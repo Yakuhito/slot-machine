@@ -1,0 +1,85 @@
+; state.clsp by yakuhito
+;; Inner puzzle for a singleton that has a state and may run any of n actions
+;; Each action will receive the current state/list of output conditions and return new values
+;; One or more actions may be run per spend
+
+;; An action's solution will always be: (list Current_State Base_Conditions solution)
+;;  (where capital first letters are used to denote Truths)
+;; It returns two values: (c new_state new_conditions)
+;;  !new_conditions should contain Base_Conditions!
+
+;; Warning: This puzzle does not support updating the allowed puzzles list.
+;;          If you want to do it, you might want to create a new, slightly-different
+;;          version OR use the hacky approach of determening whether an action is allowed
+;;          via the state
+
+;; Warning 2: This puzzle assumes the singleton has an amount of 1.
+
+(mod (
+  MY_MOD_HASH
+  MERKLE_ROOT
+  STATE
+  actions ; (list (proof puzzle . solution) ...)
+)
+
+  (include condition_codes.clib)
+  (include merkle_utils.clib)
+  (include sha256tree.clib)
+  (include curry.clib)
+
+  (defun run_next_action (
+    MY_MOD_HASH
+    MERKLE_ROOT
+    (new_state . new_conditions)
+    new_remaining_actions
+  )
+    (run_actions_and_recreate
+      MY_MOD_HASH
+      MERKLE_ROOT
+      new_state
+      new_conditions
+      new_remaining_actions
+    )
+  )
+
+  (defun run_actions_and_recreate (
+    MY_MOD_HASH
+    MERKLE_ROOT
+    state
+    conditions
+    remaining_actions
+  )
+    (if remaining_actions
+      ; (f remaining_actions) = (list proof puzzle . solution)
+      (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (f (r (f remaining_actions)))) (f (f remaining_actions))))
+        (run_next_action
+          MY_MOD_HASH
+          MERKLE_ROOT
+          (a
+            (f (r (f remaining_actions)))
+            (list state conditions (r (r (f remaining_actions))))
+          )
+          (r remaining_actions)
+        )
+        ; else
+        (x)
+      )
+      ; else
+      (c
+        (list
+          CREATE_COIN
+          (curry_hashes MY_MOD_HASH
+            (sha256 1 MY_MOD_HASH)
+            (sha256 1 MERKLE_ROOT)
+            (sha256tree state)
+          )
+          1
+        )
+        conditions
+      )
+    )
+  )
+  
+
+  (run_actions_and_recreate MY_MOD_HASH MERKLE_ROOT STATE () actions)
+)
