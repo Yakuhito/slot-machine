@@ -1,0 +1,35 @@
+; precommit.clsp by yakuhito
+;; A pre-commit coin can be used to prove that a value has been pre-committed for a singleton
+;;  some time ago
+
+(mod (
+    ; 1st curry
+    SINGLETON_STRUCT ; owner/controller singleton
+    RELATIVE_BLOCK_HEIGHT ; how many blocks to wait before this coin is spendable
+    PRECOMMIT_PAYOUT_ADDRESS
+    ; 2nd curry
+    VALUE
+    PRECOMMIT_VALUE
+    ; info about this coin's spender (singleton coin being spent)
+    singleton_inner_puzzle_hash
+  )
+
+  (include condition_codes.clib)
+  (include sha256tree.clib)
+  (include curry.clib)
+
+  (list 
+    (list ASSERT_MY_AMOUNT PRECOMMIT_VALUE) ; ensure the required pre-commit amount was locked and not just supplied now
+    (list CREATE_COIN PRECOMMIT_PAYOUT_ADDRESS PRECOMMIT_VALUE)
+    (list ASSERT_HEIGHT_RELATIVE RELATIVE_BLOCK_HEIGHT)
+    (list
+      RECEIVE_MESSAGE
+      18 ; puzzle-puzzle
+      ()
+      (curry_hashes (f SINGLETON_STRUCT)
+        (sha256tree SINGLETON_STRUCT)
+        singleton_inner_puzzle_hash
+      )
+    )
+  )
+)
