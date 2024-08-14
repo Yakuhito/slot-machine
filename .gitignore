@@ -167,8 +167,5 @@ cython_debug/
 /target
 
 
-# Added by cargo
-#
-# already existing elements were commented out
-
-#/target
+# Added by yak
+main.sym
