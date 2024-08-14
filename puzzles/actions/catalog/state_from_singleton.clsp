@@ -1,0 +1,34 @@
+; state_from_singleton.clsp by yakuhito
+;; This action can be used to update the state of the current singleton
+;; based on an announcement from another singleton.
+
+;; For example, CAT registration fees might change based on block rewards. It makes sense
+;; to have a separate singleton that contains the logic to determine the fee (i.e., schedule)
+;; and then have the registration singleton trust it.
+
+(mod (
+  OTHER_SINGLETON_STRUCT
+  Current_State
+  Conditions
+  (new_state . other_singleton_inner_puzzle_hash)
+)
+  (include condition_codes.clib)
+  (include sha256tree.clib)
+  (include curry.clib)
+
+  (c
+    new_state
+    (c
+      (list
+        RECEIVE_MESSAGE
+        18 ; puzzle-puzzle
+        (sha256tree new_state)
+        (curry_hashes (f OTHER_SINGLETON_STRUCT)
+          (sha256tree OTHER_SINGLETON_STRUCT)
+          other_singleton_inner_puzzle_hash
+        )
+      )
+      Conditions
+    )
+  )
+)
