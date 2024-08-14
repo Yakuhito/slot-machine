@@ -1,0 +1,15 @@
+; any_metadata.clsp by yakuhito
+;; Allows an NFT owner to fully control the metadata of an NFT they own
+
+;; Note that the metadata updater may not be changed, and no extra conditions
+;; will be added (to prevent potential bypasses of e.g., ownership layer).
+
+(mod
+  (
+    Current_Metadata
+    Metadata_Updater_Puzzle_Hash
+    new_metadata ; provided by owner/inner puzzle
+  )
+  ; returns ((new_metadata new_metadata_updater_puzhash) conditions)
+  (list (list new_metadata Metadata_Updater_Puzzle_Hash) ())
+)
