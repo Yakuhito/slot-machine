@@ -1,0 +1,4 @@
+;; todo: create new slot
+;; recreate left and right slots (consume + create new)
+;; create prelauncher
+;; assert launcher spent AND created right NFT (i.e., destination ph is owner and royalties are set up correctly)
