@@ -22,18 +22,61 @@
   UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
-  tail_hash ; full TAIL in the reveal of the pre-commit coin
-  (left_tail_hash . left_left_tail_hash) ; left slot info
-  (right_tail_hash . right_right_tail_hash) ; right slot info
+  Current_State ; Truth
+  Conditions ; Truth
+  ( 
+    tail_hash ; full TAIL in the reveal of the pre-commit coin
+    (left_tail_hash . left_left_tail_hash) ; left slot info
+    (right_tail_hash . right_right_tail_hash) ; right slot info
+  ) ; solution
 )
-  (list
-    (list ) ; spend left slot
-    ; spend right slot
-    ; create new left slot
-    ; create new right slot
-    ; create new slot
-    ; create prelauncher
-    ; assert correct NFT was created
-    ; /\ (i.e., destination ph is owner and royalties are set up correctly)
+  (include condition_codes.clib)
+  (include sha256tree.clib)
+  (include curry.clib)
+
+  (defun spend_slot (SLOT_1ST_CURRY_HASH slot_value)
+    (list
+      SEND_MESSAGE
+      18 ; puzzle-puzzle
+      ()
+      (curry_hashes SLOT_1ST_CURRY_HASH
+        (sha256 1 (sha256tree slot_value))
+      )
+    )
+  )
+
+  (defun create_slot (SLOT_1ST_CURRY_HASH slot_value)
+    (list
+      CREATE_COIN
+      (curry_hashes SLOT_1ST_CURRY_HASH
+        (sha256 1 (sha256tree slot_value))
+      )
+      0
+    )
+  )
+
+  (c
+    Current_State ; new state
+    (c 
+      (spend_slot SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash right_tail_hash))) ; spend left slot
+      (c 
+        (spend_slot SLOT_1ST_CURRY_HASH (c right_tail_hash (c left_tail_hash right_right_tail_hash))) ; spend right slot
+        (c 
+          (create_slot SLOT_1ST_CURRY_HASH (c tail_hash (c left_tail_hash right_tail_hash))) ; create new slot
+          (c
+            (create_slot SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash tail_hash))) ; create new left slot
+            (c
+              (create_slot SLOT_1ST_CURRY_HASH (c right_tail_hash (c tail_hash right_right_tail_hash))) ; create new right slot
+              Conditions
+            )
+          )
+        )
+      )
+    ) ; new conditions
   )
 )
+
+; todo:
+; create prelauncher
+; assert correct NFT was created
+; /\ (i.e., destination ph is owner and royalties are set up correctly)
