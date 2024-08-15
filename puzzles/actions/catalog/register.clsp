@@ -1,4 +1,39 @@
-;; todo: create new slot
-;; recreate left and right slots (consume + create new)
-;; create prelauncher
-;; assert launcher spent AND created right NFT (i.e., destination ph is owner and royalties are set up correctly)
+;; register.clsp by yakuhito
+;; Responsible for registering new CATs into the regstry (CATalog)
+
+;; Main idea: you're the owner of a CAT if you know the TAIL before it's published on-chain
+;; To ensure uniqueness (i.e., that no CAT is registered twice), slots are used
+;; A double-linked list is created, and a new item is inserted for every new CAT that is registered
+
+;; Slots before insertion:
+;; ---------------       ---------------
+;; |  left slot  | <---> | right slot  | 
+;; ---------------       ---------------
+;;
+;; Slots after insertion:
+;; ---------------       ---------------       ---------------
+;; |  left slot  | <---> |  new slot   | <---> | right slot  |
+;; ---------------       ---------------       ---------------
+;; 
+;; A slot's value is (my_value . (left_value . right_value))
+;; For CATalog, a slot's value is the tail hash of a registered CAT
+
+(mod (
+  UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
+  PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
+  SLOT_1ST_CURRY_HASH ; after 1st curry
+  tail_hash ; full TAIL in the reveal of the pre-commit coin
+  (left_tail_hash . left_left_tail_hash) ; left slot info
+  (right_tail_hash . right_right_tail_hash) ; right slot info
+)
+  (list
+    (list ) ; spend left slot
+    ; spend right slot
+    ; create new left slot
+    ; create new right slot
+    ; create new slot
+    ; create prelauncher
+    ; assert correct NFT was created
+    ; /\ (i.e., destination ph is owner and royalties are set up correctly)
+  )
+)

@@ -9,7 +9,7 @@
     PRECOMMIT_PAYOUT_ADDRESS
     ; 2nd curry
     VALUE
-    PRECOMMIT_VALUE
+    PRECOMMIT_AMOUNT
     ; info about this coin's spender (singleton coin being spent)
     singleton_inner_puzzle_hash
   )
@@ -19,8 +19,8 @@
   (include curry.clib)
 
   (list 
-    (list ASSERT_MY_AMOUNT PRECOMMIT_VALUE) ; ensure the required pre-commit amount was locked and not just supplied now
-    (list CREATE_COIN PRECOMMIT_PAYOUT_ADDRESS PRECOMMIT_VALUE)
+    (list ASSERT_MY_AMOUNT PRECOMMIT_AMOUNT) ; ensure the required pre-commit amount was locked and not just supplied now
+    (list CREATE_COIN PRECOMMIT_PAYOUT_ADDRESS PRECOMMIT_AMOUNT)
     (list ASSERT_HEIGHT_RELATIVE RELATIVE_BLOCK_HEIGHT)
     (list
       RECEIVE_MESSAGE
