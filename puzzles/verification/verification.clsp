@@ -1,0 +1,50 @@
+; verification.clsp by yakuhito
+;; Verifier DIDs can create verification coins to e.g., endorse that
+;;  CAT details are not misleading
+
+;; This is the inner puzzle that allows the verification singleton to:
+;;  - be spent in 'oracle' mode so the verification can be asserted on-chain
+;;  - be spent in 'revoke' mode so the owner/delegated revocation DID can revoke the verification
+
+;; Warning: Revocation singleton may be different than the DID that created the verification. The verification
+;;  singleton should be considered the 'attester' and can be validated via launcher id. 
+
+(mod (
+  MY_MOD_HASH
+  VERIFIED_VALUES ; clsp list of (key . value)
+  REVOCATION_SINGLETON_STRUCT
+  revocation_singleton_inner_puzzle_hash
+)
+  (include condition_codes.clib)
+  (include sha256tree.clib)
+  (include curry.clib)
+
+  (if (= revocation_singleton_inner_puzzle_hash ())
+    ; oracle mode - just re-create
+    (list
+      (list
+        CREATE_COIN
+        (curry_hashes MY_MOD_HASH
+          (sha256 1 MY_MOD_HASH)
+          (sha256tree VERIFIED_VALUES)
+          (sha256tree REVOCATION_SINGLETON_STRUCT)
+        )
+        1
+      )
+    )
+    ; else
+    ; consume announcement from revocation singleton and melt
+    (list
+      (list CREATE_COIN () -113)
+      (list
+        RECEIVE_MESSAGE
+        18 ; puzzle-puzzle
+        () ; message
+        (curry_hashes (f REVOCATION_SINGLETON_STRUCT)
+          (sha256tree REVOCATION_SINGLETON_STRUCT)
+          revocation_singleton_inner_puzzle_hash
+        )
+      )
+    )
+  )
+)
