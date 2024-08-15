@@ -16,5 +16,6 @@
 
   (list
     (list CREATE_COIN LAUNCHER_PH 1)
+    (list CREATE_PUZZLE_ANNOUNCEMENT VALUE)
   )
 )

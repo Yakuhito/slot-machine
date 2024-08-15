@@ -19,6 +19,7 @@
 ;; For CATalog, a slot's value is the tail hash of a registered CAT
 
 (mod (
+  NFT_PACK ; see 'assert_launcher_ann' to see what this contains
   UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
@@ -26,8 +27,10 @@
   Conditions ; Truth
   ( 
     tail_hash ; full TAIL in the reveal of the pre-commit coin
+    initial_nft_owner_ph ; also included in the pre-commitcoin
     (left_tail_hash . left_left_tail_hash) ; left slot info
     (right_tail_hash . right_right_tail_hash) ; right slot info
+    my_id
   ) ; solution
 )
   (include condition_codes.clib)
@@ -55,6 +58,78 @@
     )
   )
 
+  (defun assert_launcher_ann (
+    (
+      LAUNCHER_HASH
+      SINGLETON_MOD_HASH
+      STATE_LAYER_MOD_HASH
+      INITIAL_METADATA_HASH
+      METADATA_UPDATER_HASH_HASH
+      NFT_OWNERSHIP_LAYER_MOD_HASH
+      TRANSFER_PROGRAM_MOD_HASH
+      ROYALTY_ADDRESS_HASH
+      TRADE_PRICE_PERCENTAGE
+    ) ; NFT_PACK
+    launcher_id
+    initial_nft_owner_ph
+  )
+    (list
+      ASSERT_COIN_ANNOUNCEMENT
+      launcher_id
+      (sha256tree
+        (list 
+          (curry_hashes SINGLETON_MOD_HASH
+            (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
+            (curry_hashes STATE_LAYER_MOD_HASH
+              (sha256 1 STATE_LAYER_MOD_HASH)
+              INITIAL_METADATA_HASH ; initial metadata
+              METADATA_UPDATER_HASH_HASH
+              (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+                (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+                (sha256 1 ()) ; current owner
+                (curry_hashes TRANSFER_PROGRAM_MOD_HASH
+                  (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
+                  ROYALTY_ADDRESS_HASH
+                  (sha256 1 TRADE_PRICE_PERCENTAGE)
+                ) ; transfer program
+                initial_nft_owner_ph
+              ) ; state layer inner ph = ownership layer ph
+            ) ; singleton inner ph = state layer ph
+          ) ; singleton full ph
+          1 ; amount
+          () ; kv list
+        )
+      ); announcement
+    ) ; make correct NFT was created (i.e., destination ph is owner and royalties are set up correctly)
+  )
+
+  (defun create_prelauncher_and_assert_launcher (
+    NFT_PACK
+    my_id
+    initial_nft_owner_ph
+    prelauncher_full_puzzle_hash
+    conditions_so_far
+  )
+    (c
+      (list
+        CREATE_COIN
+        prelauncher_full_puzzle_hash
+        0
+      ) ; create uniqueness prelauncher
+      (c 
+        (assert_launcher_ann
+          (coinid 
+            (coinid my_id prelauncher_full_puzzle_hash 0) ; prelauncher id
+            (f NFT_PACK)
+            1
+          ) ; launcher id
+          initial_nft_owner_ph
+        )
+        conditions_so_far
+      )
+    )
+  )
+
   (c
     Current_State ; new state
     (c 
@@ -67,7 +142,27 @@
             (create_slot SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash tail_hash))) ; create new left slot
             (c
               (create_slot SLOT_1ST_CURRY_HASH (c right_tail_hash (c tail_hash right_right_tail_hash))) ; create new right slot
-              Conditions
+              (c
+                (list
+                  SEND_MESSAGE
+                  18 ; puzzle-puzzle
+                  ()
+                  (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                    (sha256 2 (sha256 1 initial_nft_owner_ph) tail_hash) ; precommit coin reveal will be (c initial_nft_owner_ph TAIL)
+                    (sha256 1 (f Current_State)) ; PRECOMMIT_AMOUNT = registration fee = only value held in state
+                  )
+                ) ; consume precommit coin
+                (c
+                  (list ASSERT_MY_COIN_ID my_id)
+                  (create_prelauncher_and_assert_launcher
+                    LAUNCHER_HASH
+                    my_id
+                    initial_nft_owner_ph
+                    (curry_hashes UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH (sha256 1 tail_hash))
+                    Conditions
+                  )
+                )
+              )
             )
           )
         )
@@ -75,8 +170,3 @@
     ) ; new conditions
   )
 )
-
-; todo:
-; create prelauncher
-; assert correct NFT was created
-; /\ (i.e., destination ph is owner and royalties are set up correctly)
