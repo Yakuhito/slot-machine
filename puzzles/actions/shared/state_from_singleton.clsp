@@ -9,7 +9,6 @@
 (mod (
   OTHER_SINGLETON_STRUCT
   Current_State
-  Conditions
   (new_state . other_singleton_inner_puzzle_hash)
 )
   (include condition_codes.clib)
@@ -18,17 +17,14 @@
 
   (c
     new_state
-    (c
-      (list
-        RECEIVE_MESSAGE
-        18 ; puzzle-puzzle
-        (sha256tree new_state)
-        (curry_hashes (f OTHER_SINGLETON_STRUCT)
-          (sha256tree OTHER_SINGLETON_STRUCT)
-          other_singleton_inner_puzzle_hash
-        )
+    (list
+      RECEIVE_MESSAGE
+      18 ; puzzle-puzzle
+      (sha256tree new_state)
+      (curry_hashes (f OTHER_SINGLETON_STRUCT)
+        (sha256tree OTHER_SINGLETON_STRUCT)
+        other_singleton_inner_puzzle_hash
       )
-      Conditions
     )
   )
 )
