@@ -48,13 +48,14 @@
     )
   )
 
-  (defun create_slot (SLOT_1ST_CURRY_HASH slot_value)
+  (defun create_slot_with_hint (SLOT_1ST_CURRY_HASH slot_value)
     (list
       CREATE_COIN
       (curry_hashes SLOT_1ST_CURRY_HASH
         (sha256 1 (sha256tree slot_value))
       )
       0
+      (f slot_value)
     )
   )
 
@@ -137,11 +138,11 @@
       (c 
         (spend_slot SLOT_1ST_CURRY_HASH (c right_tail_hash (c left_tail_hash right_right_tail_hash))) ; spend right slot
         (c 
-          (create_slot SLOT_1ST_CURRY_HASH (c tail_hash (c left_tail_hash right_tail_hash))) ; create new slot
+          (create_slot_with_hint SLOT_1ST_CURRY_HASH (c tail_hash (c left_tail_hash right_tail_hash))) ; create new slot
           (c
-            (create_slot SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash tail_hash))) ; create new left slot
+            (create_slot_with_hint SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash tail_hash))) ; create new left slot
             (c
-              (create_slot SLOT_1ST_CURRY_HASH (c right_tail_hash (c tail_hash right_right_tail_hash))) ; create new right slot
+              (create_slot_with_hint SLOT_1ST_CURRY_HASH (c right_tail_hash (c tail_hash right_right_tail_hash))) ; create new right slot
               (c
                 (list
                   SEND_MESSAGE
@@ -155,7 +156,7 @@
                 (c
                   (list ASSERT_MY_COIN_ID my_id)
                   (create_prelauncher_and_assert_launcher
-                    LAUNCHER_HASH
+                    (f NFT_PACK)
                     my_id
                     initial_nft_owner_ph
                     (curry_hashes UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH (sha256 1 tail_hash))
