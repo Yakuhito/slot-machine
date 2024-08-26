@@ -3,10 +3,10 @@
 ;; Each action will receive the current state/list of output conditions and return new values
 ;; One or more actions may be run per spend
 
-;; An action's solution will always be: (list Current_State Base_Conditions solution)
+;; An action's solution will always be: (list Current_State solution)
 ;;  (where capital first letters are used to denote Truths)
 ;; It returns two values: (c new_state new_conditions)
-;;  !new_conditions should contain Base_Conditions!
+;;  !new_conditions will be directly aded to this puzzle's output conditions!
 
 ;; Warning: This puzzle does not support updating the allowed puzzles list.
 ;;          If you want to do it, you might want to create a new, slightly-different
@@ -27,17 +27,25 @@
   (include sha256tree.clib)
   (include curry.clib)
 
+  (defun merge_lists (long_list short_list)
+    (if short_list
+      (c (f short_list) (merge_lists (r short_list) long_list))
+      long_list
+    )
+  )
+
   (defun run_next_action (
     MY_MOD_HASH
     MERKLE_ROOT
     (new_state . new_conditions)
     new_remaining_actions
+    current_conditions
   )
     (run_actions_and_recreate
       MY_MOD_HASH
       MERKLE_ROOT
       new_state
-      new_conditions
+      (merge_lists current_conditions new_conditions)
       new_remaining_actions
     )
   )
@@ -57,9 +65,10 @@
           MERKLE_ROOT
           (a
             (f (r (f remaining_actions)))
-            (list state conditions (r (r (f remaining_actions))))
+            (list state (r (r (f remaining_actions))))
           )
           (r remaining_actions)
+          conditions
         )
         ; else
         (x)
