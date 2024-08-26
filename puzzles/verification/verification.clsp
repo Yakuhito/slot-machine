@@ -10,9 +10,10 @@
 ;;  singleton should be considered the 'attester' and can be validated via launcher id. 
 
 (mod (
-  MY_MOD_HASH
-  VERIFIED_VALUES ; clsp list of (key . value)
   REVOCATION_SINGLETON_STRUCT
+  ; 2nd curry
+  SELF_HASH
+  VERIFIED_DATA
   revocation_singleton_inner_puzzle_hash
 )
   (include condition_codes.clib)
@@ -24,10 +25,9 @@
     (list
       (list
         CREATE_COIN
-        (curry_hashes MY_MOD_HASH
-          (sha256 1 MY_MOD_HASH)
-          (sha256tree VERIFIED_VALUES)
-          (sha256tree REVOCATION_SINGLETON_STRUCT)
+        (curry_hashes SELF_HASH
+          (sha256 1 SELF_HASH)
+          (sha256tree VERIFIED_DATA)
         )
         1
       )
