@@ -24,7 +24,6 @@
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
   Current_State ; Truth
-  Conditions ; Truth
   ( 
     tail_hash ; full TAIL in the reveal of the pre-commit coin
     initial_nft_owner_ph ; also included in the pre-commit coin
@@ -134,50 +133,52 @@
     )
   )
 
-  (c
-    Current_State ; new state
-    (c 
-      (spend_slot SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash right_tail_hash))) ; spend left slot
-      (c 
-        (spend_slot SLOT_1ST_CURRY_HASH (c right_tail_hash (c left_tail_hash right_right_tail_hash))) ; spend right slot
-        (c 
-          (create_slot_with_hint SLOT_1ST_CURRY_HASH (c tail_hash (c left_tail_hash right_tail_hash))) ; create new slot
-          (c
-            (create_slot_with_hint SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash tail_hash))) ; create new left slot
-            (c
-              (create_slot_with_hint SLOT_1ST_CURRY_HASH (c right_tail_hash (c tail_hash right_right_tail_hash))) ; create new right slot
-              (c
-                (list
-                  SEND_MESSAGE
-                  18 ; puzzle-puzzle
-                  ()
-                  (curry_hashes PRECOMMIT_1ST_CURRY_HASH
-                    (sha256 2
-                      (sha256 2 
-                        (sha256 1 initial_nft_owner_ph)
-                        (sha256 1 initial_nft_metadata_hash)
-                      )
-                      tail_hash
-                    ) ; precommit coin reveal will be (c (c initial_nft_owner_ph initial_nft_metadata_hash) TAIL)
-                    (sha256 1 (f Current_State)) ; PRECOMMIT_AMOUNT = registration fee = only value held in state
-                  )
-                ) ; consume precommit coin
-                (c
-                  (list ASSERT_MY_COIN_ID my_id)
-                  (create_prelauncher_and_assert_launcher
-                    NFT_PACK
-                    my_id
-                    initial_nft_owner_ph
-                    initial_nft_metadata_hash
-                    (curry_hashes UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH (sha256 1 tail_hash))
-                    Conditions
-                  )
+  (if (all (> tail_hash left_tail_hash) (> right_tail_hash tail_hash))
+    (c
+      Current_State ; new state
+
+      ; create NFT that will hold CAT info
+      (create_prelauncher_and_assert_launcher
+        NFT_PACK
+        my_id
+        initial_nft_owner_ph
+        initial_nft_metadata_hash
+        (curry_hashes UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH (sha256 1 tail_hash))
+        (list
+          (list ASSERT_MY_COIN_ID my_id)
+
+          ; spend left slot
+          (spend_slot SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash right_tail_hash))) 
+          ; spend right slot
+          (spend_slot SLOT_1ST_CURRY_HASH (c right_tail_hash (c left_tail_hash right_right_tail_hash)))
+          
+          ; create new slot
+          (create_slot_with_hint SLOT_1ST_CURRY_HASH (c tail_hash (c left_tail_hash right_tail_hash))) 
+          ; create new left slot
+          (create_slot_with_hint SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash tail_hash))) 
+          ; create new right slot
+          (create_slot_with_hint SLOT_1ST_CURRY_HASH (c right_tail_hash (c tail_hash right_right_tail_hash))) 
+          
+          ; consume precommit coin
+          (list
+            SEND_MESSAGE
+            18 ; puzzle-puzzle
+            ()
+            (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+              (sha256 2
+                (sha256 2 
+                  (sha256 1 initial_nft_owner_ph)
+                  (sha256 1 initial_nft_metadata_hash)
                 )
-              )
+                tail_hash
+              ) ; precommit coin reveal will be (c (c initial_nft_owner_ph initial_nft_metadata_hash) TAIL)
+              (sha256 1 (f Current_State)) ; PRECOMMIT_AMOUNT = registration fee = only value held in state
             )
-          )
+          ) 
         )
-      )
-    ) ; new conditions
+      ) ; conditions
+    )
+    ; else
+    (x)
   )
 )
