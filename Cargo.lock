@@ -212,7 +212,10 @@ checksum = "8318a53db07bb3f8dca91a600466bdb3f2eaadeedfdbcf02e1accbad9271ba50"
 name = "catalog"
 version = "0.1.0"
 dependencies = [
+ "chia",
  "chia-wallet-sdk",
+ "clvmr",
+ "hex-literal",
  "openssl",
  "openssl-sys",
 ]
@@ -231,6 +234,24 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "chia"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "270de4ca88b9fde1b2136823c3f131be16ba8c24effb6d77efa2f5dffd46b28c"
+dependencies = [
+ "chia-bls 0.11.0",
+ "chia-client",
+ "chia-consensus",
+ "chia-protocol",
+ "chia-puzzles",
+ "chia-ssl",
+ "chia-traits 0.11.0",
+ "clvm-traits",
+ "clvm-utils",
+ "clvmr",
+]
 
 [[package]]
 name = "chia-bls"
@@ -263,6 +284,21 @@ dependencies = [
  "lru",
  "sha2",
  "thiserror",
+]
+
+[[package]]
+name = "chia-client"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8c759008594127494101816947c2f2e2fb843d472f8831fdc7fbfa0f3989f45"
+dependencies = [
+ "chia-protocol",
+ "chia-traits 0.11.0",
+ "futures-util",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tungstenite",
 ]
 
 [[package]]

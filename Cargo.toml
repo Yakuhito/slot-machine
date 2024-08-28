@@ -9,6 +9,9 @@ repository = "https://github.com/Yakuhito/catalog"
 
 [dependencies]
 chia-wallet-sdk = "0.13.0"
+clvmr = "0.8.0"
+chia = "0.12.0"
+hex-literal = "0.4.1"
 
 [target.aarch64-unknown-linux-gnu.dependencies]
 openssl = { version = "0.10.64", features = ["vendored"] }

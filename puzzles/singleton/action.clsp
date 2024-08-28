@@ -1,4 +1,4 @@
-; state.clsp by yakuhito
+; action.clsp by yakuhito
 ;; Inner puzzle for a singleton that has a state and may run any of n actions
 ;; Each action will receive the current state/list of output conditions and return new values
 ;; One or more actions may be run per spend
