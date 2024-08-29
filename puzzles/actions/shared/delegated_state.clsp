@@ -1,4 +1,4 @@
-; state_from_singleton.clsp by yakuhito
+; delegated_state.clsp by yakuhito
 ;; This action can be used to update the state of the current singleton
 ;; based on an announcement from another singleton.
 

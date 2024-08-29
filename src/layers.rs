@@ -1,8 +1,11 @@
-mod state_layer;
+mod action_layer;
+mod actions;
 
 use chia_wallet_sdk::{DriverError, SpendContext};
 use clvmr::NodePtr;
-pub use state_layer::*;
+
+pub use action_layer::*;
+pub use actions::*;
 
 pub trait SpendContextExt {
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
