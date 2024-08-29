@@ -36,6 +36,7 @@ mod tests {
     #[test]
     fn test_puzzle_hashes() -> anyhow::Result<()> {
         assert_puzzle_hash!(ACTION_LAYER_PUZZLE => ACTION_LAYER_PUZZLE_HASH);
+        assert_puzzle_hash!(DELEGATED_STATE_ACTION_PUZZLE => DELEGATED_STATE_ACTION_PUZZLE_HASH);
 
         Ok(())
     }
