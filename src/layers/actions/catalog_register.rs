@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::{CurriedProgram, TreeHash},
+    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
     puzzles::{
         nft::{
@@ -14,42 +14,16 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
-use crate::{PrecommitCoin, SpendContextExt, UniquenessPrelauncher};
+use crate::{PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher};
 
 use super::Action;
-
-/*
-register:
-    NFT_PACK ; see 'assert_launcher_ann' to see what this contains
-     |- as follows:
-    (
-        LAUNCHER_HASH
-        SINGLETON_MOD_HASH
-        STATE_LAYER_MOD_HASH
-        METADATA_UPDATER_HASH_HASH
-        NFT_OWNERSHIP_LAYER_MOD_HASH
-        TRANSFER_PROGRAM_MOD_HASH
-        ROYALTY_ADDRESS_HASH    <-- ! Custom !
-        TRADE_PRICE_PERCENTAGE  <-- ! Custom !
-    ) ; NFT_PACK
-
-    UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
-     |- curry with launcher hash
-
-    PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
-     |- SINGLETON_STRUCT <-- ! Depends on launcher id !
-     |- RELATIVE_BLOCK_HEIGHT ; 32
-     |- PRECOMMIT_PAYOUT_ADDRESS <-- ! Custom !
-
-    SLOT_1ST_CURRY_HASH ; after 1st curry
-     |- depends on launcher id
-*/
 
 pub struct CatalogRegisterAction {
     pub launcher_id: Bytes32,
     pub royalty_address: Bytes32,
     pub trade_price_percentage: u8,
     pub precommit_payout_puzzle_hash: Bytes32,
+    pub relative_block_height: u32,
 }
 
 impl CatalogRegisterAction {
@@ -58,12 +32,14 @@ impl CatalogRegisterAction {
         royalty_address: Bytes32,
         trade_price_percentage: u8,
         precommit_payout_puzzle_hash: Bytes32,
+        relative_block_height: u32,
     ) -> Self {
         Self {
             launcher_id,
             royalty_address,
             trade_price_percentage,
             precommit_payout_puzzle_hash,
+            relative_block_height,
         }
     }
 }
@@ -157,23 +133,36 @@ impl CatalogRegisterActionArgs {
     ) -> Self {
         Self {
             nft_pack: NftPack::new(royalty_address_hash, trade_price_percentage),
-            uniqueness_prelauncher_1st_curry_hash: UniquenessPrelauncher::first_curry_hash().into(),
-            precommit_1st_curry_hash: PrecommitCoin::first_curry_hash(
+            uniqueness_prelauncher_1st_curry_hash: UniquenessPrelauncher::<()>::first_curry_hash()
+                .into(),
+            precommit_1st_curry_hash: PrecommitCoin::<()>::first_curry_hash(
                 launcher_id,
                 relative_block_height,
                 precommit_payout_puzzle_hash,
             )
             .into(),
-            slot_1st_curry_hash: todo,
+            slot_1st_curry_hash: Slot::first_curry_hash(launcher_id).into(),
         }
     }
 }
 
-impl DelegatedStateActionArgs {
-    pub fn curry_tree_hash(other_launcher_id: Bytes32) -> TreeHash {
+impl CatalogRegisterActionArgs {
+    pub fn curry_tree_hash(
+        launcher_id: Bytes32,
+        royalty_address_hash: Bytes32,
+        trade_price_percentage: u8,
+        precommit_payout_puzzle_hash: Bytes32,
+        relative_block_height: u32,
+    ) -> TreeHash {
         CurriedProgram {
-            program: DELEGATED_STATE_ACTION_PUZZLE_HASH,
-            args: DelegatedStateActionArgs::new(other_launcher_id),
+            program: CATALOG_REGISTER_PUZZLE_HASH,
+            args: CatalogRegisterActionArgs::new(
+                launcher_id,
+                royalty_address_hash,
+                trade_price_percentage,
+                precommit_payout_puzzle_hash,
+                relative_block_height,
+            ),
         }
         .tree_hash()
     }
@@ -181,21 +170,12 @@ impl DelegatedStateActionArgs {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
-pub struct DelegatedStateActionSolution<S> {
-    pub new_state: S,
-    pub other_singleton_inner_puzzle_hash: Bytes32,
-}
-
-/*
-pub struct CatalogRegisterAction {
+pub struct CatalogRegisterActionSolution {
     pub tail_hash: Bytes32,
     pub initial_nft_owner_ph: Bytes32,
-    pub initial_nft_metadata_hash: Bytes32,
     pub left_tail_hash: Bytes32,
     pub left_left_tail_hash: Bytes32,
     pub right_tail_hash: Bytes32,
     pub right_right_tail_hash: Bytes32,
     pub my_id: Bytes32,
 }
-
-*/
