@@ -6,7 +6,7 @@
     ; 1st curry
     SINGLETON_STRUCT ; owner/controller singleton
     RELATIVE_BLOCK_HEIGHT ; how many blocks to wait before this coin is spendable
-    PRECOMMIT_PAYOUT_ADDRESS
+    PRECOMMIT_PAYOUT_PUZZLE_HASH
     ; 2nd curry
     VALUE
     PRECOMMIT_AMOUNT
@@ -20,7 +20,7 @@
 
   (list 
     (list ASSERT_MY_AMOUNT PRECOMMIT_AMOUNT) ; ensure the required pre-commit amount was locked and not just supplied now
-    (list CREATE_COIN PRECOMMIT_PAYOUT_ADDRESS PRECOMMIT_AMOUNT)
+    (list CREATE_COIN PRECOMMIT_PAYOUT_PUZZLE_HASH PRECOMMIT_AMOUNT)
     (list ASSERT_HEIGHT_RELATIVE RELATIVE_BLOCK_HEIGHT)
     (list
       RECEIVE_MESSAGE
