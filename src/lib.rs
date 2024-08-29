@@ -11,6 +11,7 @@ pub trait SpendContextExt {
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn delegated_state_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn catalog_register_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn uniqueness_prelauncher_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -27,6 +28,11 @@ impl SpendContextExt for SpendContext {
     /// Allocate the catalog register action puzzle and return its pointer.
     fn catalog_register_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(CATALOG_REGISTER_PUZZLE_HASH, &CATALOG_REGISTER_PUZZLE)
+    }
+
+    /// Allocate the uniqueness prelauncher puzzle and return its pointer.
+    fn uniqueness_prelauncher_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(UNIQUENESS_PRELAUNCHER_PUZZLE_HASH, &UNIQUENESS_PRELAUNCHER_PUZZLE)
     }
 }
 

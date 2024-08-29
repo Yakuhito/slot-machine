@@ -1,6 +1,10 @@
-use chia::{clvm_utils::TreeHash, protocol::{Bytes32, Coin}};
-use chia_wallet_sdk::{Conditions, DriverError, Launcher, SpendContext};
+use chia::{clvm_utils::{CurriedProgram, ToTreeHash, TreeHash}, protocol::{Bytes32, Coin, CoinSpend}, puzzles::singleton::{SINGLETON_LAUNCHER_PUZZLE, SINGLETON_LAUNCHER_PUZZLE_HASH}};
+use chia_wallet_sdk::{DriverError, Launcher, SpendContext};
+use clvm_traits::{FromClvm, ToClvm};
+use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
+
+use crate::SpendContextExt;
 
 
 #[derive(Debug, Clone)]
@@ -15,59 +19,71 @@ impl<V> UniquenessPrelauncher<V> {
         Self { coin, value }
     }
 
-    pub fn new(parent_coin_id: Bytes32, amount: u64, value: V) -> Self {
-        Self::from_coin(
+    pub fn new(ctx: &mut SpendContext,parent_coin_id: Bytes32, value: V) -> Result<Self, DriverError> where V: ToClvm<Allocator> + Clone { 
+        let value_ptr = ctx.alloc(&value)?;
+        let value_hash = ctx.tree_hash(value_ptr);
+
+        Ok(Self::from_coin(
             Coin::new(
                 parent_coin_id,
-                SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
-                amount,
+                UniquenessPrelauncher::<V>::puzzle_hash(value_hash).into(),
+                0,
             ),
             value,
-        )
+        ))
     }
 
-    pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+    pub fn puzzle_hash(value_hash: TreeHash) -> TreeHash {
+        let tree_hash_1st_curry = CurriedProgram {
+            program: UNIQUENESS_PRELAUNCHER_PUZZLE_HASH,
+            args: UniquenessPrelauncher1stCurryArgs {
+                launcher_puzzle_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
+            },
+        }.tree_hash();
+
+        CurriedProgram {
+            program: tree_hash_1st_curry,
+            args: UniquenessPrelauncher2ndCurryArgs {
+                value: value_hash,
+            },
+        }.tree_hash()
+    }
+
+    pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> where V: ToClvm<Allocator> + Clone {
+        let prog_1st_curry = CurriedProgram {
+            program: ctx.uniqueness_prelauncher_puzzle()?,
+            args: UniquenessPrelauncher1stCurryArgs {
+                launcher_puzzle_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
+            },
+        }.to_clvm(&mut ctx.allocator)?;
+
         Ok(CurriedProgram {
-            program: SINGLETON_LAUNCHER_PUZZLE.to_vec(),
-            args: UniquenessPrelauncherArgs::new(self.coin.coin_id(), self.value),
+            program: prog_1st_curry,
+            args: UniquenessPrelauncher2ndCurryArgs {
+                value: self.value.clone(),
+            },
         }.to_clvm(&mut ctx.allocator)?)
     }
 
-    pub fn spend<T>(
+    pub fn spend(
         self,
         ctx: &mut SpendContext,
     ) -> Result<Launcher, DriverError>
     where
-        T: ToClvm<Allocator>,
+        V: ToClvm<Allocator> + Clone,
     {
-        let singleton_puzzle_hash =
-            SingletonArgs::curry_tree_hash(self.coin.coin_id(), singleton_inner_puzzle_hash.into())
-                .into();
+        let puzzle_reveal = self.construct_puzzle(ctx)?;
+        let puzzle_reveal = ctx.serialize(&puzzle_reveal)?;
 
-        let solution_ptr = ctx.alloc(&LauncherSolution {
-            singleton_puzzle_hash,
-            amount: self.coin.amount,
-            key_value_list,
-        })?;
-
-        let solution = ctx.serialize(&solution_ptr)?;
+        let solution = ctx.serialize(&NodePtr::NIL)?;
 
         ctx.insert(CoinSpend::new(
             self.coin,
-            Program::from(SINGLETON_LAUNCHER_PUZZLE.to_vec()),
-            solution,
+            puzzle_reveal,
+            solution
         ));
 
-        let singleton_coin =
-            Coin::new(self.coin.coin_id(), singleton_puzzle_hash, self.coin.amount);
-
-        Ok((
-            self.conditions.assert_coin_announcement(announcement_id(
-                self.coin.coin_id(),
-                ctx.tree_hash(solution_ptr),
-            )),
-            singleton_coin,
-        ))
+        Ok(Launcher::new(self.coin.coin_id(), 1))
     }
 }
 
@@ -78,3 +94,16 @@ pub const  UNIQUENESS_PRELAUNCHER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     1e5759069429397243b808748e5bd5270ea0891953ea06df9a46b87ce4ade466
     "
 ));
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct UniquenessPrelauncher1stCurryArgs {
+    pub launcher_puzzle_hash: Bytes32,
+}
+
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct UniquenessPrelauncher2ndCurryArgs<V> {
+    pub value: V,
+}
