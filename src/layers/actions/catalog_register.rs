@@ -153,7 +153,7 @@ impl CatalogRegisterActionArgs {
             nft_pack: NftPack::new(royalty_address_hash, trade_price_percentage),
             uniqueness_prelauncher_1st_curry_hash: UniquenessPrelauncher::first_curry_hash().into(),
             precommit_1st_curry_hash: todo,
-            precommit_1st_curry_hash: todo,
+            slot_1st_curry_hash: todo,
         }
     }
 }

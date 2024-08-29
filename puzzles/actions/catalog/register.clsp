@@ -27,7 +27,6 @@
   ( 
     tail_hash ; full TAIL in the reveal of the pre-commit coin
     initial_nft_owner_ph ; also included in the pre-commit coin
-    initial_nft_metadata_hash ; also included in the pre-commit coin
     left_tail_hash left_left_tail_hash ; left slot info
     right_tail_hash right_right_tail_hash ; right slot info
     my_id
@@ -72,7 +71,6 @@
     ) ; NFT_PACK
     launcher_id
     initial_nft_owner_ph
-    initial_nft_metadata_hash
   )
     (list
       ASSERT_COIN_ANNOUNCEMENT
@@ -83,11 +81,11 @@
             (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
             (curry_hashes STATE_LAYER_MOD_HASH
               (sha256 1 STATE_LAYER_MOD_HASH)
-              initial_nft_metadata_hash ; initial metadata
+              (sha256_one)
               METADATA_UPDATER_HASH_HASH
               (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
                 (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
-                (sha256 1 ()) ; current owner
+                (sha256_one) ; current owner 
                 (curry_hashes TRANSFER_PROGRAM_MOD_HASH
                   (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
                   ROYALTY_ADDRESS_HASH
@@ -108,7 +106,6 @@
     NFT_PACK
     my_id
     initial_nft_owner_ph
-    initial_nft_metadata_hash
     prelauncher_full_puzzle_hash
     conditions_so_far
   )
@@ -126,7 +123,6 @@
             1
           ) ; launcher id
           initial_nft_owner_ph
-          initial_nft_metadata_hash
         )
         conditions_so_far
       )
@@ -142,7 +138,6 @@
         NFT_PACK
         my_id
         initial_nft_owner_ph
-        initial_nft_metadata_hash
         (curry_hashes UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH (sha256 1 tail_hash))
         (list
           (list ASSERT_MY_COIN_ID my_id)
@@ -166,10 +161,7 @@
             ()
             (curry_hashes PRECOMMIT_1ST_CURRY_HASH
               (sha256 2
-                (sha256 2 
-                  (sha256 1 initial_nft_owner_ph)
-                  (sha256 1 initial_nft_metadata_hash)
-                )
+                (sha256 1 initial_nft_owner_ph)
                 tail_hash
               ) ; precommit coin reveal will be (c (c initial_nft_owner_ph initial_nft_metadata_hash) TAIL)
               (sha256 1 (f Current_State)) ; PRECOMMIT_AMOUNT = registration fee = only value held in state
