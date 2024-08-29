@@ -9,12 +9,18 @@ pub use actions::*;
 
 pub trait SpendContextExt {
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn delegated_state_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
     /// Allocate the action layer puzzle and return its pointer.
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(ACTION_LAYER_PUZZLE_HASH, &ACTION_LAYER_PUZZLE)
+    }
+    
+    /// Allocate the delegated state action puzzle and return its pointer.
+    fn delegated_state_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(DELEGATED_STATE_ACTION_PUZZLE_HASH, &DELEGATED_STATE_ACTION_PUZZLE)
     }
 }
 
