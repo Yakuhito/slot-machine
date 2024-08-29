@@ -1,6 +1,19 @@
 mod state_layer;
 
+use chia_wallet_sdk::{DriverError, SpendContext};
+use clvmr::NodePtr;
 pub use state_layer::*;
+
+pub trait SpendContextExt {
+    fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+}
+
+impl SpendContextExt for SpendContext {
+    /// Allocate the action layer puzzle and return its pointer.
+    fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(ACTION_LAYER_PUZZLE_HASH, &ACTION_LAYER_PUZZLE)
+    }
+}
 
 #[cfg(test)]
 mod tests {
