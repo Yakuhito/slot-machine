@@ -19,10 +19,13 @@ impl SpendContextExt for SpendContext {
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(ACTION_LAYER_PUZZLE_HASH, &ACTION_LAYER_PUZZLE)
     }
-    
+
     /// Allocate the delegated state action puzzle and return its pointer.
     fn delegated_state_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(DELEGATED_STATE_ACTION_PUZZLE_HASH, &DELEGATED_STATE_ACTION_PUZZLE)
+        self.puzzle(
+            DELEGATED_STATE_ACTION_PUZZLE_HASH,
+            &DELEGATED_STATE_ACTION_PUZZLE,
+        )
     }
 
     /// Allocate the catalog register action puzzle and return its pointer.
@@ -32,7 +35,10 @@ impl SpendContextExt for SpendContext {
 
     /// Allocate the uniqueness prelauncher puzzle and return its pointer.
     fn uniqueness_prelauncher_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(UNIQUENESS_PRELAUNCHER_PUZZLE_HASH, &UNIQUENESS_PRELAUNCHER_PUZZLE)
+        self.puzzle(
+            UNIQUENESS_PRELAUNCHER_PUZZLE_HASH,
+            &UNIQUENESS_PRELAUNCHER_PUZZLE,
+        )
     }
 }
 
