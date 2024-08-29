@@ -43,17 +43,19 @@ impl<V> UniquenessPrelauncher<V> {
         ))
     }
 
-    pub fn puzzle_hash(value_hash: TreeHash) -> TreeHash {
-        let tree_hash_1st_curry = CurriedProgram {
+    pub fn first_curry_hash() -> TreeHash {
+        CurriedProgram {
             program: UNIQUENESS_PRELAUNCHER_PUZZLE_HASH,
             args: UniquenessPrelauncher1stCurryArgs {
                 launcher_puzzle_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
             },
         }
-        .tree_hash();
+        .tree_hash()
+    }
 
+    pub fn puzzle_hash(value_hash: TreeHash) -> TreeHash {
         CurriedProgram {
-            program: tree_hash_1st_curry,
+            program: Self::first_curry_hash(),
             args: UniquenessPrelauncher2ndCurryArgs { value: value_hash },
         }
         .tree_hash()
