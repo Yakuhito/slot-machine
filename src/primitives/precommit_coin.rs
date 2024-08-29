@@ -100,7 +100,7 @@ impl<V> PrecommitCoin<V> {
         V: ToClvm<Allocator> + Clone,
     {
         let prog_1st_curry = CurriedProgram {
-            program: ctx.uniqueness_prelauncher_puzzle()?,
+            program: ctx.precommit_coin_puzzle()?,
             args: PrecommitCoin1stCurryArgs {
                 singleton_struct: SingletonStruct::new(self.launcher_id),
                 relative_block_height: self.relative_block_height,
