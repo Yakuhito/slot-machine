@@ -1,7 +1,8 @@
 use chia::{
     protocol::{Bytes32, Coin},
-    puzzles::Proof,
+    puzzles::{singleton::SingletonArgs, LineageProof, Proof},
 };
+use chia_wallet_sdk::{DriverError, SpendContext};
 
 use super::SlotLauncherInfo;
 
@@ -28,5 +29,39 @@ impl SlotLauncher {
             proof,
             info: SlotLauncherInfo::new(launcher_id, slot_value_hashes, next_puzzle_hash),
         }
+    }
+
+    pub fn child(
+        &self,
+        ctx: &mut SpendContext,
+        next_slot_value_hashes: Vec<Bytes32>,
+        next_next_puzzle_hash: Bytes32,
+    ) -> Result<Option<Self>, DriverError> {
+        let child_info = SlotLauncherInfo::new(
+            self.info.launcher_id,
+            next_slot_value_hashes,
+            next_next_puzzle_hash,
+        );
+
+        let child_inner_puzzle_hash = child_info.inner_puzzle_hash(ctx)?;
+        let child_puzzle_hash =
+            SingletonArgs::curry_tree_hash(self.info.launcher_id, child_inner_puzzle_hash);
+
+        if child_puzzle_hash != self.info.next_puzzle_hash.into() {
+            return Ok(None);
+        }
+
+        let child_proof = Proof::Lineage(LineageProof {
+            parent_parent_coin_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash(ctx)?.into(),
+            parent_amount: self.coin.amount,
+        });
+        let child_coin = Coin::new(self.coin.coin_id(), child_puzzle_hash.into(), 1);
+
+        Ok(Some(Self {
+            coin: child_coin,
+            proof: child_proof,
+            info: child_info,
+        }))
     }
 }

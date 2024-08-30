@@ -1,5 +1,5 @@
-use chia::protocol::Bytes32;
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, SingletonLayer};
+use chia::{clvm_utils::TreeHash, protocol::Bytes32};
+use chia_wallet_sdk::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
 use clvmr::Allocator;
 
 use crate::SlotLauncherLayer;
@@ -53,5 +53,16 @@ impl SlotLauncherInfo {
                 self.next_puzzle_hash,
             ),
         )
+    }
+
+    pub fn inner_puzzle_hash(&self, ctx: &mut SpendContext) -> Result<TreeHash, DriverError> {
+        let inner_puzzle = SlotLauncherLayer::new(
+            self.launcher_id,
+            self.slot_value_hashes.clone(),
+            self.next_puzzle_hash,
+        )
+        .construct_puzzle(ctx)?;
+
+        Ok(ctx.tree_hash(inner_puzzle))
     }
 }
