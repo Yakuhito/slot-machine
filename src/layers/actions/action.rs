@@ -1,6 +1,6 @@
 use chia::clvm_utils::TreeHash;
 use chia_wallet_sdk::{DriverError, SpendContext};
-use clvmr::NodePtr;
+use clvmr::{Allocator, NodePtr};
 
 pub trait Action {
     type Solution;
@@ -12,5 +12,5 @@ pub trait Action {
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError>;
 
-    fn puzzle_hash(&self, ctx: &mut SpendContext) -> TreeHash;
+    fn puzzle_hash(&self, allocator: &mut Allocator) -> TreeHash;
 }

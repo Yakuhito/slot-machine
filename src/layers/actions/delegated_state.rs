@@ -3,9 +3,9 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{DriverError, SpendContext};
+use chia_wallet_sdk::DriverError;
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::NodePtr;
+use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
 use crate::SpendContextExt;
@@ -46,7 +46,7 @@ impl Action for DelegatedStateAction {
             .map_err(DriverError::ToClvm)
     }
 
-    fn puzzle_hash(&self, _: &mut SpendContext) -> TreeHash {
+    fn puzzle_hash(&self, _: &mut Allocator) -> TreeHash {
         DelegatedStateActionArgs::curry_tree_hash(self.other_launcher_id)
     }
 }

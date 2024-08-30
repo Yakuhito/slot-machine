@@ -9,9 +9,9 @@ use chia::{
         singleton::{SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH},
     },
 };
-use chia_wallet_sdk::{DriverError, SpendContext};
+use chia_wallet_sdk::DriverError;
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::NodePtr;
+use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
 use crate::{PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher};
@@ -74,7 +74,7 @@ impl Action for CatalogRegisterAction {
             .map_err(DriverError::ToClvm)
     }
 
-    fn puzzle_hash(&self, _: &mut SpendContext) -> TreeHash {
+    fn puzzle_hash(&self, _: &mut Allocator) -> TreeHash {
         CatalogRegisterActionArgs::curry_tree_hash(
             self.launcher_id,
             self.royalty_address_hash,

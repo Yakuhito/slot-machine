@@ -1,7 +1,8 @@
-use chia::protocol::Bytes32;
-use chia_wallet_sdk::{DriverError, SingletonLayer, SpendContext};
+use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
+use chia_wallet_sdk::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::NodePtr;
+use clvmr::{Allocator, NodePtr};
+use hex_literal::hex;
 
 use crate::{
     Action, ActionLayer, CatalogRegisterAction, CatalogRegisterActionSolution,
@@ -25,6 +26,35 @@ pub struct CatalogConstants {
     pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
     pub price_singleton_launcher_id: Bytes32,
+}
+
+impl CatalogConstants {
+    pub fn with_price_singleton(mut self, price_singleton_launcher_id: Bytes32) -> Self {
+        self.price_singleton_launcher_id = price_singleton_launcher_id;
+        self
+    }
+}
+
+pub enum CatalogConstantsPresets {
+    Testnet,
+    Mainnet,
+}
+
+impl CatalogConstantsPresets {
+    pub fn value(self) -> CatalogConstants {
+        match self {
+            CatalogConstantsPresets::Testnet => CatalogConstants {
+                royalty_address_hash: Bytes32::from([1; 32]).tree_hash().into(),
+                trade_price_percentage: 100,
+                precommit_payout_puzzle_hash: Bytes32::from([2; 32]).tree_hash().into(),
+                relative_block_height: 8,
+                price_singleton_launcher_id: Bytes32::from(hex!(
+                    "0000000000000000000000000000000000000000000000000000000000000000"
+                )),
+            },
+            CatalogConstantsPresets::Mainnet => unimplemented!("oops - this isn't implemented yet"),
+        }
+    }
 }
 
 pub enum CatalogAction {
@@ -78,10 +108,10 @@ impl Action for CatalogAction {
         }
     }
 
-    fn puzzle_hash(&self, ctx: &mut chia_wallet_sdk::SpendContext) -> chia::clvm_utils::TreeHash {
+    fn puzzle_hash(&self, allocator: &mut Allocator) -> chia::clvm_utils::TreeHash {
         match self {
-            CatalogAction::Register(action) => action.puzzle_hash(ctx),
-            CatalogAction::UpdatePrice(action) => action.puzzle_hash(ctx),
+            CatalogAction::Register(action) => action.puzzle_hash(allocator),
+            CatalogAction::UpdatePrice(action) => action.puzzle_hash(allocator),
         }
     }
 }
@@ -104,26 +134,60 @@ impl CatalogInfo {
         }
     }
 
-    #[must_use]
-    pub fn into_layers(self, ctx: &mut SpendContext) -> CatalogLayers {
+    pub fn action_puzzle_hashes(
+        allocator: &mut Allocator,
+        launcher_id: Bytes32,
+        constants: &CatalogConstants,
+    ) -> Vec<Bytes32> {
         let register_action_hash = CatalogRegisterAction::new(
-            self.launcher_id,
-            self.constants.royalty_address_hash,
-            self.constants.trade_price_percentage,
-            self.constants.precommit_payout_puzzle_hash,
-            self.constants.relative_block_height,
+            launcher_id,
+            constants.royalty_address_hash,
+            constants.trade_price_percentage,
+            constants.precommit_payout_puzzle_hash,
+            constants.relative_block_height,
         )
-        .puzzle_hash(ctx);
+        .puzzle_hash(allocator);
 
         let update_price_action_hash =
-            DelegatedStateAction::new(self.constants.price_singleton_launcher_id).puzzle_hash(ctx);
+            DelegatedStateAction::new(constants.price_singleton_launcher_id).puzzle_hash(allocator);
 
-        let action_puzzle_hashes: Vec<Bytes32> =
-            vec![register_action_hash.into(), update_price_action_hash.into()];
+        vec![register_action_hash.into(), update_price_action_hash.into()]
+    }
 
+    #[must_use]
+    pub fn into_layers(self, allocator: &mut Allocator) -> CatalogLayers {
         SingletonLayer::new(
             self.launcher_id,
-            ActionLayer::new(action_puzzle_hashes, self.state),
+            ActionLayer::new(
+                Self::action_puzzle_hashes(allocator, self.launcher_id, &self.constants),
+                self.state,
+            ),
         )
+    }
+
+    pub fn parse(
+        allocator: &mut Allocator,
+        puzzle: Puzzle,
+        constants: CatalogConstants,
+    ) -> Result<Option<Self>, DriverError> {
+        let Some(layers) = CatalogLayers::parse_puzzle(allocator, puzzle)? else {
+            return Ok(None);
+        };
+
+        let action_puzzle_hashes =
+            Self::action_puzzle_hashes(allocator, layers.launcher_id, &constants);
+        if layers.inner_puzzle.action_puzzle_hashes != action_puzzle_hashes {
+            return Ok(None);
+        }
+
+        Ok(Some(Self::from_layers(layers, constants)))
+    }
+
+    pub fn from_layers(layers: CatalogLayers, constants: CatalogConstants) -> Self {
+        Self {
+            launcher_id: layers.launcher_id,
+            state: layers.inner_puzzle.state,
+            constants,
+        }
     }
 }

@@ -1,6 +1,8 @@
 use chia::{protocol::Coin, puzzles::Proof};
+use chia_wallet_sdk::{DriverError, Primitive, Puzzle};
+use clvmr::{Allocator, NodePtr};
 
-use super::CatalogInfo;
+use super::{CatalogConstants, CatalogInfo};
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -13,5 +15,21 @@ pub struct Catalog {
 impl Catalog {
     pub fn new(coin: Coin, proof: Proof, info: CatalogInfo) -> Self {
         Self { coin, proof, info }
+    }
+}
+
+impl Catalog {
+    fn from_parent_spend(
+        allocator: &mut Allocator,
+        parent_coin: Coin,
+        parent_puzzle: Puzzle,
+        parent_solution: NodePtr,
+        coin: Coin,
+        constants: CatalogConstants,
+    ) -> Result<Option<Self>, DriverError>
+    where
+        Self: Sized,
+    {
+        todo!()
     }
 }
