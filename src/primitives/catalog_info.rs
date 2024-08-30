@@ -27,25 +27,6 @@ pub struct CatalogConstants {
     pub price_singleton_launcher_id: Bytes32,
 }
 
-#[must_use]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CatalogInfo {
-    pub launcher_id: Bytes32,
-    pub state: CatalogState,
-
-    pub constants: CatalogConstants,
-}
-
-impl CatalogInfo {
-    pub fn new(launcher_id: Bytes32, state: CatalogState, constants: CatalogConstants) -> Self {
-        Self {
-            launcher_id,
-            state,
-            constants,
-        }
-    }
-}
-
 pub enum CatalogAction {
     Register(CatalogRegisterAction),
     UpdatePrice(DelegatedStateAction),
@@ -102,5 +83,47 @@ impl Action for CatalogAction {
             CatalogAction::Register(action) => action.puzzle_hash(ctx),
             CatalogAction::UpdatePrice(action) => action.puzzle_hash(ctx),
         }
+    }
+}
+
+#[must_use]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogInfo {
+    pub launcher_id: Bytes32,
+    pub state: CatalogState,
+
+    pub constants: CatalogConstants,
+}
+
+impl CatalogInfo {
+    pub fn new(launcher_id: Bytes32, state: CatalogState, constants: CatalogConstants) -> Self {
+        Self {
+            launcher_id,
+            state,
+            constants,
+        }
+    }
+
+    #[must_use]
+    pub fn into_layers(self, ctx: &mut SpendContext) -> CatalogLayers {
+        let register_action_hash = CatalogRegisterAction::new(
+            self.launcher_id,
+            self.constants.royalty_address_hash,
+            self.constants.trade_price_percentage,
+            self.constants.precommit_payout_puzzle_hash,
+            self.constants.relative_block_height,
+        )
+        .puzzle_hash(ctx);
+
+        let update_price_action_hash =
+            DelegatedStateAction::new(self.constants.price_singleton_launcher_id).puzzle_hash(ctx);
+
+        let action_puzzle_hashes: Vec<Bytes32> =
+            vec![register_action_hash.into(), update_price_action_hash.into()];
+
+        SingletonLayer::new(
+            self.launcher_id,
+            ActionLayer::new(action_puzzle_hashes, self.state),
+        )
     }
 }
