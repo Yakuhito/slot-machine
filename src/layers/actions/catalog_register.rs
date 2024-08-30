@@ -11,7 +11,7 @@ use chia::{
 };
 use chia_wallet_sdk::DriverError;
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher};
@@ -20,7 +20,7 @@ use super::Action;
 
 pub struct CatalogRegisterAction {
     pub launcher_id: Bytes32,
-    pub royalty_address: Bytes32,
+    pub royalty_address_hash: Bytes32,
     pub trade_price_percentage: u8,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
@@ -29,14 +29,14 @@ pub struct CatalogRegisterAction {
 impl CatalogRegisterAction {
     pub fn new(
         launcher_id: Bytes32,
-        royalty_address: Bytes32,
+        royalty_address_hash: Bytes32,
         trade_price_percentage: u8,
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
     ) -> Self {
         Self {
             launcher_id,
-            royalty_address,
+            royalty_address_hash,
             trade_price_percentage,
             precommit_payout_puzzle_hash,
             relative_block_height,
@@ -44,17 +44,20 @@ impl CatalogRegisterAction {
     }
 }
 
-impl<S> Action<DelegatedStateActionSolution<S>> for DelegatedStateAction
-where
-    S: ToClvm<Allocator>,
-{
+impl Action<CatalogRegisterActionSolution> for CatalogRegisterAction {
     fn construct_puzzle(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
     ) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.delegated_state_action_puzzle()?,
-            args: DelegatedStateActionArgs::new(self.other_launcher_id),
+            args: CatalogRegisterActionArgs::new(
+                self.launcher_id,
+                self.royalty_address_hash,
+                self.trade_price_percentage,
+                self.precommit_payout_puzzle_hash,
+                self.relative_block_height,
+            ),
         }
         .to_clvm(&mut ctx.allocator)?)
     }
@@ -62,7 +65,7 @@ where
     fn construct_solution(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DelegatedStateActionSolution<S>,
+        solution: CatalogRegisterActionSolution,
     ) -> Result<NodePtr, DriverError> {
         solution
             .to_clvm(&mut ctx.allocator)
