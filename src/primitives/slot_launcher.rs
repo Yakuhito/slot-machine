@@ -1,8 +1,11 @@
 use chia::{
     protocol::{Bytes32, Coin},
-    puzzles::{singleton::SingletonArgs, LineageProof, Proof},
+    puzzles::{
+        singleton::{SingletonArgs, SingletonSolution},
+        LineageProof, Proof,
+    },
 };
-use chia_wallet_sdk::{DriverError, SpendContext};
+use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
 
 use super::SlotLauncherInfo;
 
@@ -63,5 +66,23 @@ impl SlotLauncher {
             proof: child_proof,
             info: child_info,
         }))
+    }
+
+    pub fn spend(self, ctx: &mut SpendContext) -> Result<(), DriverError> {
+        let layers = self.info.into_layers();
+
+        let puzzle = layers.construct_puzzle(ctx)?;
+        let solution = layers.construct_solution(
+            ctx,
+            SingletonSolution {
+                lineage_proof: self.proof,
+                amount: self.coin.amount,
+                inner_solution: (),
+            },
+        )?;
+
+        ctx.spend(self.coin, Spend::new(puzzle, solution))?;
+
+        Ok(())
     }
 }
