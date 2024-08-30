@@ -11,7 +11,7 @@ use chia::{
 };
 use chia_wallet_sdk::DriverError;
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher};
@@ -73,8 +73,10 @@ impl Action for CatalogRegisterAction {
             .to_clvm(&mut ctx.allocator)
             .map_err(DriverError::ToClvm)
     }
+}
 
-    fn puzzle_hash(&self, _: &mut Allocator) -> TreeHash {
+impl ToTreeHash for CatalogRegisterAction {
+    fn tree_hash(&self) -> TreeHash {
         CatalogRegisterActionArgs::curry_tree_hash(
             self.launcher_id,
             self.royalty_address_hash,
