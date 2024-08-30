@@ -28,10 +28,8 @@ impl SlotLauncherLayer {
     }
 }
 
-pub fn get_hint(memos: &Vec<Bytes>) -> Option<Bytes32> {
-    let Some(hint) = memos.first() else {
-        return None;
-    };
+pub fn get_hint(memos: &[Bytes]) -> Option<Bytes32> {
+    let hint = memos.first()?;
 
     let Ok(hint) = hint.try_into() else {
         return None;
@@ -88,7 +86,7 @@ impl Layer for SlotLauncherLayer {
             })
             .collect();
 
-        if slot_value_hashes.len() == 0 {
+        if slot_value_hashes.is_empty() {
             return Ok(None);
         }
 
