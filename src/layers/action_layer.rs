@@ -6,6 +6,7 @@ use chia::{
     protocol::Bytes32,
 };
 use chia_wallet_sdk::{DriverError, Layer, MerkleTree, Puzzle, Spend, SpendContext};
+use clvm_traits::{clvm_list, match_tuple};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
@@ -75,6 +76,32 @@ impl<S> ActionLayer<S> {
         }
 
         Ok(Some((args.merkle_root, args.state)))
+    }
+
+    pub fn get_new_state(
+        ctx: &mut SpendContext,
+        initial_state: S,
+        solution: NodePtr,
+    ) -> Result<S, DriverError>
+    where
+        S: ToClvm<Allocator> + FromClvm<Allocator>,
+    {
+        let solution =
+            RawActionLayerSolution::<NodePtr, NodePtr>::from_clvm(&ctx.allocator, solution)?;
+
+        let mut state: S = initial_state;
+        for raw_action in solution.actions {
+            let actual_solution = clvm_list!(
+                state.to_clvm(&mut ctx.allocator)?,
+                raw_action.action_solution
+            );
+            let actual_solution = actual_solution.to_clvm(&mut ctx.allocator)?;
+
+            let output = ctx.run(raw_action.action_puzzle_reveal, actual_solution)?;
+            (state, _) = <match_tuple!(S, NodePtr)>::from_clvm(&ctx.allocator, output)?;
+        }
+
+        Ok(state)
     }
 }
 
