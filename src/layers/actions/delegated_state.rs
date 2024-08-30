@@ -36,16 +36,6 @@ impl Action for DelegatedStateAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn construct_solution(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DelegatedStateActionSolution<NodePtr>,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
-    }
-
     fn puzzle_hash(&self, _: &mut SpendContext) -> TreeHash {
         DelegatedStateActionArgs::curry_tree_hash(self.other_launcher_id)
     }

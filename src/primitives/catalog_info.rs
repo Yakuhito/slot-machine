@@ -1,8 +1,9 @@
 use chia::protocol::Bytes32;
-use chia_wallet_sdk::SingletonLayer;
+use chia_wallet_sdk::{DriverError, SingletonLayer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
+use clvmr::NodePtr;
 
-use crate::ActionLayer;
+use crate::{Action, ActionLayer, CatalogRegisterAction, DelegatedStateAction};
 
 pub type CatalogLayers = SingletonLayer<ActionLayer<CatalogState>>;
 
@@ -38,6 +39,29 @@ impl CatalogInfo {
             launcher_id,
             state,
             constants,
+        }
+    }
+}
+
+pub enum CatalogAction {
+    Register(CatalogRegisterAction),
+    UpdatePrice(DelegatedStateAction),
+}
+
+impl Action for CatalogAction {
+    type Solution = NodePtr;
+
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+        match self {
+            CatalogAction::Register(action) => action.construct_puzzle(ctx),
+            CatalogAction::UpdatePrice(action) => action.construct_puzzle(ctx),
+        }
+    }
+
+    fn puzzle_hash(&self, ctx: &mut chia_wallet_sdk::SpendContext) -> chia::clvm_utils::TreeHash {
+        match self {
+            CatalogAction::Register(action) => action.puzzle_hash(ctx),
+            CatalogAction::UpdatePrice(action) => action.puzzle_hash(ctx),
         }
     }
 }

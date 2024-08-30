@@ -45,7 +45,7 @@ impl CatalogRegisterAction {
 }
 
 impl Action for CatalogRegisterAction {
-    type Solution = CatalogRegisterActionSolution;
+    type Solution = NodePtr;
 
     fn construct_puzzle(
         &self,
@@ -62,16 +62,6 @@ impl Action for CatalogRegisterAction {
             ),
         }
         .to_clvm(&mut ctx.allocator)?)
-    }
-
-    fn construct_solution(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: CatalogRegisterActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
     }
 
     fn puzzle_hash(&self, _: &mut SpendContext) -> TreeHash {
