@@ -2,7 +2,9 @@ use chia::protocol::Bytes32;
 use chia_wallet_sdk::SingletonLayer;
 use clvm_traits::{FromClvm, ToClvm};
 
-type CatalogLayers = SingletonLayer<ActionLayer<CatalogState>>;
+use crate::ActionLayer;
+
+pub type CatalogLayers = SingletonLayer<ActionLayer<CatalogState>>;
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm)]
@@ -32,6 +34,7 @@ impl CatalogInfo {
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
         price_singleton_launcher_id: Bytes32,
+        state: CatalogState,
     ) -> Self {
         Self {
             launcher_id,
@@ -40,6 +43,9 @@ impl CatalogInfo {
             precommit_payout_puzzle_hash,
             relative_block_height,
             price_singleton_launcher_id,
+            state,
         }
     }
 }
+
+// todo: config to initialize this more easily + impl

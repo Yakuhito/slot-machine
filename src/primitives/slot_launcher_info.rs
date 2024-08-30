@@ -4,7 +4,7 @@ use clvmr::Allocator;
 
 use crate::SlotLauncherLayer;
 
-type SlotLauncherLayers = SingletonLayer<SlotLauncherLayer>;
+pub type SlotLauncherLayers = SingletonLayer<SlotLauncherLayer>;
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
