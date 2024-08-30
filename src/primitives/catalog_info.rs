@@ -3,7 +3,10 @@ use chia_wallet_sdk::{DriverError, SingletonLayer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 
-use crate::{Action, ActionLayer, CatalogRegisterAction, DelegatedStateAction};
+use crate::{
+    Action, ActionLayer, CatalogRegisterAction, CatalogRegisterActionSolution,
+    DelegatedStateAction, DelegatedStateActionSolution,
+};
 
 pub type CatalogLayers = SingletonLayer<ActionLayer<CatalogState>>;
 
@@ -48,13 +51,49 @@ pub enum CatalogAction {
     UpdatePrice(DelegatedStateAction),
 }
 
+pub enum CatalogActionSolution {
+    Register(CatalogRegisterActionSolution),
+    UpdatePrice(DelegatedStateActionSolution<CatalogState>),
+}
+
 impl Action for CatalogAction {
-    type Solution = NodePtr;
+    type Solution = CatalogActionSolution;
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         match self {
             CatalogAction::Register(action) => action.construct_puzzle(ctx),
             CatalogAction::UpdatePrice(action) => action.construct_puzzle(ctx),
+        }
+    }
+
+    fn construct_solution(
+        &self,
+        ctx: &mut SpendContext,
+        solution: Self::Solution,
+    ) -> Result<NodePtr, DriverError> {
+        match self {
+            CatalogAction::Register(action) => {
+                let CatalogActionSolution::Register(solution) = solution else {
+                    return Err(DriverError::Custom("Invalid solution".to_string()));
+                };
+
+                action.construct_solution(ctx, solution)
+            }
+            CatalogAction::UpdatePrice(action) => {
+                let CatalogActionSolution::UpdatePrice(solution) = solution else {
+                    return Err(DriverError::Custom("Invalid solution".to_string()));
+                };
+
+                let new_state = solution.new_state.to_clvm(&mut ctx.allocator)?;
+                action.construct_solution(
+                    ctx,
+                    DelegatedStateActionSolution {
+                        new_state,
+                        other_singleton_inner_puzzle_hash: solution
+                            .other_singleton_inner_puzzle_hash,
+                    },
+                )
+            }
         }
     }
 
