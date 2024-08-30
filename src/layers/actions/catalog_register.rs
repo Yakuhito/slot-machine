@@ -9,7 +9,7 @@ use chia::{
         singleton::{SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH},
     },
 };
-use chia_wallet_sdk::DriverError;
+use chia_wallet_sdk::{DriverError, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -44,7 +44,9 @@ impl CatalogRegisterAction {
     }
 }
 
-impl Action<CatalogRegisterActionSolution> for CatalogRegisterAction {
+impl Action for CatalogRegisterAction {
+    type Solution = CatalogRegisterActionSolution;
+
     fn construct_puzzle(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
@@ -70,6 +72,16 @@ impl Action<CatalogRegisterActionSolution> for CatalogRegisterAction {
         solution
             .to_clvm(&mut ctx.allocator)
             .map_err(DriverError::ToClvm)
+    }
+
+    fn puzzle_hash(&self, _: &mut SpendContext) -> TreeHash {
+        CatalogRegisterActionArgs::curry_tree_hash(
+            self.launcher_id,
+            self.royalty_address_hash,
+            self.trade_price_percentage,
+            self.precommit_payout_puzzle_hash,
+            self.relative_block_height,
+        )
     }
 }
 
