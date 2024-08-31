@@ -144,7 +144,7 @@ pub const PRECOMMIT_COIN_PUZZLE: [u8; 526] = hex!("ff02ffff01ff04ffff04ff18ffff0
 
 pub const PRECOMMIT_COIN_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    1e5759069429397243b808748e5bd5270ea0891953ea06df9a46b87ce4ade466
+    585bfa948f4c7aa920d30c2caab7825c43e2f11e2462206a03fa731063230994
     "
 ));
 

@@ -101,7 +101,7 @@ pub const UNIQUENESS_PRELAUNCHER_PUZZLE: [u8; 59] = hex!("ff02ffff01ff04ffff04ff
 
 pub const UNIQUENESS_PRELAUNCHER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    1e5759069429397243b808748e5bd5270ea0891953ea06df9a46b87ce4ade466
+    851c3d39cef84cfd9449afcaeff5f50d1be9371d8b7d6057ac318bec553a1a9f
     "
 ));
 

@@ -91,7 +91,7 @@ pub const SLOT_PUZZLE: [u8; 533] = hex!("ff02ffff01ff04ffff04ff10ffff04ffff30ff1
 
 pub const SLOT_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    1e5759069429397243b808748e5bd5270ea0891953ea06df9a46b87ce4ade466
+    b38ba57fdab27038c023662fb1e5f86611a3923291226571a68f12d936bb7401
     "
 ));
 
