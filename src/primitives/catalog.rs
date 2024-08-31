@@ -24,7 +24,7 @@ impl Catalog {
 }
 
 impl Catalog {
-    fn from_parent_spend(
+    pub fn from_parent_spend(
         allocator: &mut Allocator,
         parent_coin: Coin,
         parent_puzzle: Puzzle,
