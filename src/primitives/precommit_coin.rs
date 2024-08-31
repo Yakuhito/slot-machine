@@ -164,7 +164,7 @@ pub struct PrecommitCoin2ndCurryArgs<V> {
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
+#[clvm(solution)]
 pub struct PrecommitCoinSolution {
     pub singleton_inner_puzzle_hash: Bytes32,
 }

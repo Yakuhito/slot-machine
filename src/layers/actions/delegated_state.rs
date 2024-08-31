@@ -86,7 +86,7 @@ impl DelegatedStateActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
+#[clvm(solution)]
 pub struct DelegatedStateActionSolution<S> {
     pub new_state: S,
     pub other_singleton_inner_puzzle_hash: Bytes32,

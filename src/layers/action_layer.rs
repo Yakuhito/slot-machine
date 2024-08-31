@@ -232,7 +232,7 @@ pub struct RawActionLayerSolutionItem<P, S> {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
+#[clvm(solution)]
 pub struct RawActionLayerSolution<P, S> {
     pub actions: Vec<RawActionLayerSolutionItem<P, S>>,
 }

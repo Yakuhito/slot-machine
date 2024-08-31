@@ -186,7 +186,7 @@ impl CatalogRegisterActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
+#[clvm(solution)]
 pub struct CatalogRegisterActionSolution {
     pub tail_hash: Bytes32,
     pub initial_nft_owner_ph: Bytes32,
