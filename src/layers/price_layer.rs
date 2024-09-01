@@ -123,7 +123,7 @@ impl Layer for PriceLayer {
     type Solution = ();
 
     fn parse_puzzle(_: &Allocator, _: Puzzle) -> Result<Option<Self>, DriverError> {
-        todo!()
+        Ok(None) // Can't infer price schedule from single puzzle
     }
 
     fn parse_solution(_: &Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
