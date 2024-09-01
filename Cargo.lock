@@ -227,6 +227,7 @@ dependencies = [
  "clvm-traits",
  "clvmr",
  "hex-literal",
+ "num-bigint",
  "once_cell",
  "openssl",
  "openssl-sys",
