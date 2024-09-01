@@ -7,16 +7,10 @@ use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, SpendContext};
 use clvm_traits::{clvm_quote, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use num_bigint::BigInt;
-use once_cell::sync::Lazy;
 
-// https://docs.chia.net/block-rewards/#rewards-schedule
-pub static BLOCK_REWARD_SCHEDULE: Lazy<Vec<(u32, u64)>> = Lazy::new(|| {
-    vec![
-        (10_091_520, 500_000_000_000),
-        (15_137_280, 250_000_000_000),
-        (20_183_040, 125_000_000_000),
-    ]
-});
+// TODO: ideally, this layer would only be aware of this generation
+// so the primitive stores all this data and this puzzle is
+// only aware of launcher_id, other_singleton_puzzle_hash, next_block_height, next_price
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PriceLayer {
