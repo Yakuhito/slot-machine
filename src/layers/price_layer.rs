@@ -11,6 +11,9 @@ use num_bigint::BigInt;
 // TODO: ideally, this layer would only be aware of this generation
 // so the primitive stores all this data and this puzzle is
 // only aware of launcher_id, other_singleton_puzzle_hash, next_block_height, next_price
+// this would allow the layer to implement parse_puzzle
+// you could even modify it to be a more general delegated state layer - the primitive would
+// make it specific to price schedules
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PriceLayer {
@@ -27,17 +30,13 @@ impl PriceLayer {
         price_schedule: Vec<(u32, u64)>,
         generation: u32,
         other_singleton_puzzle_hash: Bytes32,
-    ) -> Option<Self> {
-        if generation > price_schedule.len() as u32 {
-            return None;
-        }
-
-        Some(Self {
+    ) -> Self {
+        Self {
             launcher_id,
             price_schedule,
             generation,
             other_singleton_puzzle_hash,
-        })
+        }
     }
 
     pub fn construct_single_generation_puzzle(

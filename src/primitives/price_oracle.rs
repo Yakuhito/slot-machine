@@ -1,8 +1,9 @@
 use chia::{
+    clvm_utils::TreeHash,
     protocol::{Bytes32, Coin},
-    puzzles::Proof,
+    puzzles::{singleton::SingletonSolution, Proof},
 };
-use chia_wallet_sdk::SingletonLayer;
+use chia_wallet_sdk::{DriverError, Layer, SingletonLayer, Spend, SpendContext};
 use once_cell::sync::Lazy;
 
 use crate::PriceLayer;
@@ -47,5 +48,68 @@ impl PriceOracle {
             generation,
             other_singleton_puzzle_hash,
         }
+    }
+
+    #[must_use]
+    pub fn into_layers(self) -> PriceOracleLayers {
+        SingletonLayer::new(
+            self.launcher_id,
+            PriceLayer::new(
+                self.launcher_id,
+                self.price_schedule,
+                self.generation,
+                self.other_singleton_puzzle_hash,
+            ),
+        )
+    }
+
+    pub fn inner_puzzle_hash(&self, ctx: &mut SpendContext) -> Result<TreeHash, DriverError> {
+        let inner_puzzle = PriceLayer::new(
+            self.launcher_id,
+            self.price_schedule.clone(),
+            self.generation,
+            self.other_singleton_puzzle_hash,
+        )
+        .construct_puzzle(ctx)?;
+
+        Ok(ctx.tree_hash(inner_puzzle))
+    }
+
+    pub fn child(self) -> Self {
+        let generation = if self.generation < self.price_schedule.len() as u32 {
+            self.generation + 1
+        } else {
+            self.generation
+        };
+
+        Self {
+            coin: self.coin,
+            proof: self.proof,
+            launcher_id: self.launcher_id,
+            price_schedule: self.price_schedule,
+            generation,
+            other_singleton_puzzle_hash: self.other_singleton_puzzle_hash,
+        }
+    }
+
+    pub fn spend(self, ctx: &mut SpendContext) -> Result<(), DriverError> {
+        let lineage_proof = self.proof;
+        let coin = self.coin;
+
+        let layers = self.into_layers();
+
+        let puzzle = layers.construct_puzzle(ctx)?;
+        let solution = layers.construct_solution(
+            ctx,
+            SingletonSolution {
+                lineage_proof,
+                amount: coin.amount,
+                inner_solution: (),
+            },
+        )?;
+
+        ctx.spend(coin, Spend::new(puzzle, solution))?;
+
+        Ok(())
     }
 }
