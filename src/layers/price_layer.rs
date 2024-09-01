@@ -1,4 +1,5 @@
 use chia::{
+    clvm_utils::tree_hash,
     protocol::{Bytes, Bytes32},
     puzzles::standard::{DEFAULT_HIDDEN_PUZZLE, DEFAULT_HIDDEN_PUZZLE_HASH},
 };
@@ -45,7 +46,7 @@ impl PriceLayer {
         })
     }
 
-    pub fn construct_generation_puzzle(
+    pub fn construct_single_generation_puzzle(
         allocator: &mut Allocator,
         my_launcher_id: Bytes32,
         next_block_height: u32,
@@ -78,6 +79,44 @@ impl PriceLayer {
         .to_clvm(allocator)
         .map_err(DriverError::ToClvm)
     }
+
+    pub fn construct_generation_puzzle(
+        allocator: &mut Allocator,
+        launcher_id: Bytes32,
+        price_schedule: Vec<(u32, u64)>,
+        generation: u32,
+        other_singleton_puzzle_hash: Bytes32,
+    ) -> Result<NodePtr, DriverError> {
+        if generation >= price_schedule.len() as u32 {
+            return DEFAULT_HIDDEN_PUZZLE
+                .to_clvm(allocator)
+                .map_err(DriverError::ToClvm);
+        }
+
+        let mut current_gen = generation as usize;
+        let mut next_puzzle_hash: Bytes32 = DEFAULT_HIDDEN_PUZZLE_HASH.into();
+        while current_gen > price_schedule.len() {
+            let next_puzze = Self::construct_single_generation_puzzle(
+                allocator,
+                launcher_id,
+                price_schedule[current_gen].0,
+                price_schedule[current_gen].1,
+                next_puzzle_hash,
+                other_singleton_puzzle_hash,
+            )?;
+            next_puzzle_hash = tree_hash(allocator, next_puzze).into();
+            current_gen -= 1;
+        }
+
+        PriceLayer::construct_single_generation_puzzle(
+            allocator,
+            launcher_id,
+            price_schedule[current_gen].0,
+            price_schedule[current_gen].1,
+            next_puzzle_hash,
+            other_singleton_puzzle_hash,
+        )
+    }
 }
 
 impl Layer for PriceLayer {
@@ -92,31 +131,11 @@ impl Layer for PriceLayer {
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        if self.generation >= self.price_schedule.len() as u32 {
-            return ctx.alloc(&DEFAULT_HIDDEN_PUZZLE);
-        }
-
-        let mut current_gen = self.generation as usize;
-        let mut next_puzzle_hash: Bytes32 = DEFAULT_HIDDEN_PUZZLE_HASH.into();
-        while current_gen > self.price_schedule.len() {
-            let next_puzze = PriceLayer::construct_generation_puzzle(
-                &mut ctx.allocator,
-                self.launcher_id,
-                self.price_schedule[current_gen].0,
-                self.price_schedule[current_gen].1,
-                next_puzzle_hash,
-                self.other_singleton_puzzle_hash,
-            )?;
-            next_puzzle_hash = ctx.tree_hash(next_puzze).into();
-            current_gen -= 1;
-        }
-
-        PriceLayer::construct_generation_puzzle(
+        Self::construct_generation_puzzle(
             &mut ctx.allocator,
             self.launcher_id,
-            self.price_schedule[current_gen].0,
-            self.price_schedule[current_gen].1,
-            next_puzzle_hash,
+            self.price_schedule.clone(),
+            self.generation,
             self.other_singleton_puzzle_hash,
         )
     }
