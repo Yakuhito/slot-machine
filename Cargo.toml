@@ -1,11 +1,11 @@
 [package]
-name = "catalog"
+name = "xch-slot-machine"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["yakuhito <y@kuhi.to>"]
-homepage = "https://github.com/Yakuhito/catalog"
-repository = "https://github.com/Yakuhito/catalog"
+homepage = "https://github.com/Yakuhito/slot-machine"
+repository = "https://github.com/Yakuhito/slot-machine"
 
 [dependencies]
 chia-wallet-sdk = "0.14.0"

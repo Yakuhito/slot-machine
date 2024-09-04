@@ -218,23 +218,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8318a53db07bb3f8dca91a600466bdb3f2eaadeedfdbcf02e1accbad9271ba50"
 
 [[package]]
-name = "catalog"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chia",
- "chia-wallet-sdk",
- "clvm-traits",
- "clvmr",
- "hex-literal",
- "num-bigint",
- "once_cell",
- "openssl",
- "openssl-sys",
- "rstest",
-]
-
-[[package]]
 name = "cc"
 version = "1.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2611,6 +2594,23 @@ dependencies = [
  "rusticata-macros",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "xch-slot-machine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chia",
+ "chia-wallet-sdk",
+ "clvm-traits",
+ "clvmr",
+ "hex-literal",
+ "num-bigint",
+ "once_cell",
+ "openssl",
+ "openssl-sys",
+ "rstest",
 ]
 
 [[package]]
