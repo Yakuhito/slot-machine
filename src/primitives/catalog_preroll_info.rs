@@ -11,7 +11,7 @@ use crate::ConditionsLayer;
 
 use super::{Slot, UniquenessPrelauncher};
 
-pub type CatalogPrerollLayers = SingletonLayer<ConditionsLayer<NodePtr>>;
+pub type CatalogPrerollerLayers = SingletonLayer<ConditionsLayer<NodePtr>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddCatInfo {
@@ -53,7 +53,7 @@ impl AddCat {
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CatalogPrerollInfo {
+pub struct CatalogPrerollerInfo {
     pub launcher_id: Bytes32,
     pub to_launch: Vec<AddCat>,
     pub next_puzzle_hash: Bytes32,
@@ -69,7 +69,7 @@ pub fn get_hint(memos: &[Bytes]) -> Option<Bytes32> {
     Some(hint)
 }
 
-impl CatalogPrerollInfo {
+impl CatalogPrerollerInfo {
     pub fn new(launcher_id: Bytes32, to_launch: Vec<AddCat>, next_puzzle_hash: Bytes32) -> Self {
         Self {
             launcher_id,
@@ -79,14 +79,14 @@ impl CatalogPrerollInfo {
     }
 
     pub fn parse(allocator: &Allocator, puzzle: Puzzle) -> Result<Option<Self>, DriverError> {
-        let Some(layers) = CatalogPrerollLayers::parse_puzzle(allocator, puzzle)? else {
+        let Some(layers) = CatalogPrerollerLayers::parse_puzzle(allocator, puzzle)? else {
             return Ok(None);
         };
 
         Self::from_layers(layers)
     }
 
-    pub fn from_layers(layers: CatalogPrerollLayers) -> Result<Option<Self>, DriverError> {
+    pub fn from_layers(layers: CatalogPrerollerLayers) -> Result<Option<Self>, DriverError> {
         let Some(Condition::CreateCoin(recreate_condition)) =
             layers.inner_puzzle.conditions.as_ref().iter().find(|c| {
                 let Condition::CreateCoin(cc) = c else {
@@ -162,11 +162,11 @@ impl CatalogPrerollInfo {
         self,
         allocator: &mut Allocator,
         my_coin_id: Bytes32,
-    ) -> Result<CatalogPrerollLayers, DriverError> {
+    ) -> Result<CatalogPrerollerLayers, DriverError> {
         let mut conditions =
             Conditions::new().create_coin(self.next_puzzle_hash, 1, vec![self.launcher_id.into()]);
 
-        for (add_cat, uniq_prelauncher, slot) in CatalogPrerollInfo::get_prelaunchers_and_slots(
+        for (add_cat, uniq_prelauncher, slot) in CatalogPrerollerInfo::get_prelaunchers_and_slots(
             allocator,
             self.to_launch,
             my_coin_id,
@@ -189,7 +189,7 @@ impl CatalogPrerollInfo {
                 .create_coin(
                     slot.coin.puzzle_hash,
                     slot.coin.amount,
-                    vec![slot.value_hash.into()],
+                    vec![asset_id.into()],
                 );
         }
 
@@ -199,13 +199,13 @@ impl CatalogPrerollInfo {
         ))
     }
 
-    pub fn inner_puzzle_hash(&self, ctx: &mut SpendContext) -> Result<TreeHash, DriverError> {
-        let inner_puzzle = SlotLauncherLayer::new(
-            self.launcher_id,
-            self.slot_value_hashes.clone(),
-            self.next_puzzle_hash,
-        )
-        .construct_puzzle(ctx)?;
+    pub fn inner_puzzle_hash(
+        self,
+        ctx: &mut SpendContext,
+        my_coin_id: Bytes32,
+    ) -> Result<TreeHash, DriverError> {
+        let layers = self.into_layers(&mut ctx.allocator, my_coin_id)?;
+        let inner_puzzle = layers.inner_puzzle.construct_puzzle(ctx)?;
 
         Ok(ctx.tree_hash(inner_puzzle))
     }

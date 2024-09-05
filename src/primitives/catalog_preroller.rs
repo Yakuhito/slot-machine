@@ -7,7 +7,7 @@ use chia::{
 };
 use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
 
-use super::SlotLauncherInfo;
+use super::{AddCat, CatalogPrerollerInfo};
 
 /// Used to create slots & then transition to either a new
 /// slot launcher or the main logic singleton innerpuzzle
@@ -16,7 +16,7 @@ use super::SlotLauncherInfo;
 pub struct SlotLauncher {
     pub coin: Coin,
     pub proof: Proof,
-    pub info: SlotLauncherInfo,
+    pub info: CatalogPrerollerInfo,
 }
 
 impl SlotLauncher {
@@ -24,29 +24,28 @@ impl SlotLauncher {
         coin: Coin,
         proof: Proof,
         launcher_id: Bytes32,
-        slot_value_hashes: Vec<Bytes32>,
+        to_launch: Vec<AddCat>,
         next_puzzle_hash: Bytes32,
     ) -> Self {
         Self {
             coin,
             proof,
-            info: SlotLauncherInfo::new(launcher_id, slot_value_hashes, next_puzzle_hash),
+            info: CatalogPrerollerInfo::new(launcher_id, to_launch, next_puzzle_hash),
         }
     }
 
     pub fn child(
         &self,
         ctx: &mut SpendContext,
-        next_slot_value_hashes: Vec<Bytes32>,
+        next_to_launch: Vec<AddCat>,
         next_next_puzzle_hash: Bytes32,
     ) -> Result<Option<Self>, DriverError> {
-        let child_info = SlotLauncherInfo::new(
-            self.info.launcher_id,
-            next_slot_value_hashes,
-            next_next_puzzle_hash,
-        );
+        let child_info =
+            CatalogPrerollerInfo::new(self.info.launcher_id, next_to_launch, next_next_puzzle_hash);
 
-        let child_inner_puzzle_hash = child_info.inner_puzzle_hash(ctx)?;
+        let child_inner_puzzle_hash = child_info
+            .clone()
+            .inner_puzzle_hash(ctx, Bytes32::default())?;
         let child_puzzle_hash =
             SingletonArgs::curry_tree_hash(self.info.launcher_id, child_inner_puzzle_hash);
 
@@ -56,7 +55,11 @@ impl SlotLauncher {
 
         let child_proof = Proof::Lineage(LineageProof {
             parent_parent_coin_info: self.coin.parent_coin_info,
-            parent_inner_puzzle_hash: self.info.inner_puzzle_hash(ctx)?.into(),
+            parent_inner_puzzle_hash: self
+                .info
+                .clone()
+                .inner_puzzle_hash(ctx, self.coin.coin_id())?
+                .into(),
             parent_amount: self.coin.amount,
         });
         let child_coin = Coin::new(self.coin.coin_id(), child_puzzle_hash.into(), 1);
@@ -69,7 +72,9 @@ impl SlotLauncher {
     }
 
     pub fn spend(self, ctx: &mut SpendContext) -> Result<(), DriverError> {
-        let layers = self.info.into_layers();
+        let layers = self
+            .info
+            .into_layers(&mut ctx.allocator, self.coin.coin_id())?;
 
         let puzzle = layers.construct_puzzle(ctx)?;
         let solution = layers.construct_solution(

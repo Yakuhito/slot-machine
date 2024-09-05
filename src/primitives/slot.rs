@@ -114,3 +114,19 @@ pub struct SlotSolution {
     pub parent_inner_puzzle_hash: Bytes32,
     pub spender_inner_puzzle_hash: Bytes32,
 }
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(list)]
+pub struct CatalogSlotNeigborsInfo {
+    pub left_asset_id: Bytes32,
+    #[clvm(rest)]
+    pub right_asset_id: Bytes32,
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(list)]
+pub struct CatalogSlotValue {
+    pub asset_id: Bytes32,
+    #[clvm(rest)]
+    pub neighbors: CatalogSlotNeigborsInfo,
+}
