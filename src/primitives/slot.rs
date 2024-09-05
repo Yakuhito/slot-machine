@@ -130,3 +130,15 @@ pub struct CatalogSlotValue {
     #[clvm(rest)]
     pub neighbors: CatalogSlotNeigborsInfo,
 }
+
+impl CatalogSlotValue {
+    pub fn new(asset_id: Bytes32, left_asset_id: Bytes32, right_asset_id: Bytes32) -> Self {
+        Self {
+            asset_id,
+            neighbors: CatalogSlotNeigborsInfo {
+                left_asset_id,
+                right_asset_id,
+            },
+        }
+    }
+}

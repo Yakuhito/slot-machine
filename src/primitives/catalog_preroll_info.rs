@@ -11,7 +11,7 @@ use clvmr::{Allocator, NodePtr};
 
 use crate::{CatNftMetadata, ConditionsLayer, SpendContextExt, ANY_METADATA_UPDATER_HASH};
 
-use super::{Slot, UniquenessPrelauncher};
+use super::{CatalogSlotValue, Slot, UniquenessPrelauncher};
 
 pub type CatalogPrerollerLayers = SingletonLayer<ConditionsLayer<NodePtr>>;
 
@@ -137,14 +137,23 @@ impl CatalogPrerollerInfo {
 
         for add_cat in to_launch {
             let asset_id = add_cat.asset_id;
+            let Some((asset_id_left, asset_id_right)) = add_cat
+                .info
+                .as_ref()
+                .map(|i| (i.asset_id_left, i.asset_id_right))
+            else {
+                return Err(DriverError::Custom(
+                    "Missing CAT launch info (required to build slot)".to_string(),
+                ));
+            };
 
             // uniqueness prelauncher
             let uniq_prelauncher =
                 UniquenessPrelauncher::<Bytes32>::new(allocator, my_coin_id, asset_id)?;
 
             // slot
-            let asset_id_hash: Bytes32 = asset_id.tree_hash().into();
-            let slot = Slot::new(my_coin_id, my_launcher_id, asset_id_hash)?;
+            let value = CatalogSlotValue::new(asset_id, asset_id_left, asset_id_right);
+            let slot = Slot::new(my_coin_id, my_launcher_id, value.tree_hash().into())?;
 
             res.push((add_cat, uniq_prelauncher, slot));
         }
