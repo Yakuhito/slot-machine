@@ -1,10 +1,12 @@
 use chia_wallet_sdk::{DriverError, SpendContext};
 use clvmr::NodePtr;
 
+mod cat_nft_metadata;
 mod drivers;
 mod layers;
 mod primitives;
 
+pub use cat_nft_metadata::*;
 pub use drivers::*;
 pub use layers::*;
 pub use primitives::*;
