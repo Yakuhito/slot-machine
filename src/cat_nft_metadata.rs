@@ -1,17 +1,6 @@
 use chia::protocol::Bytes32;
 use clvm_traits::{ClvmDecoder, ClvmEncoder, FromClvm, FromClvmError, Raw, ToClvm, ToClvmError};
 
-/*
-pub code: String,
-    pub name: String,
-    pub description: String,
-
-    pub image_urls: Vec<String>,
-    pub image_hash: Bytes32,
-
-    pub metadata_urls: Vec<String>,
-    pub metadata_hash: Bytes32,
-*/
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CatNftMetadata {
     pub code: String,

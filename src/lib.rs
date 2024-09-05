@@ -18,6 +18,7 @@ pub trait SpendContextExt {
     fn uniqueness_prelauncher_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn precommit_coin_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn slot_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn any_metadata_updater(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -56,6 +57,11 @@ impl SpendContextExt for SpendContext {
     fn slot_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(SLOT_PUZZLE_HASH, &SLOT_PUZZLE)
     }
+
+    /// Allocate the any metadata updater puzzle and return its pointer.
+    fn any_metadata_updater(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(ANY_METADATA_UPDATER_HASH, &ANY_METADATA_UPDATER)
+    }
 }
 
 #[cfg(test)]
@@ -81,6 +87,7 @@ mod tests {
         assert_puzzle_hash!(UNIQUENESS_PRELAUNCHER_PUZZLE => UNIQUENESS_PRELAUNCHER_PUZZLE_HASH);
         assert_puzzle_hash!(PRECOMMIT_COIN_PUZZLE => PRECOMMIT_COIN_PUZZLE_HASH);
         assert_puzzle_hash!(SLOT_PUZZLE => SLOT_PUZZLE_HASH);
+        assert_puzzle_hash!(ANY_METADATA_UPDATER => ANY_METADATA_UPDATER_HASH);
 
         Ok(())
     }

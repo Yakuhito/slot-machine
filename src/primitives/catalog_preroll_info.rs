@@ -1,13 +1,15 @@
 use chia::{
     clvm_utils::{ToTreeHash, TreeHash},
     protocol::{Bytes, Bytes32},
+    puzzles::nft::NFT_ROYALTY_TRANSFER_PUZZLE_HASH,
 };
 use chia_wallet_sdk::{
-    Condition, Conditions, DriverError, Layer, Puzzle, SingletonLayer, SpendContext,
+    Condition, Conditions, DriverError, Launcher, Layer, Puzzle, SingletonLayer, SpendContext,
 };
+use clvm_traits::ToClvm;
 use clvmr::{Allocator, NodePtr};
 
-use crate::ConditionsLayer;
+use crate::{CatNftMetadata, ConditionsLayer, SpendContextExt, ANY_METADATA_UPDATER_HASH};
 
 use super::{Slot, UniquenessPrelauncher};
 
@@ -18,15 +20,8 @@ pub struct AddCatInfo {
     pub asset_id_left: Bytes32,
     pub asset_id_right: Bytes32,
 
-    pub code: String,
-    pub name: String,
-    pub description: String,
-
-    pub image_urls: Vec<String>,
-    pub image_hash: Bytes32,
-
-    pub metadata_urls: Vec<String>,
-    pub metadata_hash: Bytes32,
+    pub owner_puzzle_hash: Bytes32,
+    pub metadata: CatNftMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,7 +152,6 @@ impl CatalogPrerollerInfo {
         Ok(res)
     }
 
-    #[must_use]
     pub fn into_layers(
         self,
         allocator: &mut Allocator,
@@ -166,6 +160,7 @@ impl CatalogPrerollerInfo {
         let mut conditions =
             Conditions::new().create_coin(self.next_puzzle_hash, 1, vec![self.launcher_id.into()]);
 
+        let fake_ctx = &mut SpendContext::new();
         for (add_cat, uniq_prelauncher, slot) in CatalogPrerollerInfo::get_prelaunchers_and_slots(
             allocator,
             self.to_launch,
@@ -178,7 +173,27 @@ impl CatalogPrerollerInfo {
                     "Missing CAT launch info (required to build puzzle)".to_string(),
                 ));
             };
-            // todo: secure NFT launch via annpuncement
+
+            // uniqueness preelauncher was created - but we ned to assert that the correct NFT was acutally created
+            let launcher = Launcher::new(uniq_prelauncher.coin.coin_id(), 1);
+
+            let target_nft_metadata_ptr = info.metadata.to_clvm(&mut fake_ctx.allocator)?;
+            let eve_nft_p2_layer = ConditionsLayer::new(
+                Conditions::new()
+                    .create_coin(info.owner_puzzle_hash, 1, vec![self.launcher_id.into()])
+                    .update_nft_metadata(fake_ctx.any_metadata_updater()?, target_nft_metadata_ptr),
+            );
+            let eve_nft_p2_puzzle_ptr = eve_nft_p2_layer.construct_puzzle(fake_ctx)?;
+            let eve_nft_p2_hash = fake_ctx.tree_hash(eve_nft_p2_puzzle_ptr);
+
+            let (_, nft) = launcher.mint_eve_nft(
+                fake_ctx,
+                eve_nft_p2_hash.into(),
+                (),
+                ANY_METADATA_UPDATER_HASH.into(),
+                NFT_ROYALTY_TRANSFER_PUZZLE_HASH.into(),
+                100,
+            )?;
 
             conditions = conditions
                 .create_coin(
@@ -190,7 +205,8 @@ impl CatalogPrerollerInfo {
                     slot.coin.puzzle_hash,
                     slot.coin.amount,
                     vec![asset_id.into()],
-                );
+                )
+                .assert_concurrent_spend(nft.coin.coin_id());
         }
 
         Ok(SingletonLayer::new(
