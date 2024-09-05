@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
+    clvm_utils::{tree_hash, CurriedProgram, ToTreeHash, TreeHash},
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::singleton::SINGLETON_LAUNCHER_PUZZLE_HASH,
 };
@@ -23,15 +23,15 @@ impl<V> UniquenessPrelauncher<V> {
     }
 
     pub fn new(
-        ctx: &mut SpendContext,
+        allocator: &mut Allocator,
         parent_coin_id: Bytes32,
         value: V,
     ) -> Result<Self, DriverError>
     where
         V: ToClvm<Allocator> + Clone,
     {
-        let value_ptr = ctx.alloc(&value)?;
-        let value_hash = ctx.tree_hash(value_ptr);
+        let value_ptr = value.to_clvm(allocator)?;
+        let value_hash = tree_hash(&allocator, value_ptr);
 
         Ok(Self::from_coin(
             Coin::new(

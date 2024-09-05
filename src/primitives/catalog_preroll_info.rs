@@ -1,11 +1,15 @@
 use chia::{
-    clvm_utils::TreeHash,
+    clvm_utils::{ToTreeHash, TreeHash},
     protocol::{Bytes, Bytes32},
 };
-use chia_wallet_sdk::{Condition, DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
+use chia_wallet_sdk::{
+    Condition, Conditions, DriverError, Layer, Puzzle, SingletonLayer, SpendContext,
+};
 use clvmr::{Allocator, NodePtr};
 
 use crate::ConditionsLayer;
+
+use super::{Slot, UniquenessPrelauncher};
 
 pub type CatalogPrerollLayers = SingletonLayer<ConditionsLayer<NodePtr>>;
 
@@ -128,16 +132,71 @@ impl CatalogPrerollInfo {
         }))
     }
 
+    pub fn get_prelaunchers_and_slots(
+        allocator: &mut Allocator,
+        to_launch: Vec<AddCat>,
+        my_coin_id: Bytes32,
+        my_launcher_id: Bytes32,
+    ) -> Result<Vec<(AddCat, UniquenessPrelauncher<Bytes32>, Slot)>, DriverError> {
+        let mut res = Vec::with_capacity(to_launch.len());
+
+        for add_cat in to_launch {
+            let asset_id = add_cat.asset_id;
+
+            // uniqueness prelauncher
+            let uniq_prelauncher =
+                UniquenessPrelauncher::<Bytes32>::new(allocator, my_coin_id, asset_id)?;
+
+            // slot
+            let asset_id_hash: Bytes32 = asset_id.tree_hash().into();
+            let slot = Slot::new(my_coin_id, my_launcher_id, asset_id_hash)?;
+
+            res.push((add_cat, uniq_prelauncher, slot));
+        }
+
+        Ok(res)
+    }
+
     #[must_use]
-    pub fn into_layers(self) -> SlotLauncherLayers {
-        SingletonLayer::new(
+    pub fn into_layers(
+        self,
+        allocator: &mut Allocator,
+        my_coin_id: Bytes32,
+    ) -> Result<CatalogPrerollLayers, DriverError> {
+        let mut conditions =
+            Conditions::new().create_coin(self.next_puzzle_hash, 1, vec![self.launcher_id.into()]);
+
+        for (add_cat, uniq_prelauncher, slot) in CatalogPrerollInfo::get_prelaunchers_and_slots(
+            allocator,
+            self.to_launch,
+            my_coin_id,
             self.launcher_id,
-            SlotLauncherLayer::new(
-                self.launcher_id,
-                self.slot_value_hashes,
-                self.next_puzzle_hash,
-            ),
-        )
+        )? {
+            let asset_id = add_cat.asset_id;
+            let Some(info) = add_cat.info else {
+                return Err(DriverError::Custom(
+                    "Missing CAT launch info (required to build puzzle)".to_string(),
+                ));
+            };
+            // todo: secure NFT launch via annpuncement
+
+            conditions = conditions
+                .create_coin(
+                    uniq_prelauncher.coin.puzzle_hash,
+                    uniq_prelauncher.coin.amount,
+                    vec![],
+                )
+                .create_coin(
+                    slot.coin.puzzle_hash,
+                    slot.coin.amount,
+                    vec![slot.value_hash.into()],
+                );
+        }
+
+        Ok(SingletonLayer::new(
+            self.launcher_id,
+            ConditionsLayer::new(conditions),
+        ))
     }
 
     pub fn inner_puzzle_hash(&self, ctx: &mut SpendContext) -> Result<TreeHash, DriverError> {
