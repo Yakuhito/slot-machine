@@ -31,7 +31,7 @@ impl<V> UniquenessPrelauncher<V> {
         V: ToClvm<Allocator> + Clone,
     {
         let value_ptr = value.to_clvm(allocator)?;
-        let value_hash = tree_hash(&allocator, value_ptr);
+        let value_hash = tree_hash(allocator, value_ptr);
 
         Ok(Self::from_coin(
             Coin::new(

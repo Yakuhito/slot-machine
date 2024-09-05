@@ -91,7 +91,7 @@ pub const ANY_METADATA_UPDATER: [u8; 23] = hex!("ff04ffff04ff0bffff04ff05ff80808
 
 pub const ANY_METADATA_UPDATER_HASH: TreeHash = TreeHash::new(hex!(
     "
-    1e5759069429397243b808748e5bd5270ea0891953ea06df9a46b87ce4ade466
+    9f28d55242a3bd2b3661c38ba8647392c26bb86594050ea6d33aad1725ca3eea
     "
 ));
 
