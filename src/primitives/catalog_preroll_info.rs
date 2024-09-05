@@ -1,10 +1,13 @@
-use chia::{clvm_utils::TreeHash, protocol::Bytes32};
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
+use chia::{
+    clvm_utils::TreeHash,
+    protocol::{Bytes, Bytes32},
+};
+use chia_wallet_sdk::{Condition, DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
 use clvmr::{Allocator, NodePtr};
 
 use crate::ConditionsLayer;
 
-pub type SlotLauncherLayers = SingletonLayer<ConditionsLayer<NodePtr>>;
+pub type CatalogPrerollLayers = SingletonLayer<ConditionsLayer<NodePtr>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddCatInfo {
@@ -17,6 +20,9 @@ pub struct AddCatInfo {
 
     pub image_urls: Vec<String>,
     pub image_hash: Bytes32,
+
+    pub metadata_urls: Vec<String>,
+    pub metadata_hash: Bytes32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,30 +52,80 @@ impl AddCat {
 pub struct CatalogPrerollInfo {
     pub launcher_id: Bytes32,
     pub to_launch: Vec<AddCat>,
+    pub next_puzzle_hash: Bytes32,
+}
+
+pub fn get_hint(memos: &[Bytes]) -> Option<Bytes32> {
+    let hint = memos.first()?;
+
+    let Ok(hint) = hint.try_into() else {
+        return None;
+    };
+
+    Some(hint)
 }
 
 impl CatalogPrerollInfo {
-    pub fn new(launcher_id: Bytes32, to_launch: Vec<AddCat>) -> Self {
+    pub fn new(launcher_id: Bytes32, to_launch: Vec<AddCat>, next_puzzle_hash: Bytes32) -> Self {
         Self {
             launcher_id,
             to_launch,
+            next_puzzle_hash,
         }
     }
 
     pub fn parse(allocator: &Allocator, puzzle: Puzzle) -> Result<Option<Self>, DriverError> {
-        let Some(layers) = SlotLauncherLayers::parse_puzzle(allocator, puzzle)? else {
+        let Some(layers) = CatalogPrerollLayers::parse_puzzle(allocator, puzzle)? else {
             return Ok(None);
         };
 
-        Ok(Some(Self::from_layers(layers)))
+        Self::from_layers(layers)
     }
 
-    pub fn from_layers(layers: SlotLauncherLayers) -> Self {
-        Self {
-            launcher_id: layers.launcher_id,
-            slot_value_hashes: layers.inner_puzzle.slot_value_hashes,
-            next_puzzle_hash: layers.inner_puzzle.next_puzzle_hash,
-        }
+    pub fn from_layers(layers: CatalogPrerollLayers) -> Result<Option<Self>, DriverError> {
+        let Some(Condition::CreateCoin(recreate_condition)) =
+            layers.inner_puzzle.conditions.as_ref().iter().find(|c| {
+                let Condition::CreateCoin(cc) = c else {
+                    return false;
+                };
+
+                cc.amount % 2 == 1
+            })
+        else {
+            return Ok(None);
+        };
+
+        let Some(launcher_id) = get_hint(&recreate_condition.memos) else {
+            return Ok(None);
+        };
+
+        let next_puzzle_hash = recreate_condition.puzzle_hash;
+        let to_launch = layers
+            .inner_puzzle
+            .conditions
+            .into_iter()
+            .filter_map(|cond| {
+                let Condition::CreateCoin(create_coin) = cond else {
+                    return None;
+                };
+
+                if create_coin.amount != 0 {
+                    return None;
+                }
+
+                // we get the asset_id from slot launches
+                // uniqueness prelauncher would not have any memos
+                let asset_id = get_hint(&create_coin.memos)?;
+
+                Some(AddCat::from_asset_id(asset_id))
+            })
+            .collect();
+
+        Ok(Some(Self {
+            launcher_id,
+            to_launch,
+            next_puzzle_hash,
+        }))
     }
 
     #[must_use]
