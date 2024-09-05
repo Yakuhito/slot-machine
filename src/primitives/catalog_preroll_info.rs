@@ -1,29 +1,58 @@
 use chia::{clvm_utils::TreeHash, protocol::Bytes32};
 use chia_wallet_sdk::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
-use clvmr::Allocator;
+use clvmr::{Allocator, NodePtr};
 
-use crate::SlotLauncherLayer;
+use crate::ConditionsLayer;
 
-pub type SlotLauncherLayers = SingletonLayer<SlotLauncherLayer>;
+pub type SlotLauncherLayers = SingletonLayer<ConditionsLayer<NodePtr>>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddCatInfo {
+    pub asset_id_left: Bytes32,
+    pub asset_id_right: Bytes32,
+
+    pub code: String,
+    pub name: String,
+    pub description: String,
+
+    pub image_urls: Vec<String>,
+    pub image_hash: Bytes32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddCat {
+    pub asset_id: Bytes32,
+    pub info: Option<AddCatInfo>,
+}
+
+impl AddCat {
+    pub fn new(asset_id: Bytes32, info: AddCatInfo) -> Self {
+        Self {
+            asset_id,
+            info: Some(info),
+        }
+    }
+
+    pub fn from_asset_id(asset_id: Bytes32) -> Self {
+        Self {
+            asset_id,
+            info: None,
+        }
+    }
+}
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SlotLauncherInfo {
+pub struct CatalogPrerollInfo {
     pub launcher_id: Bytes32,
-    pub slot_value_hashes: Vec<Bytes32>,
-    pub next_puzzle_hash: Bytes32,
+    pub to_launch: Vec<AddCat>,
 }
 
-impl SlotLauncherInfo {
-    pub fn new(
-        launcher_id: Bytes32,
-        slot_value_hashes: Vec<Bytes32>,
-        next_puzzle_hash: Bytes32,
-    ) -> Self {
+impl CatalogPrerollInfo {
+    pub fn new(launcher_id: Bytes32, to_launch: Vec<AddCat>) -> Self {
         Self {
             launcher_id,
-            slot_value_hashes,
-            next_puzzle_hash,
+            to_launch,
         }
     }
 
