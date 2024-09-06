@@ -6,12 +6,15 @@ use chia::{
         offer::{
             NotarizedPayment, Payment, SettlementPaymentsSolution, SETTLEMENT_PAYMENTS_PUZZLE_HASH,
         },
-        standard::StandardArgs,
-        EveProof, Proof,
+        singleton::SingletonArgs,
+        standard::{StandardArgs, StandardSolution},
+        EveProof, LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{Condition, Conditions, DriverError, Launcher, Offer, SpendContext};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{
+    Condition, Conditions, DriverError, Launcher, Layer, Offer, Spend, SpendContext, StandardLayer,
+};
+use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::NodePtr;
 
 use crate::{
@@ -131,6 +134,31 @@ pub fn parse_one_sided_offer(
     })
 }
 
+pub fn spend_security_coin(
+    ctx: &mut SpendContext,
+    security_coin: Coin,
+    conditions: Conditions<NodePtr>,
+    sk: SecretKey,
+) -> Result<Signature, DriverError> {
+    let pk = sk.public_key();
+
+    let layer = StandardLayer::new(pk);
+    let puzzle_reveal_ptr = layer.construct_puzzle(ctx)?;
+
+    let quoted_conditions_ptr = clvm_quote!(conditions).to_clvm(&mut ctx.allocator)?;
+    let solution_ptr = layer.construct_solution(
+        ctx,
+        StandardSolution {
+            original_public_key: None,
+            delegated_puzzle: quoted_conditions_ptr,
+            solution: NodePtr::NIL,
+        },
+    )?;
+
+    let spend = Spend::new(puzzle_reveal_ptr, solution_ptr);
+    ctx.spend(security_coin, spend)?;
+}
+
 pub fn launch_catalog(
     offer: Offer,
     price_schedule: PriceSchedule,
@@ -187,17 +215,18 @@ pub fn launch_catalog(
     );
 
     // Spend preroll coin launcher
-    let target_catalog = CatalogInfo::new(
+    let target_catalog_info = CatalogInfo::new(
         catalog_launcher_id,
         CatalogState {
             registration_price: initial_registration_price,
         },
         constants,
     );
+    let target_catalog_inner_puzzle_hash = target_catalog_info.clone().inner_puzzle_hash();
     let preroll_info = CatalogPrerollerInfo::new(
         catalog_launcher_id,
         cats_to_launch,
-        target_catalog.inner_puzzle_hash().into(),
+        target_catalog_inner_puzzle_hash.into(),
     );
 
     let preroll_coin_inner_ph = preroll_info
@@ -218,13 +247,40 @@ pub fn launch_catalog(
     );
 
     // Spend preroll coin until the Catalog is created
+    let catalog_coin = Coin::new(
+        preroller.coin.coin_id(),
+        SingletonArgs::curry_tree_hash(catalog_launcher_id, target_catalog_inner_puzzle_hash)
+            .into(),
+        1,
+    );
+    let catalog = Catalog::new(
+        catalog_coin,
+        Proof::Lineage(LineageProof {
+            parent_parent_coin_info: preroller.coin.parent_coin_info,
+            parent_inner_puzzle_hash: preroll_coin_inner_ph.into(),
+            parent_amount: 1,
+        }),
+        target_catalog_info,
+    );
+
     preroller.spend(ctx)?;
 
     // Secure everything we've done with the preroll coin
+    security_coin_conditions =
+        security_coin_conditions.assert_concurrent_spend(catalog.coin.coin_id());
 
     // Spend security coin
+    let security_coin_sig = spend_security_coin(
+        ctx,
+        offer.security_coin,
+        security_coin_conditions,
+        offer.security_coin_sk,
+    );
 
-    // Finally, return the spend bundle
-
-    todo!()
+    // Finally, return the data
+    Ok((
+        SpendBundle::new(ctx.take(), offer.aggregated_signature + security_coin_sig),
+        price_scheduler,
+        catalog,
+    ))
 }
