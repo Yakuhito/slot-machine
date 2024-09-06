@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::{CurriedProgram, TreeHash},
+    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
     puzzles::singleton::{
         SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH,
@@ -102,13 +102,33 @@ pub const STATE_SCHEDULER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
 ));
 
-#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
+#[derive(FromClvm, ToClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
 pub struct StateSchedulerLayerArgs {
     pub other_singleton_struct: SingletonStruct,
     pub new_state_hash: Bytes32,
     pub required_block_height: u32,
     pub new_puzzle_hash: Bytes32,
+}
+
+impl StateSchedulerLayerArgs {
+    pub fn curry_tree_hash(
+        other_singleton_launcher_id: Bytes32,
+        new_state_hash: Bytes32,
+        required_block_height: u32,
+        new_puzzle_hash: Bytes32,
+    ) -> TreeHash {
+        CurriedProgram {
+            program: STATE_SCHEDULER_PUZZLE_HASH,
+            args: StateSchedulerLayerArgs {
+                other_singleton_struct: SingletonStruct::new(other_singleton_launcher_id),
+                new_state_hash,
+                required_block_height,
+                new_puzzle_hash,
+            },
+        }
+        .tree_hash()
+    }
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
