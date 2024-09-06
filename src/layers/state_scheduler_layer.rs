@@ -1,8 +1,16 @@
-use chia::{clvm_utils::TreeHash, protocol::Bytes32, puzzles::singleton::SingletonStruct};
+use chia::{
+    clvm_utils::{CurriedProgram, TreeHash},
+    protocol::Bytes32,
+    puzzles::singleton::{
+        SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH,
+    },
+};
 use chia_wallet_sdk::{DriverError, Layer, Puzzle, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
+
+use crate::SpendContextExt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateSchedulerLayer {
@@ -31,16 +39,50 @@ impl StateSchedulerLayer {
 impl Layer for StateSchedulerLayer {
     type Solution = StateSchedulerLayerSolution;
 
-    fn parse_puzzle(_: &Allocator, _: Puzzle) -> Result<Option<Self>, DriverError> {
-        todo!()
+    fn parse_puzzle(allocator: &Allocator, puzzle: Puzzle) -> Result<Option<Self>, DriverError> {
+        let Some(puzzle) = puzzle.as_curried() else {
+            return Ok(None);
+        };
+
+        if puzzle.mod_hash != STATE_SCHEDULER_PUZZLE_HASH {
+            return Ok(None);
+        }
+
+        let args = StateSchedulerLayerArgs::from_clvm(allocator, puzzle.args)?;
+
+        if args.other_singleton_struct.launcher_puzzle_hash != SINGLETON_LAUNCHER_PUZZLE_HASH.into()
+            || args.other_singleton_struct.mod_hash != SINGLETON_TOP_LAYER_PUZZLE_HASH.into()
+        {
+            return Err(DriverError::NonStandardLayer);
+        }
+
+        Ok(Some(Self {
+            other_singleton_launcher_id: args.other_singleton_struct.launcher_id,
+            new_state_hash: args.new_state_hash,
+            required_block_height: args.required_block_height,
+            new_puzzle_hash: args.new_puzzle_hash,
+        }))
     }
 
-    fn parse_solution(_: &Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        todo!()
+    fn parse_solution(
+        allocator: &Allocator,
+        solution: NodePtr,
+    ) -> Result<Self::Solution, DriverError> {
+        StateSchedulerLayerSolution::from_clvm(allocator, solution).map_err(DriverError::FromClvm)
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        todo!()
+        CurriedProgram {
+            program: ctx.state_shcheduler_puzzle()?,
+            args: StateSchedulerLayerArgs {
+                other_singleton_struct: SingletonStruct::new(self.other_singleton_launcher_id),
+                new_state_hash: self.new_state_hash,
+                required_block_height: self.required_block_height,
+                new_puzzle_hash: self.new_puzzle_hash,
+            },
+        }
+        .to_clvm(&mut ctx.allocator)
+        .map_err(DriverError::ToClvm)
     }
 
     fn construct_solution(
