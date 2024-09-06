@@ -19,6 +19,7 @@ pub trait SpendContextExt {
     fn precommit_coin_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn slot_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn any_metadata_updater(&mut self) -> Result<NodePtr, DriverError>;
+    fn state_shcheduler_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -62,6 +63,11 @@ impl SpendContextExt for SpendContext {
     fn any_metadata_updater(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(ANY_METADATA_UPDATER_HASH, &ANY_METADATA_UPDATER)
     }
+
+    /// Allocate the state scheduler puzzle and return its pointer.
+    fn state_shcheduler_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(STATE_SCHEDULER_PUZZLE_HASH, &STATE_SCHEDULER_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -88,6 +94,7 @@ mod tests {
         assert_puzzle_hash!(PRECOMMIT_COIN_PUZZLE => PRECOMMIT_COIN_PUZZLE_HASH);
         assert_puzzle_hash!(SLOT_PUZZLE => SLOT_PUZZLE_HASH);
         assert_puzzle_hash!(ANY_METADATA_UPDATER => ANY_METADATA_UPDATER_HASH);
+        assert_puzzle_hash!(STATE_SCHEDULER_PUZZLE => STATE_SCHEDULER_PUZZLE_HASH);
 
         Ok(())
     }
