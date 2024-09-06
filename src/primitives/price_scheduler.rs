@@ -12,9 +12,10 @@ use once_cell::sync::Lazy;
 use crate::{StateSchedulerLayer, StateSchedulerLayerArgs, StateSchedulerLayerSolution};
 
 pub type PriceOracleLayers = SingletonLayer<StateSchedulerLayer>;
+pub type PriceSchedule = Vec<(u32, u64)>;
 
 // https://docs.chia.net/block-rewards/#rewards-schedule
-pub static BLOCK_REWARD_SCHEDULE: Lazy<Vec<(u32, u64)>> = Lazy::new(|| {
+pub static BLOCK_REWARD_SCHEDULE: Lazy<PriceSchedule> = Lazy::new(|| {
     vec![
         (10_091_520, 500_000_000_000),
         (15_137_280, 250_000_000_000),
@@ -29,7 +30,7 @@ pub struct PriceScheduler {
 
     pub launcher_id: Bytes32,
 
-    pub price_schedule: Vec<(u32, u64)>,
+    pub price_schedule: PriceSchedule,
     pub generation: usize,
     pub other_singleton_launcher_id: Bytes32,
 }
@@ -39,7 +40,7 @@ impl PriceScheduler {
         coin: Coin,
         proof: Proof,
         launcher_id: Bytes32,
-        price_schedule: Vec<(u32, u64)>,
+        price_schedule: PriceSchedule,
         generation: usize,
         other_singleton_launcher_id: Bytes32,
     ) -> Self {

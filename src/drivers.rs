@@ -9,9 +9,11 @@ use chia::{
         standard::StandardArgs,
     },
 };
-use chia_wallet_sdk::{Condition, DriverError, Offer, SpendContext};
+use chia_wallet_sdk::{Condition, Conditions, DriverError, Launcher, Offer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
+
+use crate::PriceSchedule;
 
 pub struct SecureOneSidedOffer {
     pub coin_spends: Vec<CoinSpend>,
@@ -125,8 +127,54 @@ pub fn parse_one_sided_offer(
     })
 }
 
-pub fn launch_catalog(ctx: &mut SpendContext, offer: Offer) -> Result<SpendBundle, DriverError> {
+pub fn launch_catalog(offer: Offer, schedule: PriceSchedule) -> Result<SpendBundle, DriverError> {
+    let ctx = &mut SpendContext::new();
+
     let offer = parse_one_sided_offer(ctx, offer)?;
+    let security_coin_id = offer.security_coin.coin_id();
+
+    let mut security_coin_conditions = Conditions::new();
+
+    // Launch preroll coin
+    let preroll_launcher = Launcher::new(security_coin_id, 0);
+    let preroll_launcher_coin = preroll_launcher.coin();
+    let preroll_launcher_id = preroll_launcher_coin.coin_id();
+    security_coin_conditions = security_coin_conditions.create_coin(
+        preroll_launcher_coin.puzzle_hash,
+        preroll_launcher_coin.amount,
+        vec![preroll_launcher_id.into()],
+    );
+
+    // Launch price oracle
+    let price_oracle_launcher = Launcher::new(security_coin_id, 2);
+    let price_oracle_launcher_coin = price_oracle_launcher.coin();
+    let price_oracle_launcher_id = price_oracle_launcher_coin.coin_id();
+    security_coin_conditions = security_coin_conditions.create_coin(
+        price_oracle_launcher_coin.puzzle_hash,
+        price_oracle_launcher_coin.amount,
+        vec![price_oracle_launcher_id.into()],
+    );
+
+    // let price_oracle_0th_gen_inner_puzzle_hash = PriceScheduler::new(coin, proof, launcher_id, price_schedule, generation, other_singleton_launcher_id)
+    // price_oracle_launcher.spend(
+    //     ctx,
+    //     singleton_inner_puzzle_hash,
+    //     schedule.to_clvm(&mut ctx.allocator)?,
+    // );
+
+    // Spend preroll coin until the Catalog is created
+
+    // Secure everything we've done with the preroll coin
+
+    // Spend security coin
+
+    // Finally, return the spend bundle
 
     todo!()
+    // overview:
+    //  - launch preroll coin, do not secure via announcement (see below)
+    //  - launch price oracle and secure announcement (amount 2 so it doesn't conflict w/ catalog launch)
+    //  - spend preroll coin until the Catalog is created
+    //  - assert concurrent spend with the last spent preroll coin to secure the whole thing
+    //  - spend security coin
 }
