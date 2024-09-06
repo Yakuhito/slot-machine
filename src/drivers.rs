@@ -13,7 +13,7 @@ use chia_wallet_sdk::{Condition, Conditions, DriverError, Launcher, Offer, Spend
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 
-use crate::PriceSchedule;
+use crate::{PriceSchedule, PriceScheduler};
 
 pub struct SecureOneSidedOffer {
     pub coin_spends: Vec<CoinSpend>,
@@ -155,12 +155,12 @@ pub fn launch_catalog(offer: Offer, schedule: PriceSchedule) -> Result<SpendBund
         vec![price_oracle_launcher_id.into()],
     );
 
-    // let price_oracle_0th_gen_inner_puzzle_hash = PriceScheduler::new(coin, proof, launcher_id, price_schedule, generation, other_singleton_launcher_id)
-    // price_oracle_launcher.spend(
-    //     ctx,
-    //     singleton_inner_puzzle_hash,
-    //     schedule.to_clvm(&mut ctx.allocator)?,
-    // );
+    let price_oracle_0th_gen_inner_puzzle_hash = PriceScheduler::new(Coin::default(), proof, launcher_id, price_schedule, generation, other_singleton_launcher_id)
+    price_oracle_launcher.spend(
+        ctx,
+        singleton_inner_puzzle_hash,
+        schedule.to_clvm(&mut ctx.allocator)?,
+    );
 
     // Spend preroll coin until the Catalog is created
 
