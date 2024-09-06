@@ -1,7 +1,9 @@
 use chia::{
     clvm_utils::{ToTreeHash, TreeHash},
     protocol::{Bytes32, Coin},
-    puzzles::{singleton::SingletonSolution, standard::DEFAULT_HIDDEN_PUZZLE_HASH, Proof},
+    puzzles::{
+        singleton::SingletonSolution, standard::DEFAULT_HIDDEN_PUZZLE_HASH, LineageProof, Proof,
+    },
 };
 use chia_wallet_sdk::{DriverError, Layer, SingletonLayer, Spend, SpendContext};
 use clvm_traits::clvm_list;
@@ -87,7 +89,7 @@ impl PriceScheduler {
 
     #[must_use]
     pub fn into_layers(self) -> PriceOracleLayers {
-        let (required_block_height, new_price) = self.price_schedule[self.generation as usize];
+        let (required_block_height, new_price) = self.price_schedule[self.generation];
         let new_state_hash = clvm_list!(new_price).tree_hash();
 
         SingletonLayer::new(
@@ -107,22 +109,27 @@ impl PriceScheduler {
     }
 
     pub fn child(self) -> Option<Self> {
-        let generation = if self.generation < self.price_schedule.len() {
-            self.generation + 1
-        } else {
-            self.generation
+        if self.generation >= self.price_schedule.len() {
+            return None;
         };
 
-        // todo this ain't right
+        let child_proof = Proof::Lineage(LineageProof {
+            parent_parent_coin_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.inner_puzzle_hash().into(),
+            parent_amount: self.coin.amount,
+        });
 
-        Self {
-            coin: self.coin,
-            proof: self.proof,
+        let child_puzzle_hash = self.generation_inner_puzzle_hash(self.generation + 1);
+        let child_coin = Coin::new(self.coin.coin_id(), child_puzzle_hash.into(), 1);
+
+        Some(Self {
+            coin: child_coin,
+            proof: child_proof,
             launcher_id: self.launcher_id,
             price_schedule: self.price_schedule,
-            generation,
-            other_singleton_puzzle_hash: self.other_singleton_puzzle_hash,
-        }
+            generation: self.generation + 1,
+            other_singleton_launcher_id: self.other_singleton_launcher_id,
+        })
     }
 
     pub fn spend(
