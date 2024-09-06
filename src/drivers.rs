@@ -1,6 +1,7 @@
 use bip39::Mnemonic;
 use chia::{
-    bls::{SecretKey, Signature},
+    bls::{sign, SecretKey, Signature},
+    consensus::consensus_constants::ConsensusConstants,
     protocol::{Bytes32, Coin, CoinSpend, SpendBundle},
     puzzles::{
         offer::{
@@ -12,7 +13,8 @@ use chia::{
     },
 };
 use chia_wallet_sdk::{
-    Condition, Conditions, DriverError, Launcher, Layer, Offer, Spend, SpendContext, StandardLayer,
+    AggSig, AggSigKind, Condition, Conditions, DriverError, Launcher, Layer, Offer,
+    RequiredSignature, Spend, SpendContext, StandardLayer,
 };
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::NodePtr;
@@ -139,6 +141,7 @@ pub fn spend_security_coin(
     security_coin: Coin,
     conditions: Conditions<NodePtr>,
     sk: SecretKey,
+    consensus_constants: &ConsensusConstants,
 ) -> Result<Signature, DriverError> {
     let pk = sk.public_key();
 
@@ -157,6 +160,32 @@ pub fn spend_security_coin(
 
     let spend = Spend::new(puzzle_reveal_ptr, solution_ptr);
     ctx.spend(security_coin, spend)?;
+
+    let output = ctx.run(puzzle_reveal_ptr, solution_ptr)?;
+    let output = Vec::<Condition<NodePtr>>::from_clvm(&ctx.allocator, output)?;
+    let Some(agg_sig_me) = output.iter().find_map(|cond| {
+        if let Condition::AggSigMe(agg_sig_me) = cond {
+            return Some(agg_sig_me);
+        }
+
+        None
+    }) else {
+        return Err(DriverError::Custom(
+            "Missing agg_sig_me from security coin".to_string(),
+        ));
+    };
+
+    let required_signature = RequiredSignature::from_condition(
+        &security_coin,
+        AggSig::new(
+            AggSigKind::Me,
+            agg_sig_me.public_key,
+            agg_sig_me.message.clone(),
+        ),
+        consensus_constants,
+    );
+
+    Ok(sign(&sk, required_signature.final_message()))
 }
 
 pub fn launch_catalog(
@@ -164,7 +193,8 @@ pub fn launch_catalog(
     price_schedule: PriceSchedule,
     initial_registration_price: u64,
     cats_to_launch: Vec<AddCat>,
-    constants: CatalogConstants,
+    catalog_constants: CatalogConstants,
+    consensus_constants: &ConsensusConstants,
 ) -> Result<(SpendBundle, PriceScheduler, Catalog), DriverError> {
     let ctx = &mut SpendContext::new();
 
@@ -220,7 +250,7 @@ pub fn launch_catalog(
         CatalogState {
             registration_price: initial_registration_price,
         },
-        constants,
+        catalog_constants,
     );
     let target_catalog_inner_puzzle_hash = target_catalog_info.clone().inner_puzzle_hash();
     let preroll_info = CatalogPrerollerInfo::new(
@@ -275,11 +305,12 @@ pub fn launch_catalog(
         offer.security_coin,
         security_coin_conditions,
         offer.security_coin_sk,
-    );
+        consensus_constants,
+    )?;
 
     // Finally, return the data
     Ok((
-        SpendBundle::new(ctx.take(), offer.aggregated_signature + security_coin_sig),
+        SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig),
         price_scheduler,
         catalog,
     ))
