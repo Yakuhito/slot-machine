@@ -2601,10 +2601,12 @@ name = "xch-slot-machine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bip39",
  "chia",
  "chia-wallet-sdk",
  "clvm-traits",
  "clvmr",
+ "getrandom",
  "hex-literal",
  "num-bigint",
  "once_cell",
