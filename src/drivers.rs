@@ -7,13 +7,17 @@ use chia::{
             NotarizedPayment, Payment, SettlementPaymentsSolution, SETTLEMENT_PAYMENTS_PUZZLE_HASH,
         },
         standard::StandardArgs,
+        EveProof, Proof,
     },
 };
 use chia_wallet_sdk::{Condition, Conditions, DriverError, Launcher, Offer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 
-use crate::{PriceSchedule, PriceScheduler};
+use crate::{
+    AddCat, Catalog, CatalogConstants, CatalogInfo, CatalogPreroller, CatalogPrerollerInfo,
+    CatalogState, PriceSchedule, PriceScheduler, PriceSchedulerInfo,
+};
 
 pub struct SecureOneSidedOffer {
     pub coin_spends: Vec<CoinSpend>,
@@ -127,7 +131,13 @@ pub fn parse_one_sided_offer(
     })
 }
 
-pub fn launch_catalog(offer: Offer, schedule: PriceSchedule) -> Result<SpendBundle, DriverError> {
+pub fn launch_catalog(
+    offer: Offer,
+    price_schedule: PriceSchedule,
+    initial_registration_price: u64,
+    cats_to_launch: Vec<AddCat>,
+    constants: CatalogConstants,
+) -> Result<(SpendBundle, PriceScheduler, Catalog), DriverError> {
     let ctx = &mut SpendContext::new();
 
     let offer = parse_one_sided_offer(ctx, offer)?;
@@ -135,34 +145,80 @@ pub fn launch_catalog(offer: Offer, schedule: PriceSchedule) -> Result<SpendBund
 
     let mut security_coin_conditions = Conditions::new();
 
-    // Launch preroll coin
+    // Create preroll coin launcher
     let preroll_launcher = Launcher::new(security_coin_id, 0);
     let preroll_launcher_coin = preroll_launcher.coin();
-    let preroll_launcher_id = preroll_launcher_coin.coin_id();
+    let catalog_launcher_id = preroll_launcher_coin.coin_id();
+
+    // Launch price scheduler
+    let price_scheduler_launcher = Launcher::new(security_coin_id, 2);
+    let price_scheduler_launcher_coin = price_scheduler_launcher.coin();
+    let price_scheduler_launcher_id = price_scheduler_launcher_coin.coin_id();
     security_coin_conditions = security_coin_conditions.create_coin(
-        preroll_launcher_coin.puzzle_hash,
-        preroll_launcher_coin.amount,
-        vec![preroll_launcher_id.into()],
+        price_scheduler_launcher_coin.puzzle_hash,
+        price_scheduler_launcher_coin.amount,
+        vec![price_scheduler_launcher_id.into()],
     );
 
-    // Launch price oracle
-    let price_oracle_launcher = Launcher::new(security_coin_id, 2);
-    let price_oracle_launcher_coin = price_oracle_launcher.coin();
-    let price_oracle_launcher_id = price_oracle_launcher_coin.coin_id();
-    security_coin_conditions = security_coin_conditions.create_coin(
-        price_oracle_launcher_coin.puzzle_hash,
-        price_oracle_launcher_coin.amount,
-        vec![price_oracle_launcher_id.into()],
+    let price_scheduler_0th_gen_info = PriceSchedulerInfo::new(
+        price_scheduler_launcher_id,
+        price_schedule.clone(),
+        0,
+        catalog_launcher_id,
     );
 
-    let price_oracle_0th_gen_inner_puzzle_hash = PriceScheduler::new(Coin::default(), proof, launcher_id, price_schedule, generation, other_singleton_launcher_id)
-    price_oracle_launcher.spend(
+    let schedule_ptr = price_schedule.to_clvm(&mut ctx.allocator)?;
+    let (conds, price_scheduler_0th_gen_coin) = price_scheduler_launcher.spend(
         ctx,
-        singleton_inner_puzzle_hash,
-        schedule.to_clvm(&mut ctx.allocator)?,
+        price_scheduler_0th_gen_info.inner_puzzle_hash().into(),
+        schedule_ptr,
+    )?;
+
+    // this creates the launcher & secures the spend
+    security_coin_conditions = security_coin_conditions.extend(conds);
+
+    let price_scheduler = PriceScheduler::new(
+        price_scheduler_0th_gen_coin,
+        Proof::Eve(EveProof {
+            parent_parent_coin_info: price_scheduler_launcher_coin.parent_coin_info,
+            parent_amount: price_scheduler_launcher_coin.amount,
+        }),
+        price_scheduler_0th_gen_info,
+    );
+
+    // Spend preroll coin launcher
+    let target_catalog = CatalogInfo::new(
+        catalog_launcher_id,
+        CatalogState {
+            registration_price: initial_registration_price,
+        },
+        constants,
+    );
+    let preroll_info = CatalogPrerollerInfo::new(
+        catalog_launcher_id,
+        cats_to_launch,
+        target_catalog.inner_puzzle_hash().into(),
+    );
+
+    let preroll_coin_inner_ph = preroll_info
+        .clone()
+        .inner_puzzle_hash(ctx, Bytes32::default())?;
+    let (conds, preroller_coin) = preroll_launcher.spend(ctx, preroll_coin_inner_ph.into(), ())?;
+
+    // this creates the launcher & secures the spend
+    security_coin_conditions = security_coin_conditions.extend(conds);
+
+    let preroller = CatalogPreroller::new(
+        preroller_coin,
+        Proof::Eve(EveProof {
+            parent_parent_coin_info: preroll_launcher_coin.parent_coin_info,
+            parent_amount: preroll_launcher_coin.amount,
+        }),
+        preroll_info,
     );
 
     // Spend preroll coin until the Catalog is created
+    preroller.spend(ctx)?;
 
     // Secure everything we've done with the preroll coin
 
@@ -171,10 +227,4 @@ pub fn launch_catalog(offer: Offer, schedule: PriceSchedule) -> Result<SpendBund
     // Finally, return the spend bundle
 
     todo!()
-    // overview:
-    //  - launch preroll coin, do not secure via announcement (see below)
-    //  - launch price oracle and secure announcement (amount 2 so it doesn't conflict w/ catalog launch)
-    //  - spend preroll coin until the Catalog is created
-    //  - assert concurrent spend with the last spent preroll coin to secure the whole thing
-    //  - spend security coin
 }
