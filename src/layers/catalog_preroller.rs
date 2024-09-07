@@ -112,7 +112,7 @@ pub const CATALOG_PREROLLER_PUZZLE: [u8; 375] = hex!("ff02ffff01ff04ffff04ff0cff
 
 pub const CATALOG_PREROLLER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    f081173cc82c6940a0c0a9f35b7ae5e75ff7befa431ac97f216af94328b9a8be
+    a3dd6566fcafea7c9e118c90c27e540d8e8df4fb43eb4123e096c38d799fc98e
     "
 ));
 
