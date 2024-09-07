@@ -140,7 +140,7 @@ pub fn spend_security_coin(
     ctx: &mut SpendContext,
     security_coin: Coin,
     conditions: Conditions<NodePtr>,
-    sk: SecretKey,
+    sk: &SecretKey,
     consensus_constants: &ConsensusConstants,
 ) -> Result<Signature, DriverError> {
     let pk = sk.public_key();
@@ -161,7 +161,17 @@ pub fn spend_security_coin(
     let spend = Spend::new(puzzle_reveal_ptr, solution_ptr);
     ctx.spend(security_coin, spend)?;
 
-    let output = ctx.run(puzzle_reveal_ptr, solution_ptr)?;
+    sign_standard_transaction(ctx, security_coin, spend, sk, consensus_constants)
+}
+
+pub fn sign_standard_transaction(
+    ctx: &mut SpendContext,
+    coin: Coin,
+    spend: Spend,
+    sk: &SecretKey,
+    consensus_constants: &ConsensusConstants,
+) -> Result<Signature, DriverError> {
+    let output = ctx.run(spend.puzzle, spend.solution)?;
     let output = Vec::<Condition<NodePtr>>::from_clvm(&ctx.allocator, output)?;
     let Some(agg_sig_me) = output.iter().find_map(|cond| {
         if let Condition::AggSigMe(agg_sig_me) = cond {
@@ -176,7 +186,7 @@ pub fn spend_security_coin(
     };
 
     let required_signature = RequiredSignature::from_condition(
-        &security_coin,
+        &coin,
         AggSig::new(
             AggSigKind::Me,
             agg_sig_me.public_key,
@@ -185,7 +195,7 @@ pub fn spend_security_coin(
         consensus_constants,
     );
 
-    Ok(sign(&sk, required_signature.final_message()))
+    Ok(sign(sk, required_signature.final_message()))
 }
 
 pub fn launch_catalog(
@@ -303,7 +313,7 @@ pub fn launch_catalog(
         ctx,
         offer.security_coin,
         security_coin_conditions,
-        offer.security_coin_sk,
+        &offer.security_coin_sk,
         consensus_constants,
     )?;
 
@@ -318,7 +328,8 @@ pub fn launch_catalog(
 
 #[cfg(test)]
 mod tests {
-    use chia_wallet_sdk::TESTNET11_CONSTANTS;
+    use chia::protocol::SpendBundle;
+    use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
     use hex_literal::hex;
 
     use crate::{AddCatInfo, CatNftMetadata};
@@ -328,6 +339,7 @@ mod tests {
     #[test]
     fn test_catalog() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
+        let mut sim = Simulator::new();
 
         // setup config
 
@@ -371,8 +383,37 @@ mod tests {
             )),
         };
 
+        // Create source offer
+        let [launcher_sk]: [SecretKey; 1] = test_secret_keys(1)?.try_into().unwrap();
+
+        let launcher_pk = launcher_sk.public_key();
+        let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
+
+        let offer_amount = 2 + cats_to_launch.len() as u64;
+        let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
+        let offer_spend = StandardLayer::new(launcher_pk).spend_with_conditions(
+            ctx,
+            Conditions::new().create_coin(
+                SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+                offer_amount,
+                vec![],
+            ),
+        )?;
+
+        let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
+        let solution = ctx.serialize(&offer_spend.solution)?;
+        let offer = Offer::new(SpendBundle {
+            coin_spends: vec![CoinSpend::new(offer_src_coin, puzzle_reveal, solution)],
+            aggregated_signature: sign_standard_transaction(
+                ctx,
+                offer_src_coin,
+                offer_spend,
+                &launcher_sk,
+                &TESTNET11_CONSTANTS,
+            )?,
+        });
+
         // Launch catalog & price singleton
-        let offer = todo!();
         let (sig, sk, price_scheduler, catalog) = launch_catalog(
             ctx,
             offer,
