@@ -40,5 +40,8 @@
         )
     )
 
-    (assert_nfts MOD_HASHES my_coin_id NFT_INFOS BASE_CONDITIONS)
+    (c
+        (list ASSERT_MY_COIN_ID my_coin_id)
+        (assert_nfts MOD_HASHES my_coin_id NFT_INFOS BASE_CONDITIONS)
+    )
 )
