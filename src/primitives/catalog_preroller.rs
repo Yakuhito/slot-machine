@@ -32,7 +32,7 @@ impl CatalogPreroller {
             self.coin.coin_id(),
         )?
         .into_iter()
-        .map(|(add_cat, uniqueness_prelauncher, _)| {
+        .try_for_each(|(add_cat, uniqueness_prelauncher, _)| {
             let cat_nft_launcher = uniqueness_prelauncher.spend(ctx)?;
 
             let Some(info) = add_cat.info else {
@@ -73,11 +73,10 @@ impl CatalogPreroller {
                     puzzle: eve_cat_nft_inner_puzzle,
                     solution: NodePtr::NIL,
                 },
-            );
+            )?;
 
             Ok(())
-        })
-        .collect::<Result<(), DriverError>>()?;
+        })?;
 
         let layers = self.info.into_layers()?;
 
