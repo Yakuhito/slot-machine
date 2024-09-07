@@ -34,6 +34,7 @@ impl CatalogPreroller {
         .into_iter()
         .try_for_each(|(add_cat, uniqueness_prelauncher, _)| {
             let cat_nft_launcher = uniqueness_prelauncher.spend(ctx)?;
+            let cat_nft_launcher_id = cat_nft_launcher.coin().coin_id();
 
             let Some(info) = add_cat.info else {
                 return Err(DriverError::Custom(
@@ -46,7 +47,7 @@ impl CatalogPreroller {
                     ctx,
                     info.metadata.clone(),
                     info.owner_puzzle_hash,
-                    self.info.launcher_id,
+                    cat_nft_launcher_id,
                     info.royalty_puzzle_hash,
                     info.royalty_ten_thousandths,
                 )?;
@@ -64,7 +65,7 @@ impl CatalogPreroller {
                 ctx,
                 info.metadata,
                 info.owner_puzzle_hash,
-                self.info.launcher_id,
+                cat_nft_launcher_id,
             )?
             .construct_puzzle(ctx)?;
             eve_cat_nft.spend(

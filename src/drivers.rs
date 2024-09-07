@@ -215,7 +215,7 @@ pub fn launch_catalog(
     let mut security_coin_conditions = Conditions::new();
 
     // Create preroll coin launcher
-    let preroll_launcher = Launcher::new(security_coin_id, 0);
+    let preroll_launcher = Launcher::new(security_coin_id, 1);
     let preroll_launcher_coin = preroll_launcher.coin();
     let catalog_launcher_id = preroll_launcher_coin.coin_id();
 
