@@ -332,7 +332,7 @@ mod tests {
     use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
     use hex_literal::hex;
 
-    use crate::{AddCatInfo, CatNftMetadata};
+    use crate::{print_spend_bundle_to_file, AddCatInfo, CatNftMetadata};
 
     use super::*;
 
@@ -424,7 +424,9 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
-        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
+        let spends = ctx.take();
+        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+        sim.spend_coins(spends, &[launcher_sk, security_sk])?;
 
         Ok(())
     }
