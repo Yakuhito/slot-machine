@@ -183,7 +183,7 @@ impl CatalogPrerollerInfo {
                 ));
             };
 
-            // uniqueness preelauncher was created - but we ned to assert that the correct NFT was acutally created
+            // uniqueness prelauncher was created - but we ned to assert that the correct NFT was acutally created
             let launcher = Launcher::new(uniq_prelauncher.coin.coin_id(), 1);
 
             let target_nft_metadata_ptr = info.metadata.to_clvm(&mut fake_ctx.allocator)?;

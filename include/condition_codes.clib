@@ -39,6 +39,7 @@
     (defconstant ASSERT_HEIGHT_ABSOLUTE 83)
 
     ; extra (yak-added for some reason)
+    (defconstant ASSERT_CONCURRENT_SPEND 64)
     (defconstant SEND_MESSAGE 66)
     (defconstant RECEIVE_MESSAGE 67)
 )
