@@ -208,6 +208,8 @@ pub fn launch_catalog(
     consensus_constants: &ConsensusConstants,
 ) -> Result<(Signature, SecretKey, PriceScheduler, Catalog), DriverError> {
     let offer = parse_one_sided_offer(ctx, offer)?;
+    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+
     let security_coin_id = offer.security_coin.coin_id();
 
     let mut security_coin_conditions = Conditions::new();
@@ -221,11 +223,6 @@ pub fn launch_catalog(
     let price_scheduler_launcher = Launcher::new(security_coin_id, 2);
     let price_scheduler_launcher_coin = price_scheduler_launcher.coin();
     let price_scheduler_launcher_id = price_scheduler_launcher_coin.coin_id();
-    security_coin_conditions = security_coin_conditions.create_coin(
-        price_scheduler_launcher_coin.puzzle_hash,
-        price_scheduler_launcher_coin.amount,
-        vec![price_scheduler_launcher_id.into()],
-    );
 
     let price_scheduler_0th_gen_info = PriceSchedulerInfo::new(
         price_scheduler_launcher_id,
