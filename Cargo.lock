@@ -2607,12 +2607,15 @@ dependencies = [
  "clvm-traits",
  "clvmr",
  "getrandom",
+ "hex",
  "hex-literal",
  "num-bigint",
  "once_cell",
  "openssl",
  "openssl-sys",
  "rstest",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
