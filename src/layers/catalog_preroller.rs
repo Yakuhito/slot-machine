@@ -135,7 +135,7 @@ impl Default for CatalogPrerollerModHashes {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
+#[clvm(curry)]
 pub struct CatalogPrerollerArgs<T = NodePtr>
 where
     T: FromClvm<Allocator> + ToClvm<Allocator> + Clone,

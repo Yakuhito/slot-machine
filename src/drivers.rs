@@ -266,9 +266,7 @@ pub fn launch_catalog(
         target_catalog_inner_puzzle_hash.into(),
     );
 
-    let preroll_coin_inner_ph = preroll_info
-        .clone()
-        .inner_puzzle_hash(ctx, Bytes32::default())?;
+    let preroll_coin_inner_ph = preroll_info.clone().inner_puzzle_hash(ctx)?;
     let (conds, preroller_coin) =
         preroll_launcher.spend_with_target_amount(ctx, preroll_coin_inner_ph.into(), (), 1)?;
 
