@@ -66,7 +66,7 @@ impl PriceSchedulerInfo {
     pub fn generation_inner_puzzle_hash(&self, generation: usize) -> TreeHash {
         let mut inner_puzzle_hash = DEFAULT_HIDDEN_PUZZLE_HASH;
 
-        let mut i = self.price_schedule.len();
+        let mut i = self.price_schedule.len() - 1;
         while i >= generation {
             let (required_block_height, new_price) = self.price_schedule[i];
 
@@ -77,7 +77,11 @@ impl PriceSchedulerInfo {
                 inner_puzzle_hash.into(),
             );
 
-            i -= 1;
+            if i > 0 {
+                i -= 1;
+            } else {
+                break;
+            }
         }
 
         inner_puzzle_hash

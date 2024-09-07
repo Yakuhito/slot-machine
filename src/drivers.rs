@@ -414,7 +414,7 @@ mod tests {
         });
 
         // Launch catalog & price singleton
-        let (sig, sk, price_scheduler, catalog) = launch_catalog(
+        let (_, security_sk, price_scheduler, catalog) = launch_catalog(
             ctx,
             offer,
             test_price_schedule,
@@ -423,6 +423,8 @@ mod tests {
             catalog_constants,
             &TESTNET11_CONSTANTS,
         )?;
+
+        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
 
         Ok(())
     }
