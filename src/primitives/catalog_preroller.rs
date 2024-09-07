@@ -42,25 +42,6 @@ impl CatalogPreroller {
                 ));
             };
 
-            let eve_cat_nft_singleton_inner_puzzle_hash =
-                CatalogPrerollerInfo::get_eve_cat_nft_singleton_inner_puzzle_hash(
-                    ctx,
-                    info.metadata.clone(),
-                    info.owner_puzzle_hash,
-                    cat_nft_launcher_id,
-                    info.royalty_puzzle_hash,
-                    info.royalty_ten_thousandths,
-                )?;
-
-            let (_, eve_cat_nft) = cat_nft_launcher.mint_eve_nft(
-                ctx,
-                eve_cat_nft_singleton_inner_puzzle_hash.into(),
-                (),
-                ANY_METADATA_UPDATER_HASH.into(),
-                info.royalty_puzzle_hash,
-                info.royalty_ten_thousandths,
-            )?;
-
             let eve_cat_nft_inner_puzzle = CatalogPrerollerInfo::get_eve_cat_nft_p2_layer(
                 ctx,
                 info.metadata,
@@ -68,6 +49,17 @@ impl CatalogPreroller {
                 cat_nft_launcher_id,
             )?
             .construct_puzzle(ctx)?;
+            let eve_cat_p2_puzzle_hash = ctx.tree_hash(eve_cat_nft_inner_puzzle);
+
+            let (_, eve_cat_nft) = cat_nft_launcher.mint_eve_nft(
+                ctx,
+                eve_cat_p2_puzzle_hash.into(),
+                (),
+                ANY_METADATA_UPDATER_HASH.into(),
+                info.royalty_puzzle_hash,
+                info.royalty_ten_thousandths,
+            )?;
+
             eve_cat_nft.spend(
                 ctx,
                 Spend {
