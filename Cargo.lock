@@ -351,8 +351,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-client"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38d2c4ba141188c6ae43b9d1056b8729fed765bc1f10d1a488fbab33b8073edf"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?branch=custom_meta_updater#f78ff0fd95751a645676b443b5f82cc44232b0bf"
 dependencies = [
  "chia-protocol",
  "chia-sdk-types",
@@ -360,7 +359,6 @@ dependencies = [
  "chia-traits 0.11.0",
  "futures-util",
  "hex",
- "native-tls",
  "serde",
  "serde_with",
  "thiserror",
@@ -373,8 +371,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-derive"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8b5582005c3908e4005fbd25cb153b955d5a2775973c0386204bb27a3604ffd"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?branch=custom_meta_updater#f78ff0fd95751a645676b443b5f82cc44232b0bf"
 dependencies = [
  "convert_case",
  "quote",
@@ -384,8 +381,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-driver"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "931d46a2754c7befa223e2eb24b3ca49ea277a8c27c66cddd9bd508cbea3f998"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?branch=custom_meta_updater#f78ff0fd95751a645676b443b5f82cc44232b0bf"
 dependencies = [
  "chia-bls 0.13.0",
  "chia-protocol",
@@ -403,8 +399,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-offers"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d09c29c2ede07de795cd1a1f922c094134c87d82bef4742d1c0cb022254ee3ad"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?branch=custom_meta_updater#f78ff0fd95751a645676b443b5f82cc44232b0bf"
 dependencies = [
  "bech32",
  "chia-bls 0.13.0",
@@ -425,8 +420,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-signer"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d30002ada9bb7420c32ba95caa6b588be650d5d223e43a939c9b6bdedae4796"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?branch=custom_meta_updater#f78ff0fd95751a645676b443b5f82cc44232b0bf"
 dependencies = [
  "chia-bls 0.13.0",
  "chia-consensus",
@@ -440,8 +434,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-test"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0184ce78344904d660ca49d1d461d4315bf3c85bf5ad2464d385a7666798015d"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?branch=custom_meta_updater#f78ff0fd95751a645676b443b5f82cc44232b0bf"
 dependencies = [
  "anyhow",
  "bip39",
@@ -472,8 +465,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-types"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "526aed9801e9100fd1fb08b5cbdeeb19bf28ba9f7e4b48a4a67329a74879a5cf"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?branch=custom_meta_updater#f78ff0fd95751a645676b443b5f82cc44232b0bf"
 dependencies = [
  "chia-bls 0.13.0",
  "chia-consensus",
@@ -524,8 +516,7 @@ dependencies = [
 [[package]]
 name = "chia-wallet-sdk"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbc3c63f68045fc22e4c363d324d826a53e9257e1f670102f7a893754ca0059b"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?branch=custom_meta_updater#f78ff0fd95751a645676b443b5f82cc44232b0bf"
 dependencies = [
  "bech32",
  "chia-protocol",
@@ -633,6 +624,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmake"
+version = "0.1.51"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb1e43aa7fd152b1f968787f7dbcdeb306d1867ff373c69955211876c053f91a"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -645,16 +645,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
 dependencies = [
  "unicode-segmentation",
-]
-
-[[package]]
-name = "core-foundation"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
-dependencies = [
- "core-foundation-sys",
- "libc",
 ]
 
 [[package]]
@@ -847,16 +837,6 @@ name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
-
-[[package]]
-name = "errno"
-version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "534c5cf6194dfab3db3242765c03bbe257cf92f22b38f6bc0c58d59108a820ba"
-dependencies = [
- "libc",
- "windows-sys 0.52.0",
-]
 
 [[package]]
 name = "fastrand"
@@ -1251,15 +1231,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2d16453e800a8cf6dd2fc3eb4bc99b786a9b90c663b8559a5b1a041bf89e472"
 dependencies = [
  "cc",
+ "cmake",
+ "libc",
  "pkg-config",
  "vcpkg",
 ]
-
-[[package]]
-name = "linux-raw-sys"
-version = "0.4.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89"
 
 [[package]]
 name = "lock_api"
@@ -1325,24 +1301,7 @@ dependencies = [
  "hermit-abi",
  "libc",
  "wasi",
- "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "native-tls"
-version = "0.2.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8614eb2c83d59d1c8cc974dd3f920198647674a0a035e1af1fa58707e317466"
-dependencies = [
- "libc",
- "log",
- "openssl",
- "openssl-probe",
- "openssl-sys",
- "schannel",
- "security-framework",
- "security-framework-sys",
- "tempfile",
+ "windows-sys",
 ]
 
 [[package]]
@@ -1477,12 +1436,6 @@ dependencies = [
  "quote",
  "syn",
 ]
-
-[[package]]
-name = "openssl-probe"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-src"
@@ -1776,7 +1729,7 @@ dependencies = [
  "libc",
  "spin",
  "untrusted",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -1854,19 +1807,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustix"
-version = "0.38.35"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a85d50532239da68e9addb745ba38ff4612a242c1c7ceea689c4bc7c2f43c36f"
-dependencies = [
- "bitflags",
- "errno",
- "libc",
- "linux-raw-sys",
- "windows-sys 0.52.0",
-]
-
-[[package]]
 name = "rustls-pki-types"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1877,15 +1817,6 @@ name = "ryu"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
-
-[[package]]
-name = "schannel"
-version = "0.1.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbc91545643bcf3a0bbb6569265615222618bdf33ce4ffbbd13c4bbd4c093534"
-dependencies = [
- "windows-sys 0.52.0",
-]
 
 [[package]]
 name = "scopeguard"
@@ -1905,29 +1836,6 @@ dependencies = [
  "pkcs8",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "security-framework"
-version = "2.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "897b2245f0b511c87893af39b033e5ca9cce68824c4d7e7630b5a1d339658d02"
-dependencies = [
- "bitflags",
- "core-foundation",
- "core-foundation-sys",
- "libc",
- "security-framework-sys",
-]
-
-[[package]]
-name = "security-framework-sys"
-version = "2.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75da29fe9b9b08fe9d6b22b5b4bcbc75d8db3aa31e639aa56bb62e9d46bfceaf"
-dependencies = [
- "core-foundation-sys",
- "libc",
 ]
 
 [[package]]
@@ -2067,7 +1975,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce305eb0b4296696835b71df73eb912e0f1ffd2556a501fcede6e0c50349191c"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -2118,19 +2026,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "tempfile"
-version = "3.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04cbcdd0c794ebb0d4cf35e88edd2f7d2c4c3e9a5a6dab322839b321c6a87a64"
-dependencies = [
- "cfg-if",
- "fastrand",
- "once_cell",
- "rustix",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2223,7 +2118,7 @@ dependencies = [
  "signal-hook-registry",
  "socket2",
  "tokio-macros",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -2238,16 +2133,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-native-tls"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
-dependencies = [
- "native-tls",
- "tokio",
-]
-
-[[package]]
 name = "tokio-tungstenite"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2255,9 +2140,7 @@ checksum = "c83b561d025642014097b66e6c1bb422783339e0909e4429cde4749d1990bc38"
 dependencies = [
  "futures-util",
  "log",
- "native-tls",
  "tokio",
- "tokio-native-tls",
  "tungstenite",
 ]
 
@@ -2332,7 +2215,6 @@ dependencies = [
  "http",
  "httparse",
  "log",
- "native-tls",
  "rand",
  "sha1",
  "thiserror",
@@ -2483,15 +2365,6 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
-dependencies = [
- "windows-targets",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets",
 ]

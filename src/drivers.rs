@@ -413,7 +413,7 @@ mod tests {
         });
 
         // Launch catalog & price singleton
-        let (_, security_sk, price_scheduler, catalog) = launch_catalog(
+        let (_, security_sk, _price_scheduler, _catalog) = launch_catalog(
             ctx,
             offer,
             test_price_schedule,

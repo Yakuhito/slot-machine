@@ -49,12 +49,12 @@ impl CatalogPreroller {
                 cat_nft_launcher_id,
             )?
             .construct_puzzle(ctx)?;
-            let eve_cat_p2_puzzle_hash = ctx.tree_hash(eve_cat_nft_inner_puzzle);
+            let eve_cat_nft_p2_puzzle_hash = ctx.tree_hash(eve_cat_nft_inner_puzzle);
 
             let (_, eve_cat_nft) = cat_nft_launcher.mint_eve_nft(
                 ctx,
-                eve_cat_p2_puzzle_hash.into(),
-                (),
+                eve_cat_nft_p2_puzzle_hash.into(),
+                0,
                 ANY_METADATA_UPDATER_HASH.into(),
                 info.royalty_puzzle_hash,
                 info.royalty_ten_thousandths,
