@@ -10,6 +10,14 @@ use hex_literal::hex;
 
 use crate::SpendContextExt;
 
+// the values below are for slots organized into a double-linked ordered list
+// the minimum possible value of an slot - this will be contained by one of the ends of the list
+pub static SLOT32_MIN_VALUE: [u8; 32] =
+    hex!("8000000000000000000000000000000000000000000000000000000000000000");
+// the maximum possible value of a slot - will be contained by the other end of the list
+pub static SLOT32_MAX_VALUE: [u8; 32] =
+    hex!("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
 #[derive(Debug, Clone)]
 #[must_use]
 pub struct Slot {

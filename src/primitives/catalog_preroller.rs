@@ -4,6 +4,8 @@ use chia::{
 };
 use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
 
+use crate::CatalogPrerollerSolution;
+
 use super::CatalogPrerollerInfo;
 
 /// Used to create slots & then transition to either a new
@@ -22,9 +24,7 @@ impl CatalogPreroller {
     }
 
     pub fn spend(self, ctx: &mut SpendContext) -> Result<(), DriverError> {
-        let layers = self
-            .info
-            .into_layers(&mut ctx.allocator, self.coin.coin_id())?;
+        let layers = self.info.into_layers()?;
 
         let puzzle = layers.construct_puzzle(ctx)?;
         let solution = layers.construct_solution(
@@ -32,7 +32,9 @@ impl CatalogPreroller {
             SingletonSolution {
                 lineage_proof: self.proof,
                 amount: self.coin.amount,
-                inner_solution: (),
+                inner_solution: CatalogPrerollerSolution {
+                    my_coin_id: self.coin.coin_id(),
+                },
             },
         )?;
 
