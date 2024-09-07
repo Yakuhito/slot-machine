@@ -305,7 +305,7 @@ pub fn launch_catalog(
 
     // Secure everything we've done with the preroll coin
     security_coin_conditions =
-        security_coin_conditions.assert_concurrent_spend(catalog.coin.coin_id());
+        security_coin_conditions.assert_concurrent_spend(catalog.coin.parent_coin_info);
 
     // Spend security coin
     let security_coin_sig = spend_security_coin(
