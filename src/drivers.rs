@@ -343,6 +343,16 @@ mod tests {
         let initial_registration_price = 2000;
         let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250)];
 
+        let catalog_constants = CatalogConstants {
+            royalty_address_hash: Bytes32::from([7; 32]),
+            trade_price_percentage: 100,
+            precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
+            relative_block_height: 1,
+            price_singleton_launcher_id: Bytes32::from(hex!(
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )),
+        };
+
         let premine_cat = AddCat {
             asset_id: Bytes32::from(hex!(
                 "d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad"
@@ -366,19 +376,11 @@ mod tests {
                     metadata_uris: vec!["https://icons-testnet.dexie.space/test.json".to_string()],
                     metadata_hash: Bytes32::from([2; 32]),
                 },
+                royalty_puzzle_hash: catalog_constants.royalty_address_hash,
+                royalty_ten_thousandths: catalog_constants.trade_price_percentage as u16,
             }),
         };
         let cats_to_launch = vec![premine_cat];
-
-        let catalog_constants = CatalogConstants {
-            royalty_address_hash: Bytes32::from([7; 32]),
-            trade_price_percentage: 100,
-            precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
-            relative_block_height: 1,
-            price_singleton_launcher_id: Bytes32::from(hex!(
-                "0000000000000000000000000000000000000000000000000000000000000000"
-            )),
-        };
 
         // Create source offer
         let [launcher_sk]: [SecretKey; 1] = test_secret_keys(1)?.try_into().unwrap();

@@ -3,8 +3,9 @@ use chia::{
     puzzles::{singleton::SingletonSolution, Proof},
 };
 use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
+use clvmr::NodePtr;
 
-use crate::CatalogPrerollerSolution;
+use crate::{CatalogPrerollerSolution, ANY_METADATA_UPDATER_HASH};
 
 use super::CatalogPrerollerInfo;
 
@@ -24,6 +25,60 @@ impl CatalogPreroller {
     }
 
     pub fn spend(self, ctx: &mut SpendContext) -> Result<(), DriverError> {
+        CatalogPrerollerInfo::get_prelaunchers_and_slots(
+            &mut ctx.allocator,
+            self.info.to_launch.clone(),
+            self.info.launcher_id,
+            self.coin.coin_id(),
+        )?
+        .into_iter()
+        .map(|(add_cat, uniqueness_prelauncher, _)| {
+            let cat_nft_launcher = uniqueness_prelauncher.spend(ctx)?;
+
+            let Some(info) = add_cat.info else {
+                return Err(DriverError::Custom(
+                    "Missing CAT launch info (required to build puzzle)".to_string(),
+                ));
+            };
+
+            let eve_cat_nft_singleton_inner_puzzle_hash =
+                CatalogPrerollerInfo::get_eve_cat_nft_singleton_inner_puzzle_hash(
+                    ctx,
+                    info.metadata.clone(),
+                    info.owner_puzzle_hash,
+                    self.info.launcher_id,
+                    info.royalty_puzzle_hash,
+                    info.royalty_ten_thousandths,
+                )?;
+
+            let (_, eve_cat_nft) = cat_nft_launcher.mint_eve_nft(
+                ctx,
+                eve_cat_nft_singleton_inner_puzzle_hash.into(),
+                (),
+                ANY_METADATA_UPDATER_HASH.into(),
+                info.royalty_puzzle_hash,
+                info.royalty_ten_thousandths,
+            )?;
+
+            let eve_cat_nft_inner_puzzle = CatalogPrerollerInfo::get_eve_cat_nft_p2_layer(
+                ctx,
+                info.metadata,
+                info.owner_puzzle_hash,
+                self.info.launcher_id,
+            )?
+            .construct_puzzle(ctx)?;
+            eve_cat_nft.spend(
+                ctx,
+                Spend {
+                    puzzle: eve_cat_nft_inner_puzzle,
+                    solution: NodePtr::NIL,
+                },
+            );
+
+            Ok(())
+        })
+        .collect::<Result<(), DriverError>>()?;
+
         let layers = self.info.into_layers()?;
 
         let puzzle = layers.construct_puzzle(ctx)?;
