@@ -2,7 +2,7 @@ use bip39::Mnemonic;
 use chia::{
     bls::{sign, SecretKey, Signature},
     consensus::consensus_constants::ConsensusConstants,
-    protocol::{Bytes32, Coin, CoinSpend, SpendBundle},
+    protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
         offer::{
             NotarizedPayment, Payment, SettlementPaymentsSolution, SETTLEMENT_PAYMENTS_PUZZLE_HASH,
@@ -189,15 +189,14 @@ pub fn spend_security_coin(
 }
 
 pub fn launch_catalog(
+    ctx: &mut SpendContext,
     offer: Offer,
     price_schedule: PriceSchedule,
     initial_registration_price: u64,
     cats_to_launch: Vec<AddCat>,
     catalog_constants: CatalogConstants,
     consensus_constants: &ConsensusConstants,
-) -> Result<(SpendBundle, PriceScheduler, Catalog), DriverError> {
-    let ctx = &mut SpendContext::new();
-
+) -> Result<(Signature, SecretKey, PriceScheduler, Catalog), DriverError> {
     let offer = parse_one_sided_offer(ctx, offer)?;
     let security_coin_id = offer.security_coin.coin_id();
 
@@ -310,8 +309,80 @@ pub fn launch_catalog(
 
     // Finally, return the data
     Ok((
-        SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig),
+        offer.aggregated_signature + &security_coin_sig,
+        offer.security_coin_sk,
         price_scheduler,
         catalog,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use chia_wallet_sdk::TESTNET11_CONSTANTS;
+    use hex_literal::hex;
+
+    use crate::{AddCatInfo, CatNftMetadata};
+
+    use super::*;
+
+    #[test]
+    fn test_catalog() -> anyhow::Result<()> {
+        let ctx = &mut SpendContext::new();
+
+        // setup config
+
+        let initial_registration_price = 2000;
+        let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250)];
+
+        let premine_cat = AddCat {
+            asset_id: Bytes32::from(hex!(
+                "d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad"
+            )),
+            info: Some(AddCatInfo {
+                asset_id_left: Bytes32::from(hex!(
+                    "8000000000000000000000000000000000000000000000000000000000000000"
+                )),
+                asset_id_right: Bytes32::from(hex!(
+                    "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                )),
+                owner_puzzle_hash: Bytes32::from([1; 32]),
+                metadata: CatNftMetadata {
+                    code: "TDBX".to_string(),
+                    name: "Testnet dexie bucks".to_string(),
+                    description: "    Testnet version of dexie bucks".to_string(),
+                    image_uris: vec!["https://icons-testnet.dexie.space/d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad.webp".to_string()],
+                    image_hash: Bytes32::from(
+                        hex!("c84607c0e4cb4a878cc34ba913c90504ed0aac0f4484c2078529b9e42387da99")
+                    ),
+                    metadata_uris: vec!["https://icons-testnet.dexie.space/test.json".to_string()],
+                    metadata_hash: Bytes32::from([2; 32]),
+                },
+            }),
+        };
+        let cats_to_launch = vec![premine_cat];
+
+        let catalog_constants = CatalogConstants {
+            royalty_address_hash: Bytes32::from([7; 32]),
+            trade_price_percentage: 100,
+            precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
+            relative_block_height: 1,
+            price_singleton_launcher_id: Bytes32::from(hex!(
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )),
+        };
+
+        // Launch catalog & price singleton
+        let offer = todo!();
+        let (sig, sk, price_scheduler, catalog) = launch_catalog(
+            ctx,
+            offer,
+            test_price_schedule,
+            initial_registration_price,
+            cats_to_launch,
+            catalog_constants,
+            &TESTNET11_CONSTANTS,
+        )?;
+
+        Ok(())
+    }
 }
