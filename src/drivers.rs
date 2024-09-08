@@ -345,12 +345,23 @@ pub fn launch_catalog(
 #[cfg(test)]
 mod tests {
     use chia::{
-        clvm_utils::CurriedProgram, protocol::SpendBundle, puzzles::cat::GenesisByCoinIdTailArgs,
+        clvm_utils::CurriedProgram,
+        consensus::gen::{
+            conditions::EmptyVisitor, flags::MEMPOOL_MODE,
+            owned_conditions::OwnedSpendBundleConditions, run_block_generator::run_block_generator,
+            solution_generator::solution_generator,
+        },
+        protocol::SpendBundle,
+        puzzles::cat::GenesisByCoinIdTailArgs,
     };
     use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
+    use clvmr::ENABLE_BLS_OPS_OUTSIDE_GUARD;
     use hex_literal::hex;
 
-    use crate::{AddCatInfo, CatNftMetadata, CatalogPrecommitValue, PrecommitCoin};
+    use crate::{
+        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
+        PrecommitCoin,
+    };
 
     use super::*;
 
@@ -540,7 +551,30 @@ mod tests {
         let solution_program = ctx.serialize(&NodePtr::NIL)?;
         ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-        sim.spend_coins(ctx.take(), &[user_sk])?;
+        let spends = ctx.take();
+        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+        sim.spend_coins(spends.clone(), &[user_sk])?;
+
+        let generator = solution_generator(
+            spends
+                .into_iter()
+                .map(|cs| (cs.coin, cs.puzzle_reveal, cs.solution)),
+        )
+        .unwrap();
+
+        let conds = run_block_generator::<&[u8], EmptyVisitor, _>(
+            &mut ctx.allocator,
+            &generator,
+            [],
+            u64::MAX,
+            MEMPOOL_MODE & ENABLE_BLS_OPS_OUTSIDE_GUARD,
+            &TESTNET11_CONSTANTS,
+        )
+        .unwrap();
+
+        let conds = OwnedSpendBundleConditions::from(&ctx.allocator, conds);
+
+        println!("Cost for registering CAT: {:?}", conds.cost);
 
         Ok(())
     }
