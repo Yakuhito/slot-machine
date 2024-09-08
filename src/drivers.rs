@@ -490,6 +490,8 @@ mod tests {
             ),
         )?;
 
+        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
         // call the 'register' action on CATalog
         let mut sorted_slot_vals = slots
             .clone()
