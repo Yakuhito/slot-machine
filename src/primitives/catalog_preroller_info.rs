@@ -29,8 +29,6 @@ pub struct AddCatInfo {
 
     pub owner_puzzle_hash: Bytes32,
     pub metadata: CatNftMetadata,
-    pub royalty_puzzle_hash: Bytes32,
-    pub royalty_ten_thousandths: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +59,9 @@ pub struct CatalogPrerollerInfo {
     pub launcher_id: Bytes32,
     pub to_launch: Vec<AddCat>,
     pub next_puzzle_hash: Bytes32,
+
+    pub royalty_puzzle_hash: Bytes32,
+    pub royalty_ten_thousandths: u16,
 }
 
 pub fn get_hint(memos: &[Bytes]) -> Option<Bytes32> {

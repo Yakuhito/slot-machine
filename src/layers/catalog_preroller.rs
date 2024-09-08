@@ -33,7 +33,7 @@ pub struct CatalogPrerollerLayer {
     pub nft_infos: Vec<CatalogPrerollerNftInfo>,
     pub base_conditions: Conditions<NodePtr>,
     pub royalty_address_hash: Bytes32,
-    pub trade_price_percentage: u8,
+    pub trade_price_percentage: u16,
 }
 
 impl CatalogPrerollerLayer {
@@ -41,7 +41,7 @@ impl CatalogPrerollerLayer {
         nft_infos: Vec<CatalogPrerollerNftInfo>,
         base_conditions: Conditions<NodePtr>,
         royalty_address_hash: Bytes32,
-        trade_price_percentage: u8,
+        trade_price_percentage: u16,
     ) -> Self {
         Self {
             nft_infos,
@@ -154,7 +154,7 @@ where
         nft_infos: Vec<CatalogPrerollerNftInfo>,
         base_conditions: Conditions<T>,
         royalty_address_hash: Bytes32,
-        trade_price_percentage: u8,
+        trade_price_percentage: u16,
     ) -> Self {
         Self {
             uniqueness_prelauncher_1st_curry_hash: UniquenessPrelauncher::<()>::first_curry_hash()
@@ -169,7 +169,7 @@ where
         nft_infos: Vec<CatalogPrerollerNftInfo>,
         base_conditions: Conditions<T>,
         royalty_address_hash: Bytes32,
-        trade_price_percentage: u8,
+        trade_price_percentage: u16,
     ) -> TreeHash
     where
         T: ToClvm<TreeHasher>,

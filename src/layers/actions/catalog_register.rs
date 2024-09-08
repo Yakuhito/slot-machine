@@ -21,7 +21,7 @@ use super::Action;
 pub struct CatalogRegisterAction {
     pub launcher_id: Bytes32,
     pub royalty_address_hash: Bytes32,
-    pub trade_price_percentage: u8,
+    pub trade_price_percentage: u16,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
 }
@@ -30,7 +30,7 @@ impl CatalogRegisterAction {
     pub fn new(
         launcher_id: Bytes32,
         royalty_address_hash: Bytes32,
-        trade_price_percentage: u8,
+        trade_price_percentage: u16,
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
     ) -> Self {
@@ -105,11 +105,11 @@ pub struct NftPack {
     pub nft_ownership_layer_mod_hash: Bytes32,
     pub transfer_program_mod_hash: Bytes32,
     pub royalty_address_hash: Bytes32,
-    pub trade_price_percentage: u8,
+    pub trade_price_percentage: u16,
 }
 
 impl NftPack {
-    pub fn new(royalty_address_hash: Bytes32, trade_price_percentage: u8) -> Self {
+    pub fn new(royalty_address_hash: Bytes32, trade_price_percentage: u16) -> Self {
         Self {
             launcher_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
             singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
@@ -144,7 +144,7 @@ impl CatalogRegisterActionArgs {
     pub fn new(
         launcher_id: Bytes32,
         royalty_address_hash: Bytes32,
-        trade_price_percentage: u8,
+        trade_price_percentage: u16,
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
     ) -> Self {
@@ -167,7 +167,7 @@ impl CatalogRegisterActionArgs {
     pub fn curry_tree_hash(
         launcher_id: Bytes32,
         royalty_address_hash: Bytes32,
-        trade_price_percentage: u8,
+        trade_price_percentage: u16,
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
     ) -> TreeHash {
