@@ -12,7 +12,7 @@ use crate::SpendContextExt;
 
 use super::SlotInfo;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SlotProof {
     pub parent_parent_info: Bytes32,
     pub parent_inner_puzzle_hash: Bytes32,
@@ -30,7 +30,7 @@ impl SlotProof {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
 pub struct Slot<V>
 where

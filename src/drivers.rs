@@ -435,7 +435,7 @@ mod tests {
         });
 
         // Launch catalog & price singleton
-        let (_, security_sk, _price_scheduler, catalog, slots) = launch_catalog(
+        let (_, security_sk, _price_scheduler, mut catalog, slots) = launch_catalog(
             ctx,
             offer,
             test_price_schedule,
@@ -449,98 +449,100 @@ mod tests {
 
         // Register CAT
 
-        // create precommit coin
-        let user_coin = sim.new_coin(user_puzzle_hash, catalog.info.state.registration_price);
-        let tail = CurriedProgram {
-            program: ctx.genesis_by_coin_id_tail_puzzle()?,
-            args: GenesisByCoinIdTailArgs::new(user_coin.coin_id()),
+        let mut slots = slots.clone();
+        for i in 0..10 {
+            // create precommit coin
+            let user_coin = sim.new_coin(user_puzzle_hash, catalog.info.state.registration_price);
+            let tail = CurriedProgram {
+                program: ctx.genesis_by_coin_id_tail_puzzle()?,
+                args: GenesisByCoinIdTailArgs::new(user_coin.coin_id()),
+            }
+            .to_clvm(&mut ctx.allocator)?; // pretty much a random TAIL - we're not actually launching it
+            let tail_hash = ctx.tree_hash(tail);
+
+            let eve_nft_inner_puzzle =
+                clvm_quote!(Conditions::new().create_coin(Bytes32::new([4 + i; 32]), 1, vec![]))
+                    .to_clvm(&mut ctx.allocator)?;
+            let eve_nft_inner_puzzle_hash = ctx.tree_hash(eve_nft_inner_puzzle);
+
+            let value = CatalogPrecommitValue {
+                initial_inner_puzzle_hash: eve_nft_inner_puzzle_hash.into(),
+                tail_reveal: tail,
+            };
+
+            let precommit_coin = PrecommitCoin::new(
+                ctx,
+                user_coin.coin_id(),
+                catalog.info.launcher_id,
+                catalog_constants.relative_block_height,
+                catalog_constants.precommit_payout_puzzle_hash,
+                value,
+                catalog.info.state.registration_price,
+            )?;
+
+            StandardLayer::new(user_pk).spend(
+                ctx,
+                user_coin,
+                Conditions::new().create_coin(
+                    precommit_coin.coin.puzzle_hash,
+                    precommit_coin.coin.amount,
+                    vec![],
+                ),
+            )?;
+
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
+            // call the 'register' action on CATalog
+            slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
+
+            let slot_value_to_insert =
+                CatalogSlotValue::new(tail_hash.into(), Bytes32::default(), Bytes32::default());
+
+            let mut left_slot: Option<Slot<CatalogSlotValue>> = None;
+            let mut right_slot: Option<Slot<CatalogSlotValue>> = None;
+            for slot in slots.iter() {
+                if left_slot.is_none()
+                    || (slot.info.value.unwrap() > left_slot.unwrap().info.value.unwrap()
+                        && slot.info.value.unwrap() < slot_value_to_insert)
+                {
+                    left_slot = Some(*slot);
+                }
+
+                if right_slot.is_none()
+                    || (slot.info.value.unwrap() < right_slot.unwrap().info.value.unwrap()
+                        && slot.info.value.unwrap() > slot_value_to_insert)
+                {
+                    right_slot = Some(*slot);
+                }
+            }
+            let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
+
+            let (secure_cond, new_catalog, new_slots) = catalog.register_cat(
+                ctx,
+                tail_hash.into(),
+                left_slot,
+                right_slot,
+                precommit_coin,
+                Spend {
+                    puzzle: eve_nft_inner_puzzle,
+                    solution: NodePtr::NIL,
+                },
+            )?;
+
+            let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
+            let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
+
+            let funds_program = ctx.serialize(&funds_puzzle)?;
+            let solution_program = ctx.serialize(&NodePtr::NIL)?;
+            ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
+
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
+            slots.retain(|s| *s != left_slot && *s != right_slot);
+            slots.extend(new_slots);
+
+            catalog = new_catalog;
         }
-        .to_clvm(&mut ctx.allocator)?; // pretty much a random TAIL - we're not actually launching it
-        let tail_hash = ctx.tree_hash(tail);
-
-        let eve_nft_inner_puzzle =
-            clvm_quote!(Conditions::new().create_coin(Bytes32::new([10; 32]), 1, vec![]))
-                .to_clvm(&mut ctx.allocator)?;
-        let eve_nft_inner_puzzle_hash = ctx.tree_hash(eve_nft_inner_puzzle);
-
-        let value = CatalogPrecommitValue {
-            initial_inner_puzzle_hash: eve_nft_inner_puzzle_hash.into(),
-            tail_reveal: tail,
-        };
-        let precommit_coin = PrecommitCoin::new(
-            ctx,
-            user_coin.coin_id(),
-            catalog.info.launcher_id,
-            catalog_constants.relative_block_height,
-            catalog_constants.precommit_payout_puzzle_hash,
-            value,
-            catalog.info.state.registration_price,
-        )?;
-
-        StandardLayer::new(user_pk).spend(
-            ctx,
-            user_coin,
-            Conditions::new().create_coin(
-                precommit_coin.coin.puzzle_hash,
-                precommit_coin.coin.amount,
-                vec![],
-            ),
-        )?;
-
-        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-
-        // call the 'register' action on CATalog
-        let mut sorted_slot_vals = slots
-            .clone()
-            .into_iter()
-            .map(|s| s.info.value.unwrap())
-            .collect::<Vec<_>>();
-        sorted_slot_vals.sort_unstable();
-
-        let slot_value_to_insert =
-            CatalogSlotValue::new(tail_hash.into(), Bytes32::default(), Bytes32::default());
-
-        let left_slot_value = sorted_slot_vals
-            .iter()
-            .rev()
-            .find(|&&x| x < slot_value_to_insert)
-            .unwrap();
-        let left_slot = slots
-            .clone()
-            .into_iter()
-            .find(|s| s.info.value.unwrap() == *left_slot_value)
-            .unwrap();
-
-        let right_slot_value = sorted_slot_vals
-            .iter()
-            .find(|&&x| x > slot_value_to_insert)
-            .unwrap();
-        let right_slot = slots
-            .clone()
-            .into_iter()
-            .find(|s| s.info.value.unwrap() == *right_slot_value)
-            .unwrap();
-
-        let secure_cond = catalog.register_cat(
-            ctx,
-            tail_hash.into(),
-            left_slot,
-            right_slot,
-            precommit_coin,
-            Spend {
-                puzzle: eve_nft_inner_puzzle,
-                solution: NodePtr::NIL,
-            },
-        )?;
-
-        let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
-        let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
-
-        let funds_program = ctx.serialize(&funds_puzzle)?;
-        let solution_program = ctx.serialize(&NodePtr::NIL)?;
-        ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
-
-        sim.spend_coins(ctx.take(), &[user_sk])?;
 
         Ok(())
     }

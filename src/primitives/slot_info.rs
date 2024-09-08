@@ -12,7 +12,7 @@ pub static SLOT32_MIN_VALUE: [u8; 32] =
 pub static SLOT32_MAX_VALUE: [u8; 32] =
     hex!("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
 pub struct SlotInfo<V>
 where

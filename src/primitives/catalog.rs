@@ -14,7 +14,8 @@ use crate::{
 
 use super::{
     CatalogAction, CatalogActionSolution, CatalogConstants, CatalogInfo, CatalogPrecommitValue,
-    CatalogSlotValue, CatalogState, PrecommitCoin, Slot, UniquenessPrelauncher,
+    CatalogSlotValue, CatalogState, PrecommitCoin, Slot, SlotInfo, SlotProof,
+    UniquenessPrelauncher,
 };
 
 #[derive(Debug, Clone)]
@@ -76,7 +77,7 @@ impl Catalog {
         ctx: &mut SpendContext,
         actions: Vec<CatalogAction>,
         solutions: Vec<CatalogActionSolution>,
-    ) -> Result<(), DriverError> {
+    ) -> Result<Spend, DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
@@ -124,7 +125,7 @@ impl Catalog {
             },
         )?;
 
-        ctx.spend(self.coin, Spend::new(puzzle, solution))
+        Ok(Spend::new(puzzle, solution))
     }
 
     pub fn register_cat(
@@ -135,7 +136,7 @@ impl Catalog {
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         eve_nft_inner_spend: Spend,
-    ) -> Result<Conditions, DriverError> {
+    ) -> Result<(Conditions, Catalog, Vec<Slot<CatalogSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
@@ -148,6 +149,46 @@ impl Catalog {
 
         left_slot.spend(ctx, spender_inner_puzzle_hash)?;
         right_slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        let new_slots_proof = SlotProof {
+            parent_parent_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+        };
+        let new_slots = vec![
+            Slot::new(
+                new_slots_proof,
+                SlotInfo::from_value(
+                    self.info.launcher_id,
+                    CatalogSlotValue::new(
+                        left_slot_value.asset_id,
+                        left_slot_value.neighbors.left_asset_id,
+                        tail_hash,
+                    ),
+                ),
+            ),
+            Slot::new(
+                new_slots_proof,
+                SlotInfo::from_value(
+                    self.info.launcher_id,
+                    CatalogSlotValue::new(
+                        tail_hash,
+                        left_slot_value.asset_id,
+                        right_slot_value.asset_id,
+                    ),
+                ),
+            ),
+            Slot::new(
+                new_slots_proof,
+                SlotInfo::from_value(
+                    self.info.launcher_id,
+                    CatalogSlotValue::new(
+                        right_slot_value.asset_id,
+                        tail_hash,
+                        right_slot_value.neighbors.right_asset_id,
+                    ),
+                ),
+            ),
+        ];
 
         // spend precommit coin
         let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
@@ -194,8 +235,27 @@ impl Catalog {
             my_id: self.coin.coin_id(),
         });
 
-        self.spend(ctx, vec![register_action], vec![register_solution])?;
+        let my_coin = self.coin;
+        let my_constants = self.info.constants.clone();
+        let my_spend = self.spend(ctx, vec![register_action], vec![register_solution])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let new_catalog = Catalog::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child catalog".to_string(),
+        ))?;
 
-        Ok(Conditions::new().assert_concurrent_spend(nft_coin_id))
+        ctx.spend(my_coin, my_spend)?;
+
+        Ok((
+            Conditions::new().assert_concurrent_spend(nft_coin_id),
+            new_catalog,
+            new_slots,
+        ))
     }
 }
