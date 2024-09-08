@@ -22,7 +22,7 @@ use clvmr::NodePtr;
 
 use crate::{
     AddCat, Catalog, CatalogConstants, CatalogInfo, CatalogPreroller, CatalogPrerollerInfo,
-    CatalogState, PriceSchedule, PriceScheduler, PriceSchedulerInfo,
+    CatalogState, PriceSchedule, PriceScheduler, PriceSchedulerInfo, Slot,
 };
 
 pub struct SecureOneSidedOffer {
@@ -207,7 +207,7 @@ pub fn launch_catalog(
     cats_to_launch: Vec<AddCat>,
     catalog_constants: CatalogConstants,
     consensus_constants: &ConsensusConstants,
-) -> Result<(Signature, SecretKey, PriceScheduler, Catalog), DriverError> {
+) -> Result<(Signature, SecretKey, PriceScheduler, Catalog, Vec<Slot>), DriverError> {
     let offer = parse_one_sided_offer(ctx, offer)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
@@ -307,7 +307,7 @@ pub fn launch_catalog(
         target_catalog_info,
     );
 
-    preroller.spend(ctx, royalty_puzzle_hash)?;
+    let slots = preroller.spend(ctx, royalty_puzzle_hash)?;
 
     // Secure everything we've done with the preroll coin
     security_coin_conditions =
@@ -328,16 +328,22 @@ pub fn launch_catalog(
         offer.security_coin_sk,
         price_scheduler,
         catalog,
+        slots,
     ))
 }
 
 #[cfg(test)]
 mod tests {
-    use chia::protocol::SpendBundle;
+    use chia::{
+        clvm_utils::CurriedProgram, protocol::SpendBundle, puzzles::cat::GenesisByCoinIdTailArgs,
+    };
     use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
     use hex_literal::hex;
 
-    use crate::{print_spend_bundle_to_file, AddCatInfo, CatNftMetadata};
+    use crate::{
+        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
+        PrecommitCoin,
+    };
 
     use super::*;
 
@@ -389,10 +395,13 @@ mod tests {
         let cats_to_launch = vec![premine_cat];
 
         // Create source offer
-        let [launcher_sk]: [SecretKey; 1] = test_secret_keys(1)?.try_into().unwrap();
+        let [launcher_sk, user_sk]: [SecretKey; 2] = test_secret_keys(2)?.try_into().unwrap();
 
         let launcher_pk = launcher_sk.public_key();
         let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
+
+        let user_pk = user_sk.public_key();
+        let user_puzzle_hash = StandardArgs::curry_tree_hash(user_pk).into();
 
         let offer_amount = 2 + cats_to_launch.len() as u64;
         let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
@@ -419,19 +428,58 @@ mod tests {
         });
 
         // Launch catalog & price singleton
-        let (_, security_sk, _price_scheduler, _catalog) = launch_catalog(
+        let (_, security_sk, _price_scheduler, catalog, slots) = launch_catalog(
             ctx,
             offer,
             test_price_schedule,
             initial_registration_price,
             cats_to_launch,
-            catalog_constants,
+            catalog_constants.clone(),
             &TESTNET11_CONSTANTS,
         )?;
 
+        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
+
+        // Register CAT
+
+        // create precommit coin
+        let user_coin = sim.new_coin(user_puzzle_hash, catalog.info.state.registration_price);
+        let tail = CurriedProgram {
+            program: ctx.genesis_by_coin_id_tail_puzzle()?,
+            args: GenesisByCoinIdTailArgs::new(user_coin.coin_id()),
+        }
+        .to_clvm(&mut ctx.allocator)?; // pretty much a random TAIL - we're not actually launching it
+        let tail_hash = ctx.tree_hash(tail);
+
+        let value = CatalogPrecommitValue {
+            initial_inner_puzzle_hash: Bytes32::new([10; 32]),
+            tail_reveal: tail,
+        };
+        let precommit_coin = PrecommitCoin::new(
+            ctx,
+            user_coin.coin_id(),
+            catalog.info.launcher_id,
+            catalog_constants.relative_block_height,
+            catalog_constants.precommit_payout_puzzle_hash,
+            value,
+            catalog.info.state.registration_price,
+        )?;
+
+        StandardLayer::new(user_pk).spend(
+            ctx,
+            user_coin,
+            Conditions::new().create_coin(
+                precommit_coin.coin.puzzle_hash,
+                precommit_coin.coin.amount,
+                vec![],
+            ),
+        )?;
+
+        // call the 'register' action on CATalog
+
         let spends = ctx.take();
         print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-        sim.spend_coins(spends, &[launcher_sk, security_sk])?;
+        sim.spend_coins(spends, &[user_sk])?;
 
         Ok(())
     }

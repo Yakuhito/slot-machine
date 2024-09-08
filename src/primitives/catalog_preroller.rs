@@ -7,7 +7,7 @@ use clvmr::NodePtr;
 
 use crate::{CatalogPrerollerSolution, ANY_METADATA_UPDATER_HASH};
 
-use super::CatalogPrerollerInfo;
+use super::{CatalogPrerollerInfo, Slot};
 
 /// Used to create slots & then transition to either a new
 /// slot launcher or the main logic singleton innerpuzzle
@@ -28,7 +28,9 @@ impl CatalogPreroller {
         self,
         ctx: &mut SpendContext,
         royalty_puzzle_hash: Bytes32,
-    ) -> Result<(), DriverError> {
+    ) -> Result<Vec<Slot>, DriverError> {
+        let mut slots = Vec::with_capacity(self.info.to_launch.len());
+
         CatalogPrerollerInfo::get_prelaunchers_and_slots(
             &mut ctx.allocator,
             self.info.to_launch.clone(),
@@ -36,7 +38,7 @@ impl CatalogPreroller {
             self.coin.coin_id(),
         )?
         .into_iter()
-        .try_for_each(|(add_cat, uniqueness_prelauncher, _)| {
+        .try_for_each(|(add_cat, uniqueness_prelauncher, slot)| {
             let cat_nft_launcher = uniqueness_prelauncher.spend(ctx)?;
 
             let Some(info) = add_cat.info else {
@@ -70,6 +72,7 @@ impl CatalogPreroller {
                 },
             )?;
 
+            slots.push(slot);
             Ok(())
         })?;
 
@@ -89,6 +92,6 @@ impl CatalogPreroller {
 
         ctx.spend(self.coin, Spend::new(puzzle, solution))?;
 
-        Ok(())
+        Ok(slots)
     }
 }

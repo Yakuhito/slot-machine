@@ -168,3 +168,11 @@ pub struct PrecommitCoin2ndCurryArgs<V> {
 pub struct PrecommitCoinSolution {
     pub singleton_inner_puzzle_hash: Bytes32,
 }
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(list)]
+pub struct CatalogPrecommitValue<T = NodePtr> {
+    pub initial_inner_puzzle_hash: Bytes32,
+    #[clvm(rest)]
+    pub tail_reveal: T,
+}

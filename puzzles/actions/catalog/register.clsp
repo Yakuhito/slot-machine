@@ -99,7 +99,7 @@
           () ; kv list
         )
       ); announcement
-    ) ; make correct NFT was created (i.e., destination ph is owner and royalties are set up correctly)
+    ) ; make sure correct NFT was created (i.e., destination ph is owner and royalties are set up correctly)
   )
 
   (defun create_prelauncher_and_assert_launcher (

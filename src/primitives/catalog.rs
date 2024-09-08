@@ -2,12 +2,12 @@ use chia::{
     protocol::Coin,
     puzzles::{LineageProof, Proof},
 };
-use chia_wallet_sdk::{DriverError, Puzzle};
+use chia_wallet_sdk::{DriverError, Puzzle, SpendContext};
 use clvmr::{Allocator, NodePtr};
 
 use crate::ActionLayer;
 
-use super::{CatalogConstants, CatalogInfo, CatalogState};
+use super::{CatalogAction, CatalogActionSolution, CatalogConstants, CatalogInfo, CatalogState};
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -59,5 +59,15 @@ impl Catalog {
             proof,
             info: new_info,
         }))
+    }
+}
+
+impl Catalog {
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        actions: Vec<CatalogAction>,
+        solutions: Vec<CatalogActionSolution>,
+    ) -> Result<(), DriverError> {
     }
 }
