@@ -194,7 +194,7 @@ impl CatalogPrerollerInfo {
             slots.push(slot);
 
             let max_value = Bytes32::new(SLOT32_MAX_VALUE);
-            if value.neighbors.left_asset_id == max_value {
+            if value.neighbors.right_asset_id == max_value {
                 let right_slot_value = CatalogSlotValue::new(max_value, value.asset_id, max_value);
                 let right_slot = Slot::from_value(my_coin_id, my_launcher_id, right_slot_value);
                 slots.push(right_slot);

@@ -174,20 +174,29 @@ impl CatalogSlotValue {
 
 impl Ord for CatalogSlotValue {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Simple integer arithmetic comparison
-        // Returns true if the asset ID is higher or equal to the SLOT min value
-        let is_self_minimal = self.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
-        let is_other_minimal = other.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
+        let self_is_negative = self.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
+        let other_is_negative = other.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
 
-        match (is_self_minimal, is_other_minimal) {
-            (true, true) => match self.asset_id.cmp(&other.asset_id) {
-                Ordering::Less => Ordering::Greater,
+        if self_is_negative && !other_is_negative {
+            return Ordering::Less;
+        }
+
+        if !self_is_negative && other_is_negative {
+            return Ordering::Greater;
+        }
+
+        if self_is_negative {
+            return match self.asset_id.cmp(&other.asset_id) {
+                Ordering::Less => Ordering::Less,
                 Ordering::Equal => Ordering::Equal,
-                Ordering::Greater => Ordering::Less,
-            }, // Invert
-            (false, false) => self.asset_id.cmp(&other.asset_id), // Same region comparision
-            (true, false) => Ordering::Less, // Self is within minimal range, but other is not
-            (false, true) => Ordering::Greater, // Other is within minimal range, but self is not
+                Ordering::Greater => Ordering::Greater,
+            };
+        }
+
+        match self.asset_id.cmp(&other.asset_id) {
+            Ordering::Less => Ordering::Greater,
+            Ordering::Equal => Ordering::Equal,
+            Ordering::Greater => Ordering::Less,
         }
     }
 }

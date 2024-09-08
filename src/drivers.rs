@@ -348,10 +348,12 @@ mod tests {
         clvm_utils::CurriedProgram, protocol::SpendBundle, puzzles::cat::GenesisByCoinIdTailArgs,
     };
     use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
+    use clvm_traits::clvm_list;
+    use hex::encode;
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogAction,
+        print_spend_bundle_to_file, Action, AddCatInfo, CatNftMetadata, CatalogAction,
         CatalogActionSolution, CatalogPrecommitValue, CatalogRegisterAction,
         CatalogRegisterActionSolution, PrecommitCoin,
     };
@@ -493,6 +495,7 @@ mod tests {
             .map(|s| s.value.unwrap())
             .collect::<Vec<_>>();
         sorted_slot_vals.sort_unstable();
+        println!("sorted_slot_vals: {:?}", sorted_slot_vals);
 
         let slot_value_to_insert =
             CatalogSlotValue::new(tail_hash.into(), Bytes32::default(), Bytes32::default());
@@ -503,12 +506,23 @@ mod tests {
             .find(|&&x| x < slot_value_to_insert)
             .unwrap();
         let left_slot = slots.iter().find(|s| s.value.unwrap() == *left_slot_value);
+        println!("asset id: {:?}", tail_hash);
+        println!("left_slot asset id: {:?}", left_slot_value.asset_id);
+        println!(
+            "left_slot asset id < asset_id: {:?}",
+            left_slot_value.asset_id < tail_hash.into()
+        );
+        println!(
+            "left_slot value < new slot value: {:?}",
+            left_slot_value < &slot_value_to_insert
+        );
 
         let right_slot_value = sorted_slot_vals
             .iter()
             .find(|&&x| x > slot_value_to_insert)
             .unwrap();
         let right_slot = slots.iter().find(|s| s.value.unwrap() == *right_slot_value);
+        println!("right_slot asset id: {:?}", right_slot_value.asset_id);
 
         let register_action = CatalogRegisterAction {
             launcher_id: catalog.info.launcher_id,
@@ -517,9 +531,16 @@ mod tests {
             precommit_payout_puzzle_hash: catalog_constants.precommit_payout_puzzle_hash,
             relative_block_height: catalog_constants.relative_block_height,
         };
+        // todo: debug
+        let reg_action_puz = register_action.clone().construct_puzzle(ctx)?;
+        println!(
+            "register_action: {:?}",
+            encode(ctx.serialize(&reg_action_puz)?.into_bytes())
+        );
+        // todo: debug
         let register_action = CatalogAction::Register(register_action);
 
-        let register_solution = CatalogActionSolution::Register(CatalogRegisterActionSolution {
+        let register_solution = CatalogRegisterActionSolution {
             tail_hash: tail_hash.into(),
             initial_nft_owner_ph: value.initial_inner_puzzle_hash,
             left_tail_hash: left_slot_value.asset_id,
@@ -527,7 +548,19 @@ mod tests {
             right_tail_hash: right_slot_value.asset_id,
             right_right_tail_hash: right_slot_value.neighbors.right_asset_id,
             my_id: catalog.coin.coin_id(),
-        });
+        };
+        // todo: debug
+        let reg_solution_puz = clvm_list!(
+            catalog.info.state.clone(),
+            register_solution.clone().construct_puzzle(ctx)?
+        );
+        let reg_solution_puz = ctx.alloc(&reg_solution_puz)?;
+        println!(
+            "reg_solution_puz (with state truth): {:?}",
+            encode(ctx.serialize(&reg_solution_puz)?.into_bytes())
+        );
+        // todo: debug
+        let register_solution = CatalogActionSolution::Register(register_solution);
 
         catalog.spend(ctx, vec![register_action], vec![register_solution])?;
 
