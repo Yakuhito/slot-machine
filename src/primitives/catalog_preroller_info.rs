@@ -1,21 +1,16 @@
 use chia::{
-    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
+    clvm_utils::{ToTreeHash, TreeHash},
     protocol::{Bytes, Bytes32, Program},
-    puzzles::{
-        nft::{NftRoyaltyTransferPuzzleArgs, NftStateLayerArgs, NFT_STATE_LAYER_PUZZLE_HASH},
-        singleton::SingletonArgs,
-    },
 };
 use chia_wallet_sdk::{
-    Condition, Conditions, DriverError, Layer, NftOwnershipLayer, Puzzle, SingletonLayer,
-    SpendContext,
+    Condition, Conditions, DriverError, Layer, Puzzle, SingletonLayer, SpendContext,
 };
 use clvm_traits::ToClvm;
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
     CatNftMetadata, CatalogPrerollerLayer, CatalogPrerollerNftInfo, ConditionsLayer,
-    ANY_METADATA_UPDATER, ANY_METADATA_UPDATER_HASH,
+    ANY_METADATA_UPDATER,
 };
 
 use super::{CatalogSlotValue, Slot, UniquenessPrelauncher, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE};
@@ -75,11 +70,19 @@ pub fn get_hint(memos: &[Bytes]) -> Option<Bytes32> {
 }
 
 impl CatalogPrerollerInfo {
-    pub fn new(launcher_id: Bytes32, to_launch: Vec<AddCat>, next_puzzle_hash: Bytes32) -> Self {
+    pub fn new(
+        launcher_id: Bytes32,
+        to_launch: Vec<AddCat>,
+        next_puzzle_hash: Bytes32,
+        royalty_puzzle_hash: Bytes32,
+        royalty_ten_thousandths: u16,
+    ) -> Self {
         Self {
             launcher_id,
             to_launch,
             next_puzzle_hash,
+            royalty_puzzle_hash,
+            royalty_ten_thousandths,
         }
     }
 
@@ -138,6 +141,8 @@ impl CatalogPrerollerInfo {
             launcher_id,
             to_launch,
             next_puzzle_hash,
+            royalty_puzzle_hash: layers.inner_puzzle.royalty_address_hash,
+            royalty_ten_thousandths: layers.inner_puzzle.trade_price_percentage,
         }))
     }
 
@@ -190,39 +195,6 @@ impl CatalogPrerollerInfo {
                 .create_coin(owner_puzzle_hash, 1, vec![launcher_id.into()])
                 .update_nft_metadata(any_metadata_updater_ptr, target_nft_metadata_ptr),
         ))
-    }
-
-    pub fn get_eve_cat_nft_singleton_inner_puzzle_hash(
-        ctx: &mut SpendContext,
-        metadata: CatNftMetadata,
-        owner_puzzle_hash: Bytes32,
-        launcher_id: Bytes32,
-        royalty_puzzle_hash: Bytes32,
-        royalty_ten_thousandths: u16,
-    ) -> Result<TreeHash, DriverError> {
-        let eve_nft_p2_layer =
-            Self::get_eve_cat_nft_p2_layer(ctx, metadata, owner_puzzle_hash, launcher_id)?;
-        let p2_puzzle = eve_nft_p2_layer.construct_puzzle(ctx)?;
-
-        Ok(CurriedProgram {
-            program: NFT_STATE_LAYER_PUZZLE_HASH,
-            args: NftStateLayerArgs {
-                mod_hash: NFT_STATE_LAYER_PUZZLE_HASH.into(),
-                metadata: (),
-                metadata_updater_puzzle_hash: ANY_METADATA_UPDATER_HASH.into(),
-                inner_puzzle: NftOwnershipLayer::new(
-                    None,
-                    NftRoyaltyTransferPuzzleArgs::curry_tree_hash(
-                        launcher_id,
-                        royalty_puzzle_hash,
-                        royalty_ten_thousandths,
-                    ),
-                    ctx.tree_hash(p2_puzzle),
-                )
-                .tree_hash(),
-            },
-        }
-        .tree_hash())
     }
 
     pub fn into_layers(self) -> Result<CatalogPrerollerLayers, DriverError> {
@@ -290,29 +262,29 @@ impl CatalogPrerollerInfo {
             );
 
             // NFT info
-            let eve_nft_inner_puzzle_hash =
-                CatalogPrerollerInfo::get_eve_cat_nft_singleton_inner_puzzle_hash(
-                    fake_ctx,
-                    info.metadata,
-                    info.owner_puzzle_hash,
-                    self.launcher_id,
-                    info.royalty_puzzle_hash,
-                    info.royalty_ten_thousandths,
-                )?;
+            let eve_nft_inner_layer = CatalogPrerollerInfo::get_eve_cat_nft_p2_layer(
+                fake_ctx,
+                info.metadata,
+                info.owner_puzzle_hash,
+                self.launcher_id,
+            )?;
+            let eve_nft_inner_puzzle = eve_nft_inner_layer.construct_puzzle(fake_ctx)?;
+            let eve_nft_inner_puzzle_hash = fake_ctx.tree_hash(eve_nft_inner_puzzle);
 
             nft_infos.push(CatalogPrerollerNftInfo {
+                eve_nft_inner_puzzle_hash: eve_nft_inner_puzzle_hash.into(),
                 asset_id_hash: asset_id.tree_hash().into(),
-                eve_nft_full_puzzle_hash: SingletonArgs::curry_tree_hash(
-                    self.launcher_id,
-                    eve_nft_inner_puzzle_hash,
-                )
-                .into(),
             })
         }
 
         Ok(SingletonLayer::new(
             self.launcher_id,
-            CatalogPrerollerLayer::new(nft_infos, base_conditions),
+            CatalogPrerollerLayer::new(
+                nft_infos,
+                base_conditions,
+                self.royalty_puzzle_hash,
+                self.royalty_ten_thousandths,
+            ),
         ))
     }
 

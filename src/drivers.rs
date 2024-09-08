@@ -252,6 +252,9 @@ pub fn launch_catalog(
     );
 
     // Spend preroll coin launcher
+    let royalty_puzzle_hash = catalog_constants.royalty_address_hash;
+    let trade_price_percentage = catalog_constants.trade_price_percentage;
+
     let target_catalog_info = CatalogInfo::new(
         catalog_launcher_id,
         CatalogState {
@@ -264,6 +267,8 @@ pub fn launch_catalog(
         catalog_launcher_id,
         cats_to_launch,
         target_catalog_inner_puzzle_hash.into(),
+        royalty_puzzle_hash,
+        trade_price_percentage,
     );
 
     let preroll_coin_inner_ph = preroll_info.clone().inner_puzzle_hash(ctx)?;
@@ -376,8 +381,6 @@ mod tests {
                     metadata_uris: vec!["https://icons-testnet.dexie.space/test.json".to_string()],
                     metadata_hash: Bytes32::from([2; 32]),
                 },
-                royalty_puzzle_hash: catalog_constants.royalty_address_hash,
-                royalty_ten_thousandths: catalog_constants.trade_price_percentage as u16,
             }),
         };
         let cats_to_launch = vec![premine_cat];

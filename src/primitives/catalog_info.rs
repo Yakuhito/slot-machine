@@ -26,7 +26,7 @@ pub struct CatalogState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogConstants {
     pub royalty_address_hash: Bytes32,
-    pub trade_price_percentage: u8,
+    pub trade_price_percentage: u16,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
     pub price_singleton_launcher_id: Bytes32,

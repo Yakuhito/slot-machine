@@ -56,8 +56,8 @@ impl CatalogPreroller {
                 eve_cat_nft_p2_puzzle_hash.into(),
                 0,
                 ANY_METADATA_UPDATER_HASH.into(),
-                info.royalty_puzzle_hash,
-                info.royalty_ten_thousandths,
+                self.info.royalty_puzzle_hash,
+                self.info.royalty_ten_thousandths,
             )?;
 
             eve_cat_nft.spend(
