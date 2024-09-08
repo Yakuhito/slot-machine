@@ -29,7 +29,7 @@
 
   (defun merge_lists (long_list short_list)
     (if short_list
-      (c (f short_list) (merge_lists (r short_list) long_list))
+      (c (f short_list) (merge_lists long_list (r short_list)))
       long_list
     )
   )
@@ -82,9 +82,9 @@
             (sha256 1 MERKLE_ROOT)
             (sha256tree state)
           )
-          1
+          1STATE
         )
-        conditions
+        conditionsSTATE
       )
     )
   )
