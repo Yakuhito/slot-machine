@@ -32,16 +32,22 @@ impl CatalogPrerollerNftInfo {
 pub struct CatalogPrerollerLayer {
     pub nft_infos: Vec<CatalogPrerollerNftInfo>,
     pub base_conditions: Conditions<NodePtr>,
+    pub royalty_address_hash: Bytes32,
+    pub trade_price_percentage: u8,
 }
 
 impl CatalogPrerollerLayer {
     pub fn new(
         nft_infos: Vec<CatalogPrerollerNftInfo>,
         base_conditions: Conditions<NodePtr>,
+        royalty_address_hash: Bytes32,
+        trade_price_percentage: u8,
     ) -> Self {
         Self {
             nft_infos,
             base_conditions,
+            royalty_address_hash,
+            trade_price_percentage,
         }
     }
 }
@@ -59,13 +65,22 @@ impl Layer for CatalogPrerollerLayer {
         }
 
         let args = CatalogPrerollerArgs::<NodePtr>::from_clvm(allocator, puzzle.args)?;
-        if args.mod_hashes != CatalogPrerollerModHashes::default() {
+        if args.uniqueness_prelauncher_1st_curry_hash
+            != UniquenessPrelauncher::<()>::first_curry_hash().into()
+            || args.nft_pack
+                != NftPack::new(
+                    args.nft_pack.royalty_address_hash,
+                    args.nft_pack.trade_price_percentage,
+                )
+        {
             return Err(DriverError::NonStandardLayer);
         }
 
         Ok(Some(Self {
             nft_infos: args.nft_infos,
             base_conditions: args.base_conditions,
+            royalty_address_hash: args.nft_pack.royalty_address_hash,
+            trade_price_percentage: args.nft_pack.trade_price_percentage,
         }))
     }
 
@@ -80,7 +95,9 @@ impl Layer for CatalogPrerollerLayer {
         CurriedProgram {
             program: ctx.catalog_preroller_puzzle()?,
             args: CatalogPrerollerArgs::<NodePtr> {
-                mod_hashes: CatalogPrerollerModHashes::default(),
+                uniqueness_prelauncher_1st_curry_hash:
+                    UniquenessPrelauncher::<()>::first_curry_hash().into(),
+                nft_pack: NftPack::new(self.royalty_address_hash, self.trade_price_percentage),
                 nft_infos: self.nft_infos.clone(),
                 base_conditions: self.base_conditions.clone(),
             },
