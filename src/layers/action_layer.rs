@@ -41,6 +41,9 @@ impl<S> ActionLayer<S> {
         let proofs: Vec<(u32, Vec<Bytes32>)> = action_spends_puzzle_hashes
             .iter()
             .filter_map(|puzzle_hash| {
+                println!("puzzle_hash: {puzzle_hash:?}");
+                println!("action_puzzle_hashes: {:?}", self.action_puzzle_hashes);
+                println!("merkle_tree: {:?}", merkle_tree);
                 let proof = merkle_tree.get_proof(*puzzle_hash)?;
 
                 Some(proof)

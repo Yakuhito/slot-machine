@@ -510,13 +510,15 @@ mod tests {
             .unwrap();
         let right_slot = slots.iter().find(|s| s.value.unwrap() == *right_slot_value);
 
-        let register_action = CatalogAction::Register(CatalogRegisterAction {
+        let register_action = CatalogRegisterAction {
             launcher_id: catalog.info.launcher_id,
             royalty_puzzle_hash_hash: catalog_constants.royalty_address.tree_hash().into(),
             trade_price_percentage: catalog_constants.trade_price_percentage,
             precommit_payout_puzzle_hash: catalog_constants.precommit_payout_puzzle_hash,
             relative_block_height: catalog_constants.relative_block_height,
-        });
+        };
+        let register_action = CatalogAction::Register(register_action);
+
         let register_solution = CatalogActionSolution::Register(CatalogRegisterActionSolution {
             tail_hash: tail_hash.into(),
             initial_nft_owner_ph: value.initial_inner_puzzle_hash,

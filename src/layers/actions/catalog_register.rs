@@ -18,6 +18,7 @@ use crate::{CatalogSlotValue, PrecommitCoin, Slot, SpendContextExt, UniquenessPr
 
 use super::Action;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogRegisterAction {
     pub launcher_id: Bytes32,
     pub royalty_puzzle_hash_hash: Bytes32,
@@ -52,7 +53,7 @@ impl Action for CatalogRegisterAction {
         ctx: &mut chia_wallet_sdk::SpendContext,
     ) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
-            program: ctx.delegated_state_action_puzzle()?,
+            program: ctx.catalog_register_action_puzzle()?,
             args: CatalogRegisterActionArgs::new(
                 self.launcher_id,
                 self.royalty_puzzle_hash_hash,

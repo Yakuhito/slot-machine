@@ -158,9 +158,11 @@ impl CatalogInfo {
             constants.relative_block_height,
         )
         .tree_hash();
+        println!("register_action_hash: {register_action_hash:?}");
 
         let update_price_action_hash =
             DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id);
+        println!("update_price_action_hash: {update_price_action_hash:?}");
 
         vec![register_action_hash.into(), update_price_action_hash.into()]
     }
