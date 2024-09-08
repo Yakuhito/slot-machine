@@ -184,7 +184,6 @@ impl CatalogPrerollerInfo {
         ctx: &mut SpendContext,
         metadata: CatNftMetadata,
         owner_puzzle_hash: Bytes32,
-        launcher_id: Bytes32,
     ) -> Result<ConditionsLayer<NodePtr>, DriverError> {
         let target_nft_metadata_ptr = metadata.to_clvm(&mut ctx.allocator)?;
         let any_metadata_updater_ptr =
@@ -192,7 +191,7 @@ impl CatalogPrerollerInfo {
 
         Ok(ConditionsLayer::new(
             Conditions::new()
-                .create_coin(owner_puzzle_hash, 1, vec![launcher_id.into()])
+                .create_coin(owner_puzzle_hash, 1, vec![])
                 .update_nft_metadata(any_metadata_updater_ptr, target_nft_metadata_ptr),
         ))
     }
@@ -266,15 +265,14 @@ impl CatalogPrerollerInfo {
                 fake_ctx,
                 info.metadata,
                 info.owner_puzzle_hash,
-                self.launcher_id,
             )?;
             let eve_nft_inner_puzzle = eve_nft_inner_layer.construct_puzzle(fake_ctx)?;
             let eve_nft_inner_puzzle_hash = fake_ctx.tree_hash(eve_nft_inner_puzzle);
 
-            nft_infos.push(CatalogPrerollerNftInfo {
-                eve_nft_inner_puzzle_hash: eve_nft_inner_puzzle_hash.into(),
-                asset_id_hash: asset_id.tree_hash().into(),
-            })
+            nft_infos.push(CatalogPrerollerNftInfo::from_asset_id(
+                eve_nft_inner_puzzle_hash.into(),
+                asset_id,
+            ))
         }
 
         Ok(SingletonLayer::new(
