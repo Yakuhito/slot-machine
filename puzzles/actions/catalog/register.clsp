@@ -74,31 +74,33 @@
   )
     (list
       ASSERT_COIN_ANNOUNCEMENT
-      launcher_id
-      (sha256tree
-        (list 
-          (curry_hashes SINGLETON_MOD_HASH
-            (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
-            (curry_hashes STATE_LAYER_MOD_HASH
-              (sha256 1 STATE_LAYER_MOD_HASH)
-              (sha256_one)
-              METADATA_UPDATER_HASH_HASH
-              (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
-                (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
-                (sha256_one) ; current owner 
-                (curry_hashes TRANSFER_PROGRAM_MOD_HASH
-                  (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
-                  ROYALTY_PUZZLE_HASH_HASH
-                  (sha256 1 TRADE_PRICE_PERCENTAGE)
-                ) ; transfer program
-                initial_nft_owner_ph
-              ) ; state layer inner ph = ownership layer ph
-            ) ; singleton inner ph = state layer ph
-          ) ; singleton full ph
-          1 ; amount
-          () ; kv list
-        )
-      ); announcement
+      (sha256 
+        launcher_id
+        (sha256tree
+          (list 
+            (curry_hashes SINGLETON_MOD_HASH
+              (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
+              (curry_hashes STATE_LAYER_MOD_HASH
+                (sha256 1 STATE_LAYER_MOD_HASH)
+                (sha256_one)
+                METADATA_UPDATER_HASH_HASH
+                (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+                  (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+                  (sha256_one) ; current owner 
+                  (curry_hashes TRANSFER_PROGRAM_MOD_HASH
+                    (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
+                    ROYALTY_PUZZLE_HASH_HASH
+                    (sha256 1 TRADE_PRICE_PERCENTAGE)
+                  ) ; transfer program
+                  initial_nft_owner_ph
+                ) ; state layer inner ph = ownership layer ph
+              ) ; singleton inner ph = state layer ph
+            ) ; singleton full ph
+            1 ; amount
+            () ; kv list
+          )
+        ); announcement
+      )
     ) ; make sure correct NFT was created (i.e., destination ph is owner and royalties are set up correctly)
   )
 
@@ -117,6 +119,7 @@
       ) ; create uniqueness prelauncher
       (c 
         (assert_launcher_ann
+          NFT_PACK
           (coinid 
             (coinid my_id prelauncher_full_puzzle_hash 0) ; prelauncher id
             (f NFT_PACK)
