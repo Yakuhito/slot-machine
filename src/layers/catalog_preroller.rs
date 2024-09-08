@@ -1,7 +1,6 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash, TreeHasher},
     protocol::Bytes32,
-    puzzles::singleton::SINGLETON_LAUNCHER_PUZZLE_HASH,
 };
 use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
@@ -10,18 +9,20 @@ use hex_literal::hex;
 
 use crate::{SpendContextExt, UniquenessPrelauncher};
 
+use super::NftPack;
+
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
 pub struct CatalogPrerollerNftInfo {
-    pub eve_nft_full_puzzle_hash: Bytes32,
-    #[clvm(rest)]
     pub asset_id_hash: Bytes32,
+    #[clvm(rest)]
+    pub eve_nft_inner_puzzle_hash: Bytes32,
 }
 
 impl CatalogPrerollerNftInfo {
-    pub fn from_asset_id(eve_nft_full_puzzle_hash: Bytes32, asset_id: Bytes32) -> Self {
+    pub fn from_asset_id(eve_nft_inner_puzzle_hash: Bytes32, asset_id: Bytes32) -> Self {
         Self {
-            eve_nft_full_puzzle_hash,
+            eve_nft_inner_puzzle_hash,
             asset_id_hash: asset_id.tree_hash().into(),
         }
     }
@@ -108,31 +109,13 @@ impl CatalogPrerollerLayer {
     }
 }
 
-pub const CATALOG_PREROLLER_PUZZLE: [u8; 375] = hex!("ff02ffff01ff04ffff04ff0cffff04ff2fff808080ffff02ff16ffff04ff02ffff04ff05ffff04ff2fffff04ff0bffff04ff17ff8080808080808080ffff04ffff01ffff4046ff02ffff02ffff03ff17ffff01ff04ffff04ff08ffff04ffff30ffff30ffff30ff0bffff0bff5effff0bff0affff0bff0aff6eff0d80ffff0bff0affff0bff7effff0bff0affff0bff0aff6eff6780ffff0bff0aff6eff4e808080ff4e808080ff8080ff09ffff010180ff47ffff010180ff808080ffff02ff16ffff04ff02ffff04ff05ffff04ff0bffff04ff37ffff04ff2fff8080808080808080ffff012f80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff018080");
+pub const CATALOG_PREROLLER_PUZZLE: [u8; 810] = hex!("ff02ffff01ff04ffff04ff18ffff04ff5fff808080ffff02ff1cffff04ff02ffff04ff05ffff04ffff018a4d4f445f484153484553ffff04ff5fffff04ff17ffff04ff2fff808080808080808080ffff04ffff01ffffff4046ff02ff02ffff03ff2fffff01ff04ffff04ff10ffff04ffff02ff1affff04ff02ffff04ff0bffff04ff2fffff04ffff30ffff30ff17ffff02ff2effff04ff02ffff04ff05ffff04ff818fff8080808080ff8080ff13ffff010180ff808080808080ff808080ffff02ff1cffff04ff02ffff04ff05ffff04ff0bffff04ff17ffff04ff6fffff04ff5fff808080808080808080ffff015f80ff0180ffffff02ffff03ff05ffff01ff0bff76ffff02ff3effff04ff02ffff04ff09ffff04ffff02ff12ffff04ff02ffff04ff0dff80808080ff808080808080ffff016680ff0180ff30ff17ffff02ff2effff04ff02ffff04ff15ffff04ffff0bffff0102ffff0bffff0101ff1580ffff0bffff0102ffff0bffff0101ff1780ffff0bffff0101ff09808080ffff04ffff02ff2effff04ff02ffff04ff2dffff04ffff0bffff0101ff2d80ffff04ff46ffff04ff5dffff04ffff02ff2effff04ff02ffff04ff81bdffff04ffff0bffff0101ff81bd80ffff04ff46ffff04ffff02ff2effff04ff02ffff04ff82017dffff04ffff0bffff0102ffff0bffff0101ff1580ffff0bffff0102ffff0bffff0101ff1780ffff0bffff0101ff09808080ffff04ff8202fdffff04ffff0bffff0101ff8205fd80ff80808080808080ffff04ff1bff8080808080808080ff8080808080808080ff808080808080ffff010180ffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff0bff56ffff02ff3effff04ff02ffff04ff05ffff04ffff02ff12ffff04ff02ffff04ff07ff80808080ff808080808080ff0bff14ffff0bff14ff66ff0580ffff0bff14ff0bff468080ff018080");
 
 pub const CATALOG_PREROLLER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    a3dd6566fcafea7c9e118c90c27e540d8e8df4fb43eb4123e096c38d799fc98e
+    0372d71339fd2a9862d0dacc22a0f8e7883f1642a10f2a223a48203350fabbc4
     "
 ));
-
-#[derive(FromClvm, ToClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
-pub struct CatalogPrerollerModHashes {
-    pub launcher_mod_hash: Bytes32,
-    #[clvm(rest)]
-    pub uniqueness_prelauncher_1st_curry_hash: Bytes32,
-}
-
-impl Default for CatalogPrerollerModHashes {
-    fn default() -> Self {
-        Self {
-            launcher_mod_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
-            uniqueness_prelauncher_1st_curry_hash: UniquenessPrelauncher::<()>::first_curry_hash()
-                .into(),
-        }
-    }
-}
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(curry)]
@@ -140,7 +123,8 @@ pub struct CatalogPrerollerArgs<T = NodePtr>
 where
     T: FromClvm<Allocator> + ToClvm<Allocator> + Clone,
 {
-    pub mod_hashes: CatalogPrerollerModHashes,
+    pub uniqueness_prelauncher_1st_curry_hash: Bytes32,
+    pub nft_pack: NftPack,
     pub nft_infos: Vec<CatalogPrerollerNftInfo>,
     pub base_conditions: Conditions<T>,
 }
@@ -149,9 +133,16 @@ impl<T> CatalogPrerollerArgs<T>
 where
     T: FromClvm<Allocator> + ToClvm<Allocator> + Clone,
 {
-    pub fn new(nft_infos: Vec<CatalogPrerollerNftInfo>, base_conditions: Conditions<T>) -> Self {
+    pub fn new(
+        nft_infos: Vec<CatalogPrerollerNftInfo>,
+        base_conditions: Conditions<T>,
+        royalty_address_hash: Bytes32,
+        trade_price_percentage: u8,
+    ) -> Self {
         Self {
-            mod_hashes: CatalogPrerollerModHashes::default(),
+            uniqueness_prelauncher_1st_curry_hash: UniquenessPrelauncher::<()>::first_curry_hash()
+                .into(),
+            nft_pack: NftPack::new(royalty_address_hash, trade_price_percentage),
             nft_infos,
             base_conditions,
         }
@@ -160,6 +151,8 @@ where
     pub fn curry_tree_hash(
         nft_infos: Vec<CatalogPrerollerNftInfo>,
         base_conditions: Conditions<T>,
+        royalty_address_hash: Bytes32,
+        trade_price_percentage: u8,
     ) -> TreeHash
     where
         T: ToClvm<TreeHasher>,
@@ -167,7 +160,9 @@ where
         CurriedProgram {
             program: CATALOG_PREROLLER_PUZZLE_HASH,
             args: CatalogPrerollerArgs::<T> {
-                mod_hashes: CatalogPrerollerModHashes::default(),
+                uniqueness_prelauncher_1st_curry_hash:
+                    UniquenessPrelauncher::<()>::first_curry_hash().into(),
+                nft_pack: NftPack::new(royalty_address_hash, trade_price_percentage),
                 nft_infos,
                 base_conditions,
             },

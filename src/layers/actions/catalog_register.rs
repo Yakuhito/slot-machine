@@ -96,7 +96,7 @@ pub const ANY_METADATA_UPDATER_HASH: TreeHash = TreeHash::new(hex!(
 ));
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(curry)]
+#[clvm(list)]
 pub struct NftPack {
     pub launcher_hash: Bytes32,
     pub singleton_mod_hash: Bytes32,
