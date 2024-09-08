@@ -59,7 +59,6 @@
                         ) ; transfer program
                         inner_puzzle_hash
                     )
-                    
                 ) ; singleton inner puzzle = NFT state layer
             )
             1
@@ -73,7 +72,7 @@
                     ASSERT_CONCURRENT_SPEND
                     (compute_concurrent_spend_coin_id
                         NFT_PACK
-                        nft_infos
+                        (f nft_infos)
                         (coinid
                             (coinid
                                 my_coin_id 
