@@ -5,7 +5,6 @@ use chia::{
 use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::ToClvm;
 use clvmr::{Allocator, NodePtr};
-use hex::encode;
 
 use crate::{Action, ActionLayer, ActionLayerSolution};
 
@@ -93,43 +92,6 @@ impl Catalog {
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
-
-        // todo: debug \/
-        let puz = ctx.serialize(&solutions[0].clone())?;
-        println!(
-            "___catalog register solution: {:?}",
-            encode(ctx.serialize(&puz)?.into_bytes())
-        );
-
-        let puz = layers.inner_puzzle.construct_puzzle(ctx)?;
-        println!(
-            "action layer puzz: {:?}",
-            encode(ctx.serialize(&puz)?.into_bytes())
-        );
-
-        let sol = ActionLayerSolution {
-            proofs: layers
-                .inner_puzzle
-                .get_proofs(&action_puzzle_hashes)
-                .ok_or(DriverError::Custom(
-                    "Couldn't build proofs for one or more actions".to_string(),
-                ))?,
-            action_spends: actions
-                .clone()
-                .into_iter()
-                .zip(solutions.clone())
-                .map(|(a, s)| Spend {
-                    puzzle: a,
-                    solution: s,
-                })
-                .collect(),
-        };
-        let sol = layers.inner_puzzle.construct_solution(ctx, sol)?;
-        println!(
-            "action layer sol: {:?}",
-            encode(ctx.serialize(&sol)?.into_bytes())
-        );
-        // todo: debug /\
 
         let solution = layers.construct_solution(
             ctx,
