@@ -10,7 +10,8 @@ use hex_literal::hex;
 
 use crate::{
     Action, ActionLayer, ActionLayerArgs, CatalogRegisterAction, CatalogRegisterActionArgs,
-    CatalogRegisterActionSolution, DelegatedStateAction, DelegatedStateActionSolution,
+    CatalogRegisterActionSolution, DelegatedStateAction, DelegatedStateActionArgs,
+    DelegatedStateActionSolution,
 };
 
 pub type CatalogLayers = SingletonLayer<ActionLayer<CatalogState>>;
@@ -149,9 +150,9 @@ impl CatalogInfo {
         launcher_id: Bytes32,
         constants: &CatalogConstants,
     ) -> Vec<Bytes32> {
-        let register_action_hash = CatalogRegisterActionArgs::new(
+        let register_action_hash = CatalogRegisterActionArgs::curry_tree_hash(
             launcher_id,
-            constants.royalty_address,
+            constants.royalty_address.tree_hash().into(),
             constants.trade_price_percentage,
             constants.precommit_payout_puzzle_hash,
             constants.relative_block_height,
@@ -159,7 +160,7 @@ impl CatalogInfo {
         .tree_hash();
 
         let update_price_action_hash =
-            DelegatedStateAction::new(constants.price_singleton_launcher_id).tree_hash();
+            DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id);
 
         vec![register_action_hash.into(), update_price_action_hash.into()]
     }
