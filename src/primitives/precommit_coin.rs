@@ -3,7 +3,7 @@ use chia::{
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{DriverError, Launcher, SpendContext};
+use chia_wallet_sdk::{DriverError, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -123,7 +123,7 @@ impl<V> PrecommitCoin<V> {
         self,
         ctx: &mut SpendContext,
         singleton_inner_puzzle_hash: Bytes32,
-    ) -> Result<Launcher, DriverError>
+    ) -> Result<(), DriverError>
     where
         V: ToClvm<Allocator> + Clone,
     {
@@ -136,7 +136,7 @@ impl<V> PrecommitCoin<V> {
 
         ctx.insert(CoinSpend::new(self.coin, puzzle_reveal, solution));
 
-        Ok(Launcher::new(self.coin.coin_id(), 1))
+        Ok(())
     }
 }
 

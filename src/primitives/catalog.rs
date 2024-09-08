@@ -134,6 +134,7 @@ impl Catalog {
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
     ) -> Result<(), DriverError> {
+        // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
         };
@@ -141,7 +142,16 @@ impl Catalog {
             return Err(DriverError::Custom("Missing right slot value".to_string()));
         };
 
-        // spend catalog
+        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
+
+        left_slot.spend(ctx, spender_inner_puzzle_hash)?;
+        // right_slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        // spend precommit coin
+        let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
+        // precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
+
+        // finally, spend self
         let register_action = CatalogAction::Register(CatalogRegisterAction {
             launcher_id: self.info.launcher_id,
             royalty_puzzle_hash_hash: self.info.constants.royalty_address.tree_hash().into(),
@@ -152,7 +162,7 @@ impl Catalog {
 
         let register_solution = CatalogActionSolution::Register(CatalogRegisterActionSolution {
             tail_hash,
-            initial_nft_owner_ph: precommit_coin.value.initial_inner_puzzle_hash,
+            initial_nft_owner_ph: initial_inner_puzzle_hash,
             left_tail_hash: left_slot_value.asset_id,
             left_left_tail_hash: left_slot_value.neighbors.left_asset_id,
             right_tail_hash: right_slot_value.asset_id,
@@ -160,13 +170,8 @@ impl Catalog {
             my_id: self.coin.coin_id(),
         });
 
-        // spend slots
-        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
-
-        left_slot.spend(ctx, spender_inner_puzzle_hash)?;
-        right_slot.spend(ctx, spender_inner_puzzle_hash)?;
-
         self.spend(ctx, vec![register_action], vec![register_solution])?;
-        todo!();
+
+        Ok(())
     }
 }

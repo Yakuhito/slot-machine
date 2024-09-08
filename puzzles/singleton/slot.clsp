@@ -36,6 +36,6 @@
     (list ASSERT_MY_PARENT_ID
       (coinid parent_parent_info (singleton_full_puzzle_hash SINGLETON_STRUCT parent_inner_puzzle_hash) 1)
     )
-    (list RECEIVE_MESSAGE 18 () (singleton_full_puzzle_hash spender_inner_puzzle_hash)) ; puzzle-puzzle
+    (list RECEIVE_MESSAGE 18 () (singleton_full_puzzle_hash SINGLETON_STRUCT spender_inner_puzzle_hash)) ; puzzle-puzzle
   )
 )
