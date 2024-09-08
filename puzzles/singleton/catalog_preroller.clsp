@@ -23,7 +23,7 @@
             TRANSFER_PROGRAM_MOD_HASH
             ROYALTY_ADDRESS_HASH
             TRADE_PRICE_PERCENTAGE
-        ) ; MOD_HASHES
+        ) ; NFT_PACK
         (
             asset_id_hash . inner_puzzle_hash
         ) ; nft_info
@@ -66,13 +66,13 @@
         )
     )
 
-    (defun assert_nfts (UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH MOD_HASHES my_coin_id nft_infos conditions_so_far)
+    (defun assert_nfts (UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH NFT_PACK my_coin_id nft_infos conditions_so_far)
         (if nft_infos
             (c
                 (list
                     ASSERT_CONCURRENT_SPEND
                     (compute_concurrent_spend_coin_id
-                        MOD_HASHES
+                        NFT_PACK
                         nft_infos
                         (coinid
                             (coinid
@@ -82,12 +82,12 @@
                                 )
                                 0
                             ) ; uniqueness pre-launcher id
-                            (f MOD_HASHES) ; LAUNCHER_MOD_HASH 
+                            (f NFT_PACK) ; LAUNCHER_MOD_HASH 
                             1
                         ) ; launcher id
                     )
                 )
-                (assert_nfts UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH MOD_HASHES my_coin_id (r nft_infos) conditions_so_far)
+                (assert_nfts UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH NFT_PACK my_coin_id (r nft_infos) conditions_so_far)
             )
             ; else
             conditions_so_far
@@ -96,6 +96,6 @@
 
     (c
         (list ASSERT_MY_COIN_ID my_coin_id)
-        (assert_nfts UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH MOD_HASHES my_coin_id NFT_INFOS BASE_CONDITIONS)
+        (assert_nfts UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH NFT_PACK my_coin_id NFT_INFOS BASE_CONDITIONS)
     )
 )
