@@ -533,10 +533,10 @@ mod tests {
         };
         // todo: debug
         let reg_action_puz = register_action.clone().construct_puzzle(ctx)?;
-        println!(
-            "register_action: {:?}",
-            encode(ctx.serialize(&reg_action_puz)?.into_bytes())
-        );
+        // println!(
+        //     "register_action: {:?}",
+        //     encode(ctx.serialize(&reg_action_puz)?.into_bytes())
+        // );
         // todo: debug
         let register_action = CatalogAction::Register(register_action);
 
@@ -555,10 +555,10 @@ mod tests {
             register_solution.clone().construct_puzzle(ctx)?
         );
         let reg_solution_puz = ctx.alloc(&reg_solution_puz)?;
-        println!(
-            "reg_solution_puz (with state truth): {:?}",
-            encode(ctx.serialize(&reg_solution_puz)?.into_bytes())
-        );
+        // println!(
+        //     "reg_solution_puz (with state truth): {:?}",
+        //     encode(ctx.serialize(&reg_solution_puz)?.into_bytes())
+        // );
         // todo: debug
         let register_solution = CatalogActionSolution::Register(register_solution);
 

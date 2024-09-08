@@ -37,16 +37,22 @@
   (defun run_next_action (
     MY_MOD_HASH
     MERKLE_ROOT
-    (new_state . new_conditions)
+    ; (new_state . new_conditions)
+    resp
     new_remaining_actions
     current_conditions
   )
-    (run_actions_and_recreate
-      MY_MOD_HASH
-      MERKLE_ROOT
-      new_state
-      (merge_lists current_conditions new_conditions)
+    ; (run_actions_and_recreate
+    ;   MY_MOD_HASH
+    ;   MERKLE_ROOT
+    ;   new_state
+    ;   (merge_lists current_conditions new_conditions)
+    ;   new_remaining_actions
+    ; )
+    (list
+      resp
       new_remaining_actions
+      current_conditions
     )
   )
 
@@ -58,7 +64,7 @@
     remaining_actions
   )
     (if remaining_actions
-      ; (f remaining_actions) = (list proof puzzle . solution)
+      ; (f remaining_actions) = (proof puzzle . solution)
       (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (f (r (f remaining_actions)))) (f (f remaining_actions))))
         (run_next_action
           MY_MOD_HASH
@@ -82,9 +88,9 @@
             (sha256 1 MERKLE_ROOT)
             (sha256tree state)
           )
-          1STATE
+          1
         )
-        conditionsSTATE
+        conditions
       )
     )
   )
