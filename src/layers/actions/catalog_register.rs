@@ -110,11 +110,13 @@ pub struct NftPack {
 
 impl NftPack {
     pub fn new(royalty_puzzle_hash_hash: Bytes32, trade_price_percentage: u16) -> Self {
+        let meta_updater_hash: Bytes32 = ANY_METADATA_UPDATER_HASH.into();
+
         Self {
             launcher_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
             singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
             state_layer_mod_hash: NFT_STATE_LAYER_PUZZLE_HASH.into(),
-            metadata_updater_hash_hash: ANY_METADATA_UPDATER_HASH.into(),
+            metadata_updater_hash_hash: meta_updater_hash.tree_hash().into(),
             nft_ownership_layer_mod_hash: NFT_OWNERSHIP_LAYER_PUZZLE_HASH.into(),
             transfer_program_mod_hash: NFT_ROYALTY_TRANSFER_PUZZLE_HASH.into(),
             royalty_puzzle_hash_hash,

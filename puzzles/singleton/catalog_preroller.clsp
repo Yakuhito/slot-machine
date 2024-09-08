@@ -65,65 +65,6 @@
                 )
                 1
             )
-            ; todo: debug
-            launcher_id
-            inner_puzzle_hash
-            (sha256 2
-                (sha256 1 SINGLETON_MOD_HASH)
-                (sha256 2
-                    (sha256 1 launcher_id)
-                    (sha256 1 LAUNCHER_MOD_HASH)
-                )
-            ) ; sha256tree singleton struct
-            (curry_hashes TRANSFER_PROGRAM_MOD_HASH
-                (sha256 2
-                    (sha256 1 SINGLETON_MOD_HASH)
-                    (sha256 2
-                        (sha256 1 launcher_id)
-                        (sha256 1 LAUNCHER_MOD_HASH)
-                    )
-                ) ; sha256tree singleton struct
-                ROYALTY_ADDRESS_HASH
-                (sha256 1 TRADE_PRICE_PERCENTAGE)
-            ) ; transfer program
-            (curry_hashes NFT_OWNERSHIP_MOD_HASH
-                (sha256 1 NFT_OWNERSHIP_MOD_HASH)
-                (sha256_one) ; owner is ()
-                (curry_hashes TRANSFER_PROGRAM_MOD_HASH
-                    (sha256 2
-                        (sha256 1 SINGLETON_MOD_HASH)
-                        (sha256 2
-                            (sha256 1 launcher_id)
-                            (sha256 1 LAUNCHER_MOD_HASH)
-                        )
-                    ) ; sha256tree singleton struct
-                    ROYALTY_ADDRESS_HASH
-                    (sha256 1 TRADE_PRICE_PERCENTAGE)
-                ) ; transfer program
-                inner_puzzle_hash
-            ); transfer layer
-            (curry_hashes NFT_STATE_LAYER_MOD_HASH
-                (sha256 1 NFT_STATE_LAYER_MOD_HASH)
-                (sha256_one) ; metadata is ()
-                METADATA_UPDATER_HASH_HASH
-                (curry_hashes NFT_OWNERSHIP_MOD_HASH
-                    (sha256 1 NFT_OWNERSHIP_MOD_HASH)
-                    (sha256_one) ; owner is ()
-                    (curry_hashes TRANSFER_PROGRAM_MOD_HASH
-                        (sha256 2
-                            (sha256 1 SINGLETON_MOD_HASH)
-                            (sha256 2
-                                (sha256 1 launcher_id)
-                                (sha256 1 LAUNCHER_MOD_HASH)
-                            )
-                        ) ; sha256tree singleton struct
-                        ROYALTY_ADDRESS_HASH
-                        (sha256 1 TRADE_PRICE_PERCENTAGE)
-                    ) ; transfer program
-                    inner_puzzle_hash
-                )
-            ) ; singleton inner puzzle = NFT state layer
-            ; todo: debug
         )
     )
 
