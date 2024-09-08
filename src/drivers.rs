@@ -21,7 +21,7 @@ use clvmr::NodePtr;
 
 use crate::{
     AddCat, Catalog, CatalogConstants, CatalogInfo, CatalogPreroller, CatalogPrerollerInfo,
-    CatalogState, LauncherExt, PriceSchedule, PriceScheduler, PriceSchedulerInfo,
+    CatalogState, PriceSchedule, PriceScheduler, PriceSchedulerInfo,
 };
 
 pub struct SecureOneSidedOffer {
@@ -232,12 +232,12 @@ pub fn launch_catalog(
     );
 
     let schedule_ptr = price_schedule.to_clvm(&mut ctx.allocator)?;
-    let (conds, price_scheduler_0th_gen_coin) = price_scheduler_launcher.spend_with_target_amount(
-        ctx,
-        price_scheduler_0th_gen_info.inner_puzzle_hash().into(),
-        schedule_ptr,
-        1,
-    )?;
+    let (conds, price_scheduler_0th_gen_coin) =
+        price_scheduler_launcher.with_singleton_amount(1).spend(
+            ctx,
+            price_scheduler_0th_gen_info.inner_puzzle_hash().into(),
+            schedule_ptr,
+        )?;
 
     // this creates the launcher & secures the spend
     security_coin_conditions = security_coin_conditions.extend(conds);
@@ -273,7 +273,9 @@ pub fn launch_catalog(
 
     let preroll_coin_inner_ph = preroll_info.clone().inner_puzzle_hash(ctx)?;
     let (conds, preroller_coin) =
-        preroll_launcher.spend_with_target_amount(ctx, preroll_coin_inner_ph.into(), (), 1)?;
+        preroll_launcher
+            .with_singleton_amount(1)
+            .spend(ctx, preroll_coin_inner_ph.into(), ())?;
 
     // this creates the launcher & secures the spend
     security_coin_conditions = security_coin_conditions.extend(conds);

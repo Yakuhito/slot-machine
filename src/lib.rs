@@ -4,14 +4,12 @@ use clvmr::NodePtr;
 mod cat_nft_metadata;
 mod debug;
 mod drivers;
-mod launcher_ext;
 mod layers;
 mod primitives;
 
 pub use cat_nft_metadata::*;
 pub use debug::*;
 pub use drivers::*;
-pub use launcher_ext::*;
 pub use layers::*;
 pub use primitives::*;
 
