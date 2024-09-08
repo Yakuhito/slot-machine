@@ -1,4 +1,5 @@
 use chia::{
+    clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
@@ -6,9 +7,14 @@ use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::ToClvm;
 use clvmr::{Allocator, NodePtr};
 
-use crate::{Action, ActionLayer, ActionLayerSolution};
+use crate::{
+    Action, ActionLayer, ActionLayerSolution, CatalogRegisterAction, CatalogRegisterActionSolution,
+};
 
-use super::{CatalogAction, CatalogActionSolution, CatalogConstants, CatalogInfo, CatalogState};
+use super::{
+    precommit_coin, CatalogAction, CatalogActionSolution, CatalogConstants, CatalogInfo,
+    CatalogPrecommitValue, CatalogSlotValue, CatalogState, PrecommitCoin, Slot,
+};
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -118,5 +124,43 @@ impl Catalog {
         )?;
 
         ctx.spend(self.coin, Spend::new(puzzle, solution))
+    }
+
+    pub fn register_cat(
+        self,
+        ctx: &mut SpendContext,
+        tail_hash: Bytes32,
+        left_slot: Slot<CatalogSlotValue>,
+        right_slot: Slot<CatalogSlotValue>,
+        precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
+    ) -> Result<(), DriverError> {
+        let Some(left_slot_value) = left_slot.value else {
+            return Err(DriverError::Custom("Missing left slot value".to_string()));
+        };
+        let Some(right_slot_value) = right_slot.value else {
+            return Err(DriverError::Custom("Missing right slot value".to_string()));
+        };
+
+        let register_action = CatalogAction::Register(CatalogRegisterAction {
+            launcher_id: self.info.launcher_id,
+            royalty_puzzle_hash_hash: self.info.constants.royalty_address.tree_hash().into(),
+            trade_price_percentage: self.info.constants.trade_price_percentage,
+            precommit_payout_puzzle_hash: self.info.constants.precommit_payout_puzzle_hash,
+            relative_block_height: self.info.constants.relative_block_height,
+        });
+
+        let register_solution = CatalogActionSolution::Register(CatalogRegisterActionSolution {
+            tail_hash,
+            initial_nft_owner_ph: precommit_coin.value.initial_inner_puzzle_hash,
+            left_tail_hash: left_slot_value.asset_id,
+            left_left_tail_hash: left_slot_value.neighbors.left_asset_id,
+            right_tail_hash: right_slot_value.asset_id,
+            right_right_tail_hash: right_slot_value.neighbors.right_asset_id,
+            my_id: self.coin.coin_id(),
+        });
+
+        self.spend(ctx, vec![register_action], vec![register_solution])?;
+
+        Ok(())
     }
 }

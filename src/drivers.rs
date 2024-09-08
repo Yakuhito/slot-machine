@@ -502,33 +502,23 @@ mod tests {
             .rev()
             .find(|&&x| x < slot_value_to_insert)
             .unwrap();
-        let left_slot = slots.iter().find(|s| s.value.unwrap() == *left_slot_value);
+        let left_slot = slots
+            .clone()
+            .into_iter()
+            .find(|s| s.value.unwrap() == *left_slot_value)
+            .unwrap();
 
         let right_slot_value = sorted_slot_vals
             .iter()
             .find(|&&x| x > slot_value_to_insert)
             .unwrap();
-        let right_slot = slots.iter().find(|s| s.value.unwrap() == *right_slot_value);
+        let right_slot = slots
+            .clone()
+            .into_iter()
+            .find(|s| s.value.unwrap() == *right_slot_value)
+            .unwrap();
 
-        let register_action = CatalogAction::Register(CatalogRegisterAction {
-            launcher_id: catalog.info.launcher_id,
-            royalty_puzzle_hash_hash: catalog_constants.royalty_address.tree_hash().into(),
-            trade_price_percentage: catalog_constants.trade_price_percentage,
-            precommit_payout_puzzle_hash: catalog_constants.precommit_payout_puzzle_hash,
-            relative_block_height: catalog_constants.relative_block_height,
-        });
-
-        let register_solution = CatalogActionSolution::Register(CatalogRegisterActionSolution {
-            tail_hash: tail_hash.into(),
-            initial_nft_owner_ph: value.initial_inner_puzzle_hash,
-            left_tail_hash: left_slot_value.asset_id,
-            left_left_tail_hash: left_slot_value.neighbors.left_asset_id,
-            right_tail_hash: right_slot_value.asset_id,
-            right_right_tail_hash: right_slot_value.neighbors.right_asset_id,
-            my_id: catalog.coin.coin_id(),
-        });
-
-        catalog.spend(ctx, vec![register_action], vec![register_solution])?;
+        catalog.register_cat(ctx, tail_hash.into(), left_slot, right_slot, precommit_coin)?;
 
         let spends = ctx.take();
         print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
