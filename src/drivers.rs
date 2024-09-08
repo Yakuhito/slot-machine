@@ -346,10 +346,13 @@ pub fn launch_catalog(
 mod tests {
     use chia::{
         clvm_utils::CurriedProgram,
-        consensus::gen::{
-            conditions::EmptyVisitor, flags::MEMPOOL_MODE,
-            owned_conditions::OwnedSpendBundleConditions, run_block_generator::run_block_generator,
-            solution_generator::solution_generator,
+        consensus::{
+            gen::{
+                conditions::EmptyVisitor, flags::MEMPOOL_MODE,
+                owned_conditions::OwnedSpendBundleConditions,
+                run_block_generator::run_block_generator, solution_generator::solution_generator,
+            },
+            spendbundle_validation::get_flags_for_height_and_constants,
         },
         protocol::SpendBundle,
         puzzles::cat::GenesisByCoinIdTailArgs,
@@ -567,7 +570,7 @@ mod tests {
             &generator,
             [],
             u64::MAX,
-            MEMPOOL_MODE & ENABLE_BLS_OPS_OUTSIDE_GUARD,
+            get_flags_for_height_and_constants(1, &TESTNET11_CONSTANTS),
             &TESTNET11_CONSTANTS,
         )
         .unwrap();
