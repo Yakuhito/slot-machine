@@ -14,7 +14,9 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{CatalogSlotValue, PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher};
+use crate::{
+    CatalogInfo, CatalogSlotValue, PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogRegisterAction {
@@ -39,6 +41,16 @@ impl CatalogRegisterAction {
             trade_price_percentage,
             precommit_payout_puzzle_hash,
             relative_block_height,
+        }
+    }
+
+    pub fn from_info(info: &CatalogInfo) -> Self {
+        Self {
+            launcher_id: info.launcher_id,
+            royalty_puzzle_hash_hash: info.constants.royalty_address.tree_hash().into(),
+            trade_price_percentage: info.constants.royalty_ten_thousandths,
+            precommit_payout_puzzle_hash: info.constants.precommit_payout_puzzle_hash,
+            relative_block_height: info.constants.relative_block_height,
         }
     }
 }
@@ -74,8 +86,8 @@ impl Layer for CatalogRegisterAction {
     }
 
     fn parse_puzzle(
-        allocator: &clvmr::Allocator,
-        puzzle: chia_wallet_sdk::Puzzle,
+        _: &clvmr::Allocator,
+        _: chia_wallet_sdk::Puzzle,
     ) -> Result<Option<Self>, DriverError>
     where
         Self: Sized,
@@ -83,10 +95,7 @@ impl Layer for CatalogRegisterAction {
         unimplemented!()
     }
 
-    fn parse_solution(
-        allocator: &clvmr::Allocator,
-        solution: NodePtr,
-    ) -> Result<Self::Solution, DriverError> {
+    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
         unimplemented!()
     }
 }

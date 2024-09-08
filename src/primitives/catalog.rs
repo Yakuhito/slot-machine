@@ -1,21 +1,18 @@
 use chia::{
-    clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::ToClvm;
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    Action, ActionLayer, ActionLayerSolution, CatalogRegisterAction, CatalogRegisterActionSolution,
-    ANY_METADATA_UPDATER_HASH,
+    ActionLayer, ActionLayerSolution, CatalogRegisterAction, CatalogRegisterActionSolution,
+    DelegatedStateAction, DelegatedStateActionSolution, ANY_METADATA_UPDATER_HASH,
 };
 
 use super::{
-    CatalogAction, CatalogActionSolution, CatalogConstants, CatalogInfo, CatalogPrecommitValue,
-    CatalogSlotValue, CatalogState, PrecommitCoin, Slot, SlotInfo, SlotProof,
-    UniquenessPrelauncher,
+    CatalogConstants, CatalogInfo, CatalogPrecommitValue, CatalogSlotValue, CatalogState,
+    PrecommitCoin, Slot, SlotInfo, SlotProof, UniquenessPrelauncher,
 };
 
 #[derive(Debug, Clone)]
@@ -55,7 +52,7 @@ impl Catalog {
 
         let new_state = ActionLayer::<CatalogState>::get_new_state(
             allocator,
-            parent_info.state.clone(),
+            parent_info.state,
             parent_solution,
         )?;
 
@@ -71,35 +68,57 @@ impl Catalog {
     }
 }
 
+pub enum CatalogAction {
+    Register(CatalogRegisterActionSolution),
+    UpdatePrice(DelegatedStateActionSolution<CatalogState>),
+}
+
 impl Catalog {
     pub fn spend(
         self,
         ctx: &mut SpendContext,
         actions: Vec<CatalogAction>,
-        solutions: Vec<CatalogActionSolution>,
     ) -> Result<Spend, DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
 
-        let actions = actions
+        let action_spends: Vec<Spend> = actions
             .into_iter()
-            .map(|a| a.construct_puzzle(ctx))
-            .collect::<Result<Vec<_>, _>>()?;
-        let action_puzzle_hashes = actions
-            .iter()
-            .map(|a| ctx.tree_hash(*a).into())
-            .collect::<Vec<Bytes32>>();
+            .map(|action| match action {
+                CatalogAction::Register(solution) => {
+                    let layer = CatalogRegisterAction::from_info(&self.info);
 
-        let solutions = solutions
-            .into_iter()
-            .map(|sol| match sol {
-                CatalogActionSolution::Register(solution) => solution.to_clvm(&mut ctx.allocator),
-                CatalogActionSolution::UpdatePrice(solution) => {
-                    solution.to_clvm(&mut ctx.allocator)
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                CatalogAction::UpdatePrice(solution) => {
+                    let layer =
+                        DelegatedStateAction::new(self.info.constants.price_singleton_launcher_id);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+
+                    let new_state_ptr = ctx.alloc(&solution.new_state)?;
+                    let solution = layer.construct_solution(
+                        ctx,
+                        DelegatedStateActionSolution::<NodePtr> {
+                            new_state: new_state_ptr,
+                            other_singleton_inner_puzzle_hash: solution
+                                .other_singleton_inner_puzzle_hash,
+                        },
+                    )?;
+
+                    Ok(Spend::new(puzzle, solution))
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
+
+        let action_puzzle_hashes = action_spends
+            .iter()
+            .map(|a| ctx.tree_hash(a.puzzle).into())
+            .collect::<Vec<Bytes32>>();
 
         let solution = layers.construct_solution(
             ctx,
@@ -109,18 +128,17 @@ impl Catalog {
                 inner_solution: ActionLayerSolution {
                     proofs: layers
                         .inner_puzzle
-                        .get_proofs(&action_puzzle_hashes)
+                        .get_proofs(
+                            &CatalogInfo::action_puzzle_hashes(
+                                self.info.launcher_id,
+                                &self.info.constants,
+                            ),
+                            &action_puzzle_hashes,
+                        )
                         .ok_or(DriverError::Custom(
                             "Couldn't build proofs for one or more actions".to_string(),
                         ))?,
-                    action_spends: actions
-                        .into_iter()
-                        .zip(solutions)
-                        .map(|(a, s)| Spend {
-                            puzzle: a,
-                            solution: s,
-                        })
-                        .collect(),
+                    action_spends,
                 },
             },
         )?;
@@ -217,15 +235,7 @@ impl Catalog {
         nft.spend(ctx, eve_nft_inner_spend)?;
 
         // finally, spend self
-        let register_action = CatalogAction::Register(CatalogRegisterAction {
-            launcher_id: self.info.launcher_id,
-            royalty_puzzle_hash_hash: self.info.constants.royalty_address.tree_hash().into(),
-            trade_price_percentage: self.info.constants.royalty_ten_thousandths,
-            precommit_payout_puzzle_hash: self.info.constants.precommit_payout_puzzle_hash,
-            relative_block_height: self.info.constants.relative_block_height,
-        });
-
-        let register_solution = CatalogActionSolution::Register(CatalogRegisterActionSolution {
+        let register = CatalogAction::Register(CatalogRegisterActionSolution {
             tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,
             left_tail_hash: left_slot_value.asset_id,
@@ -236,8 +246,8 @@ impl Catalog {
         });
 
         let my_coin = self.coin;
-        let my_constants = self.info.constants.clone();
-        let my_spend = self.spend(ctx, vec![register_action], vec![register_solution])?;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, vec![register])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
         let new_catalog = Catalog::from_parent_spend(
             &mut ctx.allocator,

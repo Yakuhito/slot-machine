@@ -29,6 +29,12 @@ impl<S> ActionLayer<S> {
         Self { merkle_root, state }
     }
 
+    pub fn from_action_puzzle_hashes(leaves: &[Bytes32], state: S) -> Self {
+        let merkle_root = MerkleTree::new(leaves).root;
+
+        Self { merkle_root, state }
+    }
+
     pub fn get_proofs(
         &self,
         action_puzzle_hashes: &[Bytes32],
@@ -101,7 +107,7 @@ impl<S> ActionLayer<S> {
 
 impl<S> Layer for ActionLayer<S>
 where
-    S: ToClvm<Allocator> + Clone,
+    S: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
 {
     type Solution = ActionLayerSolution;
 
@@ -151,10 +157,9 @@ where
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        let merkle_tree = MerkleTree::new(&self.action_puzzle_hashes);
         Ok(CurriedProgram {
             program: ctx.action_layer_puzzle()?,
-            args: ActionLayerArgs::<S>::new(merkle_tree.root, self.state.clone()),
+            args: ActionLayerArgs::<S>::new(self.merkle_root, self.state.clone()),
         }
         .to_clvm(&mut ctx.allocator)?)
     }

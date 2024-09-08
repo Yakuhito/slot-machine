@@ -3,28 +3,24 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonArgs,
 };
-use chia_wallet_sdk::{DriverError, Layer, MerkleTree, Puzzle, SingletonLayer, SpendContext};
+use chia_wallet_sdk::{DriverError, Layer, MerkleTree, Puzzle, SingletonLayer};
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use clvmr::Allocator;
 use hex_literal::hex;
 
-use crate::{
-    Action, ActionLayer, ActionLayerArgs, CatalogRegisterAction, CatalogRegisterActionArgs,
-    CatalogRegisterActionSolution, DelegatedStateAction, DelegatedStateActionArgs,
-    DelegatedStateActionSolution,
-};
+use crate::{ActionLayer, ActionLayerArgs, CatalogRegisterActionArgs, DelegatedStateActionArgs};
 
 pub type CatalogLayers = SingletonLayer<ActionLayer<CatalogState>>;
 
 #[must_use]
-#[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm)]
+#[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
 #[clvm(list)]
 pub struct CatalogState {
     pub registration_price: u64,
 }
 
 #[must_use]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct CatalogConstants {
     pub royalty_address: Bytes32,
     pub royalty_ten_thousandths: u16,
@@ -62,69 +58,8 @@ impl CatalogConstantsPresets {
     }
 }
 
-pub enum CatalogAction {
-    Register(CatalogRegisterAction),
-    UpdatePrice(DelegatedStateAction),
-}
-
-pub enum CatalogActionSolution {
-    Register(CatalogRegisterActionSolution),
-    UpdatePrice(DelegatedStateActionSolution<CatalogState>),
-}
-
-impl Action for CatalogAction {
-    type Solution = CatalogActionSolution;
-
-    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        match self {
-            CatalogAction::Register(action) => action.construct_puzzle(ctx),
-            CatalogAction::UpdatePrice(action) => action.construct_puzzle(ctx),
-        }
-    }
-
-    fn construct_solution(
-        &self,
-        ctx: &mut SpendContext,
-        solution: Self::Solution,
-    ) -> Result<NodePtr, DriverError> {
-        match self {
-            CatalogAction::Register(action) => {
-                let CatalogActionSolution::Register(solution) = solution else {
-                    return Err(DriverError::Custom("Invalid solution".to_string()));
-                };
-
-                action.construct_solution(ctx, solution)
-            }
-            CatalogAction::UpdatePrice(action) => {
-                let CatalogActionSolution::UpdatePrice(solution) = solution else {
-                    return Err(DriverError::Custom("Invalid solution".to_string()));
-                };
-
-                let new_state = solution.new_state.to_clvm(&mut ctx.allocator)?;
-                action.construct_solution(
-                    ctx,
-                    DelegatedStateActionSolution {
-                        new_state,
-                        other_singleton_inner_puzzle_hash: solution
-                            .other_singleton_inner_puzzle_hash,
-                    },
-                )
-            }
-        }
-    }
-}
-
-impl ToTreeHash for CatalogAction {
-    fn tree_hash(&self) -> TreeHash {
-        match self {
-            CatalogAction::Register(action) => action.tree_hash(),
-            CatalogAction::UpdatePrice(action) => action.tree_hash(),
-        }
-    }
-}
-
 #[must_use]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct CatalogInfo {
     pub launcher_id: Bytes32,
     pub state: CatalogState,
@@ -149,7 +84,7 @@ impl CatalogInfo {
     pub fn action_puzzle_hashes(
         launcher_id: Bytes32,
         constants: &CatalogConstants,
-    ) -> Vec<Bytes32> {
+    ) -> [Bytes32; 2] {
         let register_action_hash = CatalogRegisterActionArgs::curry_tree_hash(
             launcher_id,
             constants.royalty_address.tree_hash().into(),
@@ -162,15 +97,15 @@ impl CatalogInfo {
         let update_price_action_hash =
             DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id);
 
-        vec![register_action_hash.into(), update_price_action_hash.into()]
+        [register_action_hash.into(), update_price_action_hash.into()]
     }
 
     #[must_use]
     pub fn into_layers(self) -> CatalogLayers {
         SingletonLayer::new(
             self.launcher_id,
-            ActionLayer::new(
-                Self::action_puzzle_hashes(self.launcher_id, &self.constants),
+            ActionLayer::from_action_puzzle_hashes(
+                &Self::action_puzzle_hashes(self.launcher_id, &self.constants),
                 self.state,
             ),
         )
@@ -186,7 +121,8 @@ impl CatalogInfo {
         };
 
         let action_puzzle_hashes = Self::action_puzzle_hashes(layers.launcher_id, &constants);
-        if layers.inner_puzzle.action_puzzle_hashes != action_puzzle_hashes {
+        let merkle_root = MerkleTree::new(&action_puzzle_hashes).root;
+        if layers.inner_puzzle.merkle_root != merkle_root {
             return Ok(None);
         }
 

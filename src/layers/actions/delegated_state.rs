@@ -45,8 +45,8 @@ impl Layer for DelegatedStateAction {
     }
 
     fn parse_puzzle(
-        allocator: &clvmr::Allocator,
-        puzzle: chia_wallet_sdk::Puzzle,
+        _: &clvmr::Allocator,
+        _: chia_wallet_sdk::Puzzle,
     ) -> Result<Option<Self>, DriverError>
     where
         Self: Sized,
@@ -54,10 +54,7 @@ impl Layer for DelegatedStateAction {
         unimplemented!()
     }
 
-    fn parse_solution(
-        allocator: &clvmr::Allocator,
-        solution: NodePtr,
-    ) -> Result<Self::Solution, DriverError> {
+    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
         unimplemented!()
     }
 }
