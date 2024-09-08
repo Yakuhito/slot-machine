@@ -27,7 +27,7 @@ pub struct CatalogState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogConstants {
     pub royalty_address: Bytes32,
-    pub trade_price_percentage: u16,
+    pub royalty_ten_thousandths: u16,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
     pub price_singleton_launcher_id: Bytes32,
@@ -50,7 +50,7 @@ impl CatalogConstantsPresets {
         match self {
             CatalogConstantsPresets::Testnet => CatalogConstants {
                 royalty_address: Bytes32::from([1; 32]).tree_hash().into(),
-                trade_price_percentage: 100,
+                royalty_ten_thousandths: 100,
                 precommit_payout_puzzle_hash: Bytes32::from([2; 32]).tree_hash().into(),
                 relative_block_height: 8,
                 price_singleton_launcher_id: Bytes32::from(hex!(
@@ -153,7 +153,7 @@ impl CatalogInfo {
         let register_action_hash = CatalogRegisterActionArgs::curry_tree_hash(
             launcher_id,
             constants.royalty_address.tree_hash().into(),
-            constants.trade_price_percentage,
+            constants.royalty_ten_thousandths,
             constants.precommit_payout_puzzle_hash,
             constants.relative_block_height,
         )

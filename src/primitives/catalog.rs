@@ -3,17 +3,18 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::ToClvm;
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
     Action, ActionLayer, ActionLayerSolution, CatalogRegisterAction, CatalogRegisterActionSolution,
+    ANY_METADATA_UPDATER_HASH,
 };
 
 use super::{
     CatalogAction, CatalogActionSolution, CatalogConstants, CatalogInfo, CatalogPrecommitValue,
-    CatalogSlotValue, CatalogState, PrecommitCoin, Slot,
+    CatalogSlotValue, CatalogState, PrecommitCoin, Slot, UniquenessPrelauncher,
 };
 
 #[derive(Debug, Clone)]
@@ -133,7 +134,8 @@ impl Catalog {
         left_slot: Slot<CatalogSlotValue>,
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
-    ) -> Result<(), DriverError> {
+        eve_nft_inner_spend: Spend,
+    ) -> Result<Conditions, DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
@@ -151,11 +153,33 @@ impl Catalog {
         let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
         precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
 
+        // spend uniqueness prelauncher
+        let uniqueness_prelauncher = UniquenessPrelauncher::<Bytes32>::new(
+            &mut ctx.allocator,
+            self.coin.coin_id(),
+            tail_hash,
+        )?;
+        let nft_launcher = uniqueness_prelauncher.spend(ctx)?;
+
+        // launch eve nft
+        let (_, nft) = nft_launcher.mint_eve_nft(
+            ctx,
+            initial_inner_puzzle_hash,
+            (),
+            ANY_METADATA_UPDATER_HASH.into(),
+            self.info.constants.royalty_address,
+            self.info.constants.royalty_ten_thousandths,
+        )?;
+
+        // spend nft launcher
+        let nft_coin_id = nft.coin.coin_id();
+        nft.spend(ctx, eve_nft_inner_spend)?;
+
         // finally, spend self
         let register_action = CatalogAction::Register(CatalogRegisterAction {
             launcher_id: self.info.launcher_id,
             royalty_puzzle_hash_hash: self.info.constants.royalty_address.tree_hash().into(),
-            trade_price_percentage: self.info.constants.trade_price_percentage,
+            trade_price_percentage: self.info.constants.royalty_ten_thousandths,
             precommit_payout_puzzle_hash: self.info.constants.precommit_payout_puzzle_hash,
             relative_block_height: self.info.constants.relative_block_height,
         });
@@ -172,6 +196,6 @@ impl Catalog {
 
         self.spend(ctx, vec![register_action], vec![register_solution])?;
 
-        Ok(())
+        Ok(Conditions::new().assert_concurrent_spend(nft_coin_id))
     }
 }

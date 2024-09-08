@@ -264,7 +264,7 @@ pub fn launch_catalog(
 
     // Spend preroll coin launcher
     let royalty_puzzle_hash = catalog_constants.royalty_address;
-    let trade_price_percentage = catalog_constants.trade_price_percentage;
+    let trade_price_percentage = catalog_constants.royalty_ten_thousandths;
 
     let target_catalog_info = CatalogInfo::new(
         catalog_launcher_id,
@@ -369,7 +369,7 @@ mod tests {
 
         let catalog_constants = CatalogConstants {
             royalty_address: Bytes32::from([7; 32]),
-            trade_price_percentage: 100,
+            royalty_ten_thousandths: 100,
             precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
             relative_block_height: 1,
             price_singleton_launcher_id: Bytes32::from(hex!(
@@ -461,8 +461,13 @@ mod tests {
         .to_clvm(&mut ctx.allocator)?; // pretty much a random TAIL - we're not actually launching it
         let tail_hash = ctx.tree_hash(tail);
 
+        let eve_nft_inner_puzzle =
+            clvm_quote!(Conditions::new().create_coin(Bytes32::new([10; 32]), 1, vec![]))
+                .to_clvm(&mut ctx.allocator)?;
+        let eve_nft_inner_puzzle_hash = ctx.tree_hash(eve_nft_inner_puzzle);
+
         let value = CatalogPrecommitValue {
-            initial_inner_puzzle_hash: Bytes32::new([10; 32]),
+            initial_inner_puzzle_hash: eve_nft_inner_puzzle_hash.into(),
             tail_reveal: tail,
         };
         let precommit_coin = PrecommitCoin::new(
@@ -517,7 +522,24 @@ mod tests {
             .find(|s| s.info.value.unwrap() == *right_slot_value)
             .unwrap();
 
-        catalog.register_cat(ctx, tail_hash.into(), left_slot, right_slot, precommit_coin)?;
+        let secure_cond = catalog.register_cat(
+            ctx,
+            tail_hash.into(),
+            left_slot,
+            right_slot,
+            precommit_coin,
+            Spend {
+                puzzle: eve_nft_inner_puzzle,
+                solution: NodePtr::NIL,
+            },
+        )?;
+
+        let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
+        let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
+
+        let funds_program = ctx.serialize(&funds_puzzle)?;
+        let solution_program = ctx.serialize(&NodePtr::NIL)?;
+        ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
         let spends = ctx.take();
         print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
