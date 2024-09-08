@@ -32,7 +32,7 @@ impl CatalogPrerollerNftInfo {
 pub struct CatalogPrerollerLayer {
     pub nft_infos: Vec<CatalogPrerollerNftInfo>,
     pub base_conditions: Conditions<NodePtr>,
-    pub royalty_address_hash: Bytes32,
+    pub royalty_puzzle_hash_hash: Bytes32,
     pub trade_price_percentage: u16,
 }
 
@@ -40,13 +40,13 @@ impl CatalogPrerollerLayer {
     pub fn new(
         nft_infos: Vec<CatalogPrerollerNftInfo>,
         base_conditions: Conditions<NodePtr>,
-        royalty_address_hash: Bytes32,
+        royalty_puzzle_hash_hash: Bytes32,
         trade_price_percentage: u16,
     ) -> Self {
         Self {
             nft_infos,
             base_conditions,
-            royalty_address_hash,
+            royalty_puzzle_hash_hash,
             trade_price_percentage,
         }
     }
@@ -69,7 +69,7 @@ impl Layer for CatalogPrerollerLayer {
             != UniquenessPrelauncher::<()>::first_curry_hash().into()
             || args.nft_pack
                 != NftPack::new(
-                    args.nft_pack.royalty_address_hash,
+                    args.nft_pack.royalty_puzzle_hash_hash,
                     args.nft_pack.trade_price_percentage,
                 )
         {
@@ -79,7 +79,7 @@ impl Layer for CatalogPrerollerLayer {
         Ok(Some(Self {
             nft_infos: args.nft_infos,
             base_conditions: args.base_conditions,
-            royalty_address_hash: args.nft_pack.royalty_address_hash,
+            royalty_puzzle_hash_hash: args.nft_pack.royalty_puzzle_hash_hash,
             trade_price_percentage: args.nft_pack.trade_price_percentage,
         }))
     }
@@ -97,7 +97,7 @@ impl Layer for CatalogPrerollerLayer {
             args: CatalogPrerollerArgs::<NodePtr> {
                 uniqueness_prelauncher_1st_curry_hash:
                     UniquenessPrelauncher::<()>::first_curry_hash().into(),
-                nft_pack: NftPack::new(self.royalty_address_hash, self.trade_price_percentage),
+                nft_pack: NftPack::new(self.royalty_puzzle_hash_hash, self.trade_price_percentage),
                 nft_infos: self.nft_infos.clone(),
                 base_conditions: self.base_conditions.clone(),
             },
@@ -153,13 +153,13 @@ where
     pub fn new(
         nft_infos: Vec<CatalogPrerollerNftInfo>,
         base_conditions: Conditions<T>,
-        royalty_address_hash: Bytes32,
+        royalty_puzzle_hash_hash: Bytes32,
         trade_price_percentage: u16,
     ) -> Self {
         Self {
             uniqueness_prelauncher_1st_curry_hash: UniquenessPrelauncher::<()>::first_curry_hash()
                 .into(),
-            nft_pack: NftPack::new(royalty_address_hash, trade_price_percentage),
+            nft_pack: NftPack::new(royalty_puzzle_hash_hash, trade_price_percentage),
             nft_infos,
             base_conditions,
         }
@@ -168,7 +168,7 @@ where
     pub fn curry_tree_hash(
         nft_infos: Vec<CatalogPrerollerNftInfo>,
         base_conditions: Conditions<T>,
-        royalty_address_hash: Bytes32,
+        royalty_address_hash_hash: Bytes32,
         trade_price_percentage: u16,
     ) -> TreeHash
     where
@@ -179,7 +179,7 @@ where
             args: CatalogPrerollerArgs::<T> {
                 uniqueness_prelauncher_1st_curry_hash:
                     UniquenessPrelauncher::<()>::first_curry_hash().into(),
-                nft_pack: NftPack::new(royalty_address_hash, trade_price_percentage),
+                nft_pack: NftPack::new(royalty_address_hash_hash, trade_price_percentage),
                 nft_infos,
                 base_conditions,
             },

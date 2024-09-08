@@ -55,7 +55,7 @@ pub struct CatalogPrerollerInfo {
     pub to_launch: Vec<AddCat>,
     pub next_puzzle_hash: Bytes32,
 
-    pub royalty_puzzle_hash: Bytes32,
+    pub royalty_puzzle_hash_hash: Bytes32,
     pub royalty_ten_thousandths: u16,
 }
 
@@ -74,14 +74,14 @@ impl CatalogPrerollerInfo {
         launcher_id: Bytes32,
         to_launch: Vec<AddCat>,
         next_puzzle_hash: Bytes32,
-        royalty_puzzle_hash: Bytes32,
+        royalty_puzzle_hash_hash: Bytes32,
         royalty_ten_thousandths: u16,
     ) -> Self {
         Self {
             launcher_id,
             to_launch,
             next_puzzle_hash,
-            royalty_puzzle_hash,
+            royalty_puzzle_hash_hash,
             royalty_ten_thousandths,
         }
     }
@@ -141,7 +141,7 @@ impl CatalogPrerollerInfo {
             launcher_id,
             to_launch,
             next_puzzle_hash,
-            royalty_puzzle_hash: layers.inner_puzzle.royalty_address_hash,
+            royalty_puzzle_hash_hash: layers.inner_puzzle.royalty_puzzle_hash_hash,
             royalty_ten_thousandths: layers.inner_puzzle.trade_price_percentage,
         }))
     }
@@ -280,7 +280,7 @@ impl CatalogPrerollerInfo {
             CatalogPrerollerLayer::new(
                 nft_infos,
                 base_conditions,
-                self.royalty_puzzle_hash,
+                self.royalty_puzzle_hash_hash,
                 self.royalty_ten_thousandths,
             ),
         ))

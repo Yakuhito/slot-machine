@@ -1,5 +1,5 @@
 use chia::{
-    protocol::Coin,
+    protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, Proof},
 };
 use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
@@ -24,7 +24,11 @@ impl CatalogPreroller {
         Self { coin, proof, info }
     }
 
-    pub fn spend(self, ctx: &mut SpendContext) -> Result<(), DriverError> {
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        royalty_puzzle_hash: Bytes32,
+    ) -> Result<(), DriverError> {
         CatalogPrerollerInfo::get_prelaunchers_and_slots(
             &mut ctx.allocator,
             self.info.to_launch.clone(),
@@ -54,7 +58,7 @@ impl CatalogPreroller {
                 eve_cat_nft_p2_puzzle_hash.into(),
                 0,
                 ANY_METADATA_UPDATER_HASH.into(),
-                self.info.royalty_puzzle_hash,
+                royalty_puzzle_hash,
                 self.info.royalty_ten_thousandths,
             )?;
 

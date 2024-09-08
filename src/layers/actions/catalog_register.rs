@@ -104,12 +104,12 @@ pub struct NftPack {
     pub metadata_updater_hash_hash: Bytes32,
     pub nft_ownership_layer_mod_hash: Bytes32,
     pub transfer_program_mod_hash: Bytes32,
-    pub royalty_address_hash: Bytes32,
+    pub royalty_puzzle_hash_hash: Bytes32,
     pub trade_price_percentage: u16,
 }
 
 impl NftPack {
-    pub fn new(royalty_address_hash: Bytes32, trade_price_percentage: u16) -> Self {
+    pub fn new(royalty_puzzle_hash_hash: Bytes32, trade_price_percentage: u16) -> Self {
         Self {
             launcher_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
             singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
@@ -117,7 +117,7 @@ impl NftPack {
             metadata_updater_hash_hash: ANY_METADATA_UPDATER_HASH.into(),
             nft_ownership_layer_mod_hash: NFT_OWNERSHIP_LAYER_PUZZLE_HASH.into(),
             transfer_program_mod_hash: NFT_ROYALTY_TRANSFER_PUZZLE_HASH.into(),
-            royalty_address_hash,
+            royalty_puzzle_hash_hash,
             trade_price_percentage,
         }
     }
@@ -143,13 +143,13 @@ pub struct CatalogRegisterActionArgs {
 impl CatalogRegisterActionArgs {
     pub fn new(
         launcher_id: Bytes32,
-        royalty_address_hash: Bytes32,
+        royalty_address: Bytes32,
         trade_price_percentage: u16,
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
     ) -> Self {
         Self {
-            nft_pack: NftPack::new(royalty_address_hash, trade_price_percentage),
+            nft_pack: NftPack::new(royalty_address.tree_hash().into(), trade_price_percentage),
             uniqueness_prelauncher_1st_curry_hash: UniquenessPrelauncher::<()>::first_curry_hash()
                 .into(),
             precommit_1st_curry_hash: PrecommitCoin::<()>::first_curry_hash(

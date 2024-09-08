@@ -1,6 +1,7 @@
 use bip39::Mnemonic;
 use chia::{
     bls::{sign, SecretKey, Signature},
+    clvm_utils::ToTreeHash,
     consensus::consensus_constants::ConsensusConstants,
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
@@ -252,7 +253,7 @@ pub fn launch_catalog(
     );
 
     // Spend preroll coin launcher
-    let royalty_puzzle_hash = catalog_constants.royalty_address_hash;
+    let royalty_puzzle_hash = catalog_constants.royalty_address;
     let trade_price_percentage = catalog_constants.trade_price_percentage;
 
     let target_catalog_info = CatalogInfo::new(
@@ -267,7 +268,7 @@ pub fn launch_catalog(
         catalog_launcher_id,
         cats_to_launch,
         target_catalog_inner_puzzle_hash.into(),
-        royalty_puzzle_hash,
+        royalty_puzzle_hash.tree_hash().into(),
         trade_price_percentage,
     );
 
@@ -306,7 +307,7 @@ pub fn launch_catalog(
         target_catalog_info,
     );
 
-    preroller.spend(ctx)?;
+    preroller.spend(ctx, royalty_puzzle_hash)?;
 
     // Secure everything we've done with the preroll coin
     security_coin_conditions =
@@ -351,7 +352,7 @@ mod tests {
         let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250)];
 
         let catalog_constants = CatalogConstants {
-            royalty_address_hash: Bytes32::from([7; 32]),
+            royalty_address: Bytes32::from([7; 32]),
             trade_price_percentage: 100,
             precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
             relative_block_height: 1,
