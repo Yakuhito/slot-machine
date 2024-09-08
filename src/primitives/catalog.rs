@@ -160,10 +160,13 @@ impl Catalog {
             my_id: self.coin.coin_id(),
         });
 
-        self.spend(ctx, vec![register_action], vec![register_solution])?;
+        // spend slots
+        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
 
-        // spend left slot
-        // left_slot.spend(ctx, SlotSolution {})?;
+        left_slot.spend(ctx, spender_inner_puzzle_hash)?;
+        right_slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        self.spend(ctx, vec![register_action], vec![register_solution])?;
         todo!();
     }
 }

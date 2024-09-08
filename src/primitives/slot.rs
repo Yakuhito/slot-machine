@@ -3,7 +3,7 @@ use chia::{
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::singleton::{SingletonArgs, SingletonStruct},
 };
-use chia_wallet_sdk::{DriverError, Launcher, SpendContext};
+use chia_wallet_sdk::{DriverError, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -97,16 +97,20 @@ where
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        solution: SlotSolution,
-    ) -> Result<Launcher, DriverError> {
+        spender_inner_puzzle_hash: Bytes32,
+    ) -> Result<(), DriverError> {
         let puzzle_reveal = self.construct_puzzle(ctx)?;
         let puzzle_reveal = ctx.serialize(&puzzle_reveal)?;
 
-        let solution = ctx.serialize(&solution)?;
+        let solution = ctx.serialize(&SlotSolution {
+            parent_parent_info: self.proof.parent_parent_info,
+            parent_inner_puzzle_hash: self.proof.parent_inner_puzzle_hash,
+            spender_inner_puzzle_hash,
+        })?;
 
         ctx.insert(CoinSpend::new(self.coin, puzzle_reveal, solution));
 
-        Ok(Launcher::new(self.coin.coin_id(), 1))
+        Ok(())
     }
 }
 
