@@ -81,23 +81,16 @@ impl Ord for CatalogSlotValue {
         let self_is_negative = self.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
         let other_is_negative = other.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
 
-        if self_is_negative && !other_is_negative {
-            return Ordering::Less;
-        }
-
-        if !self_is_negative && other_is_negative {
-            return Ordering::Greater;
-        }
-
-        if self_is_negative {
-            return self.asset_id.cmp(&other.asset_id);
-        }
-
-        // invert
-        match self.asset_id.cmp(&other.asset_id) {
-            Ordering::Less => Ordering::Greater,
-            Ordering::Equal => Ordering::Equal,
-            Ordering::Greater => Ordering::Less,
+        match (self_is_negative, other_is_negative) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            (true, true) | (false, false) => {
+                if self_is_negative {
+                    self.asset_id.cmp(&other.asset_id)
+                } else {
+                    self.asset_id.cmp(&other.asset_id).reverse()
+                }
+            }
         }
     }
 }

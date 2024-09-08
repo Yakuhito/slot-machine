@@ -517,6 +517,16 @@ mod tests {
             }
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
+            println!(
+                "slot values: {:?}",
+                slots
+                    .iter()
+                    .map(|s| s.info.value.unwrap())
+                    .collect::<Vec<_>>(),
+            );
+            println!("left_slot: {:?}", left_slot.info.value.unwrap());
+            println!("right_slot: {:?}", right_slot.info.value.unwrap());
+
             let (secure_cond, new_catalog, new_slots) = catalog.register_cat(
                 ctx,
                 tail_hash.into(),

@@ -3,6 +3,7 @@ use chia::{
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
+use clvm_traits::FromClvm;
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -40,26 +41,32 @@ impl Catalog {
     where
         Self: Sized,
     {
+        println!("-yak1");
         let Some(parent_info) = CatalogInfo::parse(allocator, parent_puzzle, constants)? else {
             return Ok(None);
         };
+        println!("-yak2");
 
         let proof = Proof::Lineage(LineageProof {
             parent_parent_coin_info: parent_coin.parent_coin_info,
             parent_inner_puzzle_hash: parent_info.inner_puzzle_hash().into(),
             parent_amount: parent_coin.amount,
         });
+        println!("-yak2.5");
 
+        let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
         let new_state = ActionLayer::<CatalogState>::get_new_state(
             allocator,
             parent_info.state,
-            parent_solution,
+            parent_solution.inner_solution,
         )?;
+        println!("-yak3");
 
         let new_info = parent_info.with_state(new_state);
 
         let new_coin = Coin::new(parent_coin.coin_id(), new_info.puzzle_hash().into(), 1);
 
+        println!("-yak4");
         Ok(Some(Catalog {
             coin: new_coin,
             proof,
@@ -249,6 +256,7 @@ impl Catalog {
         let my_constants = self.info.constants;
         let my_spend = self.spend(ctx, vec![register])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        println!("aaa");
         let new_catalog = Catalog::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
@@ -259,6 +267,7 @@ impl Catalog {
         .ok_or(DriverError::Custom(
             "Could not parse child catalog".to_string(),
         ))?;
+        println!("bbbb");
 
         ctx.spend(my_coin, my_spend)?;
 

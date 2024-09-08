@@ -7,7 +7,8 @@ use chia::{
 };
 use chia_wallet_sdk::{run_puzzle, DriverError, Layer, MerkleTree, Puzzle, Spend, SpendContext};
 use clvm_traits::{clvm_list, match_tuple};
-use clvmr::{Allocator, NodePtr};
+use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
+use hex::encode;
 use hex_literal::hex;
 
 use crate::SpendContextExt;
@@ -90,16 +91,27 @@ impl<S> ActionLayer<S> {
     where
         S: ToClvm<Allocator> + FromClvm<Allocator>,
     {
+        println!("--yak1");
         let solution = RawActionLayerSolution::<NodePtr, NodePtr>::from_clvm(allocator, solution)?;
 
+        println!("--yak2");
         let mut state: S = initial_state;
         for raw_action in solution.actions {
-            let actual_solution = clvm_list!(state.to_clvm(allocator)?, raw_action.action_solution);
+            let actual_solution = clvm_list!(state, raw_action.action_solution);
             let actual_solution = actual_solution.to_clvm(allocator)?;
+            println!(
+                "actual_solution: {:?}",
+                encode(node_to_bytes(allocator, actual_solution)?)
+            );
 
+            println!(
+                "puzzle: {:?}",
+                encode(node_to_bytes(allocator, raw_action.action_puzzle_reveal)?)
+            );
             let output = run_puzzle(allocator, raw_action.action_puzzle_reveal, actual_solution)?;
             (state, _) = <match_tuple!(S, NodePtr)>::from_clvm(allocator, output)?;
         }
+        println!("--yak3");
 
         Ok(state)
     }
