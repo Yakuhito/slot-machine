@@ -37,22 +37,16 @@
   (defun run_next_action (
     MY_MOD_HASH
     MERKLE_ROOT
-    ; (new_state . new_conditions)
-    resp
+    (new_state . new_conditions)
     new_remaining_actions
     current_conditions
   )
-    ; (run_actions_and_recreate
-    ;   MY_MOD_HASH
-    ;   MERKLE_ROOT
-    ;   new_state
-    ;   (merge_lists current_conditions new_conditions)
-    ;   new_remaining_actions
-    ; )
-    (list
-      resp
+    (run_actions_and_recreate
+      MY_MOD_HASH
+      MERKLE_ROOT
+      new_state
+      (merge_lists current_conditions new_conditions)
       new_remaining_actions
-      current_conditions
     )
   )
 
