@@ -441,7 +441,7 @@ mod tests {
             test_price_schedule,
             initial_registration_price,
             cats_to_launch,
-            catalog_constants.clone(),
+            catalog_constants,
             &TESTNET11_CONSTANTS,
         )?;
 
@@ -501,31 +501,23 @@ mod tests {
             let mut left_slot: Option<Slot<CatalogSlotValue>> = None;
             let mut right_slot: Option<Slot<CatalogSlotValue>> = None;
             for slot in slots.iter() {
-                if left_slot.is_none()
-                    || (slot.info.value.unwrap() > left_slot.unwrap().info.value.unwrap()
-                        && slot.info.value.unwrap() < slot_value_to_insert)
-                {
-                    left_slot = Some(*slot);
-                }
+                let slot_value = slot.info.value.unwrap();
 
-                if right_slot.is_none()
-                    || (slot.info.value.unwrap() < right_slot.unwrap().info.value.unwrap()
-                        && slot.info.value.unwrap() > slot_value_to_insert)
-                {
-                    right_slot = Some(*slot);
+                if slot_value < slot_value_to_insert {
+                    // slot belongs to the left
+                    if left_slot.is_none() || slot_value > left_slot.unwrap().info.value.unwrap() {
+                        left_slot = Some(*slot);
+                    }
+                } else {
+                    // slot belongs to the right
+                    if right_slot.is_none() || slot_value < right_slot.unwrap().info.value.unwrap()
+                    {
+                        right_slot = Some(*slot);
+                    }
                 }
             }
-            let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
-            println!(
-                "slot values: {:?}",
-                slots
-                    .iter()
-                    .map(|s| s.info.value.unwrap())
-                    .collect::<Vec<_>>(),
-            );
-            println!("left_slot: {:?}", left_slot.info.value.unwrap());
-            println!("right_slot: {:?}", right_slot.info.value.unwrap());
+            let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
             let (secure_cond, new_catalog, new_slots) = catalog.register_cat(
                 ctx,

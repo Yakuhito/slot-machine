@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
 use clvm_traits::{FromClvm, ToClvm};
 use hex_literal::hex;
+use num_bigint::BigInt;
 
 // the values below are for slots organized into a double-linked ordered list
 // the minimum possible value of an slot - this will be contained by one of the ends of the list
@@ -78,20 +79,10 @@ impl CatalogSlotValue {
 
 impl Ord for CatalogSlotValue {
     fn cmp(&self, other: &Self) -> Ordering {
-        let self_is_negative = self.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
-        let other_is_negative = other.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
+        let self_num = BigInt::from_signed_bytes_be(&self.asset_id);
+        let other_num = BigInt::from_signed_bytes_be(&other.asset_id);
 
-        match (self_is_negative, other_is_negative) {
-            (true, false) => Ordering::Less,
-            (false, true) => Ordering::Greater,
-            (true, true) | (false, false) => {
-                if self_is_negative {
-                    self.asset_id.cmp(&other.asset_id)
-                } else {
-                    self.asset_id.cmp(&other.asset_id).reverse()
-                }
-            }
-        }
+        self_num.cmp(&other_num)
     }
 }
 
