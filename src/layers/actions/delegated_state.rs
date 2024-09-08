@@ -3,14 +3,12 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::DriverError;
+use chia_wallet_sdk::{DriverError, Layer};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::SpendContextExt;
-
-use super::Action;
 
 pub struct DelegatedStateAction {
     pub other_launcher_id: Bytes32,
@@ -22,7 +20,7 @@ impl DelegatedStateAction {
     }
 }
 
-impl Action for DelegatedStateAction {
+impl Layer for DelegatedStateAction {
     type Solution = DelegatedStateActionSolution<NodePtr>;
 
     fn construct_puzzle(
@@ -44,6 +42,23 @@ impl Action for DelegatedStateAction {
         solution
             .to_clvm(&mut ctx.allocator)
             .map_err(DriverError::ToClvm)
+    }
+
+    fn parse_puzzle(
+        allocator: &clvmr::Allocator,
+        puzzle: chia_wallet_sdk::Puzzle,
+    ) -> Result<Option<Self>, DriverError>
+    where
+        Self: Sized,
+    {
+        unimplemented!()
+    }
+
+    fn parse_solution(
+        allocator: &clvmr::Allocator,
+        solution: NodePtr,
+    ) -> Result<Self::Solution, DriverError> {
+        unimplemented!()
     }
 }
 

@@ -9,14 +9,12 @@ use chia::{
         singleton::{SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH},
     },
 };
-use chia_wallet_sdk::DriverError;
+use chia_wallet_sdk::{DriverError, Layer};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{CatalogSlotValue, PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher};
-
-use super::Action;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogRegisterAction {
@@ -45,7 +43,7 @@ impl CatalogRegisterAction {
     }
 }
 
-impl Action for CatalogRegisterAction {
+impl Layer for CatalogRegisterAction {
     type Solution = CatalogRegisterActionSolution;
 
     fn construct_puzzle(
@@ -73,6 +71,23 @@ impl Action for CatalogRegisterAction {
         solution
             .to_clvm(&mut ctx.allocator)
             .map_err(DriverError::ToClvm)
+    }
+
+    fn parse_puzzle(
+        allocator: &clvmr::Allocator,
+        puzzle: chia_wallet_sdk::Puzzle,
+    ) -> Result<Option<Self>, DriverError>
+    where
+        Self: Sized,
+    {
+        unimplemented!()
+    }
+
+    fn parse_solution(
+        allocator: &clvmr::Allocator,
+        solution: NodePtr,
+    ) -> Result<Self::Solution, DriverError> {
+        unimplemented!()
     }
 }
 

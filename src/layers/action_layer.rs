@@ -14,7 +14,7 @@ use crate::SpendContextExt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActionLayer<S> {
-    pub action_puzzle_hashes: Vec<Bytes32>,
+    pub merkle_root: Bytes32,
     pub state: S,
 }
 
@@ -25,18 +25,16 @@ pub struct ActionLayerSolution {
 }
 
 impl<S> ActionLayer<S> {
-    pub fn new(action_puzzle_hashes: Vec<Bytes32>, state: S) -> Self {
-        Self {
-            action_puzzle_hashes,
-            state,
-        }
+    pub fn new(merkle_root: Bytes32, state: S) -> Self {
+        Self { merkle_root, state }
     }
 
     pub fn get_proofs(
         &self,
+        action_puzzle_hashes: &[Bytes32],
         action_spends_puzzle_hashes: &[Bytes32],
     ) -> Option<Vec<(u32, Vec<Bytes32>)>> {
-        let merkle_tree = MerkleTree::new(&self.action_puzzle_hashes);
+        let merkle_tree = MerkleTree::new(action_puzzle_hashes);
 
         let proofs: Vec<(u32, Vec<Bytes32>)> = action_spends_puzzle_hashes
             .iter()
@@ -107,9 +105,25 @@ where
 {
     type Solution = ActionLayerSolution;
 
-    /// Not available for this layer
-    fn parse_puzzle(_: &Allocator, _: Puzzle) -> Result<Option<Self>, DriverError> {
-        Ok(None)
+    fn parse_puzzle(allocator: &Allocator, puzzle: Puzzle) -> Result<Option<Self>, DriverError> {
+        let Some(puzzle) = puzzle.as_curried() else {
+            return Ok(None);
+        };
+
+        if puzzle.mod_hash != ACTION_LAYER_PUZZLE_HASH {
+            return Ok(None);
+        }
+
+        let args = ActionLayerArgs::<S>::from_clvm(allocator, puzzle.args)?;
+
+        if args.my_mod_hash != ACTION_LAYER_PUZZLE_HASH.into() {
+            return Err(DriverError::NonStandardLayer);
+        }
+
+        Ok(Some(Self {
+            merkle_root: args.merkle_root,
+            state: args.state,
+        }))
     }
 
     fn parse_solution(
