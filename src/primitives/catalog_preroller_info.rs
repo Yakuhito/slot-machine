@@ -13,7 +13,10 @@ use crate::{
     ANY_METADATA_UPDATER,
 };
 
-use super::{CatalogSlotValue, Slot, UniquenessPrelauncher, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE};
+use super::{
+    CatalogSlotValue, Slot, SlotInfo, SlotProof, UniquenessPrelauncher, SLOT32_MAX_VALUE,
+    SLOT32_MIN_VALUE,
+};
 
 pub type CatalogPrerollerLayers = SingletonLayer<CatalogPrerollerLayer>;
 
@@ -152,6 +155,7 @@ impl CatalogPrerollerInfo {
         to_launch: Vec<AddCat>,
         my_launcher_id: Bytes32,
         my_coin_id: Bytes32,
+        slot_proof: SlotProof,
     ) -> Result<
         (
             Vec<(AddCat, UniquenessPrelauncher<Bytes32>)>,
@@ -180,14 +184,17 @@ impl CatalogPrerollerInfo {
 
             // slot
             let value = CatalogSlotValue::new(asset_id, asset_id_left, asset_id_right);
-            let slot = Slot::from_value(my_coin_id, my_launcher_id, value);
+            let slot = Slot::new(slot_proof, SlotInfo::from_value(my_launcher_id, value));
 
             res.push((add_cat, uniq_prelauncher));
 
             let min_value = Bytes32::new(SLOT32_MIN_VALUE);
             if value.neighbors.left_asset_id == min_value {
                 let left_slot_value = CatalogSlotValue::new(min_value, min_value, value.asset_id);
-                let left_slot = Slot::from_value(my_coin_id, my_launcher_id, left_slot_value);
+                let left_slot = Slot::new(
+                    slot_proof,
+                    SlotInfo::from_value(my_launcher_id, left_slot_value),
+                );
                 slots.push(left_slot);
             }
 
@@ -196,7 +203,10 @@ impl CatalogPrerollerInfo {
             let max_value = Bytes32::new(SLOT32_MAX_VALUE);
             if value.neighbors.right_asset_id == max_value {
                 let right_slot_value = CatalogSlotValue::new(max_value, value.asset_id, max_value);
-                let right_slot = Slot::from_value(my_coin_id, my_launcher_id, right_slot_value);
+                let right_slot = Slot::new(
+                    slot_proof,
+                    SlotInfo::from_value(my_launcher_id, right_slot_value),
+                );
                 slots.push(right_slot);
             }
         }
@@ -240,7 +250,11 @@ impl CatalogPrerollerInfo {
             let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
 
             base_conditions = base_conditions.create_coin(
-                Slot::<CatalogSlotValue>::puzzle_hash(self.launcher_id, slot_value_hash).into(),
+                Slot::<CatalogSlotValue>::puzzle_hash(&SlotInfo::<CatalogSlotValue>::new(
+                    self.launcher_id,
+                    slot_value_hash,
+                ))
+                .into(),
                 0,
                 vec![asset_id.into()],
             );
@@ -250,10 +264,10 @@ impl CatalogPrerollerInfo {
                 // also launch min value slot
                 base_conditions = base_conditions.create_coin(
                     Slot::<CatalogSlotValue>::puzzle_hash(
-                        self.launcher_id,
-                        CatalogSlotValue::new(min_value, min_value, asset_id)
-                            .tree_hash()
-                            .into(),
+                        &SlotInfo::<CatalogSlotValue>::from_value(
+                            self.launcher_id,
+                            CatalogSlotValue::new(min_value, min_value, asset_id),
+                        ),
                     )
                     .into(),
                     0,
@@ -266,10 +280,10 @@ impl CatalogPrerollerInfo {
                 // also launch max value slot
                 base_conditions = base_conditions.create_coin(
                     Slot::<CatalogSlotValue>::puzzle_hash(
-                        self.launcher_id,
-                        CatalogSlotValue::new(max_value, asset_id, max_value)
-                            .tree_hash()
-                            .into(),
+                        &SlotInfo::<CatalogSlotValue>::from_value(
+                            self.launcher_id,
+                            CatalogSlotValue::new(max_value, asset_id, max_value),
+                        ),
                     )
                     .into(),
                     0,

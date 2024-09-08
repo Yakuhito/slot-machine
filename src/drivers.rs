@@ -489,7 +489,7 @@ mod tests {
         let mut sorted_slot_vals = slots
             .clone()
             .into_iter()
-            .map(|s| s.value.unwrap())
+            .map(|s| s.info.value.unwrap())
             .collect::<Vec<_>>();
         sorted_slot_vals.sort_unstable();
 
@@ -504,7 +504,7 @@ mod tests {
         let left_slot = slots
             .clone()
             .into_iter()
-            .find(|s| s.value.unwrap() == *left_slot_value)
+            .find(|s| s.info.value.unwrap() == *left_slot_value)
             .unwrap();
 
         let right_slot_value = sorted_slot_vals
@@ -514,7 +514,7 @@ mod tests {
         let right_slot = slots
             .clone()
             .into_iter()
-            .find(|s| s.value.unwrap() == *right_slot_value)
+            .find(|s| s.info.value.unwrap() == *right_slot_value)
             .unwrap();
 
         catalog.register_cat(ctx, tail_hash.into(), left_slot, right_slot, precommit_coin)?;

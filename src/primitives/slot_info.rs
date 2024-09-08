@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
-use chia_wallet_sdk::DriverError;
 use clvm_traits::{FromClvm, ToClvm};
 use hex_literal::hex;
 
@@ -29,12 +28,12 @@ impl<V> SlotInfo<V>
 where
     V: Copy,
 {
-    pub fn new(launcher_id: Bytes32, value_hash: Bytes32) -> Result<Self, DriverError> {
-        Ok(Self {
+    pub fn new(launcher_id: Bytes32, value_hash: Bytes32) -> Self {
+        Self {
             launcher_id,
             value_hash,
             value: None,
-        })
+        }
     }
 
     pub fn from_value(launcher_id: Bytes32, value: V) -> Self

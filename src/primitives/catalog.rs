@@ -134,10 +134,10 @@ impl Catalog {
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
     ) -> Result<(), DriverError> {
-        let Some(left_slot_value) = left_slot.value else {
+        let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
         };
-        let Some(right_slot_value) = right_slot.value else {
+        let Some(right_slot_value) = right_slot.info.value else {
             return Err(DriverError::Custom("Missing right slot value".to_string()));
         };
 

@@ -46,14 +46,14 @@ impl<V> Slot<V>
 where
     V: Copy,
 {
-    pub fn new(proof: SlotProof, info: SlotInfo<V>) -> Result<Self, DriverError> {
+    pub fn new(proof: SlotProof, info: SlotInfo<V>) -> Self {
         let parent_coin_id = proof.slot_parent_id(info.launcher_id);
 
-        Ok(Self {
+        Self {
             coin: Coin::new(parent_coin_id, Slot::<V>::puzzle_hash(&info).into(), 0),
             proof,
             info,
-        })
+        }
     }
 
     pub fn first_curry_hash(launcher_id: Bytes32) -> TreeHash {
