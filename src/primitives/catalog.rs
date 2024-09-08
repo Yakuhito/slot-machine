@@ -145,11 +145,11 @@ impl Catalog {
         let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
 
         left_slot.spend(ctx, spender_inner_puzzle_hash)?;
-        // right_slot.spend(ctx, spender_inner_puzzle_hash)?;
+        right_slot.spend(ctx, spender_inner_puzzle_hash)?;
 
         // spend precommit coin
         let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
-        // precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
+        precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
         let register_action = CatalogAction::Register(CatalogRegisterAction {

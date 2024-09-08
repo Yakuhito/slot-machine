@@ -48,7 +48,7 @@ impl<V> PrecommitCoin<V> {
                     precommit_amount,
                 )
                 .into(),
-                0,
+                precommit_amount,
             ),
             launcher_id,
             relative_block_height,
