@@ -66,7 +66,7 @@
       METADATA_UPDATER_HASH_HASH
       NFT_OWNERSHIP_LAYER_MOD_HASH
       TRANSFER_PROGRAM_MOD_HASH
-      ROYALTY_ADDRESS_HASH
+      ROYALTY_PUZZLE_HASH_HASH
       TRADE_PRICE_PERCENTAGE
     ) ; NFT_PACK
     launcher_id
@@ -88,7 +88,7 @@
                 (sha256_one) ; current owner 
                 (curry_hashes TRANSFER_PROGRAM_MOD_HASH
                   (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
-                  ROYALTY_ADDRESS_HASH
+                  ROYALTY_PUZZLE_HASH_HASH
                   (sha256 1 TRADE_PRICE_PERCENTAGE)
                 ) ; transfer program
                 initial_nft_owner_ph

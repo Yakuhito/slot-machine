@@ -1,11 +1,12 @@
 use chia::{
-    protocol::Coin,
-    puzzles::{LineageProof, Proof},
+    protocol::{Bytes32, Coin},
+    puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_wallet_sdk::{DriverError, Puzzle, SpendContext};
+use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
+use clvm_traits::ToClvm;
 use clvmr::{Allocator, NodePtr};
 
-use crate::ActionLayer;
+use crate::{Action, ActionLayer, ActionLayerSolution};
 
 use super::{CatalogAction, CatalogActionSolution, CatalogConstants, CatalogInfo, CatalogState};
 
@@ -69,5 +70,53 @@ impl Catalog {
         actions: Vec<CatalogAction>,
         solutions: Vec<CatalogActionSolution>,
     ) -> Result<(), DriverError> {
+        let layers = self.info.into_layers();
+
+        let puzzle = layers.construct_puzzle(ctx)?;
+
+        let actions = actions
+            .into_iter()
+            .map(|a| a.construct_puzzle(ctx))
+            .collect::<Result<Vec<_>, _>>()?;
+        let action_puzzle_hashes = actions
+            .iter()
+            .map(|a| ctx.tree_hash(*a).into())
+            .collect::<Vec<Bytes32>>();
+
+        let solutions = solutions
+            .into_iter()
+            .map(|sol| match sol {
+                CatalogActionSolution::Register(solution) => solution.to_clvm(&mut ctx.allocator),
+                CatalogActionSolution::UpdatePrice(solution) => {
+                    solution.to_clvm(&mut ctx.allocator)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let solution = layers.construct_solution(
+            ctx,
+            SingletonSolution {
+                lineage_proof: self.proof,
+                amount: self.coin.amount,
+                inner_solution: ActionLayerSolution {
+                    proofs: layers
+                        .inner_puzzle
+                        .get_proofs(&action_puzzle_hashes)
+                        .ok_or(DriverError::Custom(
+                            "Couldn't build proofs for one or more actions".to_string(),
+                        ))?,
+                    action_spends: actions
+                        .into_iter()
+                        .zip(solutions)
+                        .map(|(a, s)| Spend {
+                            puzzle: a,
+                            solution: s,
+                        })
+                        .collect(),
+                },
+            },
+        )?;
+
+        ctx.spend(self.coin, Spend::new(puzzle, solution))
     }
 }

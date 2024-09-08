@@ -14,13 +14,13 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher};
+use crate::{CatalogSlotValue, PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher};
 
 use super::Action;
 
 pub struct CatalogRegisterAction {
     pub launcher_id: Bytes32,
-    pub royalty_address_hash: Bytes32,
+    pub royalty_puzzle_hash_hash: Bytes32,
     pub trade_price_percentage: u16,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
@@ -29,14 +29,14 @@ pub struct CatalogRegisterAction {
 impl CatalogRegisterAction {
     pub fn new(
         launcher_id: Bytes32,
-        royalty_address_hash: Bytes32,
+        royalty_puzzle_hash_hash: Bytes32,
         trade_price_percentage: u16,
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
     ) -> Self {
         Self {
             launcher_id,
-            royalty_address_hash,
+            royalty_puzzle_hash_hash,
             trade_price_percentage,
             precommit_payout_puzzle_hash,
             relative_block_height,
@@ -55,7 +55,7 @@ impl Action for CatalogRegisterAction {
             program: ctx.delegated_state_action_puzzle()?,
             args: CatalogRegisterActionArgs::new(
                 self.launcher_id,
-                self.royalty_address_hash,
+                self.royalty_puzzle_hash_hash,
                 self.trade_price_percentage,
                 self.precommit_payout_puzzle_hash,
                 self.relative_block_height,
@@ -79,7 +79,7 @@ impl ToTreeHash for CatalogRegisterAction {
     fn tree_hash(&self) -> TreeHash {
         CatalogRegisterActionArgs::curry_tree_hash(
             self.launcher_id,
-            self.royalty_address_hash,
+            self.royalty_puzzle_hash_hash,
             self.trade_price_percentage,
             self.precommit_payout_puzzle_hash,
             self.relative_block_height,
@@ -160,7 +160,7 @@ impl CatalogRegisterActionArgs {
                 precommit_payout_puzzle_hash,
             )
             .into(),
-            slot_1st_curry_hash: Slot::first_curry_hash(launcher_id).into(),
+            slot_1st_curry_hash: Slot::<CatalogSlotValue>::first_curry_hash(launcher_id).into(),
         }
     }
 }
@@ -168,7 +168,7 @@ impl CatalogRegisterActionArgs {
 impl CatalogRegisterActionArgs {
     pub fn curry_tree_hash(
         launcher_id: Bytes32,
-        royalty_address_hash: Bytes32,
+        royalty_puzzle_hash_hash: Bytes32,
         trade_price_percentage: u16,
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
@@ -177,7 +177,7 @@ impl CatalogRegisterActionArgs {
             program: CATALOG_REGISTER_PUZZLE_HASH,
             args: CatalogRegisterActionArgs::new(
                 launcher_id,
-                royalty_address_hash,
+                royalty_puzzle_hash_hash,
                 trade_price_percentage,
                 precommit_payout_puzzle_hash,
                 relative_block_height,

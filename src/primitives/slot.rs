@@ -7,6 +7,7 @@ use chia_wallet_sdk::{DriverError, Launcher, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
+use std::cmp::Ordering;
 
 use crate::SpendContextExt;
 
@@ -20,13 +21,14 @@ pub static SLOT32_MAX_VALUE: [u8; 32] =
 
 #[derive(Debug, Clone)]
 #[must_use]
-pub struct Slot {
+pub struct Slot<V> {
     pub coin: Coin,
     pub launcher_id: Bytes32,
     pub value_hash: Bytes32,
+    pub value: Option<V>,
 }
 
-impl Slot {
+impl<V> Slot<V> {
     pub fn new(
         parent_coin_id: Bytes32,
         launcher_id: Bytes32,
@@ -35,12 +37,31 @@ impl Slot {
         Ok(Self {
             coin: Coin::new(
                 parent_coin_id,
-                Slot::puzzle_hash(launcher_id, value_hash).into(),
+                Slot::<V>::puzzle_hash(launcher_id, value_hash).into(),
                 0,
             ),
             launcher_id,
             value_hash,
+            value: None,
         })
+    }
+
+    pub fn from_value(parent_coin_id: Bytes32, launcher_id: Bytes32, value: V) -> Self
+    where
+        V: ToTreeHash,
+    {
+        let value_hash = value.tree_hash().into();
+
+        Self {
+            coin: Coin::new(
+                parent_coin_id,
+                Slot::<V>::puzzle_hash(launcher_id, value_hash).into(),
+                0,
+            ),
+            launcher_id,
+            value_hash,
+            value: Some(value),
+        }
     }
 
     pub fn first_curry_hash(launcher_id: Bytes32) -> TreeHash {
@@ -148,5 +169,31 @@ impl CatalogSlotValue {
                 right_asset_id,
             },
         }
+    }
+}
+
+impl Ord for CatalogSlotValue {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Simple integer arithmetic comparison
+        // Returns true if the asset ID is higher or equal to the SLOT min value
+        let is_self_minimal = self.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
+        let is_other_minimal = other.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
+
+        match (is_self_minimal, is_other_minimal) {
+            (true, true) => match self.asset_id.cmp(&other.asset_id) {
+                Ordering::Less => Ordering::Greater,
+                Ordering::Equal => Ordering::Equal,
+                Ordering::Greater => Ordering::Less,
+            }, // Invert
+            (false, false) => self.asset_id.cmp(&other.asset_id), // Same region comparision
+            (true, false) => Ordering::Less, // Self is within minimal range, but other is not
+            (false, true) => Ordering::Greater, // Other is within minimal range, but self is not
+        }
+    }
+}
+
+impl PartialOrd for CatalogSlotValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }

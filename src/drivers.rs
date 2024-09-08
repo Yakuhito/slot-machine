@@ -22,7 +22,7 @@ use clvmr::NodePtr;
 
 use crate::{
     AddCat, Catalog, CatalogConstants, CatalogInfo, CatalogPreroller, CatalogPrerollerInfo,
-    CatalogState, PriceSchedule, PriceScheduler, PriceSchedulerInfo, Slot,
+    CatalogSlotValue, CatalogState, PriceSchedule, PriceScheduler, PriceSchedulerInfo, Slot,
 };
 
 pub struct SecureOneSidedOffer {
@@ -199,6 +199,7 @@ pub fn sign_standard_transaction(
     Ok(sign(sk, required_signature.final_message()))
 }
 
+#[allow(clippy::type_complexity)]
 pub fn launch_catalog(
     ctx: &mut SpendContext,
     offer: Offer,
@@ -207,7 +208,16 @@ pub fn launch_catalog(
     cats_to_launch: Vec<AddCat>,
     catalog_constants: CatalogConstants,
     consensus_constants: &ConsensusConstants,
-) -> Result<(Signature, SecretKey, PriceScheduler, Catalog, Vec<Slot>), DriverError> {
+) -> Result<
+    (
+        Signature,
+        SecretKey,
+        PriceScheduler,
+        Catalog,
+        Vec<Slot<CatalogSlotValue>>,
+    ),
+    DriverError,
+> {
     let offer = parse_one_sided_offer(ctx, offer)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
@@ -341,8 +351,9 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
-        PrecommitCoin,
+        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogAction,
+        CatalogActionSolution, CatalogPrecommitValue, CatalogRegisterAction,
+        CatalogRegisterActionSolution, PrecommitCoin,
     };
 
     use super::*;
@@ -476,6 +487,47 @@ mod tests {
         )?;
 
         // call the 'register' action on CATalog
+        let mut sorted_slot_vals = slots
+            .clone()
+            .into_iter()
+            .map(|s| s.value.unwrap())
+            .collect::<Vec<_>>();
+        sorted_slot_vals.sort_unstable();
+
+        let slot_value_to_insert =
+            CatalogSlotValue::new(tail_hash.into(), Bytes32::default(), Bytes32::default());
+
+        let left_slot_value = sorted_slot_vals
+            .iter()
+            .rev()
+            .find(|&&x| x < slot_value_to_insert)
+            .unwrap();
+        let left_slot = slots.iter().find(|s| s.value.unwrap() == *left_slot_value);
+
+        let right_slot_value = sorted_slot_vals
+            .iter()
+            .find(|&&x| x > slot_value_to_insert)
+            .unwrap();
+        let right_slot = slots.iter().find(|s| s.value.unwrap() == *right_slot_value);
+
+        let register_action = CatalogAction::Register(CatalogRegisterAction {
+            launcher_id: catalog.info.launcher_id,
+            royalty_puzzle_hash_hash: catalog_constants.royalty_address.tree_hash().into(),
+            trade_price_percentage: catalog_constants.trade_price_percentage,
+            precommit_payout_puzzle_hash: catalog_constants.precommit_payout_puzzle_hash,
+            relative_block_height: catalog_constants.relative_block_height,
+        });
+        let register_solution = CatalogActionSolution::Register(CatalogRegisterActionSolution {
+            tail_hash: tail_hash.into(),
+            initial_nft_owner_ph: value.initial_inner_puzzle_hash,
+            left_tail_hash: left_slot_value.asset_id,
+            left_left_tail_hash: left_slot_value.neighbors.left_asset_id,
+            right_tail_hash: right_slot_value.asset_id,
+            right_right_tail_hash: right_slot_value.neighbors.right_asset_id,
+            my_id: catalog.coin.coin_id(),
+        });
+
+        catalog.spend(ctx, vec![register_action], vec![register_solution])?;
 
         let spends = ctx.take();
         print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");

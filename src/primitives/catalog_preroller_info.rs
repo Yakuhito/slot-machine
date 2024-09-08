@@ -146,13 +146,21 @@ impl CatalogPrerollerInfo {
         }))
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn get_prelaunchers_and_slots(
         allocator: &mut Allocator,
         to_launch: Vec<AddCat>,
         my_launcher_id: Bytes32,
         my_coin_id: Bytes32,
-    ) -> Result<Vec<(AddCat, UniquenessPrelauncher<Bytes32>, Slot)>, DriverError> {
+    ) -> Result<
+        (
+            Vec<(AddCat, UniquenessPrelauncher<Bytes32>)>,
+            Vec<Slot<CatalogSlotValue>>,
+        ),
+        DriverError,
+    > {
         let mut res = Vec::with_capacity(to_launch.len());
+        let mut slots = Vec::with_capacity(to_launch.len());
 
         for add_cat in to_launch {
             let asset_id = add_cat.asset_id;
@@ -172,12 +180,28 @@ impl CatalogPrerollerInfo {
 
             // slot
             let value = CatalogSlotValue::new(asset_id, asset_id_left, asset_id_right);
-            let slot = Slot::new(my_coin_id, my_launcher_id, value.tree_hash().into())?;
+            let slot = Slot::from_value(my_coin_id, my_launcher_id, value);
 
-            res.push((add_cat, uniq_prelauncher, slot));
+            res.push((add_cat, uniq_prelauncher));
+
+            let min_value = Bytes32::new(SLOT32_MIN_VALUE);
+            if value.neighbors.left_asset_id == min_value {
+                let left_slot_value = CatalogSlotValue::new(min_value, min_value, value.asset_id);
+                let left_slot = Slot::from_value(my_coin_id, my_launcher_id, left_slot_value);
+                slots.push(left_slot);
+            }
+
+            slots.push(slot);
+
+            let max_value = Bytes32::new(SLOT32_MAX_VALUE);
+            if value.neighbors.left_asset_id == max_value {
+                let right_slot_value = CatalogSlotValue::new(max_value, value.asset_id, max_value);
+                let right_slot = Slot::from_value(my_coin_id, my_launcher_id, right_slot_value);
+                slots.push(right_slot);
+            }
         }
 
-        Ok(res)
+        Ok((res, slots))
     }
 
     pub fn get_eve_cat_nft_p2_layer(
@@ -216,7 +240,7 @@ impl CatalogPrerollerInfo {
             let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
 
             base_conditions = base_conditions.create_coin(
-                Slot::puzzle_hash(self.launcher_id, slot_value_hash).into(),
+                Slot::<CatalogSlotValue>::puzzle_hash(self.launcher_id, slot_value_hash).into(),
                 0,
                 vec![asset_id.into()],
             );
@@ -225,7 +249,7 @@ impl CatalogPrerollerInfo {
             if info.asset_id_left == min_value {
                 // also launch min value slot
                 base_conditions = base_conditions.create_coin(
-                    Slot::puzzle_hash(
+                    Slot::<CatalogSlotValue>::puzzle_hash(
                         self.launcher_id,
                         CatalogSlotValue::new(min_value, min_value, asset_id)
                             .tree_hash()
@@ -241,7 +265,7 @@ impl CatalogPrerollerInfo {
             if info.asset_id_right == max_value {
                 // also launch max value slot
                 base_conditions = base_conditions.create_coin(
-                    Slot::puzzle_hash(
+                    Slot::<CatalogSlotValue>::puzzle_hash(
                         self.launcher_id,
                         CatalogSlotValue::new(max_value, asset_id, max_value)
                             .tree_hash()
