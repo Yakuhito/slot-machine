@@ -1,0 +1,58 @@
+(
+    ; this function ensures that an NFT with a given inner puzzle hash is spent
+    ; launcher_id is computed from the current coin's if (plus other truths)
+    ; the intention is that inner_puzzle_hash will update metadata, as well as
+    ; the inner ph and potentially the owner - thus revealing them on-chain
+    (defun secure_nft (
+        (
+            LAUNCHER_MOD_HASH
+            SINGLETON_MOD_HASH
+            NFT_STATE_LAYER_MOD_HASH
+            METADATA_UPDATER_HASH_HASH
+            NFT_OWNERSHIP_MOD_HASH
+            TRANSFER_PROGRAM_MOD_HASH
+            ROYALTY_ADDRESS_HASH
+            TRADE_PRICE_PERCENTAGE
+        ) ; NFT_PACK
+        inner_puzzle_hash
+        launcher_id
+    )
+        (list
+            ASSERT_CONCURRENT_SPEND
+            (coinid
+                launcher_id ; parent id
+                (curry_hashes SINGLETON_MOD_HASH
+                    (sha256 2
+                        (sha256 1 SINGLETON_MOD_HASH)
+                        (sha256 2
+                            (sha256 1 launcher_id)
+                            (sha256 1 LAUNCHER_MOD_HASH)
+                        )
+                    ) ; sha256tree singleton struct
+                    (curry_hashes NFT_STATE_LAYER_MOD_HASH
+                        (sha256 1 NFT_STATE_LAYER_MOD_HASH)
+                        (sha256_one) ; metadata is ()
+                        METADATA_UPDATER_HASH_HASH
+                        (curry_hashes NFT_OWNERSHIP_MOD_HASH
+                            (sha256 1 NFT_OWNERSHIP_MOD_HASH)
+                            (sha256_one) ; owner is ()
+                            (curry_hashes TRANSFER_PROGRAM_MOD_HASH
+                                (sha256 2
+                                    (sha256 1 SINGLETON_MOD_HASH)
+                                    (sha256 2
+                                        (sha256 1 launcher_id)
+                                        (sha256 1 LAUNCHER_MOD_HASH)
+                                    )
+                                ) ; sha256tree singleton struct
+                                ROYALTY_ADDRESS_HASH
+                                (sha256 1 TRADE_PRICE_PERCENTAGE)
+                            ) ; transfer program
+                            inner_puzzle_hash
+                        )
+                    ) ; singleton inner puzzle = NFT state layer
+                )
+                1
+            )
+        )
+    )
+)

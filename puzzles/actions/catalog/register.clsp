@@ -34,6 +34,7 @@
 )
   (include condition_codes.clib)
   (include sha256tree.clib)
+  (include secure_nft.clib)
   (include curry.clib)
 
   (defun spend_slot (SLOT_1ST_CURRY_HASH slot_value)
@@ -58,52 +59,6 @@
     )
   )
 
-  (defun assert_launcher_ann (
-    (
-      LAUNCHER_HASH
-      SINGLETON_MOD_HASH
-      STATE_LAYER_MOD_HASH
-      METADATA_UPDATER_HASH_HASH
-      NFT_OWNERSHIP_LAYER_MOD_HASH
-      TRANSFER_PROGRAM_MOD_HASH
-      ROYALTY_PUZZLE_HASH_HASH
-      TRADE_PRICE_PERCENTAGE
-    ) ; NFT_PACK
-    launcher_id
-    initial_nft_owner_ph
-  )
-    (list
-      ASSERT_COIN_ANNOUNCEMENT
-      (sha256 
-        launcher_id
-        (sha256tree
-          (list 
-            (curry_hashes SINGLETON_MOD_HASH
-              (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
-              (curry_hashes STATE_LAYER_MOD_HASH
-                (sha256 1 STATE_LAYER_MOD_HASH)
-                (sha256_one)
-                METADATA_UPDATER_HASH_HASH
-                (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
-                  (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
-                  (sha256_one) ; current owner 
-                  (curry_hashes TRANSFER_PROGRAM_MOD_HASH
-                    (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_HASH)))
-                    ROYALTY_PUZZLE_HASH_HASH
-                    (sha256 1 TRADE_PRICE_PERCENTAGE)
-                  ) ; transfer program
-                  initial_nft_owner_ph
-                ) ; state layer inner ph = ownership layer ph
-              ) ; singleton inner ph = state layer ph
-            ) ; singleton full ph
-            1 ; amount
-            () ; kv list
-          )
-        ); announcement
-      )
-    ) ; make sure correct NFT was created (i.e., destination ph is owner and royalties are set up correctly)
-  )
-
   (defun create_prelauncher_and_assert_launcher (
     NFT_PACK
     my_id
@@ -118,14 +73,14 @@
         0
       ) ; create uniqueness prelauncher
       (c 
-        (assert_launcher_ann
+        (secure_nft
           NFT_PACK
+          initial_nft_owner_ph
           (coinid 
             (coinid my_id prelauncher_full_puzzle_hash 0) ; prelauncher id
             (f NFT_PACK)
             1
           ) ; launcher id
-          initial_nft_owner_ph
         )
         conditions_so_far
       )

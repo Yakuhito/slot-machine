@@ -11,69 +11,15 @@
     my_coin_id ; can't access this while building the puzzle; only when spending the coin
 )
     (include condition_codes.clib)
+    (include secure_nft.clib)
     (include curry.clib)
-
-    (defun compute_concurrent_spend (
-        (
-            LAUNCHER_MOD_HASH
-            SINGLETON_MOD_HASH
-            NFT_STATE_LAYER_MOD_HASH
-            METADATA_UPDATER_HASH_HASH
-            NFT_OWNERSHIP_MOD_HASH
-            TRANSFER_PROGRAM_MOD_HASH
-            ROYALTY_ADDRESS_HASH
-            TRADE_PRICE_PERCENTAGE
-        ) ; NFT_PACK
-        (
-            asset_id_hash . inner_puzzle_hash
-        ) ; nft_info
-        launcher_id
-    )
-        (list
-            ASSERT_CONCURRENT_SPEND
-            (coinid
-                launcher_id ; parent id
-                (curry_hashes SINGLETON_MOD_HASH
-                    (sha256 2
-                        (sha256 1 SINGLETON_MOD_HASH)
-                        (sha256 2
-                            (sha256 1 launcher_id)
-                            (sha256 1 LAUNCHER_MOD_HASH)
-                        )
-                    ) ; sha256tree singleton struct
-                    (curry_hashes NFT_STATE_LAYER_MOD_HASH
-                        (sha256 1 NFT_STATE_LAYER_MOD_HASH)
-                        (sha256_one) ; metadata is ()
-                        METADATA_UPDATER_HASH_HASH
-                        (curry_hashes NFT_OWNERSHIP_MOD_HASH
-                            (sha256 1 NFT_OWNERSHIP_MOD_HASH)
-                            (sha256_one) ; owner is ()
-                            (curry_hashes TRANSFER_PROGRAM_MOD_HASH
-                                (sha256 2
-                                    (sha256 1 SINGLETON_MOD_HASH)
-                                    (sha256 2
-                                        (sha256 1 launcher_id)
-                                        (sha256 1 LAUNCHER_MOD_HASH)
-                                    )
-                                ) ; sha256tree singleton struct
-                                ROYALTY_ADDRESS_HASH
-                                (sha256 1 TRADE_PRICE_PERCENTAGE)
-                            ) ; transfer program
-                            inner_puzzle_hash
-                        )
-                    ) ; singleton inner puzzle = NFT state layer
-                )
-                1
-            )
-        )
-    )
 
     (defun assert_nfts (UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH NFT_PACK my_coin_id nft_infos conditions_so_far)
         (if nft_infos
             (c
-                (compute_concurrent_spend
+                (secure_nft
                     NFT_PACK
-                    (f nft_infos)
+                    (r (f nft_infos)) ; inner puzzle hash
                     (coinid
                         (coinid
                             my_coin_id 
