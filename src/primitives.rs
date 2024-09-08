@@ -6,6 +6,7 @@ mod precommit_coin;
 mod price_scheduler;
 mod price_scheduler_info;
 mod slot;
+mod slot_info;
 mod uniqueness_prelauncher;
 
 pub use catalog::*;
@@ -16,4 +17,5 @@ pub use precommit_coin::*;
 pub use price_scheduler::*;
 pub use price_scheduler_info::*;
 pub use slot::*;
+pub use slot_info::*;
 pub use uniqueness_prelauncher::*;

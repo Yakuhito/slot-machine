@@ -351,9 +351,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogAction,
-        CatalogActionSolution, CatalogPrecommitValue, CatalogRegisterAction,
-        CatalogRegisterActionSolution, PrecommitCoin,
+        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
+        PrecommitCoin,
     };
 
     use super::*;

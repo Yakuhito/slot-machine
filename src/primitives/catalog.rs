@@ -12,8 +12,8 @@ use crate::{
 };
 
 use super::{
-    precommit_coin, CatalogAction, CatalogActionSolution, CatalogConstants, CatalogInfo,
-    CatalogPrecommitValue, CatalogSlotValue, CatalogState, PrecommitCoin, Slot,
+    CatalogAction, CatalogActionSolution, CatalogConstants, CatalogInfo, CatalogPrecommitValue,
+    CatalogSlotValue, CatalogState, PrecommitCoin, Slot,
 };
 
 #[derive(Debug, Clone)]
@@ -141,6 +141,7 @@ impl Catalog {
             return Err(DriverError::Custom("Missing right slot value".to_string()));
         };
 
+        // spend catalog
         let register_action = CatalogAction::Register(CatalogRegisterAction {
             launcher_id: self.info.launcher_id,
             royalty_puzzle_hash_hash: self.info.constants.royalty_address.tree_hash().into(),
@@ -161,6 +162,8 @@ impl Catalog {
 
         self.spend(ctx, vec![register_action], vec![register_solution])?;
 
-        Ok(())
+        // spend left slot
+        // left_slot.spend(ctx, SlotSolution {})?;
+        todo!();
     }
 }

@@ -1,67 +1,59 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::{Bytes32, Coin, CoinSpend},
-    puzzles::singleton::SingletonStruct,
+    puzzles::singleton::{SingletonArgs, SingletonStruct},
 };
 use chia_wallet_sdk::{DriverError, Launcher, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
-use std::cmp::Ordering;
 
 use crate::SpendContextExt;
 
-// the values below are for slots organized into a double-linked ordered list
-// the minimum possible value of an slot - this will be contained by one of the ends of the list
-pub static SLOT32_MIN_VALUE: [u8; 32] =
-    hex!("8000000000000000000000000000000000000000000000000000000000000000");
-// the maximum possible value of a slot - will be contained by the other end of the list
-pub static SLOT32_MAX_VALUE: [u8; 32] =
-    hex!("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+use super::SlotInfo;
 
-#[derive(Debug, Clone)]
-#[must_use]
-pub struct Slot<V> {
-    pub coin: Coin,
-    pub launcher_id: Bytes32,
-    pub value_hash: Bytes32,
-    pub value: Option<V>,
+#[derive(Debug, Clone, Copy)]
+pub struct SlotProof {
+    pub parent_parent_info: Bytes32,
+    pub parent_inner_puzzle_hash: Bytes32,
 }
 
-impl<V> Slot<V> {
-    pub fn new(
-        parent_coin_id: Bytes32,
-        launcher_id: Bytes32,
-        value_hash: Bytes32,
-    ) -> Result<Self, DriverError> {
-        Ok(Self {
-            coin: Coin::new(
-                parent_coin_id,
-                Slot::<V>::puzzle_hash(launcher_id, value_hash).into(),
-                0,
-            ),
-            launcher_id,
-            value_hash,
-            value: None,
-        })
+impl SlotProof {
+    pub fn slot_parent_id(&self, launcher_id: Bytes32) -> Bytes32 {
+        Coin::new(
+            self.parent_parent_info,
+            SingletonArgs::curry_tree_hash(launcher_id, self.parent_inner_puzzle_hash.into())
+                .into(),
+            1,
+        )
+        .coin_id()
     }
+}
 
-    pub fn from_value(parent_coin_id: Bytes32, launcher_id: Bytes32, value: V) -> Self
-    where
-        V: ToTreeHash,
-    {
-        let value_hash = value.tree_hash().into();
+#[derive(Debug, Clone, Copy)]
+#[must_use]
+pub struct Slot<V>
+where
+    V: Copy,
+{
+    pub coin: Coin,
+    pub proof: SlotProof,
 
-        Self {
-            coin: Coin::new(
-                parent_coin_id,
-                Slot::<V>::puzzle_hash(launcher_id, value_hash).into(),
-                0,
-            ),
-            launcher_id,
-            value_hash,
-            value: Some(value),
-        }
+    pub info: SlotInfo<V>,
+}
+
+impl<V> Slot<V>
+where
+    V: Copy,
+{
+    pub fn new(proof: SlotProof, info: SlotInfo<V>) -> Result<Self, DriverError> {
+        let parent_coin_id = proof.slot_parent_id(info.launcher_id);
+
+        Ok(Self {
+            coin: Coin::new(parent_coin_id, Slot::<V>::puzzle_hash(&info).into(), 0),
+            proof,
+            info,
+        })
     }
 
     pub fn first_curry_hash(launcher_id: Bytes32) -> TreeHash {
@@ -74,10 +66,12 @@ impl<V> Slot<V> {
         .tree_hash()
     }
 
-    pub fn puzzle_hash(launcher_id: Bytes32, value_hash: Bytes32) -> TreeHash {
+    pub fn puzzle_hash(info: &SlotInfo<V>) -> TreeHash {
         CurriedProgram {
-            program: Self::first_curry_hash(launcher_id),
-            args: Slot2ndCurryArgs { value_hash },
+            program: Self::first_curry_hash(info.launcher_id),
+            args: Slot2ndCurryArgs {
+                value_hash: info.value_hash,
+            },
         }
         .tree_hash()
     }
@@ -86,7 +80,7 @@ impl<V> Slot<V> {
         let prog_1st_curry = CurriedProgram {
             program: ctx.slot_puzzle()?,
             args: Slot1stCurryArgs {
-                singleton_struct: SingletonStruct::new(self.launcher_id),
+                singleton_struct: SingletonStruct::new(self.info.launcher_id),
             },
         }
         .to_clvm(&mut ctx.allocator)?;
@@ -94,7 +88,7 @@ impl<V> Slot<V> {
         Ok(CurriedProgram {
             program: prog_1st_curry,
             args: Slot2ndCurryArgs {
-                value_hash: self.value_hash,
+                value_hash: self.info.value_hash,
             },
         }
         .to_clvm(&mut ctx.allocator)?)
@@ -142,67 +136,4 @@ pub struct SlotSolution {
     pub parent_parent_info: Bytes32,
     pub parent_inner_puzzle_hash: Bytes32,
     pub spender_inner_puzzle_hash: Bytes32,
-}
-
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
-pub struct CatalogSlotNeigborsInfo {
-    pub left_asset_id: Bytes32,
-    #[clvm(rest)]
-    pub right_asset_id: Bytes32,
-}
-
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
-pub struct CatalogSlotValue {
-    pub asset_id: Bytes32,
-    #[clvm(rest)]
-    pub neighbors: CatalogSlotNeigborsInfo,
-}
-
-impl CatalogSlotValue {
-    pub fn new(asset_id: Bytes32, left_asset_id: Bytes32, right_asset_id: Bytes32) -> Self {
-        Self {
-            asset_id,
-            neighbors: CatalogSlotNeigborsInfo {
-                left_asset_id,
-                right_asset_id,
-            },
-        }
-    }
-}
-
-impl Ord for CatalogSlotValue {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let self_is_negative = self.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
-        let other_is_negative = other.asset_id >= Bytes32::from(SLOT32_MIN_VALUE);
-
-        if self_is_negative && !other_is_negative {
-            return Ordering::Less;
-        }
-
-        if !self_is_negative && other_is_negative {
-            return Ordering::Greater;
-        }
-
-        if self_is_negative {
-            return match self.asset_id.cmp(&other.asset_id) {
-                Ordering::Less => Ordering::Less,
-                Ordering::Equal => Ordering::Equal,
-                Ordering::Greater => Ordering::Greater,
-            };
-        }
-
-        match self.asset_id.cmp(&other.asset_id) {
-            Ordering::Less => Ordering::Greater,
-            Ordering::Equal => Ordering::Equal,
-            Ordering::Greater => Ordering::Less,
-        }
-    }
-}
-
-impl PartialOrd for CatalogSlotValue {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
 }
