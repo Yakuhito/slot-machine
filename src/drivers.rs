@@ -350,7 +350,10 @@ mod tests {
     use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
     use hex_literal::hex;
 
-    use crate::{AddCatInfo, CatNftMetadata, CatalogPrecommitValue, PrecommitCoin};
+    use crate::{
+        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
+        PrecommitCoin,
+    };
 
     use super::*;
 
@@ -550,7 +553,9 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            sim.spend_coins(spends, &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);

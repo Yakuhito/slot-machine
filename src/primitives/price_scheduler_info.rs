@@ -3,7 +3,7 @@ use chia::{
     protocol::Bytes32,
     puzzles::standard::DEFAULT_HIDDEN_PUZZLE_HASH,
 };
-use chia_wallet_sdk::SingletonLayer;
+use chia_wallet_sdk::{Condition, SingletonLayer};
 use clvm_traits::clvm_list;
 use once_cell::sync::Lazy;
 
@@ -57,9 +57,11 @@ impl PriceSchedulerInfo {
     ) -> TreeHash {
         StateSchedulerLayerArgs::curry_tree_hash(
             self.other_singleton_launcher_id,
+            vec![
+                Condition::<()>::create_coin(new_puzzle_hash, 1, vec![]),
+                Condition::assert_height_absolute(required_block_height),
+            ],
             new_state_hash,
-            required_block_height,
-            new_puzzle_hash,
         )
     }
 
