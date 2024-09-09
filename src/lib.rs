@@ -23,6 +23,7 @@ pub trait SpendContextExt {
     fn any_metadata_updater(&mut self) -> Result<NodePtr, DriverError>;
     fn state_shcheduler_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn catalog_preroller_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn verification_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -76,6 +77,11 @@ impl SpendContextExt for SpendContext {
     fn catalog_preroller_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(CATALOG_PREROLLER_PUZZLE_HASH, &CATALOG_PREROLLER_PUZZLE)
     }
+
+    /// Allocate the verification puzzle and return its pointer.
+    fn verification_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(VERIFICATION_LAYER_PUZZLE_HASH, &VERIFICATION_LAYER_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -104,6 +110,7 @@ mod tests {
         assert_puzzle_hash!(ANY_METADATA_UPDATER => ANY_METADATA_UPDATER_HASH);
         assert_puzzle_hash!(STATE_SCHEDULER_PUZZLE => STATE_SCHEDULER_PUZZLE_HASH);
         assert_puzzle_hash!(CATALOG_PREROLLER_PUZZLE => CATALOG_PREROLLER_PUZZLE_HASH);
+        assert_puzzle_hash!(VERIFICATION_LAYER_PUZZLE => VERIFICATION_LAYER_PUZZLE_HASH);
 
         Ok(())
     }

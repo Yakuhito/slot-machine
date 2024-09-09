@@ -12,7 +12,7 @@ pub const VERIFICATION_LAYER_PUZZLE: [u8; 576] = hex!("ff02ffff01ff02ffff03ffff0
 
 pub const VERIFICATION_LAYER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    d15bd225cd87db7d17f7b707a9706980301776474f2925c3b1e91908fae37d72
+    72600e1408134c0def58ce09d1b9edce15ffcfd5f5a2ebcd421d4a47ec4518c2
     "
 ));
 
