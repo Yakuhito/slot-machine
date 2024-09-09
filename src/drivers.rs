@@ -351,10 +351,7 @@ mod tests {
     use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
     use hex_literal::hex;
 
-    use crate::{
-        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
-        PrecommitCoin,
-    };
+    use crate::{AddCatInfo, CatNftMetadata, CatalogPrecommitValue, PrecommitCoin};
 
     use super::*;
 
@@ -456,7 +453,12 @@ mod tests {
         let mut slots = slots.clone();
         for i in 0..7 {
             // create precommit coin
-            let user_coin = sim.new_coin(user_puzzle_hash, catalog.info.state.registration_price);
+            let reg_amount = if i % 2 == 1 {
+                catalog.info.state.registration_price
+            } else {
+                price_scheduler.info.price_schedule[price_scheduler.info.generation].1
+            };
+            let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
             let tail = CurriedProgram {
                 program: ctx.genesis_by_coin_id_tail_puzzle()?,
                 args: GenesisByCoinIdTailArgs::new(user_coin.coin_id()),
@@ -481,7 +483,7 @@ mod tests {
                 catalog_constants.relative_block_height,
                 catalog_constants.precommit_payout_puzzle_hash,
                 value,
-                catalog.info.state.registration_price,
+                reg_amount,
             )?;
 
             StandardLayer::new(user_pk).spend(
@@ -523,12 +525,17 @@ mod tests {
 
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
-            if i % 2 == 0 {
-                // also update price
+            let price_update = if i % 2 == 0 {
                 let price_scheduler_child = price_scheduler.child();
+                let update_action = price_scheduler.catalog_price_update_action();
+
                 price_scheduler.spend(ctx, catalog.info.inner_puzzle_hash().into())?;
                 price_scheduler = price_scheduler_child.unwrap();
-            }
+
+                Some(update_action)
+            } else {
+                None
+            };
 
             let (secure_cond, new_catalog, new_slots) = catalog.register_cat(
                 ctx,
@@ -540,11 +547,7 @@ mod tests {
                     puzzle: eve_nft_inner_puzzle,
                     solution: NodePtr::NIL,
                 },
-                if i % 2 == 0 {
-                    Some(price_scheduler.catalog_price_update_action())
-                } else {
-                    None
-                },
+                price_update,
             )?;
 
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
@@ -555,7 +558,6 @@ mod tests {
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
             let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
             sim.spend_coins(spends, &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);

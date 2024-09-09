@@ -1,7 +1,10 @@
 use chia::{
     clvm_utils::TreeHash,
     protocol::{Bytes32, Coin},
-    puzzles::{singleton::SingletonSolution, LineageProof, Proof},
+    puzzles::{
+        singleton::{SingletonArgs, SingletonSolution},
+        LineageProof, Proof,
+    },
 };
 use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
 
@@ -40,6 +43,8 @@ impl PriceScheduler {
         let child_puzzle_hash = self
             .info
             .generation_inner_puzzle_hash(self.info.generation + 1);
+        let child_puzzle_hash =
+            SingletonArgs::curry_tree_hash(self.info.launcher_id, child_puzzle_hash);
         let child_coin = Coin::new(self.coin.coin_id(), child_puzzle_hash.into(), 1);
 
         let new_generation = self.info.generation + 1;
