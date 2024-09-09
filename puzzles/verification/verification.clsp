@@ -1,13 +1,15 @@
 ; verification.clsp by yakuhito
 ;; Verifier DIDs can create verification coins to e.g., endorse that
-;;  CAT details are not misleading
+;;  CAT details are not misleading. This puzzle is meant to be wrapped
+;;  in a singlryon top layer.
 
 ;; This is the inner puzzle that allows the verification singleton to:
 ;;  - be spent in 'oracle' mode so the verification can be asserted on-chain
 ;;  - be spent in 'revoke' mode so the owner/delegated revocation DID can revoke the verification
 
 ;; Warning: Revocation singleton may be different than the DID that created the verification. The launcher
-;;  singleton should be considered the 'attester' and can be validated via launcher id. 
+;;  singleton should be considered the 'attester' and can be validated via launcher id. A good way to think
+;;  about this case is that the launcher singleton delegated revocation capabilities to a third party.
 
 (mod (
   REVOCATION_SINGLETON_STRUCT
