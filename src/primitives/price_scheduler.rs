@@ -5,9 +5,9 @@ use chia::{
 };
 use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
 
-use crate::StateSchedulerLayerSolution;
+use crate::{DelegatedStateActionSolution, StateSchedulerLayerSolution};
 
-use super::PriceSchedulerInfo;
+use super::{CatalogAction, CatalogState, PriceSchedulerInfo};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PriceScheduler {
@@ -26,7 +26,7 @@ impl PriceScheduler {
         self.info.generation_inner_puzzle_hash(self.info.generation)
     }
 
-    pub fn child(self) -> Option<Self> {
+    pub fn child(&self) -> Option<Self> {
         if self.info.generation >= self.info.price_schedule.len() {
             return None;
         };
@@ -46,7 +46,16 @@ impl PriceScheduler {
         Some(Self {
             coin: child_coin,
             proof: child_proof,
-            info: self.info.with_generation(new_generation),
+            info: self.info.clone().with_generation(new_generation),
+        })
+    }
+
+    pub fn catalog_price_update_action(&self) -> CatalogAction {
+        CatalogAction::UpdatePrice(DelegatedStateActionSolution {
+            new_state: CatalogState {
+                registration_price: self.info.price_schedule[self.info.generation].1,
+            },
+            other_singleton_inner_puzzle_hash: self.inner_puzzle_hash().into(),
         })
     }
 

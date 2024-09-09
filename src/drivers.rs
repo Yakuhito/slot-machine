@@ -362,7 +362,7 @@ mod tests {
         // setup config
 
         let initial_registration_price = 2000;
-        let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250)];
+        let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250), (4, 125), (5, 100)];
 
         let catalog_constants = CatalogConstants {
             royalty_address: Bytes32::from([7; 32]),
@@ -435,7 +435,7 @@ mod tests {
         });
 
         // Launch catalog & price singleton
-        let (_, security_sk, _price_scheduler, mut catalog, slots) = launch_catalog(
+        let (_, security_sk, mut price_scheduler, mut catalog, slots) = launch_catalog(
             ctx,
             offer,
             test_price_schedule,
@@ -450,7 +450,7 @@ mod tests {
         // Register CAT
 
         let mut slots = slots.clone();
-        for i in 0..10 {
+        for i in 0..7 {
             // create precommit coin
             let user_coin = sim.new_coin(user_puzzle_hash, catalog.info.state.registration_price);
             let tail = CurriedProgram {
@@ -519,6 +519,13 @@ mod tests {
 
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
+            if i % 2 == 0 {
+                // also update price
+                let price_scheduler_child = price_scheduler.child();
+                price_scheduler.spend(ctx, catalog.info.inner_puzzle_hash().into())?;
+                price_scheduler = price_scheduler_child.unwrap();
+            }
+
             let (secure_cond, new_catalog, new_slots) = catalog.register_cat(
                 ctx,
                 tail_hash.into(),
@@ -528,6 +535,11 @@ mod tests {
                 Spend {
                     puzzle: eve_nft_inner_puzzle,
                     solution: NodePtr::NIL,
+                },
+                if i % 2 == 0 {
+                    Some(price_scheduler.catalog_price_update_action())
+                } else {
+                    None
                 },
             )?;
 

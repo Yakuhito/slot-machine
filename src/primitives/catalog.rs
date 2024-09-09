@@ -148,6 +148,7 @@ impl Catalog {
         Ok(Spend::new(puzzle, solution))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn register_cat(
         self,
         ctx: &mut SpendContext,
@@ -156,6 +157,7 @@ impl Catalog {
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         eve_nft_inner_spend: Spend,
+        price_update: Option<CatalogAction>,
     ) -> Result<(Conditions, Catalog, Vec<Slot<CatalogSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
@@ -249,7 +251,14 @@ impl Catalog {
 
         let my_coin = self.coin;
         let my_constants = self.info.constants;
-        let my_spend = self.spend(ctx, vec![register])?;
+        let my_spend = self.spend(
+            ctx,
+            if let Some(price_update) = price_update {
+                vec![price_update, register]
+            } else {
+                vec![register]
+            },
+        )?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
         let new_catalog = Catalog::from_parent_spend(
             &mut ctx.allocator,
