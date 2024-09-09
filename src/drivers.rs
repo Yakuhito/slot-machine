@@ -234,6 +234,7 @@ pub fn launch_catalog(
     let price_scheduler_launcher = Launcher::new(security_coin_id, 2);
     let price_scheduler_launcher_coin = price_scheduler_launcher.coin();
     let price_scheduler_launcher_id = price_scheduler_launcher_coin.coin_id();
+    let catalog_constants = catalog_constants.with_price_singleton(price_scheduler_launcher_id);
 
     let price_scheduler_0th_gen_info = PriceSchedulerInfo::new(
         price_scheduler_launcher_id,

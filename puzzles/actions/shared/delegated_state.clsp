@@ -18,12 +18,14 @@
   (c
     new_state
     (list
-      RECEIVE_MESSAGE
-      18 ; puzzle-puzzle
-      (sha256tree new_state)
-      (curry_hashes (f OTHER_SINGLETON_STRUCT)
-        (sha256tree OTHER_SINGLETON_STRUCT)
-        other_singleton_inner_puzzle_hash
+      (list
+        RECEIVE_MESSAGE
+        18 ; puzzle-puzzle
+        (sha256tree new_state)
+        (curry_hashes_inline (f OTHER_SINGLETON_STRUCT)
+          (sha256tree OTHER_SINGLETON_STRUCT)
+          other_singleton_inner_puzzle_hash
+        )
       )
     )
   )

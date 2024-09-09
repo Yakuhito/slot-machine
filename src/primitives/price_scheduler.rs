@@ -4,7 +4,6 @@ use chia::{
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
-use hex::encode;
 
 use crate::{DelegatedStateActionSolution, StateSchedulerLayerSolution};
 
@@ -83,11 +82,6 @@ impl PriceScheduler {
         )?;
 
         ctx.spend(coin, Spend::new(puzzle, solution))?;
-        println!("puzzle: {:?}", encode(ctx.serialize(&puzzle)?.into_bytes()));
-        println!(
-            "solution: {:?}",
-            encode(ctx.serialize(&solution)?.into_bytes())
-        );
 
         Ok(())
     }
