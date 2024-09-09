@@ -363,7 +363,7 @@ mod tests {
         // setup config
 
         let initial_registration_price = 2000;
-        let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250), (4, 125), (5, 100)];
+        let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250), (4, 125)];
 
         let catalog_constants = CatalogConstants {
             royalty_address: Bytes32::from([7; 32]),
@@ -439,7 +439,7 @@ mod tests {
         let (_, security_sk, mut price_scheduler, mut catalog, slots) = launch_catalog(
             ctx,
             offer,
-            test_price_schedule,
+            test_price_schedule.clone(),
             initial_registration_price,
             cats_to_launch,
             catalog_constants,
@@ -565,6 +565,11 @@ mod tests {
 
             catalog = new_catalog;
         }
+
+        assert_eq!(
+            catalog.info.state.registration_price,
+            test_price_schedule[3].1, // 0, 2, 4, 6 updated the price
+        );
 
         Ok(())
     }
