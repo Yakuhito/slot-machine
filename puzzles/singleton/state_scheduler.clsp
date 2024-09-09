@@ -7,8 +7,6 @@
   OTHER_SINGLETON_STRUCT
   BASE_CONDITIONS
   NEW_STATE_HASH
-  REQUIRED_BLOCK_HEIGHT
-  NEW_PH
   other_singleton_inner_puzzle_hash
 )
   (include condition_codes.clib)
