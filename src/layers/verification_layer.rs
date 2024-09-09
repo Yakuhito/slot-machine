@@ -4,9 +4,127 @@ use chia::{
     clvm_traits::{FromClvm, ToClvm},
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::SingletonStruct,
+    puzzles::singleton::{
+        SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH,
+    },
 };
+use chia_wallet_sdk::{DriverError, Layer, Puzzle, SpendContext};
+use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
+
+use crate::SpendContextExt;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerificationLayer<D> {
+    pub revocation_singleton_launcher_id: Bytes32,
+    pub verified_data: D,
+}
+
+impl<D> VerificationLayer<D> {
+    pub fn new(revocation_singleton_launcher_id: Bytes32, verified_data: D) -> Self {
+        Self {
+            revocation_singleton_launcher_id,
+            verified_data,
+        }
+    }
+}
+
+impl<D> Layer for VerificationLayer<D>
+where
+    D: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
+{
+    type Solution = VerificationLayerSolution;
+
+    fn parse_puzzle(allocator: &Allocator, puzzle: Puzzle) -> Result<Option<Self>, DriverError> {
+        let Some(puzzle_2nd_curry) = puzzle.as_curried() else {
+            return Ok(None);
+        };
+
+        let puzzle_2nd_curry =
+            CurriedProgram::<NodePtr, NodePtr>::from_clvm(allocator, puzzle_2nd_curry.curried_ptr)?;
+        let puzzle_1st_curry = Puzzle::parse(allocator, puzzle_2nd_curry.program);
+        let Some(puzzle_1st_curry) = puzzle_1st_curry.as_curried() else {
+            return Ok(None);
+        };
+
+        if puzzle_1st_curry.mod_hash != VERIFICATION_LAYER_PUZZLE_HASH {
+            return Ok(None);
+        }
+
+        let args_2nd_curry =
+            VerificationLayer2ndCurryArgs::<D>::from_clvm(allocator, puzzle_2nd_curry.args)?;
+        let args_1st_curry =
+            VerificationLayer1stCurryArgs::from_clvm(allocator, puzzle_1st_curry.args)?;
+
+        if args_1st_curry
+            .revocation_singleton_struct
+            .launcher_puzzle_hash
+            != SINGLETON_LAUNCHER_PUZZLE_HASH.into()
+            || args_1st_curry.revocation_singleton_struct.mod_hash
+                != SINGLETON_TOP_LAYER_PUZZLE_HASH.into()
+        {
+            return Err(DriverError::NonStandardLayer);
+        }
+
+        if args_2nd_curry.self_hash
+            != VerificationLayer1stCurryArgs::curry_tree_hash(
+                args_1st_curry.revocation_singleton_struct.launcher_id,
+            )
+            .into()
+        {
+            return Err(DriverError::NonStandardLayer);
+        }
+
+        Ok(Some(Self {
+            revocation_singleton_launcher_id: args_1st_curry
+                .revocation_singleton_struct
+                .launcher_id,
+            verified_data: args_2nd_curry.verified_data,
+        }))
+    }
+
+    fn parse_solution(
+        allocator: &Allocator,
+        solution: NodePtr,
+    ) -> Result<Self::Solution, DriverError> {
+        VerificationLayerSolution::from_clvm(allocator, solution).map_err(DriverError::FromClvm)
+    }
+
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+        let puzzle_1st_curry = CurriedProgram {
+            program: ctx.verification_puzzle()?,
+            args: VerificationLayer1stCurryArgs {
+                revocation_singleton_struct: SingletonStruct::new(
+                    self.revocation_singleton_launcher_id,
+                ),
+            },
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let self_hash: Bytes32 =
+            VerificationLayer1stCurryArgs::curry_tree_hash(self.revocation_singleton_launcher_id)
+                .into();
+
+        CurriedProgram {
+            program: puzzle_1st_curry,
+            args: VerificationLayer2ndCurryArgs {
+                self_hash,
+                verified_data: self.verified_data.clone(),
+            },
+        }
+        .to_clvm(&mut ctx.allocator)
+        .map_err(DriverError::ToClvm)
+    }
+
+    fn construct_solution(
+        &self,
+        ctx: &mut SpendContext,
+        solution: Self::Solution,
+    ) -> Result<NodePtr, DriverError> {
+        solution
+            .to_clvm(&mut ctx.allocator)
+            .map_err(DriverError::ToClvm)
+    }
+}
 
 pub const VERIFICATION_LAYER_PUZZLE: [u8; 576] = hex!("ff02ffff01ff02ffff03ffff09ff2fff8080ffff01ff04ffff04ff14ffff01ff808080ffff04ffff04ff08ffff04ffff0bff56ffff0bff0affff0bff0aff66ff0b80ffff0bff0affff0bff76ffff0bff0affff0bff0aff66ffff0bffff0101ff0b8080ffff0bff0affff0bff76ffff0bff0affff0bff0aff66ffff02ff1effff04ff02ffff04ff17ff8080808080ffff0bff0aff66ff46808080ff46808080ff46808080ffff01ff01808080ff808080ffff01ff04ffff04ff08ffff01ff80ff818f8080ffff04ffff04ff1cffff04ffff0112ffff04ff80ffff04ffff0bff56ffff0bff0affff0bff0aff66ff0980ffff0bff0affff0bff76ffff0bff0affff0bff0aff66ffff02ff1effff04ff02ffff04ff05ff8080808080ffff0bff0affff0bff76ffff0bff0affff0bff0aff66ff2f80ffff0bff0aff66ff46808080ff46808080ff46808080ff8080808080ff80808080ff0180ffff04ffff01ffff33ff3e43ff02ffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff1effff04ff02ffff04ff09ff80808080ffff02ff1effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080");
 
@@ -18,15 +136,15 @@ pub const VERIFICATION_LAYER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
-pub struct VerificationLayerArgs1stCurry {
+pub struct VerificationLayer1stCurryArgs {
     pub revocation_singleton_struct: SingletonStruct,
 }
 
-impl VerificationLayerArgs1stCurry {
+impl VerificationLayer1stCurryArgs {
     pub fn curry_tree_hash(revocation_singleton_launcher_id: Bytes32) -> TreeHash {
         CurriedProgram {
             program: VERIFICATION_LAYER_PUZZLE_HASH,
-            args: VerificationLayerArgs1stCurry {
+            args: VerificationLayer1stCurryArgs {
                 revocation_singleton_struct: SingletonStruct::new(revocation_singleton_launcher_id),
             },
         }
@@ -36,12 +154,12 @@ impl VerificationLayerArgs1stCurry {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
-pub struct VerificationLayerArgs2ndCurry<T> {
+pub struct VerificationLayer2ndCurryArgs<T> {
     pub self_hash: Bytes32,
     pub verified_data: T,
 }
 
-impl<T> VerificationLayerArgs2ndCurry<T>
+impl<T> VerificationLayer2ndCurryArgs<T>
 where
     T: ToTreeHash,
 {
@@ -50,11 +168,11 @@ where
         verified_data: T,
     ) -> TreeHash {
         let self_hash =
-            VerificationLayerArgs1stCurry::curry_tree_hash(revocation_singleton_launcher_id);
+            VerificationLayer1stCurryArgs::curry_tree_hash(revocation_singleton_launcher_id);
 
         CurriedProgram {
             program: VERIFICATION_LAYER_PUZZLE_HASH,
-            args: VerificationLayerArgs2ndCurry {
+            args: VerificationLayer2ndCurryArgs {
                 self_hash: self_hash.into(),
                 verified_data: verified_data.tree_hash(),
             },
