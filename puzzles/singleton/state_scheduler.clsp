@@ -3,10 +3,9 @@
 
 ;; For an example, see sinleton/state_scheduler.clsp (this is the trusted singleton).
 
-;; Note: Assumes this singleton's amount is 1.
-
 (mod (
   OTHER_SINGLETON_STRUCT
+  BASE_CONDITIONS
   NEW_STATE_HASH
   REQUIRED_BLOCK_HEIGHT
   NEW_PH
@@ -16,17 +15,16 @@
   (include sha256tree.clib)
   (include curry.clib)
 
-  (list
-    (list CREATE_COIN NEW_PH 1)
-    (list ASSERT_HEIGHT_ABSOLUTE REQUIRED_BLOCK_HEIGHT)
+  (c
     (list
       SEND_MESSAGE
       18 ; puzzle-puzzle
       NEW_STATE_HASH
-      (curry_hashes (f OTHER_SINGLETON_STRUCT)
+      (curry_hashes_inline (f OTHER_SINGLETON_STRUCT)
         (sha256tree OTHER_SINGLETON_STRUCT)
         other_singleton_inner_puzzle_hash
       )
     )
+    BASE_CONDITIONS
   )
 )
