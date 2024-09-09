@@ -6,7 +6,7 @@
 ;;  - be spent in 'oracle' mode so the verification can be asserted on-chain
 ;;  - be spent in 'revoke' mode so the owner/delegated revocation DID can revoke the verification
 
-;; Warning: Revocation singleton may be different than the DID that created the verification. The verification
+;; Warning: Revocation singleton may be different than the DID that created the verification. The launcher
 ;;  singleton should be considered the 'attester' and can be validated via launcher id. 
 
 (mod (
@@ -23,9 +23,10 @@
   (if (= revocation_singleton_inner_puzzle_hash ())
     ; oracle mode - just re-create
     (list
+      (list CREATE_PUZZLE_ANNOUNCEMENT ())
       (list
         CREATE_COIN
-        (curry_hashes SELF_HASH
+        (curry_hashes_inline SELF_HASH
           (sha256 1 SELF_HASH)
           (sha256tree VERIFIED_DATA)
         )
@@ -40,7 +41,7 @@
         RECEIVE_MESSAGE
         18 ; puzzle-puzzle
         () ; message
-        (curry_hashes (f REVOCATION_SINGLETON_STRUCT)
+        (curry_hashes_inline (f REVOCATION_SINGLETON_STRUCT)
           (sha256tree REVOCATION_SINGLETON_STRUCT)
           revocation_singleton_inner_puzzle_hash
         )
