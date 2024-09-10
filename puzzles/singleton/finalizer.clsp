@@ -8,6 +8,7 @@
 (mod (
     FINALIZER_MOD_HASH
     ACTION_LAYER_MOD_HASH
+    MEMO
     Merkle_Root
     Initial_State ; not used for this puzzle
     (New_State . Conditions) ; last action output
@@ -29,6 +30,7 @@
             (sha256tree New_State)
           ) ; new inner ph
           1
+          MEMO
         )
         Conditions
     )

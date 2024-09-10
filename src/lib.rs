@@ -14,6 +14,7 @@ pub use layers::*;
 pub use primitives::*;
 
 pub trait SpendContextExt {
+    fn default_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn delegated_state_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn catalog_register_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
@@ -27,6 +28,11 @@ pub trait SpendContextExt {
 }
 
 impl SpendContextExt for SpendContext {
+    /// Allocate thedefault finalizer puzzle and return its pointer.
+    fn default_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(DEFAULT_FINALIZER_PUZZLE_HASH, &DEFAULT_FINALIZER_PUZZLE)
+    }
+
     /// Allocate the action layer puzzle and return its pointer.
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(ACTION_LAYER_PUZZLE_HASH, &ACTION_LAYER_PUZZLE)
@@ -101,6 +107,7 @@ mod tests {
 
     #[test]
     fn test_puzzle_hashes() -> anyhow::Result<()> {
+        assert_puzzle_hash!(DEFAULT_FINALIZER_PUZZLE => DEFAULT_FINALIZER_PUZZLE_HASH);
         assert_puzzle_hash!(ACTION_LAYER_PUZZLE => ACTION_LAYER_PUZZLE_HASH);
         assert_puzzle_hash!(DELEGATED_STATE_ACTION_PUZZLE => DELEGATED_STATE_ACTION_PUZZLE_HASH);
         assert_puzzle_hash!(CATALOG_REGISTER_PUZZLE => CATALOG_REGISTER_PUZZLE_HASH);
