@@ -153,12 +153,10 @@ impl Primitive for Verification {
 #[cfg(test)]
 mod tests {
     use anyhow::Ok;
-    use chia::{
-        bls::Signature, protocol::Bytes, puzzles::singleton::SINGLETON_LAUNCHER_PUZZLE_HASH,
-    };
+    use chia::{protocol::Bytes, puzzles::singleton::SINGLETON_LAUNCHER_PUZZLE_HASH};
     use chia_wallet_sdk::{Conditions, Launcher, Puzzle, Simulator, StandardLayer};
 
-    use crate::{print_spend_bundle_to_file, VerifiedData};
+    use crate::VerifiedData;
 
     use super::*;
 
@@ -236,9 +234,7 @@ mod tests {
         let melt_spend = verification.spend(ctx, Some(revocation_singleton_inner_ph))?;
         ctx.insert(melt_spend);
 
-        let spends = ctx.take();
-        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-        sim.spend_coins(spends, &[sk])?;
+        sim.spend_coins(ctx.take(), &[sk])?;
 
         Ok(())
     }
