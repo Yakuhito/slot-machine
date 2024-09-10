@@ -8,6 +8,8 @@ mod price_scheduler_info;
 mod slot;
 mod slot_info;
 mod uniqueness_prelauncher;
+mod verification;
+mod verification_info;
 
 pub use catalog::*;
 pub use catalog_info::*;
@@ -19,3 +21,5 @@ pub use price_scheduler_info::*;
 pub use slot::*;
 pub use slot_info::*;
 pub use uniqueness_prelauncher::*;
+pub use verification::*;
+pub use verification_info::*;

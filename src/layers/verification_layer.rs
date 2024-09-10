@@ -9,19 +9,20 @@ use chia::{
     },
 };
 use chia_wallet_sdk::{DriverError, Layer, Puzzle, SpendContext};
+use clvm_traits::clvm_list;
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
-use crate::SpendContextExt;
+use crate::{CatNftMetadata, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VerificationLayer<D> {
+pub struct VerificationLayer {
     pub revocation_singleton_launcher_id: Bytes32,
-    pub verified_data: D,
+    pub verified_data: VerifiedData,
 }
 
-impl<D> VerificationLayer<D> {
-    pub fn new(revocation_singleton_launcher_id: Bytes32, verified_data: D) -> Self {
+impl VerificationLayer {
+    pub fn new(revocation_singleton_launcher_id: Bytes32, verified_data: VerifiedData) -> Self {
         Self {
             revocation_singleton_launcher_id,
             verified_data,
@@ -29,10 +30,7 @@ impl<D> VerificationLayer<D> {
     }
 }
 
-impl<D> Layer for VerificationLayer<D>
-where
-    D: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
-{
+impl Layer for VerificationLayer {
     type Solution = VerificationLayerSolution;
 
     fn parse_puzzle(allocator: &Allocator, puzzle: Puzzle) -> Result<Option<Self>, DriverError> {
@@ -51,8 +49,10 @@ where
             return Ok(None);
         }
 
-        let args_2nd_curry =
-            VerificationLayer2ndCurryArgs::<D>::from_clvm(allocator, puzzle_2nd_curry.args)?;
+        let args_2nd_curry = VerificationLayer2ndCurryArgs::<VerifiedData>::from_clvm(
+            allocator,
+            puzzle_2nd_curry.args,
+        )?;
         let args_1st_curry =
             VerificationLayer1stCurryArgs::from_clvm(allocator, puzzle_1st_curry.args)?;
 
@@ -197,6 +197,40 @@ impl VerificationLayerSolution {
     pub fn revocation(revocation_singleton_inner_puzzle_hash: Bytes32) -> Self {
         Self {
             revocation_singleton_inner_puzzle_hash: Some(revocation_singleton_inner_puzzle_hash),
+        }
+    }
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(list)]
+pub struct VerifiedData {
+    pub version: u32,
+    pub asset_id: Bytes32,
+    pub data_hash: Bytes32,
+    pub category: String,
+    pub subcategory: String,
+}
+
+impl VerifiedData {
+    pub fn from_cat_nft_metadata(
+        asset_id: Bytes32,
+        metadata: &CatNftMetadata,
+        category: String,
+        subcategory: String,
+    ) -> Self {
+        Self {
+            version: 1,
+            asset_id,
+            data_hash: clvm_list!(
+                metadata.code.clone(),
+                metadata.name.clone(),
+                metadata.description.clone(),
+                metadata.image_hash
+            )
+            .tree_hash()
+            .into(),
+            category,
+            subcategory,
         }
     }
 }
