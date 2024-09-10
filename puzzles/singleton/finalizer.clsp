@@ -3,6 +3,8 @@
 ;; The current one only re-creates the singleton, but advanced dApps could use it to create other
 ;;  conditions based on the final state - e.g., re-create the singleton's reserves or modify merkle root
 
+;; Note: This finalizer assumes sets the next singleton's amount to 1.
+
 (mod (
     FINALIZER_MOD_HASH
     ACTION_LAYER_MOD_HASH

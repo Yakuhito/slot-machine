@@ -6,14 +6,10 @@
 ;; An action's solution will always be: (list Current_State solution)
 ;;  (where capital first letters are used to denote Truths)
 ;; It returns two values: (c new_state new_conditions)
-;;  !new_conditions will be directly aded to this puzzle's output conditions!
+;;  new_conditions will be directly aded to this puzzle's output conditions
+;;  but the finalizer puzzle is able to filter them after all actions are run
 
-;; Warning: This puzzle does not support updating the allowed puzzles list.
-;;          If you want to do it, you might want to create a new, slightly-different
-;;          version OR use the hacky approach of determening whether an action is allowed
-;;          via the state
-
-;; Warning 2: This puzzle assumes the singleton has an amount of 1.
+;; Warning: This puzzle's finalizer may assume the singleton's amount is 1 (like the default one does).
 
 (mod (
   FINALZIER
@@ -22,7 +18,6 @@
   actions ; (list (proof puzzle . solution) ...)
   finalizer_solution
 )
-
   (include merkle_utils.clib)
   (include sha256tree.clib)
 
