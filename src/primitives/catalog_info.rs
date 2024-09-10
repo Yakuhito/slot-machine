@@ -8,7 +8,10 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::Allocator;
 use hex_literal::hex;
 
-use crate::{ActionLayer, ActionLayerArgs, CatalogRegisterActionArgs, DelegatedStateActionArgs};
+use crate::{
+    ActionLayer, ActionLayerArgs, CatalogRegisterActionArgs, DefaultFinalizerArgs,
+    DelegatedStateActionArgs,
+};
 
 pub type CatalogLayers = SingletonLayer<ActionLayer<CatalogState>>;
 
@@ -107,6 +110,7 @@ impl CatalogInfo {
             ActionLayer::from_action_puzzle_hashes(
                 &Self::action_puzzle_hashes(self.launcher_id, &self.constants),
                 self.state,
+                self.launcher_id,
             ),
         )
     }
@@ -143,6 +147,7 @@ impl CatalogInfo {
 
     pub fn inner_puzzle_hash(&self) -> TreeHash {
         ActionLayerArgs::curry_tree_hash(
+            DefaultFinalizerArgs::curry_tree_hash(self.launcher_id),
             MerkleTree::new(&Self::action_puzzle_hashes(
                 self.launcher_id,
                 &self.constants,

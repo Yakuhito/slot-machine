@@ -16,6 +16,7 @@ use crate::SpendContextExt;
 pub struct ActionLayer<S> {
     pub merkle_root: Bytes32,
     pub state: S,
+    pub hint: Bytes32,
 }
 
 #[derive(Debug, Clone)]
@@ -25,14 +26,22 @@ pub struct ActionLayerSolution {
 }
 
 impl<S> ActionLayer<S> {
-    pub fn new(merkle_root: Bytes32, state: S) -> Self {
-        Self { merkle_root, state }
+    pub fn new(merkle_root: Bytes32, state: S, hint: Bytes32) -> Self {
+        Self {
+            merkle_root,
+            state,
+            hint,
+        }
     }
 
-    pub fn from_action_puzzle_hashes(leaves: &[Bytes32], state: S) -> Self {
+    pub fn from_action_puzzle_hashes(leaves: &[Bytes32], state: S, hint: Bytes32) -> Self {
         let merkle_root = MerkleTree::new(leaves).root;
 
-        Self { merkle_root, state }
+        Self {
+            merkle_root,
+            state,
+            hint,
+        }
     }
 
     pub fn get_proofs(
@@ -73,9 +82,18 @@ impl<S> ActionLayer<S> {
             return Ok(None);
         }
 
-        let args = ActionLayerArgs::<S>::from_clvm(allocator, puzzle.args)?;
+        let args = ActionLayerArgs::<NodePtr, S>::from_clvm(allocator, puzzle.args)?;
 
-        if args.my_mod_hash != ACTION_LAYER_PUZZLE_HASH.into() {
+        let finalizer = Puzzle::parse(allocator, args.finalizer);
+        let Some(finalizer) = finalizer.as_curried() else {
+            return Ok(None);
+        };
+
+        let finalizer_args = DefaultFinalizerArgs::from_clvm(allocator, finalizer.args)?;
+        if finalizer.mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH
+            || finalizer_args.finalizer_mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH.into()
+            || finalizer_args.action_layer_mod_hash != ACTION_LAYER_PUZZLE_HASH.into()
+        {
             return Ok(None);
         }
 
@@ -90,7 +108,8 @@ impl<S> ActionLayer<S> {
     where
         S: ToClvm<Allocator> + FromClvm<Allocator>,
     {
-        let solution = RawActionLayerSolution::<NodePtr, NodePtr>::from_clvm(allocator, solution)?;
+        let solution =
+            RawActionLayerSolution::<NodePtr, NodePtr, NodePtr>::from_clvm(allocator, solution)?;
 
         let mut state: S = initial_state;
         for raw_action in solution.actions {
@@ -120,15 +139,24 @@ where
             return Ok(None);
         }
 
-        let args = ActionLayerArgs::<S>::from_clvm(allocator, puzzle.args)?;
+        let args = ActionLayerArgs::<NodePtr, S>::from_clvm(allocator, puzzle.args)?;
+        let finalizer = Puzzle::parse(allocator, args.finalizer);
+        let Some(finalizer) = finalizer.as_curried() else {
+            return Ok(None);
+        };
 
-        if args.my_mod_hash != ACTION_LAYER_PUZZLE_HASH.into() {
+        let finalizer_args = DefaultFinalizerArgs::from_clvm(allocator, finalizer.args)?;
+        if finalizer.mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH
+            || finalizer_args.finalizer_mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH.into()
+            || finalizer_args.action_layer_mod_hash != ACTION_LAYER_PUZZLE_HASH.into()
+        {
             return Err(DriverError::NonStandardLayer);
         }
 
         Ok(Some(Self {
             merkle_root: args.merkle_root,
             state: args.state,
+            hint: finalizer_args.hint,
         }))
     }
 
@@ -136,7 +164,8 @@ where
         allocator: &Allocator,
         solution: NodePtr,
     ) -> Result<Self::Solution, DriverError> {
-        let solution = RawActionLayerSolution::<NodePtr, NodePtr>::from_clvm(allocator, solution)?;
+        let solution =
+            RawActionLayerSolution::<NodePtr, NodePtr, NodePtr>::from_clvm(allocator, solution)?;
 
         let action_spends = solution
             .actions
@@ -157,9 +186,19 @@ where
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+        let finalizer = CurriedProgram {
+            program: ctx.default_finalizer_puzzle()?,
+            args: DefaultFinalizerArgs::new(self.hint),
+        }
+        .to_clvm(&mut ctx.allocator)?;
+
         Ok(CurriedProgram {
             program: ctx.action_layer_puzzle()?,
-            args: ActionLayerArgs::<S>::new(self.merkle_root, self.state.clone()),
+            args: ActionLayerArgs::<NodePtr, S>::new(
+                finalizer,
+                self.merkle_root,
+                self.state.clone(),
+            ),
         }
         .to_clvm(&mut ctx.allocator)?)
     }
@@ -180,6 +219,7 @@ where
                     action_solution: spend.solution,
                 })
                 .collect(),
+            finalizer_solution: (),
         }
         .to_clvm(&mut ctx.allocator)?)
     }
@@ -192,6 +232,32 @@ pub const DEFAULT_FINALIZER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
 ));
 
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct DefaultFinalizerArgs {
+    pub finalizer_mod_hash: Bytes32,
+    pub action_layer_mod_hash: Bytes32,
+    pub hint: Bytes32,
+}
+
+impl DefaultFinalizerArgs {
+    pub fn new(hint: Bytes32) -> Self {
+        Self {
+            finalizer_mod_hash: DEFAULT_FINALIZER_PUZZLE_HASH.into(),
+            action_layer_mod_hash: ACTION_LAYER_PUZZLE_HASH.into(),
+            hint,
+        }
+    }
+
+    pub fn curry_tree_hash(hint: Bytes32) -> TreeHash {
+        CurriedProgram {
+            program: DEFAULT_FINALIZER_PUZZLE_HASH,
+            args: DefaultFinalizerArgs::new(hint),
+        }
+        .tree_hash()
+    }
+}
+
 pub const ACTION_LAYER_PUZZLE: [u8; 491] = hex!("ff02ffff01ff02ff05ffff04ff0bffff04ff17ffff04ffff02ff0cffff04ff02ffff04ff0bffff04ffff04ff17ff8080ffff04ff2fff808080808080ffff04ff5fff808080808080ffff04ffff01ffffff02ffff03ff05ffff01ff04ff09ffff02ff08ffff04ff02ffff04ff0dffff04ff0bff808080808080ffff010b80ff0180ff02ffff03ff17ffff01ff02ffff03ffff09ff05ffff02ff0effff04ff02ffff04ffff0bffff0101ffff02ff0affff04ff02ffff04ff81a7ff8080808080ffff04ff47ff808080808080ffff01ff02ff08ffff04ff02ffff04ff1bffff04ffff02ff0cffff04ff02ffff04ff05ffff04ffff02ff81a7ffff04ff13ffff04ff81e7ff80808080ffff04ff37ff808080808080ff8080808080ffff01ff088080ff0180ffff01ff04ff13ff1b8080ff0180ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff0affff04ff02ffff04ff09ff80808080ffff02ff0affff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff02ffff03ff1bffff01ff02ff0effff04ff02ffff04ffff02ffff03ffff18ffff0101ff1380ffff01ff0bffff0102ff2bff0580ffff01ff0bffff0102ff05ff2b8080ff0180ffff04ffff04ffff17ff13ffff0181ff80ff3b80ff8080808080ffff010580ff0180ff018080");
 pub const ACTION_LAYER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
@@ -201,27 +267,31 @@ pub const ACTION_LAYER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
-pub struct ActionLayerArgs<S> {
-    pub my_mod_hash: Bytes32,
+pub struct ActionLayerArgs<F, S> {
+    pub finalizer: F,
     pub merkle_root: Bytes32,
     pub state: S,
 }
 
-impl<S> ActionLayerArgs<S> {
-    pub fn new(merkle_root: Bytes32, state: S) -> Self {
+impl<F, S> ActionLayerArgs<F, S> {
+    pub fn new(finalizer: F, merkle_root: Bytes32, state: S) -> Self {
         Self {
-            my_mod_hash: ACTION_LAYER_PUZZLE_HASH.into(),
+            finalizer,
             merkle_root,
             state,
         }
     }
 }
 
-impl ActionLayerArgs<TreeHash> {
-    pub fn curry_tree_hash(merkle_root: Bytes32, state_hash: TreeHash) -> TreeHash {
+impl ActionLayerArgs<TreeHash, TreeHash> {
+    pub fn curry_tree_hash(
+        finalizer: TreeHash,
+        merkle_root: Bytes32,
+        state_hash: TreeHash,
+    ) -> TreeHash {
         CurriedProgram {
             program: ACTION_LAYER_PUZZLE_HASH,
-            args: ActionLayerArgs::<TreeHash>::new(merkle_root, state_hash),
+            args: ActionLayerArgs::<TreeHash, TreeHash>::new(finalizer, merkle_root, state_hash),
         }
         .tree_hash()
     }
@@ -259,6 +329,7 @@ pub struct RawActionLayerSolutionItem<P, S> {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct RawActionLayerSolution<P, S> {
+pub struct RawActionLayerSolution<P, S, F> {
     pub actions: Vec<RawActionLayerSolutionItem<P, S>>,
+    pub finalizer_solution: F,
 }
