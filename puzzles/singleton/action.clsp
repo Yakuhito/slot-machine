@@ -16,79 +16,60 @@
 ;; Warning 2: This puzzle assumes the singleton has an amount of 1.
 
 (mod (
-  MY_MOD_HASH
+  FINALZIER
   MERKLE_ROOT
   STATE
   actions ; (list (proof puzzle . solution) ...)
+  finalizer_solution
 )
 
-  (include condition_codes.clib)
   (include merkle_utils.clib)
   (include sha256tree.clib)
-  (include curry.clib)
 
-  (defun merge_lists (long_list short_list)
+  (defun merge_lists (short_list long_list)
     (if short_list
-      (c (f short_list) (merge_lists long_list (r short_list)))
+      (c (f short_list) (merge_lists (r short_list) long_list))
       long_list
     )
   )
 
-  (defun run_next_action (
-    MY_MOD_HASH
+  (defun run_actions (
     MERKLE_ROOT
-    (new_state . new_conditions)
-    new_remaining_actions
-    current_conditions
-  )
-    (run_actions_and_recreate
-      MY_MOD_HASH
-      MERKLE_ROOT
-      new_state
-      (merge_lists current_conditions new_conditions)
-      new_remaining_actions
-    )
-  )
-
-  (defun run_actions_and_recreate (
-    MY_MOD_HASH
-    MERKLE_ROOT
-    state
-    conditions
+    (state . conditions)
     remaining_actions
   )
     (if remaining_actions
       ; (f remaining_actions) = (proof puzzle . solution)
       (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (f (r (f remaining_actions)))) (f (f remaining_actions))))
-        (run_next_action
-          MY_MOD_HASH
-          MERKLE_ROOT
-          (a
-            (f (r (f remaining_actions)))
-            (list state (r (r (f remaining_actions))))
-          )
-          (r remaining_actions)
+        (merge_lists 
           conditions
+          (run_actions
+            MERKLE_ROOT
+            (a
+              (f (r (f remaining_actions)))
+              (list state (r (r (f remaining_actions))))
+            )
+            (r remaining_actions)
+          )
         )
         ; else
         (x)
       )
       ; else
       (c
-        (list
-          CREATE_COIN
-          (curry_hashes MY_MOD_HASH
-            (sha256 1 MY_MOD_HASH)
-            (sha256 1 MERKLE_ROOT)
-            (sha256tree state)
-          )
-          1
-        )
+        state
         conditions
       )
     )
   )
   
-
-  (run_actions_and_recreate MY_MOD_HASH MERKLE_ROOT STATE () actions)
+  (a
+    FINALZIER
+    (list
+      MERKLE_ROOT
+      STATE
+      (run_actions MERKLE_ROOT (list STATE) actions)
+      finalizer_solution
+    )
+  )
 )

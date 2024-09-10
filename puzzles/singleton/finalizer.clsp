@@ -1,0 +1,33 @@
+; finalizer.clsp by yakuhito
+;; This puzzle is essentially used in the singleton action layer to 'finalize' a set of actions
+;; The current one only re-creates the singleton, but advanced dApps could use it to create other
+;;  conditions based on the final state - e.g., re-create the singleton's reserves or modify merkle root
+
+(mod (
+    FINALIZER_MOD_HASH
+    ACTION_LAYER_MOD_HASH
+    Merkle_Root
+    Initial_State ; not used for this puzzle
+    (New_State . Conditions) ; last action output
+    my_solution ; not used here
+)
+    (include condition_codes.clib)
+    (include sha256tree.clib)
+    (include curry.clib)
+
+    (c
+        (list
+          CREATE_COIN
+          (curry_hashes ACTION_LAYER_MOD_HASH
+            (curry_hashes FINALIZER_MOD_HASH
+                (sha256 1 FINALIZER_MOD_HASH)
+                (sha256 1 ACTION_LAYER_MOD_HASH)
+            ) ; finalizer puzzle hash
+            (sha256 1 Merkle_Root)
+            (sha256tree New_State)
+          ) ; new inner ph
+          1
+        )
+        Conditions
+    )
+)
