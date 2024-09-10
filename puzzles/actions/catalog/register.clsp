@@ -116,13 +116,12 @@
           (list
             SEND_MESSAGE
             18 ; puzzle-puzzle
-            ()
+            (f Current_State) ; precommit_amount = registration fee = only value held in state
             (curry_hashes PRECOMMIT_1ST_CURRY_HASH
               (sha256 2
                 (sha256 1 initial_nft_owner_ph)
                 tail_hash
               ) ; precommit coin reveal will be (c (c initial_nft_owner_ph initial_nft_metadata_hash) TAIL)
-              (sha256 1 (f Current_State)) ; PRECOMMIT_AMOUNT = registration fee = only value held in state
             )
           ) 
         )

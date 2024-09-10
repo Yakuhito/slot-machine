@@ -45,7 +45,6 @@ impl<V> PrecommitCoin<V> {
                     relative_block_height,
                     precommit_payout_puzzle_hash,
                     value_hash,
-                    precommit_amount,
                 )
                 .into(),
                 precommit_amount,
@@ -79,7 +78,6 @@ impl<V> PrecommitCoin<V> {
         relative_block_height: u32,
         precommit_payout_puzzle_hash: Bytes32,
         value_hash: TreeHash,
-        precommit_amount: u64,
     ) -> TreeHash {
         CurriedProgram {
             program: Self::first_curry_hash(
@@ -87,10 +85,7 @@ impl<V> PrecommitCoin<V> {
                 relative_block_height,
                 precommit_payout_puzzle_hash,
             ),
-            args: PrecommitCoin2ndCurryArgs {
-                value: value_hash,
-                precommit_amount,
-            },
+            args: PrecommitCoin2ndCurryArgs { value: value_hash },
         }
         .tree_hash()
     }
@@ -113,7 +108,6 @@ impl<V> PrecommitCoin<V> {
             program: prog_1st_curry,
             args: PrecommitCoin2ndCurryArgs {
                 value: self.value.clone(),
-                precommit_amount: self.precommit_amount,
             },
         }
         .to_clvm(&mut ctx.allocator)?)
@@ -131,6 +125,7 @@ impl<V> PrecommitCoin<V> {
         let puzzle_reveal = ctx.serialize(&puzzle_reveal)?;
 
         let solution = ctx.serialize(&PrecommitCoinSolution {
+            precommit_amount: self.coin.amount,
             singleton_inner_puzzle_hash,
         })?;
 
@@ -140,11 +135,11 @@ impl<V> PrecommitCoin<V> {
     }
 }
 
-pub const PRECOMMIT_COIN_PUZZLE: [u8; 526] = hex!("ff02ffff01ff04ffff04ff18ffff04ff5fff808080ffff04ffff04ff14ffff04ff17ffff04ff5fff80808080ffff04ffff04ff10ffff04ff0bff808080ffff04ffff04ff2cffff04ffff0112ffff04ff80ffff04ffff02ff16ffff04ff02ffff04ff09ffff04ffff02ff3effff04ff02ffff04ff05ff80808080ffff04ff81bfff808080808080ff8080808080ff8080808080ffff04ffff01ffffff5249ff33ff4302ffffff02ffff03ff05ffff01ff0bff7affff02ff2effff04ff02ffff04ff09ffff04ffff02ff12ffff04ff02ffff04ff0dff80808080ff808080808080ffff016a80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff0bff5affff02ff2effff04ff02ffff04ff05ffff04ffff02ff12ffff04ff02ffff04ff07ff80808080ff808080808080ffff0bff3cffff0bff3cff6aff0580ffff0bff3cff0bff4a8080ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff3effff04ff02ffff04ff09ff80808080ffff02ff3effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080");
+pub const PRECOMMIT_COIN_PUZZLE: [u8; 526] = hex!("ff02ffff01ff04ffff04ff18ffff04ff5fff808080ffff04ffff04ff14ffff04ff17ffff04ff5fff80808080ffff04ffff04ff10ffff04ff0bff808080ffff04ffff04ff2cffff04ffff0112ffff04ff5fffff04ffff02ff16ffff04ff02ffff04ff09ffff04ffff02ff3effff04ff02ffff04ff05ff80808080ffff04ff81bfff808080808080ff8080808080ff8080808080ffff04ffff01ffffff5249ff33ff4302ffffff02ffff03ff05ffff01ff0bff7affff02ff2effff04ff02ffff04ff09ffff04ffff02ff12ffff04ff02ffff04ff0dff80808080ff808080808080ffff016a80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff0bff5affff02ff2effff04ff02ffff04ff05ffff04ffff02ff12ffff04ff02ffff04ff07ff80808080ff808080808080ffff0bff3cffff0bff3cff6aff0580ffff0bff3cff0bff4a8080ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff3effff04ff02ffff04ff09ff80808080ffff02ff3effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080");
 
 pub const PRECOMMIT_COIN_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    585bfa948f4c7aa920d30c2caab7825c43e2f11e2462206a03fa731063230994
+    825ffe9a6c747756835ea074f5c45b78478bf9bf50377e2788a5832424fdccc4
     "
 ));
 
@@ -160,12 +155,12 @@ pub struct PrecommitCoin1stCurryArgs {
 #[clvm(curry)]
 pub struct PrecommitCoin2ndCurryArgs<V> {
     pub value: V,
-    pub precommit_amount: u64,
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct PrecommitCoinSolution {
+    pub precommit_amount: u64,
     pub singleton_inner_puzzle_hash: Bytes32,
 }
 
