@@ -25,6 +25,7 @@
             (curry_hashes FINALIZER_MOD_HASH
                 (sha256 1 FINALIZER_MOD_HASH)
                 (sha256 1 ACTION_LAYER_MOD_HASH)
+                (sha256 1 HINT)
             ) ; finalizer puzzle hash
             (sha256 1 Merkle_Root)
             (sha256tree New_State)
