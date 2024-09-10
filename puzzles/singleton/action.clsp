@@ -28,6 +28,10 @@
     )
   )
 
+  (defun merge_conditions (short_list (state . long_list))
+    (c state (merge_lists short_list long_list))
+  )
+
   (defun run_actions (
     MERKLE_ROOT
     (state . conditions)
@@ -36,7 +40,7 @@
     (if remaining_actions
       ; (f remaining_actions) = (proof puzzle . solution)
       (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (f (r (f remaining_actions)))) (f (f remaining_actions))))
-        (merge_lists 
+        (merge_conditions 
           conditions
           (run_actions
             MERKLE_ROOT
