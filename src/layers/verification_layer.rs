@@ -171,7 +171,7 @@ where
             VerificationLayer1stCurryArgs::curry_tree_hash(revocation_singleton_launcher_id);
 
         CurriedProgram {
-            program: VERIFICATION_LAYER_PUZZLE_HASH,
+            program: self_hash,
             args: VerificationLayer2ndCurryArgs {
                 self_hash: self_hash.into(),
                 verified_data: verified_data.tree_hash(),

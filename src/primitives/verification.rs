@@ -3,11 +3,11 @@ use chia::{
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
         singleton::{SingletonArgs, SingletonSolution},
-        EveProof, Proof,
+        EveProof, LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{DriverError, Layer, SingletonLayer, SpendContext};
-use clvmr::NodePtr;
+use chia_wallet_sdk::{DriverError, Layer, Primitive, Puzzle, SingletonLayer, SpendContext};
+use clvmr::{Allocator, NodePtr};
 
 use crate::{VerificationLayer, VerificationLayer2ndCurryArgs, VerificationLayerSolution};
 
@@ -93,7 +93,7 @@ impl Verification {
         self,
         ctx: &mut SpendContext,
         revocation_singleton_inner_puzzle_hash: Option<Bytes32>,
-    ) -> Result<(), DriverError> {
+    ) -> Result<CoinSpend, DriverError> {
         let sol = SingletonSolution {
             lineage_proof: self.proof,
             amount: self.coin.amount,
@@ -111,17 +111,52 @@ impl Verification {
         let puzzle_reveal = ctx.serialize(&puzzle_reveal)?;
         let solution = ctx.serialize(&solution)?;
 
-        ctx.insert(CoinSpend::new(my_coin, puzzle_reveal, solution));
+        Ok(CoinSpend::new(my_coin, puzzle_reveal, solution))
+    }
+}
 
-        Ok(())
+impl Primitive for Verification {
+    fn from_parent_spend(
+        allocator: &mut Allocator,
+        parent_coin: Coin,
+        parent_puzzle: Puzzle,
+        _: NodePtr,
+        _: Coin,
+    ) -> Result<Option<Self>, DriverError> {
+        let Some(parent_layers) = VerificationLayers::parse_puzzle(allocator, parent_puzzle)?
+        else {
+            return Ok(None);
+        };
+
+        let parent_inner_puzzle_hash = Verification::inner_puzzle_hash(
+            parent_layers.inner_puzzle.revocation_singleton_launcher_id,
+            parent_layers.inner_puzzle.verified_data.tree_hash(),
+        )
+        .into();
+
+        Ok(Some(Self {
+            coin: Coin::new(parent_coin.coin_id(), parent_coin.puzzle_hash, 1),
+            proof: Proof::Lineage(LineageProof {
+                parent_parent_coin_info: parent_coin.parent_coin_info,
+                parent_inner_puzzle_hash,
+                parent_amount: parent_coin.amount,
+            }),
+            info: VerificationInfo::new(
+                parent_layers.launcher_id,
+                parent_layers.inner_puzzle.revocation_singleton_launcher_id,
+                parent_layers.inner_puzzle.verified_data,
+            ),
+        }))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use anyhow::Ok;
-    use chia::{bls::Signature, puzzles::singleton::SINGLETON_LAUNCHER_PUZZLE_HASH};
-    use chia_wallet_sdk::{Conditions, Launcher, Simulator, StandardLayer};
+    use chia::{
+        bls::Signature, protocol::Bytes, puzzles::singleton::SINGLETON_LAUNCHER_PUZZLE_HASH,
+    };
+    use chia_wallet_sdk::{Conditions, Launcher, Puzzle, Simulator, StandardLayer};
 
     use crate::{print_spend_bundle_to_file, VerifiedData};
 
@@ -131,7 +166,7 @@ mod tests {
     fn test_verifications() -> anyhow::Result<()> {
         let mut sim = Simulator::new();
         let ctx = &mut SpendContext::new();
-        let (sk, pk, _, coin) = sim.new_p2(2)?;
+        let (sk, pk, _, coin) = sim.new_p2(1)?;
         let p2 = StandardLayer::new(pk);
 
         let did_launcher = Launcher::new(coin.coin_id(), 1);
@@ -144,10 +179,11 @@ mod tests {
             Conditions::new().create_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 0, vec![]),
         )?;
         let verification_launcher = Launcher::new(did.coin.parent_coin_info, 0);
+        // we don't need an extra mojo for the verification coin since it's melted in the same tx
 
         let test_info = VerificationInfo::new(
             verification_launcher.coin().coin_id(),
-            did.coin.coin_id(),
+            did.info.launcher_id,
             VerifiedData {
                 version: 1,
                 asset_id: Bytes32::new([2; 32]),
@@ -170,6 +206,35 @@ mod tests {
         )?;
 
         assert_eq!(new_coin, verification.coin);
+
+        // spend the verification coin in oracle mode
+        let oracle_spend = verification.spend(ctx, None)?;
+        ctx.insert(oracle_spend.clone());
+
+        let parent_puzzle = ctx.alloc(&oracle_spend.puzzle_reveal)?;
+        let parent_puzzle = Puzzle::parse(&ctx.allocator, parent_puzzle);
+        let parent_solution = ctx.alloc(&oracle_spend.solution)?;
+        let verification = Verification::from_parent_spend(
+            &mut ctx.allocator,
+            oracle_spend.coin,
+            parent_puzzle,
+            parent_solution,
+            oracle_spend.coin, // doesn't really matter
+        )?
+        .unwrap();
+
+        // melt verification coin
+        let revocation_singleton_inner_ph = did.info.inner_puzzle_hash().into();
+
+        let msg_data = ctx.alloc(&verification.coin.puzzle_hash)?;
+        let _ = did.update(
+            ctx,
+            &p2,
+            Conditions::new().send_message(18, Bytes::default(), vec![msg_data]),
+        )?;
+
+        let melt_spend = verification.spend(ctx, Some(revocation_singleton_inner_ph))?;
+        ctx.insert(melt_spend);
 
         let spends = ctx.take();
         print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
