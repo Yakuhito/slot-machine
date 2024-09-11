@@ -1,0 +1,128 @@
+;; register.clsp by yakuhito
+;; Responsible for registering new names into the name registry (CNS)
+
+;; Unlike CATalog slot's value is ((value . (left_value right_value)) . (expiration version . launcher_id)) where:
+;;  value is the slot 'key'/id and is defined as (sha256 name)
+;;  expiration is a timestamp that says when the name will expire
+;;  left_value/right_value are the key's of the slot's neighbors
+;;  version is used for versioning the 'launcher_id' attribute - for now, the only valid value is 1
+;;  launcher_id is, for version 1, a 32-byte value that specifies the name NFT's launcher id
+;;      in the future, launcher_id might point to a namespace/sub-registry, for example
+
+;; Also note that anyone can extend a name registration, but only the name NFT may update the version/launcher_id data
+
+(mod (
+  PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
+  SLOT_1ST_CURRY_HASH ; after 1st curry
+  Current_State ; Truth
+  (name_reveal left_value right_value . solution) ; see the 'main' function for rest of arguments 
+)
+  (include condition_codes.clib)
+  (include sha256tree.clib)
+  (include secure_nft.clib)
+  (include curry.clib)
+
+  (defun get_slot_value_hash (value_hash left_value_hash right_value_hash data_hash)
+    (sha256 2
+        value_hash
+        (sha256 2
+            (sha256 2 left_value_hash right_value_hash)
+            data_hash
+        )
+    )
+  )
+
+  (defun main (
+    PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
+    Current_State
+    ( 
+        name_nft_launcher_id ; also included in the pre-commit coin
+        precommitment_amount
+        left_left_value_hash left_data_hash ; left slot info
+        right_right_value_hash right_data_hash ; right slot info
+    )
+    name_hash
+    left_value_hash
+    right_value_hash
+    price
+  )
+    (c
+        Current_State ; new state
+        (list
+            ; spend left slot
+            (spend_slot SLOT_1ST_CURRY_HASH 
+                (get_slot_value_hash left_value_hash left_left_value_hash right_value_hash left_data_hash)
+            )
+            ; spend right slot
+            (spend_slot SLOT_1ST_CURRY_HASH
+                (get_slot_value_hash right_value_hash left_value_hash right_right_value_hash right_data_hash)
+            )
+            
+            ; create new slot
+            (create_slot_with_hint SLOT_1ST_CURRY_HASH (c tail_hash (c left_tail_hash right_tail_hash))) 
+            ; create new left slot
+            (create_slot_with_hint SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash tail_hash))) 
+            ; create new right slot
+            (create_slot_with_hint SLOT_1ST_CURRY_HASH (c right_tail_hash (c tail_hash right_right_tail_hash))) 
+            
+            ; consume precommit coin
+            (list
+                SEND_MESSAGE
+                18 ; puzzle-puzzle
+                precommit_amount
+                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                    (sha256 2
+                        value_hash
+                        (sha256 1 name_nft_launcher_id)
+                    ) ; data in precommit coin reveal will be (c name name_nft_launcher_id)
+                )
+            ) 
+        ) ; conditions
+    )
+  )
+
+  (defun validate_and_get_length (name length)
+    (if name
+        (validate_and_get_length (r name) (+ length 1))
+        ; else
+        length
+    )
+  )
+
+  (defun get_price_factor (length)
+    (if (> length 2)
+        (if (> length 4)
+            (if (= length 5)
+                8
+                ; else length > 6
+                (if (> length 31) (x) 1)
+            )
+            ; else 2 < length < 5
+            (if (= length 3)
+                64
+                ; else length = 4
+                32
+            )
+        )
+        ; else length <= 2
+        (x)
+    )
+  )
+
+  (if (all (> name_hash left_value) (> right_value name_hash))
+    (main
+            PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
+            Current_State
+            solution
+            (sha256 name_reveal)
+            (sha256 1 left_value) 
+            (sha256 1 right_value) 
+            (*
+                (get_price_factor (validate_and_get_length name_reveal ())) 
+                (f Current_State)
+            )
+        )
+        ; else
+        (x)
+  )
+)

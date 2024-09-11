@@ -33,31 +33,9 @@
   ) ; solution
 )
   (include condition_codes.clib)
-  (include sha256tree.clib)
   (include secure_nft.clib)
   (include curry.clib)
-
-  (defun spend_slot (SLOT_1ST_CURRY_HASH slot_value)
-    (list
-      SEND_MESSAGE
-      18 ; puzzle-puzzle
-      ()
-      (curry_hashes SLOT_1ST_CURRY_HASH
-        (sha256 1 (sha256tree slot_value))
-      )
-    )
-  )
-
-  (defun create_slot_with_hint (SLOT_1ST_CURRY_HASH slot_value)
-    (list
-      CREATE_COIN
-      (curry_hashes SLOT_1ST_CURRY_HASH
-        (sha256 1 (sha256tree slot_value))
-      )
-      0
-      (f slot_value)
-    )
-  )
+  (include slots.clib)
 
   (defun create_prelauncher_and_assert_launcher (
     NFT_PACK
@@ -87,6 +65,13 @@
     )
   )
 
+  (defun get_slot_value_hash (value left_value right_value)
+    (sha256 2
+      (sha256 1 value)
+      (sha256 2 (sha256 1 left_value) (sha256 1 right_value))
+    ) 
+  )
+
   (if (all (> tail_hash left_tail_hash) (> right_tail_hash tail_hash))
     (c
       Current_State ; new state
@@ -101,16 +86,16 @@
           (list ASSERT_MY_COIN_ID my_id)
 
           ; spend left slot
-          (spend_slot SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash right_tail_hash))) 
+          (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash left_tail_hash left_left_tail_hash right_tail_hash))
           ; spend right slot
-          (spend_slot SLOT_1ST_CURRY_HASH (c right_tail_hash (c left_tail_hash right_right_tail_hash)))
+          (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash right_tail_hash left_tail_hash right_right_tail_hash))
           
           ; create new slot
-          (create_slot_with_hint SLOT_1ST_CURRY_HASH (c tail_hash (c left_tail_hash right_tail_hash))) 
+          (create_slot_with_hint SLOT_1ST_CURRY_HASH (get_slot_value_hash tail_hash left_tail_hash right_tail_hash) tail_hash) 
           ; create new left slot
-          (create_slot_with_hint SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash tail_hash))) 
+          (create_slot_with_hint SLOT_1ST_CURRY_HASH (get_slot_value_hash left_tail_hash left_left_tail_hash tail_hash) left_tail_hash) 
           ; create new right slot
-          (create_slot_with_hint SLOT_1ST_CURRY_HASH (c right_tail_hash (c tail_hash right_right_tail_hash))) 
+          (create_slot_with_hint SLOT_1ST_CURRY_HASH (get_slot_value_hash right_tail_hash tail_hash right_right_tail_hash) right_tail_hash) 
           
           ; consume precommit coin
           (list
@@ -121,7 +106,7 @@
               (sha256 2
                 (sha256 1 initial_nft_owner_ph)
                 tail_hash
-              ) ; precommit coin reveal will be (c (c initial_nft_owner_ph initial_nft_metadata_hash) TAIL)
+              ) ; precommit coin reveal will be (c initial_nft_owner_ph TAIL)
             )
           ) 
         )
