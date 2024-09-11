@@ -18,9 +18,8 @@
   (name_reveal left_value right_value . solution) ; see the 'main' function for rest of arguments 
 )
   (include condition_codes.clib)
-  (include sha256tree.clib)
-  (include secure_nft.clib)
   (include curry.clib)
+  (include slots.clib)
 
   (defun get_slot_value_hash (value_hash left_value_hash right_value_hash data_hash)
     (sha256 2
@@ -32,11 +31,23 @@
     )
   )
 
+  (defun check_years (years)
+    (if (> years 0)
+        yars
+        ; else
+        (x)
+    )
+  )
+
   (defun main (
     PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
     Current_State
     ( 
-        name_nft_launcher_id ; also included in the pre-commit coin
+        ; start 'also included in the pre-commit coin'
+        name_nft_launcher_id ; 
+        version
+        start_time
+        ; end
         precommitment_amount
         left_left_value_hash left_data_hash ; left slot info
         right_right_value_hash right_data_hash ; right slot info
@@ -49,6 +60,8 @@
     (c
         Current_State ; new state
         (list
+            (list ASSERT_SECONDS_ABSOLUTE start_time)
+
             ; spend left slot
             (spend_slot SLOT_1ST_CURRY_HASH 
                 (get_slot_value_hash left_value_hash left_left_value_hash right_value_hash left_data_hash)
@@ -59,11 +72,32 @@
             )
             
             ; create new slot
-            (create_slot_with_hint SLOT_1ST_CURRY_HASH (c tail_hash (c left_tail_hash right_tail_hash))) 
+            (create_slot_with_hint SLOT_1ST_CURRY_HASH
+                (get_slot_value_hash
+                    name_hash
+                    left_value_hash
+                    right_value_hash
+                    (sha256 2 
+                        (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
+                        (sha256 2
+                            (sha256 1 version)
+                            (sha256 1 name_nft_launcher_id)
+                        )
+                    ) ; sha256tree data
+                    todo ; todo as well: expiration validation; include version in precommitment
+                )
+                name_hash
+            ) 
             ; create new left slot
-            (create_slot_with_hint SLOT_1ST_CURRY_HASH (c left_tail_hash (c left_left_tail_hash tail_hash))) 
+            (create_slot_with_hint SLOT_1ST_CURRY_HASH 
+                (get_slot_value_hash left_value_hash left_left_value_hash name_hash left_data_hash)
+                left_value_hash
+            ) 
             ; create new right slot
-            (create_slot_with_hint SLOT_1ST_CURRY_HASH (c right_tail_hash (c tail_hash right_right_tail_hash))) 
+            (create_slot_with_hint SLOT_1ST_CURRY_HASH
+                (get_slot_value_hash right_value_hash name_hash right_right_value_hash right_data_hash)
+                right_value_hash
+            ) 
             
             ; consume precommit coin
             (list
@@ -72,11 +106,17 @@
                 precommit_amount
                 (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                     (sha256 2
-                        value_hash
-                        (sha256 1 name_nft_launcher_id)
-                    ) ; data in precommit coin reveal will be (c name name_nft_launcher_id)
+                        (sha256 2 
+                            value_hash
+                            (sha256 1 start_time)
+                        )
+                        (sha256 2
+                            (sha256 1 version)
+                            (sha256 1 name_nft_launcher_id)
+                        )
+                    ) ; data in precommit coin reveal will be (c (c name start_time) (c version name_nft_launcher_id)))
                 )
-            ) 
+            )
         ) ; conditions
     )
   )
