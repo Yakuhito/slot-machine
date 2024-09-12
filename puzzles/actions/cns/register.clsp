@@ -1,7 +1,7 @@
 ;; register.clsp by yakuhito
 ;; Responsible for registering new names into the name registry (CNS)
 
-;; Unlike CATalog slot's value is ((value . (left_value right_value)) . (expiration version . launcher_id)) where:
+;; Unlike CATalog slot's value is (value (left_value right_value) expiration version . launcher_id) where:
 ;;  value is the slot 'key'/id and is defined as (sha256 name)
 ;;  expiration is a timestamp that says when the name will expire
 ;;  left_value/right_value are the key's of the slot's neighbors
