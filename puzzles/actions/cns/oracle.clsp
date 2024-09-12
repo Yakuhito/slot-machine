@@ -4,7 +4,7 @@
 (mod (
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
-    full_thing ; (value (left_value right_value) expiration version . launcher_id)
+    full_thing ; (value (left_value . right_value) expiration version . launcher_id)
 )
     (include condition_codes.clib)
     (include curry.clib)
