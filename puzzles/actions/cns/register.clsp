@@ -33,7 +33,7 @@
 
   (defun check_years (years)
     (if (> years 0)
-        yars
+        years
         ; else
         (x)
     )
@@ -120,9 +120,16 @@
     )
   )
 
-  (defun validate_and_get_length (name length)
+  (defun validate_and_get_length (first_letter name length)
     (if name
-        (validate_and_get_length (r name) (+ length 1))
+        (if (all
+            (all (> first_letter (- "a" 1)) (> (+ "z" 1) first_letter))
+            (all (> first_letter (- "0" 1)) (> (+ "9" 1) first_letter))
+        )
+            (validate_and_get_length (substr name 1 2) (substr name 1) (+ length 1))
+            ; else 
+            (x)
+        )
         ; else
         length
     )
@@ -157,7 +164,7 @@
             (sha256 1 left_value) 
             (sha256 1 right_value) 
             (*
-                (get_price_factor (validate_and_get_length name_reveal ())) 
+                (get_price_factor (validate_and_get_length (substr name_reveal 0 1) name_reveal ())) 
                 (f Current_State)
             )
         )
