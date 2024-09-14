@@ -1,4 +1,4 @@
-;; oracle.clsp by yakuhito
+; oracle.clsp by yakuhito
 ;; Used to 'confirm' a registration on-chain by creating a puzzle announcement
 
 (mod (

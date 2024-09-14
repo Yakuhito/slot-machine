@@ -1,4 +1,4 @@
-;; update.clsp by yakuhito
+; update.clsp by yakuhito
 ;; Used to update the launcher_id/version of a record
 
 ;; Note: The update is final.

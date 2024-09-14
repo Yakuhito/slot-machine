@@ -1,4 +1,4 @@
-;; register.clsp by yakuhito
+; register.clsp by yakuhito
 ;; Responsible for registering new CATs into the regstry (CATalog)
 
 ;; Main idea: you're the owner of a CAT if you know the TAIL before it's published on-chain
