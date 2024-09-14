@@ -37,9 +37,10 @@
     Current_State
     ( 
         ; start 'also included in the pre-commit coin'
-        name_nft_launcher_id ; 
+        name_nft_launcher_id
         version
         start_time
+        secret_hash
         ; end
         precommitment_amount
         left_left_value_hash left_data_hash ; left slot info
@@ -103,10 +104,13 @@
                             (sha256 1 start_time)
                         )
                         (sha256 2
-                            (sha256 1 version)
-                            (sha256 1 name_nft_launcher_id)
+                            (sha256 2
+                                (sha256 1 version)
+                                (sha256 1 name_nft_launcher_id)
+                            )
+                            secret_hash
                         )
-                    ) ; data in precommit coin reveal will be (c (c name start_time) (c version name_nft_launcher_id)))
+                    ) ; data in precommit coin reveal will be (c (c name start_time) (c (c version name_nft_launcher_id) secret)))
                 )
             )
         ) ; conditions
