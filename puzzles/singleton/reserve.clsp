@@ -6,14 +6,14 @@
 
 (mod (
     SINGLETON_MOD
-    OFFER_MOD
     SINGLETON_STRUCT_REST ; (sha256tree (c LAUNCHER_ID LAUNCHER_HASH))
+    BASE_CONDITIONS
     owner_inner_puzzle_hash
 )
     (include condition_codes.clib)
     (include curry.clib)
 
-    (list
+    (c
         (list RECEIVE_MESSAGE
             19 ; puzzle-puzzle + amount
             () ; data
@@ -25,6 +25,6 @@
                 owner_inner_puzzle_hash
             )
         )
-        (list CREATE_COIN OFFER_MOD 0)
+        BASE_CONDITIONS ; usually (list (list CREATE_COIN OFFER_MOD 0))
     )
 )
