@@ -1,0 +1,30 @@
+; reserve.clsp by yakuhito
+;; A simple inner puzzle that enables singletons to own XCH, CATs, and so on
+
+;; Note that, when spent, the unlocked value can be used in any way
+;;   - it's the singleton's job to ensure a reserve is re-created properly
+
+(mod (
+    SINGLETON_MOD
+    OFFER_MOD
+    SINGLETON_STRUCT_REST ; (sha256tree (c LAUNCHER_ID LAUNCHER_HASH))
+    owner_inner_puzzle_hash
+)
+    (include condition_codes.clib)
+    (include curry.clib)
+
+    (list
+        (list RECEIVE_MESSAGE
+            19 ; puzzle-puzzle + amount
+            () ; data
+            (curry_hashes_inline SINGLETON_MOD
+                (sha256 2
+                    (sha256 1 SINGLETON_MOD)
+                    SINGLETON_STRUCT_REST
+                )
+                owner_inner_puzzle_hash
+            )
+        )
+        (list CREATE_COIN OFFER_MOD 0)
+    )
+)
