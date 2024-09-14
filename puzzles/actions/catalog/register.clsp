@@ -34,7 +34,7 @@
 )
   (include condition_codes.clib)
   (include secure_nft.clib)
-  (include curry.clib)
+  (include sha256tree.clib)
   (include slots.clib)
 
   (defun create_prelauncher_and_assert_launcher (

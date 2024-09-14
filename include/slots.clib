@@ -1,4 +1,4 @@
-(  
+(
   (defun spend_slot (SLOT_1ST_CURRY_HASH slot_value_hash)
     (list
       SEND_MESSAGE

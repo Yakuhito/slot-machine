@@ -1,4 +1,6 @@
 (
+    (include curry.clib)
+    
     ; this function ensures that an NFT with a given inner puzzle hash is spent
     ; launcher_id is computed from the current coin's if (plus other truths)
     ; the intention is that inner_puzzle_hash will update metadata, as well as
