@@ -1,7 +1,7 @@
 ; state_scheduler.clsp by yakuhito
 ;; Used as the inner puzzle of a singleton that schedules state changes for another singleton.
 
-;; For an example, see sinleton/state_scheduler.clsp (this is the trusted singleton).
+;; For an example, see singleton/state_scheduler.clsp (this is the trusted singleton).
 
 (mod (
   OTHER_SINGLETON_STRUCT

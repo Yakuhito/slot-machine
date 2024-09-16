@@ -3,7 +3,7 @@
 ;; To read the values, the singleton will spend the slot coin - so the values are only readable once
 ;; Might be helpful to think of this as a one-time ticket 
 
-;; Warning: Slots do not assure uniqueness - a 'ring' structure on top is required
+;; Warning: Slots do not assure uniqueness - a double-linked sorted list structure on top is required for that
 ;;          An attacker might intentionally omit a given slot to trick the dApp that it doesn't exist
 ;;          For example, a naive name reigstration app might be tricked into registering the same name twice
 
