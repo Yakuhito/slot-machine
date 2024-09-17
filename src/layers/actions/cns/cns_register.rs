@@ -15,6 +15,100 @@ pub const CNS_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
 ));
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogRegisterAction {
+    pub launcher_id: Bytes32,
+    pub royalty_puzzle_hash_hash: Bytes32,
+    pub trade_price_percentage: u16,
+    pub precommit_payout_puzzle_hash: Bytes32,
+    pub relative_block_height: u32,
+}
+
+impl CatalogRegisterAction {
+    pub fn new(
+        launcher_id: Bytes32,
+        royalty_puzzle_hash_hash: Bytes32,
+        trade_price_percentage: u16,
+        precommit_payout_puzzle_hash: Bytes32,
+        relative_block_height: u32,
+    ) -> Self {
+        Self {
+            launcher_id,
+            royalty_puzzle_hash_hash,
+            trade_price_percentage,
+            precommit_payout_puzzle_hash,
+            relative_block_height,
+        }
+    }
+
+    pub fn from_info(info: &CatalogInfo) -> Self {
+        Self {
+            launcher_id: info.launcher_id,
+            royalty_puzzle_hash_hash: info.constants.royalty_address.tree_hash().into(),
+            trade_price_percentage: info.constants.royalty_ten_thousandths,
+            precommit_payout_puzzle_hash: info.constants.precommit_payout_puzzle_hash,
+            relative_block_height: info.constants.relative_block_height,
+        }
+    }
+}
+
+impl Layer for CatalogRegisterAction {
+    type Solution = CatalogRegisterActionSolution;
+
+    fn construct_puzzle(
+        &self,
+        ctx: &mut chia_wallet_sdk::SpendContext,
+    ) -> Result<NodePtr, DriverError> {
+        Ok(CurriedProgram {
+            program: ctx.catalog_register_action_puzzle()?,
+            args: CatalogRegisterActionArgs::new(
+                self.launcher_id,
+                self.royalty_puzzle_hash_hash,
+                self.trade_price_percentage,
+                self.precommit_payout_puzzle_hash,
+                self.relative_block_height,
+            ),
+        }
+        .to_clvm(&mut ctx.allocator)?)
+    }
+
+    fn construct_solution(
+        &self,
+        ctx: &mut chia_wallet_sdk::SpendContext,
+        solution: CatalogRegisterActionSolution,
+    ) -> Result<NodePtr, DriverError> {
+        solution
+            .to_clvm(&mut ctx.allocator)
+            .map_err(DriverError::ToClvm)
+    }
+
+    fn parse_puzzle(
+        _: &clvmr::Allocator,
+        _: chia_wallet_sdk::Puzzle,
+    ) -> Result<Option<Self>, DriverError>
+    where
+        Self: Sized,
+    {
+        unimplemented!()
+    }
+
+    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
+        unimplemented!()
+    }
+}
+
+impl ToTreeHash for CatalogRegisterAction {
+    fn tree_hash(&self) -> TreeHash {
+        CatalogRegisterActionArgs::curry_tree_hash(
+            self.launcher_id,
+            self.royalty_puzzle_hash_hash,
+            self.trade_price_percentage,
+            self.precommit_payout_puzzle_hash,
+            self.relative_block_height,
+        )
+    }
+}
+
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
 pub struct CnsRegisterActionArgs {
