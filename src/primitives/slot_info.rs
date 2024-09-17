@@ -51,10 +51,10 @@ where
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct CatalogSlotNeigborsInfo {
-    pub left_asset_id: Bytes32,
+pub struct SlotNeigborsInfo {
+    pub left_value: Bytes32,
     #[clvm(rest)]
-    pub right_asset_id: Bytes32,
+    pub right_value: Bytes32,
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,16 +62,16 @@ pub struct CatalogSlotNeigborsInfo {
 pub struct CatalogSlotValue {
     pub asset_id: Bytes32,
     #[clvm(rest)]
-    pub neighbors: CatalogSlotNeigborsInfo,
+    pub neighbors: SlotNeigborsInfo,
 }
 
 impl CatalogSlotValue {
     pub fn new(asset_id: Bytes32, left_asset_id: Bytes32, right_asset_id: Bytes32) -> Self {
         Self {
             asset_id,
-            neighbors: CatalogSlotNeigborsInfo {
-                left_asset_id,
-                right_asset_id,
+            neighbors: SlotNeigborsInfo {
+                left_value: left_asset_id,
+                right_value: right_asset_id,
             },
         }
     }
@@ -87,6 +87,54 @@ impl Ord for CatalogSlotValue {
 }
 
 impl PartialOrd for CatalogSlotValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(list)]
+pub struct CnsSlotValue {
+    pub name_hash: Bytes32,
+    pub neighbors: SlotNeigborsInfo,
+    pub expiration: u64,
+    pub version: u32,
+    #[clvm(rest)]
+    pub launcher_id: Bytes32,
+}
+
+impl CnsSlotValue {
+    pub fn new(
+        name_hash: Bytes32,
+        left_name_hash: Bytes32,
+        right_name_hash: Bytes32,
+        expiration: u64,
+        version: u32,
+        launcher_id: Bytes32,
+    ) -> Self {
+        Self {
+            name_hash,
+            neighbors: SlotNeigborsInfo {
+                left_value: left_name_hash,
+                right_value: right_name_hash,
+            },
+            expiration,
+            version,
+            launcher_id,
+        }
+    }
+}
+
+impl Ord for CnsSlotValue {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let self_num = BigInt::from_signed_bytes_be(&self.name_hash);
+        let other_num = BigInt::from_signed_bytes_be(&other.name_hash);
+
+        self_num.cmp(&other_num)
+    }
+}
+
+impl PartialOrd for CnsSlotValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }

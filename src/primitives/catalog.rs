@@ -183,7 +183,7 @@ impl Catalog {
                     self.info.launcher_id,
                     CatalogSlotValue::new(
                         left_slot_value.asset_id,
-                        left_slot_value.neighbors.left_asset_id,
+                        left_slot_value.neighbors.left_value,
                         tail_hash,
                     ),
                 ),
@@ -206,7 +206,7 @@ impl Catalog {
                     CatalogSlotValue::new(
                         right_slot_value.asset_id,
                         tail_hash,
-                        right_slot_value.neighbors.right_asset_id,
+                        right_slot_value.neighbors.right_value,
                     ),
                 ),
             ),
@@ -243,9 +243,9 @@ impl Catalog {
             tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,
             left_tail_hash: left_slot_value.asset_id,
-            left_left_tail_hash: left_slot_value.neighbors.left_asset_id,
+            left_left_tail_hash: left_slot_value.neighbors.left_value,
             right_tail_hash: right_slot_value.asset_id,
-            right_right_tail_hash: right_slot_value.neighbors.right_asset_id,
+            right_right_tail_hash: right_slot_value.neighbors.right_value,
             my_id: self.coin.coin_id(),
         });
 

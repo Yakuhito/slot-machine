@@ -189,7 +189,7 @@ impl CatalogPrerollerInfo {
             res.push((add_cat, uniq_prelauncher));
 
             let min_value = Bytes32::new(SLOT32_MIN_VALUE);
-            if value.neighbors.left_asset_id == min_value {
+            if value.neighbors.left_value == min_value {
                 let left_slot_value = CatalogSlotValue::new(min_value, min_value, value.asset_id);
                 let left_slot = Slot::new(
                     slot_proof,
@@ -201,7 +201,7 @@ impl CatalogPrerollerInfo {
             slots.push(slot);
 
             let max_value = Bytes32::new(SLOT32_MAX_VALUE);
-            if value.neighbors.right_asset_id == max_value {
+            if value.neighbors.right_value == max_value {
                 let right_slot_value = CatalogSlotValue::new(max_value, value.asset_id, max_value);
                 let right_slot = Slot::new(
                     slot_proof,
