@@ -1,4 +1,7 @@
-use chia::{clvm_utils::TreeHash, protocol::Bytes32};
+use chia::{
+    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
+    protocol::Bytes32,
+};
 use clvm_traits::{FromClvm, ToClvm};
 use hex_literal::hex;
 
@@ -37,20 +40,16 @@ impl CnsRegisterActionArgs {
     }
 }
 
-impl CatalogRegisterActionArgs {
+impl CnsRegisterActionArgs {
     pub fn curry_tree_hash(
         launcher_id: Bytes32,
-        royalty_puzzle_hash_hash: Bytes32,
-        trade_price_percentage: u16,
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
     ) -> TreeHash {
         CurriedProgram {
-            program: CATALOG_REGISTER_PUZZLE_HASH,
-            args: CatalogRegisterActionArgs::new(
+            program: CNS_REGISTER_PUZZLE_HASH,
+            args: CnsRegisterActionArgs::new(
                 launcher_id,
-                royalty_puzzle_hash_hash,
-                trade_price_percentage,
                 precommit_payout_puzzle_hash,
                 relative_block_height,
             ),
@@ -61,12 +60,18 @@ impl CatalogRegisterActionArgs {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct CatalogRegisterActionSolution {
-    pub tail_hash: Bytes32,
-    pub initial_nft_owner_ph: Bytes32,
-    pub left_tail_hash: Bytes32,
-    pub left_left_tail_hash: Bytes32,
-    pub right_tail_hash: Bytes32,
-    pub right_right_tail_hash: Bytes32,
-    pub my_id: Bytes32,
+pub struct CnsRegisterActionSolution {
+    pub name_hash: Bytes32,
+    pub name_reveal: String,
+    pub left_value: Bytes32,
+    pub right_value: Bytes32,
+    pub name_nft_launcher_id: Bytes32,
+    pub version: u32,
+    pub start_time: u64,
+    pub secret_hash: Bytes32,
+    pub precommitment_amount: u64,
+    pub left_left_value_hash: Bytes32,
+    pub left_data_hash: Bytes32,
+    pub right_right_value_hash: Bytes32,
+    pub right_data_hash: Bytes32,
 }
