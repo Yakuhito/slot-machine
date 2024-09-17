@@ -8,7 +8,7 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{CnsInfo, Slot, SpendContextExt};
+use crate::{Slot, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CnsExtendAction {
@@ -21,13 +21,6 @@ impl CnsExtendAction {
         Self {
             launcher_id,
             payout_puzzle_hash,
-        }
-    }
-
-    pub fn from_info(info: &CnsInfo) -> Self {
-        Self {
-            launcher_id: info.launcher_id,
-            payout_puzzle_hash: info.constants.precommit_payout_puzzle_hash,
         }
     }
 }

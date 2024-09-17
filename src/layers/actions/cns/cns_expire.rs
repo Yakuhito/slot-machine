@@ -7,7 +7,7 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{CnsInfo, Slot, SpendContextExt};
+use crate::{Slot, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CnsExpireAction {
@@ -17,12 +17,6 @@ pub struct CnsExpireAction {
 impl CnsExpireAction {
     pub fn new(launcher_id: Bytes32) -> Self {
         Self { launcher_id }
-    }
-
-    pub fn from_info(info: &CnsInfo) -> Self {
-        Self {
-            launcher_id: info.launcher_id,
-        }
     }
 }
 

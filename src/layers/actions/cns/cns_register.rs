@@ -7,7 +7,7 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{CnsInfo, PrecommitCoin, Slot, SpendContextExt};
+use crate::{PrecommitCoin, Slot, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CnsRegisterAction {
@@ -26,14 +26,6 @@ impl CnsRegisterAction {
             launcher_id,
             precommit_payout_puzzle_hash,
             relative_block_height,
-        }
-    }
-
-    pub fn from_info(info: &CnsInfo) -> Self {
-        Self {
-            launcher_id: info.launcher_id,
-            precommit_payout_puzzle_hash: info.constants.precommit_payout_puzzle_hash,
-            relative_block_height: info.constants.relative_block_height,
         }
     }
 }

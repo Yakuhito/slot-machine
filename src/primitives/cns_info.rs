@@ -7,7 +7,10 @@ use chia_wallet_sdk::{DriverError, Layer, MerkleTree, Puzzle, SingletonLayer};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::Allocator;
 
-use crate::{ActionLayer, ActionLayerArgs, DefaultFinalizerArgs};
+use crate::{
+    ActionLayer, ActionLayerArgs, CnsExpireAction, CnsExtendAction, CnsOracleAction,
+    CnsRegisterAction, CnsUpdateAction, DefaultFinalizerArgs, DelegatedStateActionArgs,
+};
 
 pub type CnsLayers = SingletonLayer<ActionLayer<CnsState>>;
 
@@ -69,7 +72,22 @@ impl CnsInfo {
     }
 
     pub fn action_puzzle_hashes(launcher_id: Bytes32, constants: &CnsConstants) -> [Bytes32; 6] {
-        todo!("impl the actions first :)");
+        [
+            CnsExpireAction::new(launcher_id).tree_hash().into(),
+            CnsExtendAction::new(launcher_id, constants.precommit_payout_puzzle_hash)
+                .tree_hash()
+                .into(),
+            CnsOracleAction::new(launcher_id).tree_hash().into(),
+            CnsRegisterAction::new(
+                launcher_id,
+                constants.precommit_payout_puzzle_hash,
+                constants.relative_block_height,
+            )
+            .tree_hash()
+            .into(),
+            CnsUpdateAction::new(launcher_id).tree_hash().into(),
+            DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id).into(),
+        ]
     }
 
     #[must_use]
