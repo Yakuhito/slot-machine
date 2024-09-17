@@ -78,7 +78,7 @@ pub const CNS_EXTEND_PUZZLE: [u8; 1072] = hex!("ff02ffff01ff04ff2fffff04ffff02ff
 
 pub const CNS_EXTEND_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    4a7aab0257e1bedfa6a3b6b5a7a9b7e15b1a7fec581f488bdb246d659d04a046
+    8a03592f79ae976d51bc1238d5236a00d7da88c1c50129c1e6cb8b937ff94ebf
     "
 ));
 

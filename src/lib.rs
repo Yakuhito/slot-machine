@@ -29,6 +29,7 @@ pub trait SpendContextExt {
     fn cns_register_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn cns_update_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn cns_extend_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn cns_expire_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -112,6 +113,11 @@ impl SpendContextExt for SpendContext {
     fn cns_extend_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(CNS_EXTEND_PUZZLE_HASH, &CNS_EXTEND_PUZZLE)
     }
+
+    /// Allocate the CNS expire puzzle and return its pointer.
+    fn cns_expire_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(CNS_EXPIRE_PUZZLE_HASH, &CNS_EXPIRE_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -146,6 +152,7 @@ mod tests {
         assert_puzzle_hash!(CNS_REGISTER_PUZZLE => CNS_REGISTER_PUZZLE_HASH);
         assert_puzzle_hash!(CNS_UPDATE_PUZZLE => CNS_UPDATE_PUZZLE_HASH);
         assert_puzzle_hash!(CNS_EXTEND_PUZZLE => CNS_EXTEND_PUZZLE_HASH);
+        assert_puzzle_hash!(CNS_EXPIRE_PUZZLE => CNS_EXPIRE_PUZZLE_HASH);
 
         Ok(())
     }

@@ -4,8 +4,6 @@
 ;; Remember that the slot format is (value (left_value right_value) expiration version . launcher_id)
 
 (mod (
-    OFFER_MOD
-    PAYOUT_PUZZLE_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
     (
