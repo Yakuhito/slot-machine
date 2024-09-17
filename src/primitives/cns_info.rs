@@ -1,5 +1,9 @@
-use chia::{clvm_utils::TreeHash, protocol::Bytes32, puzzles::singleton::SingletonArgs};
-use chia_wallet_sdk::{DriverError, MerkleTree, Puzzle, SingletonLayer};
+use chia::{
+    clvm_utils::{ToTreeHash, TreeHash},
+    protocol::Bytes32,
+    puzzles::singleton::SingletonArgs,
+};
+use chia_wallet_sdk::{DriverError, Layer, MerkleTree, Puzzle, SingletonLayer};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::Allocator;
 
