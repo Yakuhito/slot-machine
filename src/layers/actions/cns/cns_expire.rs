@@ -31,7 +31,7 @@ impl Layer for CnsExpireAction {
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
-            program: ctx.cns_extend_puzzle()?,
+            program: ctx.cns_oracle_puzzle()?,
             args: CnsExpireActionArgs::new(self.launcher_id),
         }
         .to_clvm(&mut ctx.allocator)?)
