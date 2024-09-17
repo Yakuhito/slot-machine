@@ -5,7 +5,7 @@
 ;;  but we're only interested in 'expiration'
 
 (mod (
-    OFFER_MOD
+    OFFER_MOD_HASH
     PAYOUT_PUZZLE_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
@@ -53,7 +53,7 @@
             (list
                 ASSERT_PUZZLE_ANNOUNCEMENT
                 (sha256
-                    OFFER_MOD
+                    OFFER_MOD_HASH
                     (sha256tree 
                         (list
                             (sha256tree name expiration) ; nonce
