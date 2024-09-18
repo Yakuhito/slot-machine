@@ -127,6 +127,19 @@ impl CnsSlotValue {
         }
     }
 
+    pub fn edge(name_hash: Bytes32, left_name_hash: Bytes32, right_name_hash: Bytes32) -> Self {
+        Self {
+            name_hash,
+            neighbors: SlotNeigborsInfo {
+                left_value: left_name_hash,
+                right_value: right_name_hash,
+            },
+            expiration: 0,
+            version: 0,
+            launcher_id: Bytes32::default(),
+        }
+    }
+
     pub fn with_neighbors(&self, left_name_hash: Bytes32, right_name_hash: Bytes32) -> Self {
         Self {
             name_hash: self.name_hash,
