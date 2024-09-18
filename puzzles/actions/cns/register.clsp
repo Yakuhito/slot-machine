@@ -110,7 +110,7 @@
                             )
                             secret_hash
                         )
-                    ) ; data in precommit coin reveal will be (c (c name start_time) (c (c version name_nft_launcher_id) secret)))
+                    ; ) ; data in precommit coin reveal will be (c (c name start_time) (c (c version name_nft_launcher_id) secret)))
                 )
             )
         ) ; conditions
