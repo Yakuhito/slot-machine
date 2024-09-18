@@ -183,7 +183,7 @@ pub struct CnsNameAndTimeBox {
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
 pub struct CnsLauncherAndVersion {
-    pub name_nft_launcher_id: String,
+    pub name_nft_launcher_id: Bytes32,
     #[clvm(rest)]
     pub version: u32,
 }

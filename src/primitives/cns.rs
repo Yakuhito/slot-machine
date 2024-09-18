@@ -1,4 +1,5 @@
 use chia::{
+    clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
@@ -14,8 +15,8 @@ use crate::{
 };
 
 use super::{
-    CnsConstants, CnsInfo, CnsSlotValue, CnsState, PrecommitCoin, Slot, SlotInfo, SlotProof,
-    UniquenessPrelauncher,
+    CnsConstants, CnsInfo, CnsPrecommitValue, CnsSlotValue, CnsState, PrecommitCoin, Slot,
+    SlotInfo, SlotProof, UniquenessPrelauncher,
 };
 
 #[derive(Debug, Clone)]
@@ -198,13 +199,11 @@ impl Cns {
     pub fn register_name(
         self,
         ctx: &mut SpendContext,
-        tail_hash: Bytes32,
         left_slot: Slot<CnsSlotValue>,
         right_slot: Slot<CnsSlotValue>,
-        precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
-        eve_nft_inner_spend: Spend,
-        price_update: Option<CatalogAction>,
-    ) -> Result<(Conditions, Catalog, Vec<Slot<CatalogSlotValue>>), DriverError> {
+        precommit_coin: PrecommitCoin<CnsPrecommitValue>,
+        price_update: Option<CnsAction>,
+    ) -> Result<(Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
@@ -218,6 +217,21 @@ impl Cns {
         left_slot.spend(ctx, spender_inner_puzzle_hash)?;
         right_slot.spend(ctx, spender_inner_puzzle_hash)?;
 
+        let name: String = precommit_coin.value.name_and_time.name.clone();
+        let name_hash: Bytes32 = name.tree_hash().into();
+
+        let version = precommit_coin.value.launcher_and_version.version;
+        let secret = precommit_coin.value.secret;
+
+        let start_time = precommit_coin.value.name_and_time.time;
+        let precommitment_amount = precommit_coin.coin.amount;
+        let expiration = todo!();
+
+        let name_nft_launcher_id = precommit_coin
+            .value
+            .launcher_and_version
+            .name_nft_launcher_id;
+
         let new_slots_proof = SlotProof {
             parent_parent_info: self.coin.parent_coin_info,
             parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
@@ -227,10 +241,20 @@ impl Cns {
                 new_slots_proof,
                 SlotInfo::from_value(
                     self.info.launcher_id,
-                    CatalogSlotValue::new(
-                        left_slot_value.asset_id,
-                        left_slot_value.neighbors.left_value,
-                        tail_hash,
+                    left_slot_value.with_neighbors(left_slot_value.neighbors.left_value, name_hash),
+                ),
+            ),
+            Slot::new(
+                new_slots_proof,
+                SlotInfo::from_value(
+                    self.info.launcher_id,
+                    CnsSlotValue::new(
+                        name_hash,
+                        left_slot_value.name_hash,
+                        right_slot_value.name_hash,
+                        expiration,
+                        version,
+                        name_nft_launcher_id,
                     ),
                 ),
             ),
@@ -238,61 +262,30 @@ impl Cns {
                 new_slots_proof,
                 SlotInfo::from_value(
                     self.info.launcher_id,
-                    CatalogSlotValue::new(
-                        tail_hash,
-                        left_slot_value.asset_id,
-                        right_slot_value.asset_id,
-                    ),
-                ),
-            ),
-            Slot::new(
-                new_slots_proof,
-                SlotInfo::from_value(
-                    self.info.launcher_id,
-                    CatalogSlotValue::new(
-                        right_slot_value.asset_id,
-                        tail_hash,
-                        right_slot_value.neighbors.right_value,
-                    ),
+                    right_slot_value
+                        .with_neighbors(name_hash, right_slot_value.neighbors.right_value),
                 ),
             ),
         ];
 
         // spend precommit coin
-        let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
         precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
 
-        // spend uniqueness prelauncher
-        let uniqueness_prelauncher = UniquenessPrelauncher::<Bytes32>::new(
-            &mut ctx.allocator,
-            self.coin.coin_id(),
-            tail_hash,
-        )?;
-        let nft_launcher = uniqueness_prelauncher.spend(ctx)?;
-
-        // launch eve nft
-        let (_, nft) = nft_launcher.mint_eve_nft(
-            ctx,
-            initial_inner_puzzle_hash,
-            (),
-            ANY_METADATA_UPDATER_HASH.into(),
-            self.info.constants.royalty_address,
-            self.info.constants.royalty_ten_thousandths,
-        )?;
-
-        // spend nft launcher
-        let nft_coin_id = nft.coin.coin_id();
-        nft.spend(ctx, eve_nft_inner_spend)?;
-
         // finally, spend self
-        let register = CatalogAction::Register(CatalogRegisterActionSolution {
-            tail_hash,
-            initial_nft_owner_ph: initial_inner_puzzle_hash,
-            left_tail_hash: left_slot_value.asset_id,
-            left_left_tail_hash: left_slot_value.neighbors.left_value,
-            right_tail_hash: right_slot_value.asset_id,
-            right_right_tail_hash: right_slot_value.neighbors.right_value,
-            my_id: self.coin.coin_id(),
+        let register = CnsAction::Register(CnsRegisterActionSolution {
+            name_hash,
+            name_reveal: name,
+            left_value: left_slot_value.name_hash,
+            right_value: right_slot_value.name_hash,
+            name_nft_launcher_id,
+            version,
+            start_time,
+            secret_hash: secret.tree_hash().into(),
+            precommitment_amount,
+            left_left_value_hash: left_slot_value.neighbors.left_value,
+            left_data_hash: todo!(),
+            right_right_value_hash: right_slot_value.neighbors.right_value,
+            right_data_hash: todo!(),
         });
 
         let my_coin = self.coin;
@@ -306,7 +299,7 @@ impl Cns {
             },
         )?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_catalog = Catalog::from_parent_spend(
+        let new_cns = Cns::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -314,14 +307,14 @@ impl Cns {
             my_constants,
         )?
         .ok_or(DriverError::Custom(
-            "Could not parse child catalog".to_string(),
+            "Could not parse child CNS singleton".to_string(),
         ))?;
 
         ctx.spend(my_coin, my_spend)?;
 
         Ok((
-            Conditions::new().assert_concurrent_spend(nft_coin_id),
-            new_catalog,
+            Conditions::new().assert_puzzle_announcement(),
+            new_cns,
             new_slots,
         ))
     }

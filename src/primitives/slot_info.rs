@@ -123,6 +123,19 @@ impl CnsSlotValue {
             launcher_id,
         }
     }
+
+    pub fn with_neighbors(&self, left_name_hash: Bytes32, right_name_hash: Bytes32) -> Self {
+        Self {
+            name_hash: self.name_hash,
+            neighbors: SlotNeigborsInfo {
+                left_value: left_name_hash,
+                right_value: right_name_hash,
+            },
+            expiration: self.expiration,
+            version: self.version,
+            launcher_id: self.launcher_id,
+        }
+    }
 }
 
 impl Ord for CnsSlotValue {
