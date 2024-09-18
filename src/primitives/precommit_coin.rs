@@ -200,7 +200,7 @@ impl CnsPrecommitValue {
     pub fn new(
         name: String,
         time: u64,
-        name_nft_launcher_id: String,
+        name_nft_launcher_id: Bytes32,
         version: u32,
         secret: Bytes32,
     ) -> Self {

@@ -1,6 +1,9 @@
 use std::cmp::Ordering;
 
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
+use chia::{
+    clvm_utils::{ToTreeHash, TreeHash},
+    protocol::Bytes32,
+};
 use clvm_traits::{FromClvm, ToClvm};
 use hex_literal::hex;
 use num_bigint::BigInt;
@@ -136,6 +139,15 @@ impl CnsSlotValue {
             launcher_id: self.launcher_id,
         }
     }
+
+    pub fn after_neigbors_data_hash(&self) -> TreeHash {
+        CnsSlotValueWithoutNameAndNeighbors {
+            expiration: self.expiration,
+            version: self.version,
+            launcher_id: self.launcher_id,
+        }
+        .tree_hash()
+    }
 }
 
 impl Ord for CnsSlotValue {
@@ -151,4 +163,13 @@ impl PartialOrd for CnsSlotValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(list)]
+pub struct CnsSlotValueWithoutNameAndNeighbors {
+    pub expiration: u64,
+    pub version: u32,
+    #[clvm(rest)]
+    pub launcher_id: Bytes32,
 }

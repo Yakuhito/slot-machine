@@ -28,6 +28,17 @@ impl CnsRegisterAction {
             relative_block_height,
         }
     }
+
+    pub fn get_price_factor(name: &str) -> Option<u64> {
+        match name.len() {
+            0..3 => None,
+            3 => Some(64),
+            4 => Some(32),
+            5 => Some(8),
+            6..31 => Some(1),
+            _ => None,
+        }
+    }
 }
 
 impl Layer for CnsRegisterAction {
@@ -84,7 +95,7 @@ pub const CNS_REGISTER_PUZZLE: [u8; 1682] = hex!("ff02ffff01ff02ffff03ffff22ffff
 
 pub const CNS_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    d8f8c9a7162fece023168305c04ef03009cacb81d0b43991a2b0e7d9d9a21cce
+    f713ede8617393fac2628f971ebd380b4c978466ed166deaafbe96880e9338cf
     "
 ));
 

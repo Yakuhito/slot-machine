@@ -3,20 +3,22 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::FromClvm;
+use chia_wallet_sdk::{
+    announcement_id, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext,
+};
+use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
     ActionLayer, ActionLayerSolution, CnsExpireAction, CnsExpireActionSolution, CnsExtendAction,
     CnsExtendActionSolution, CnsOracleAction, CnsOracleActionSolution, CnsRegisterAction,
     CnsRegisterActionSolution, CnsUpdateAction, CnsUpdateActionSolution, DelegatedStateAction,
-    DelegatedStateActionSolution, ANY_METADATA_UPDATER_HASH,
+    DelegatedStateActionSolution,
 };
 
 use super::{
     CnsConstants, CnsInfo, CnsPrecommitValue, CnsSlotValue, CnsState, PrecommitCoin, Slot,
-    SlotInfo, SlotProof, UniquenessPrelauncher,
+    SlotInfo, SlotProof,
 };
 
 #[derive(Debug, Clone)]
@@ -225,7 +227,19 @@ impl Cns {
 
         let start_time = precommit_coin.value.name_and_time.time;
         let precommitment_amount = precommit_coin.coin.amount;
-        let expiration = todo!();
+
+        let base_price = if let Some(CnsAction::UpdatePrice(ref price_update)) = price_update {
+            price_update.new_state.registration_base_price
+        } else {
+            self.info.state.registration_base_price
+        };
+        let expiration = start_time
+            + (precommitment_amount
+                / (base_price * CnsRegisterAction::get_price_factor(&name).unwrap_or(1)))
+                * 60
+                * 60
+                * 24
+                * 366;
 
         let name_nft_launcher_id = precommit_coin
             .value
@@ -274,7 +288,7 @@ impl Cns {
         // finally, spend self
         let register = CnsAction::Register(CnsRegisterActionSolution {
             name_hash,
-            name_reveal: name,
+            name_reveal: name.clone(),
             left_value: left_slot_value.name_hash,
             right_value: right_slot_value.name_hash,
             name_nft_launcher_id,
@@ -283,9 +297,9 @@ impl Cns {
             secret_hash: secret.tree_hash().into(),
             precommitment_amount,
             left_left_value_hash: left_slot_value.neighbors.left_value,
-            left_data_hash: todo!(),
+            left_data_hash: left_slot_value.after_neigbors_data_hash().into(),
             right_right_value_hash: right_slot_value.neighbors.right_value,
-            right_data_hash: todo!(),
+            right_data_hash: right_slot_value.after_neigbors_data_hash().into(),
         });
 
         let my_coin = self.coin;
@@ -312,10 +326,26 @@ impl Cns {
 
         ctx.spend(my_coin, my_spend)?;
 
+        let ann_bytes: Bytes32 = CnsRegisterAnnouncement {
+            name,
+            version,
+            name_nft_launcher_id,
+        }
+        .tree_hash()
+        .into();
         Ok((
-            Conditions::new().assert_puzzle_announcement(),
+            Conditions::new()
+                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, ann_bytes)),
             new_cns,
             new_slots,
         ))
     }
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(list)]
+pub struct CnsRegisterAnnouncement {
+    pub name: String,
+    pub version: u32,
+    pub name_nft_launcher_id: Bytes32,
 }
