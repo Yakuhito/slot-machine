@@ -22,7 +22,8 @@ use clvmr::NodePtr;
 
 use crate::{
     AddCat, Catalog, CatalogConstants, CatalogInfo, CatalogPreroller, CatalogPrerollerInfo,
-    CatalogSlotValue, CatalogState, PriceSchedule, PriceScheduler, PriceSchedulerInfo, Slot,
+    CatalogSlotValue, CatalogState, Cns, CnsConstants, CnsInfo, CnsPreroller, CnsPrerollerInfo,
+    CnsSlotValue, CnsState, PriceSchedule, PriceScheduler, PriceSchedulerInfo, Slot,
 };
 
 pub struct SecureOneSidedOffer {
@@ -319,6 +320,144 @@ pub fn launch_catalog(
     );
 
     let slots = preroller.spend(ctx, royalty_puzzle_hash)?;
+
+    // Secure everything we've done with the preroll coin
+    security_coin_conditions =
+        security_coin_conditions.assert_concurrent_spend(catalog.coin.parent_coin_info);
+
+    // Spend security coin
+    let security_coin_sig = spend_security_coin(
+        ctx,
+        offer.security_coin,
+        security_coin_conditions,
+        &offer.security_coin_sk,
+        consensus_constants,
+    )?;
+
+    // Finally, return the data
+    Ok((
+        offer.aggregated_signature + &security_coin_sig,
+        offer.security_coin_sk,
+        price_scheduler,
+        catalog,
+        slots,
+    ))
+}
+
+#[allow(clippy::type_complexity)]
+pub fn launch_cns(
+    ctx: &mut SpendContext,
+    offer: Offer,
+    price_schedule: PriceSchedule,
+    initial_base_registration_price: u64,
+    names_to_launch: Vec<CnsSlotValue>,
+    cns_constants: CnsConstants,
+    consensus_constants: &ConsensusConstants,
+) -> Result<
+    (
+        Signature,
+        SecretKey,
+        PriceScheduler,
+        Cns,
+        Vec<Slot<CnsSlotValue>>,
+    ),
+    DriverError,
+> {
+    let offer = parse_one_sided_offer(ctx, offer)?;
+    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+
+    let security_coin_id = offer.security_coin.coin_id();
+
+    let mut security_coin_conditions = Conditions::new();
+
+    // Create preroll coin launcher
+    let preroll_launcher = Launcher::new(security_coin_id, 1);
+    let preroll_launcher_coin = preroll_launcher.coin();
+    let cns_launcher_id = preroll_launcher_coin.coin_id();
+
+    // Launch price scheduler
+    let price_scheduler_launcher = Launcher::new(security_coin_id, 2);
+    let price_scheduler_launcher_coin = price_scheduler_launcher.coin();
+    let price_scheduler_launcher_id = price_scheduler_launcher_coin.coin_id();
+    let cns_constants = cns_constants.with_price_singleton(price_scheduler_launcher_id);
+
+    let price_scheduler_0th_gen_info = PriceSchedulerInfo::new(
+        price_scheduler_launcher_id,
+        price_schedule.clone(),
+        0,
+        cns_launcher_id,
+    );
+
+    let schedule_ptr = price_schedule.to_clvm(&mut ctx.allocator)?;
+    let (conds, price_scheduler_0th_gen_coin) =
+        price_scheduler_launcher.with_singleton_amount(1).spend(
+            ctx,
+            price_scheduler_0th_gen_info.inner_puzzle_hash().into(),
+            schedule_ptr,
+        )?;
+
+    // this creates the launcher & secures the spend
+    security_coin_conditions = security_coin_conditions.extend(conds);
+
+    let price_scheduler = PriceScheduler::new(
+        price_scheduler_0th_gen_coin,
+        Proof::Eve(EveProof {
+            parent_parent_coin_info: price_scheduler_launcher_coin.parent_coin_info,
+            parent_amount: price_scheduler_launcher_coin.amount,
+        }),
+        price_scheduler_0th_gen_info,
+    );
+
+    // Spend preroll coin launcher
+    let target_cns_info = CnsInfo::new(
+        cns_launcher_id,
+        CnsState {
+            registration_base_price: initial_base_registration_price,
+        },
+        cns_constants,
+    );
+    let target_cns_inner_puzzle_hash = target_cns_info.clone().inner_puzzle_hash();
+    let preroll_info = CnsPrerollerInfo::new(
+        cns_launcher_id,
+        names_to_launch,
+        target_cns_inner_puzzle_hash.into(),
+    );
+
+    let preroll_coin_inner_ph = preroll_info.clone().inner_puzzle_hash(ctx)?;
+    let (conds, preroller_coin) =
+        preroll_launcher
+            .with_singleton_amount(1)
+            .spend(ctx, preroll_coin_inner_ph.into(), ())?;
+
+    // this creates the launcher & secures the spend
+    security_coin_conditions = security_coin_conditions.extend(conds);
+
+    let preroller = CnsPreroller::new(
+        preroller_coin,
+        Proof::Eve(EveProof {
+            parent_parent_coin_info: preroll_launcher_coin.parent_coin_info,
+            parent_amount: preroll_launcher_coin.amount,
+        }),
+        preroll_info,
+    );
+
+    // Spend preroll coin until the Catalog is created
+    let cns_coin = Coin::new(
+        preroller.coin.coin_id(),
+        SingletonArgs::curry_tree_hash(cns_launcher_id, target_cns_inner_puzzle_hash).into(),
+        1,
+    );
+    let catalog = Cns::new(
+        cns_coin,
+        Proof::Lineage(LineageProof {
+            parent_parent_coin_info: preroller.coin.parent_coin_info,
+            parent_inner_puzzle_hash: preroll_coin_inner_ph.into(),
+            parent_amount: 1,
+        }),
+        target_cns_info,
+    );
+
+    let slots = preroller.spend(ctx)?;
 
     // Secure everything we've done with the preroll coin
     security_coin_conditions =
