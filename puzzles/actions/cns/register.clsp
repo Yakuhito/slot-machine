@@ -2,7 +2,7 @@
 ;; Responsible for registering new names into the name registry (CNS)
 
 ;; Unlike CATalog slot's value is (value (left_value . right_value) expiration version . launcher_id) where:
-;;  value is the slot 'key'/id and is defined as (sha256 name)
+;;  value is the slot 'key'/id and is defined as (sha256 1 name)
 ;;  expiration is a timestamp that says when the name will expire
 ;;  left_value/right_value are the key's of the slot's neighbors
 ;;  version is used for versioning the 'launcher_id' attribute - for now, the only valid value is 1
@@ -128,35 +128,39 @@
     )
   )
 
-  (defun validate_and_get_length (first_letter name length)
+  (defun validate_char (ch)
+    (any
+        (all (> ch (- "a" 1)) (> (+ "z" 1) ch))
+        (all (> ch (- "0" 1)) (> (+ "9" 1) ch))
+    )
+  )
+
+  (defun validate_and_get_length (name length)
     (if name
-        (if (all
-            (all (> first_letter (- "a" 1)) (> (+ "z" 1) first_letter))
-            (all (> first_letter (- "0" 1)) (> (+ "9" 1) first_letter))
-        )
-            (validate_and_get_length (substr name 1 2) (substr name 1) (+ length 1))
+        (if (validate_char (substr name 0 1))
+            (validate_and_get_length (substr name 1) (+ length 1))
             ; else 
-            (x)
+            (x "name")
         )
         ; else
         length
     )
   )
 
-  (if (all (= name_hash (sha256 name_reveal)) (> name_hash left_value) (> right_value name_hash))
+  (if (all (= name_hash (sha256 1 name_reveal)) (> name_hash left_value) (> right_value name_hash))
     (main
             PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
             Current_State
             solution
-            (sha256 name_reveal)
+            (sha256 1 name_reveal)
             (sha256 1 left_value) 
             (sha256 1 right_value) 
             (*
-                (get_price_factor (validate_and_get_length (substr name_reveal 0 1) name_reveal ())) 
+                (get_price_factor (validate_and_get_length name_reveal ())) 
                 (f Current_State)
             )
         )
         ; else
-        (x)
+        (x "name_hash not matchy matchy")
   )
 )

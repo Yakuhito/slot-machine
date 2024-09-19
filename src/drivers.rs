@@ -797,6 +797,8 @@ mod tests {
 
         let mut slots = slots.clone();
         for i in 0..7 {
+            println!("i: {i}");
+
             // create precommit coin
             let reg_amount = if i % 2 == 1 {
                 cns.info.state.registration_base_price
@@ -834,7 +836,9 @@ mod tests {
                 ),
             )?;
 
+            println!("before precommitment is created");
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("after precommitment is created");
 
             // call the 'register' action on CNS
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -880,9 +884,11 @@ mod tests {
             } else {
                 None
             };
+            println!("I'm here");
 
             let (secure_cond, new_cns, new_slots) =
                 cns.register_name(ctx, left_slot, right_slot, precommit_coin, price_update)?;
+            println!("I'm here boss");
 
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
             let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
