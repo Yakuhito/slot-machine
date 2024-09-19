@@ -10,7 +10,7 @@ use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
 
 use crate::{DelegatedStateActionSolution, StateSchedulerLayerSolution};
 
-use super::{CatalogAction, CatalogState, PriceSchedulerInfo};
+use super::{CatalogAction, CatalogState, CnsAction, CnsState, PriceSchedulerInfo};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PriceScheduler {
@@ -59,6 +59,15 @@ impl PriceScheduler {
         CatalogAction::UpdatePrice(DelegatedStateActionSolution {
             new_state: CatalogState {
                 registration_price: self.info.price_schedule[self.info.generation].1,
+            },
+            other_singleton_inner_puzzle_hash: self.inner_puzzle_hash().into(),
+        })
+    }
+
+    pub fn cns_price_update_action(&self) -> CnsAction {
+        CnsAction::UpdatePrice(DelegatedStateActionSolution {
+            new_state: CnsState {
+                registration_base_price: self.info.price_schedule[self.info.generation].1,
             },
             other_singleton_inner_puzzle_hash: self.inner_puzzle_hash().into(),
         })

@@ -490,7 +490,10 @@ mod tests {
     use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
     use hex_literal::hex;
 
-    use crate::{AddCatInfo, CatNftMetadata, CatalogPrecommitValue, PrecommitCoin};
+    use crate::{
+        AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, PrecommitCoin,
+        SlotNeigborsInfo, SLOT32_MIN_VALUE,
+    };
 
     use super::*;
 
@@ -707,6 +710,198 @@ mod tests {
 
         assert_eq!(
             catalog.info.state.registration_price,
+            test_price_schedule[3].1, // 0, 2, 4, 6 updated the price
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cns() -> anyhow::Result<()> {
+        let ctx = &mut SpendContext::new();
+        let mut sim = Simulator::new();
+
+        // setup config
+
+        let initial_registration_price = 2000;
+        let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250), (4, 125)];
+
+        let cns_constants = CnsConstants {
+            precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
+            relative_block_height: 1,
+            price_singleton_launcher_id: Bytes32::from(hex!(
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )),
+        };
+
+        let premine_nft = "premine";
+        let premine_nft = CnsSlotValue {
+            name_hash: premine_nft.tree_hash().into(),
+            neighbors: SlotNeigborsInfo {
+                left_value: SLOT32_MIN_VALUE.into(),
+                right_value: SLOT32_MIN_VALUE.into(),
+            },
+            expiration: 0,
+            version: 1,
+            launcher_id: Bytes32::default(),
+        };
+        let names_to_launch = vec![premine_nft];
+
+        // Create source offer
+        let [launcher_sk, user_sk]: [SecretKey; 2] = test_secret_keys(2)?.try_into().unwrap();
+
+        let launcher_pk = launcher_sk.public_key();
+        let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
+
+        let user_pk = user_sk.public_key();
+        let user_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(user_pk).into();
+
+        let offer_amount = 2;
+        let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
+        let offer_spend = StandardLayer::new(launcher_pk).spend_with_conditions(
+            ctx,
+            Conditions::new().create_coin(
+                SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+                offer_amount,
+                vec![],
+            ),
+        )?;
+
+        let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
+        let solution = ctx.serialize(&offer_spend.solution)?;
+        let offer = Offer::new(SpendBundle {
+            coin_spends: vec![CoinSpend::new(offer_src_coin, puzzle_reveal, solution)],
+            aggregated_signature: sign_standard_transaction(
+                ctx,
+                offer_src_coin,
+                offer_spend,
+                &launcher_sk,
+                &TESTNET11_CONSTANTS,
+            )?,
+        });
+
+        // Launch cns & price singleton
+        let (_, security_sk, mut price_scheduler, mut cns, slots) = launch_cns(
+            ctx,
+            offer,
+            test_price_schedule.clone(),
+            initial_registration_price,
+            names_to_launch,
+            cns_constants,
+            &TESTNET11_CONSTANTS,
+        )?;
+
+        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
+
+        // Register CAT
+
+        let mut slots = slots.clone();
+        for i in 0..7 {
+            // create precommit coin
+            let reg_amount = if i % 2 == 1 {
+                cns.info.state.registration_base_price
+            } else {
+                price_scheduler.info.price_schedule[price_scheduler.info.generation].1
+            };
+            let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
+
+            // name is "aaaaaa{i}"
+            let name = "aaaaaa".to_string() + &i.to_string();
+            let name_hash: Bytes32 = name.tree_hash().into();
+
+            let name_launcher_id = Bytes32::new([4 + i; 32]);
+            let secret = Bytes32::default();
+
+            let value = CnsPrecommitValue::new(name.clone(), 100, name_launcher_id, 1, secret);
+
+            let precommit_coin = PrecommitCoin::new(
+                ctx,
+                user_coin.coin_id(),
+                cns.info.launcher_id,
+                cns_constants.relative_block_height,
+                cns_constants.precommit_payout_puzzle_hash,
+                value,
+                reg_amount,
+            )?;
+
+            StandardLayer::new(user_pk).spend(
+                ctx,
+                user_coin,
+                Conditions::new().create_coin(
+                    precommit_coin.coin.puzzle_hash,
+                    precommit_coin.coin.amount,
+                    vec![],
+                ),
+            )?;
+
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
+            // call the 'register' action on CNS
+            slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
+
+            let slot_value_to_insert = CnsSlotValue::new(
+                name_hash,
+                Bytes32::default(),
+                Bytes32::default(),
+                0,
+                0,
+                Bytes32::default(),
+            );
+
+            let mut left_slot: Option<Slot<CnsSlotValue>> = None;
+            let mut right_slot: Option<Slot<CnsSlotValue>> = None;
+            for slot in slots.iter() {
+                let slot_value = slot.info.value.unwrap();
+
+                if slot_value < slot_value_to_insert {
+                    // slot belongs to the left
+                    if left_slot.is_none() || slot_value > left_slot.unwrap().info.value.unwrap() {
+                        left_slot = Some(*slot);
+                    }
+                } else {
+                    // slot belongs to the right
+                    if right_slot.is_none() || slot_value < right_slot.unwrap().info.value.unwrap()
+                    {
+                        right_slot = Some(*slot);
+                    }
+                }
+            }
+
+            let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
+
+            let price_update = if i % 2 == 0 {
+                let price_scheduler_child = price_scheduler.child();
+                let update_action = price_scheduler.cns_price_update_action();
+
+                price_scheduler.spend(ctx, cns.info.inner_puzzle_hash().into())?;
+                price_scheduler = price_scheduler_child.unwrap();
+
+                Some(update_action)
+            } else {
+                None
+            };
+
+            let (secure_cond, new_cns, new_slots) =
+                cns.register_name(ctx, left_slot, right_slot, precommit_coin, price_update)?;
+
+            let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
+            let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
+
+            let funds_program = ctx.serialize(&funds_puzzle)?;
+            let solution_program = ctx.serialize(&NodePtr::NIL)?;
+            ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
+
+            let spends = ctx.take();
+            sim.spend_coins(spends, &[user_sk.clone()])?;
+
+            slots.retain(|s| *s != left_slot && *s != right_slot);
+            slots.extend(new_slots);
+
+            cns = new_cns;
+        }
+
+        assert_eq!(
+            cns.info.state.registration_base_price,
             test_price_schedule[3].1, // 0, 2, 4, 6 updated the price
         );
 
