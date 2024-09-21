@@ -193,6 +193,7 @@ pub struct CnsVersionAndLauncher {
 pub struct CnsPrecommitValue {
     pub secret_and_name: CnsSecretAndName,
     pub version_and_launcher: CnsVersionAndLauncher,
+    #[clvm(rest)]
     pub start_time: u64,
 }
 
