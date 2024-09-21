@@ -4,7 +4,7 @@ use chia::{
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::FromClvm;
+use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -285,6 +285,50 @@ impl Cns {
         precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
+        println!("left slot: {:?}", left_slot_value);
+        println!("left slot value hash: {:?}", left_slot_value.tree_hash());
+        println!(
+            "manual hash: {:?}",
+            clvm_tuple!(
+                left_slot_value.name_hash.tree_hash(),
+                clvm_tuple!(
+                    clvm_tuple!(
+                        left_slot_value.neighbors.left_value.tree_hash(),
+                        left_slot_value.neighbors.right_value.tree_hash()
+                    ),
+                    left_slot_value.after_neigbors_data_hash()
+                )
+            )
+            .tree_hash()
+        );
+        println!("value hash: {:?}", left_slot_value.name_hash.tree_hash(),);
+        println!(
+            "left left value hash: {:?}",
+            left_slot_value.neighbors.left_value.tree_hash(),
+        );
+        println!(
+            "left right value hash: {:?}",
+            left_slot_value.neighbors.right_value.tree_hash(),
+        );
+        println!(
+            "rest hash: {:?}",
+            left_slot_value.after_neigbors_data_hash(),
+        );
+        println!(
+            "neighbors value hash: {:?}",
+            left_slot_value.neighbors.right_value.tree_hash(),
+        );
+        println!(
+            "rest + neigbors hash: {:?}",
+            clvm_tuple!(
+                clvm_tuple!(
+                    left_slot_value.neighbors.left_value.tree_hash(),
+                    left_slot_value.neighbors.right_value.tree_hash()
+                ),
+                left_slot_value.after_neigbors_data_hash()
+            )
+            .tree_hash()
+        );
         let register = CnsAction::Register(CnsRegisterActionSolution {
             name_hash,
             name_reveal: name.clone(),
