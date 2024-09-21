@@ -815,7 +815,7 @@ mod tests {
             let name_launcher_id = Bytes32::new([4 + i; 32]);
             let secret = Bytes32::default();
 
-            let value = CnsPrecommitValue::new(name.clone(), 100, name_launcher_id, 1, secret);
+            let value = CnsPrecommitValue::new(secret, name.clone(), 1, name_launcher_id, 100);
 
             let precommit_coin = PrecommitCoin::new(
                 ctx,

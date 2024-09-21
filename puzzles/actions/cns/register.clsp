@@ -100,17 +100,17 @@
                 (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                     (sha256 2
                         (sha256 2 
+                            secret_hash
                             name_hash
-                            (sha256 1 start_time)
                         )
                         (sha256 2
                             (sha256 2
                                 (sha256 1 version)
                                 (sha256 1 name_nft_launcher_id)
                             )
-                            secret_hash
+                            (sha256 1 start_time)
                         )
-                    ) ; data in precommit coin reveal will be (c (c name start_time) (c (c version name_nft_launcher_id) secret)))
+                    ) ; data in precommit coin reveal will be (c (c secret name) (c (c version name_nft_launcher_id) start_time)))
                 )
             )
         ) ; conditions

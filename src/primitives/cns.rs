@@ -217,13 +217,13 @@ impl Cns {
         left_slot.spend(ctx, spender_inner_puzzle_hash)?;
         right_slot.spend(ctx, spender_inner_puzzle_hash)?;
 
-        let name: String = precommit_coin.value.name_and_time.name.clone();
+        let name: String = precommit_coin.value.secret_and_name.name.clone();
         let name_hash: Bytes32 = name.tree_hash().into();
 
         let version = precommit_coin.value.version_and_launcher.version;
-        let secret = precommit_coin.value.secret;
+        let secret = precommit_coin.value.secret_and_name.secret;
 
-        let start_time = precommit_coin.value.name_and_time.time;
+        let start_time = precommit_coin.value.start_time;
         let precommitment_amount = precommit_coin.coin.amount;
 
         let base_price = if let Some(CnsAction::UpdatePrice(ref price_update)) = price_update {
