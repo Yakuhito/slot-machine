@@ -182,17 +182,17 @@ pub struct CnsNameAndTimeBox {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
-pub struct CnsLauncherAndVersion {
-    pub name_nft_launcher_id: Bytes32,
-    #[clvm(rest)]
+pub struct CnsVersionAndLauncher {
     pub version: u32,
+    #[clvm(rest)]
+    pub name_nft_launcher_id: Bytes32,
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
 pub struct CnsPrecommitValue {
     pub name_and_time: CnsNameAndTimeBox,
-    pub launcher_and_version: CnsLauncherAndVersion,
+    pub version_and_launcher: CnsVersionAndLauncher,
     pub secret: Bytes32,
 }
 
@@ -206,9 +206,9 @@ impl CnsPrecommitValue {
     ) -> Self {
         Self {
             name_and_time: CnsNameAndTimeBox { name, time },
-            launcher_and_version: CnsLauncherAndVersion {
-                name_nft_launcher_id,
+            version_and_launcher: CnsVersionAndLauncher {
                 version,
+                name_nft_launcher_id,
             },
             secret,
         }

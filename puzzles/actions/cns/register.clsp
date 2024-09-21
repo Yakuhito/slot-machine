@@ -141,7 +141,7 @@
             PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
             Current_State
             solution
-            (sha256 1 name_reveal)
+            name_hash
             (sha256 1 left_value) 
             (sha256 1 right_value) 
             (*

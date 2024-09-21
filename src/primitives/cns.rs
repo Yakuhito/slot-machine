@@ -220,7 +220,7 @@ impl Cns {
         let name: String = precommit_coin.value.name_and_time.name.clone();
         let name_hash: Bytes32 = name.tree_hash().into();
 
-        let version = precommit_coin.value.launcher_and_version.version;
+        let version = precommit_coin.value.version_and_launcher.version;
         let secret = precommit_coin.value.secret;
 
         let start_time = precommit_coin.value.name_and_time.time;
@@ -241,7 +241,7 @@ impl Cns {
 
         let name_nft_launcher_id = precommit_coin
             .value
-            .launcher_and_version
+            .version_and_launcher
             .name_nft_launcher_id;
 
         let new_slots_proof = SlotProof {

@@ -458,6 +458,7 @@ pub fn launch_cns(
     );
 
     let slots = preroller.spend(ctx)?;
+    println!("preroller slots: {:?}", slots);
 
     // Secure everything we've done with the preroll coin
     security_coin_conditions =
@@ -492,7 +493,7 @@ mod tests {
 
     use crate::{
         print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
-        CnsPrecommitValue, PrecommitCoin, SlotNeigborsInfo, SLOT32_MIN_VALUE,
+        CnsPrecommitValue, PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
     };
 
     use super::*;
@@ -739,7 +740,7 @@ mod tests {
             name_hash: premine_nft.tree_hash().into(),
             neighbors: SlotNeigborsInfo {
                 left_value: SLOT32_MIN_VALUE.into(),
-                right_value: SLOT32_MIN_VALUE.into(),
+                right_value: SLOT32_MAX_VALUE.into(),
             },
             expiration: 0,
             version: 1,
