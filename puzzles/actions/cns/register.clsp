@@ -113,6 +113,12 @@
                     ) ; data in precommit coin reveal will be (c (c secret name) (c (c version name_nft_launcher_id) start_time)))
                 )
             )
+
+            ; todo: debug
+            (list REMARK "slot 1st cury hash zzzzzzzzzzz" SLOT_1ST_CURRY_HASH)
+            (list REMARK "precommit 1st cury hash zzzzzzzz" PRECOMMIT_1ST_CURRY_HASH)
+            (list REMARK "name hash is zzzzzzzzzzzzzzz" name_hash)
+
         ) ; conditions
     )
   )
