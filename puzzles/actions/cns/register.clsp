@@ -115,18 +115,39 @@
             )
 
             ; todo: debug
-            (list REMARK left_value_hash)
-            (list REMARK left_left_value_hash)
-            (list REMARK right_value_hash)
-            (list REMARK left_data_hash)
-            (list REMARK (sha256 2 left_left_value_hash right_value_hash))
+            (list REMARK secret_hash)
+            (list REMARK name_hash)
+            (list REMARK (sha256 1 version))
+            (list REMARK (sha256 1 name_nft_launcher_id))
+            (list REMARK (sha256 1 start_time))
+            (list REMARK (sha256 2 
+                            secret_hash
+                            name_hash
+                        ))
             (list REMARK (sha256 2
-                (sha256 2 left_left_value_hash right_value_hash)
-                left_data_hash
-            ))(list REMARK (sha256 2 left_value_hash (sha256 2
-                (sha256 2 left_left_value_hash right_value_hash)
-                left_data_hash
-            )))
+                                (sha256 1 version)
+                                (sha256 1 name_nft_launcher_id)
+                            ))
+            (list REMARK (sha256 2
+                            (sha256 2
+                                (sha256 1 version)
+                                (sha256 1 name_nft_launcher_id)
+                            )
+                            (sha256 1 start_time)
+                        ))
+            (list REMARK (sha256 2
+                        (sha256 2 
+                            secret_hash
+                            name_hash
+                        )
+                        (sha256 2
+                            (sha256 2
+                                (sha256 1 version)
+                                (sha256 1 name_nft_launcher_id)
+                            )
+                            (sha256 1 start_time)
+                        )
+                    ))
         ) ; conditions
     )
   )

@@ -204,6 +204,101 @@ impl Cns {
         precommit_coin: PrecommitCoin<CnsPrecommitValue>,
         price_update: Option<CnsAction>,
     ) -> Result<(Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+        // todo: debug
+        let precommit_value = precommit_coin.value.clone();
+        /*
+        (list REMARK secret_hash)
+            (list REMARK name_hash)
+            (list REMARK (sha256 1 version))
+            (list REMARK (sha256 1 name_nft_launcher_id))
+            (list REMARK (sha256 1 start_time))
+            (list REMARK (sha256 2
+                            secret_hash
+                            name_hash
+                        ))
+            (list REMARK (sha256 2
+                                (sha256 1 version)
+                                (sha256 1 name_nft_launcher_id)
+                            ))
+            (list REMARK (sha256 2
+                            (sha256 2
+                                (sha256 1 version)
+                                (sha256 1 name_nft_launcher_id)
+                            )
+                            (sha256 1 start_time)
+                        ))
+            (list REMARK (sha256 2
+                        (sha256 2
+                            secret_hash
+                            name_hash
+                        )
+                        (sha256 2
+                            (sha256 2
+                                (sha256 1 version)
+                                (sha256 1 name_nft_launcher_id)
+                            )
+                            (sha256 1 start_time)
+                        )
+                    ))
+         */
+        println!(
+            "secret_hash: {:?}",
+            precommit_value.secret_and_name.secret.tree_hash()
+        );
+        println!(
+            "name_hash: {:?}",
+            precommit_value.secret_and_name.name.tree_hash()
+        );
+        println!(
+            "version_hash: {:?}",
+            precommit_value.version_and_launcher.version.tree_hash()
+        );
+        println!(
+            "name_nft_launcher_id_hash: {:?}",
+            precommit_value
+                .version_and_launcher
+                .name_nft_launcher_id
+                .tree_hash()
+        );
+        println!(
+            "start_time_hash: {:?}",
+            precommit_value.start_time.tree_hash()
+        );
+        println!(
+            "secret_hash + name_hash: {:?}",
+            clvm_tuple!(
+                precommit_value.secret_and_name.secret.tree_hash(),
+                precommit_value.secret_and_name.name.tree_hash()
+            )
+            .tree_hash()
+        );
+        println!(
+            "version_hash + name_nft_launcher_id_hash: {:?}",
+            clvm_tuple!(
+                precommit_value.version_and_launcher.version.tree_hash(),
+                precommit_value
+                    .version_and_launcher
+                    .name_nft_launcher_id
+                    .tree_hash()
+            )
+            .tree_hash()
+        );
+        println!(
+            "version_hash + name_nft_launcher_id_hash + start_time_hash: {:?}",
+            clvm_tuple!(
+                clvm_tuple!(
+                    precommit_value.version_and_launcher.version.tree_hash(),
+                    precommit_value
+                        .version_and_launcher
+                        .name_nft_launcher_id
+                        .tree_hash()
+                ),
+                precommit_value.start_time.tree_hash(),
+            )
+            .tree_hash()
+        );
+        println!("overall value hash: {:?}", precommit_value.tree_hash());
+        // todo: debug
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
@@ -285,50 +380,6 @@ impl Cns {
         precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
-        println!("left slot: {:?}", left_slot_value);
-        println!("left slot value hash: {:?}", left_slot_value.tree_hash());
-        println!(
-            "manual hash: {:?}",
-            clvm_tuple!(
-                left_slot_value.name_hash.tree_hash(),
-                clvm_tuple!(
-                    clvm_tuple!(
-                        left_slot_value.neighbors.left_value.tree_hash(),
-                        left_slot_value.neighbors.right_value.tree_hash()
-                    ),
-                    left_slot_value.after_neigbors_data_hash()
-                )
-            )
-            .tree_hash()
-        );
-        println!("value hash: {:?}", left_slot_value.name_hash.tree_hash(),);
-        println!(
-            "left left value hash: {:?}",
-            left_slot_value.neighbors.left_value.tree_hash(),
-        );
-        println!(
-            "left right value hash: {:?}",
-            left_slot_value.neighbors.right_value.tree_hash(),
-        );
-        println!(
-            "rest hash: {:?}",
-            left_slot_value.after_neigbors_data_hash(),
-        );
-        println!(
-            "neighbors value hash: {:?}",
-            left_slot_value.neighbors.right_value.tree_hash(),
-        );
-        println!(
-            "rest + neigbors hash: {:?}",
-            clvm_tuple!(
-                clvm_tuple!(
-                    left_slot_value.neighbors.left_value.tree_hash(),
-                    left_slot_value.neighbors.right_value.tree_hash()
-                ),
-                left_slot_value.after_neigbors_data_hash()
-            )
-            .tree_hash()
-        );
         let register = CnsAction::Register(CnsRegisterActionSolution {
             name_hash,
             name_reveal: name.clone(),
