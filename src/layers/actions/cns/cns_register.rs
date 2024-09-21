@@ -95,7 +95,7 @@ pub const CNS_REGISTER_PUZZLE: [u8; 1661] = hex!("ff02ffff01ff02ffff03ffff22ffff
 
 pub const CNS_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    2fcb5c7bbc412971374e204f99573246ecbaa8a305a9174102e7defba0532161
+    c516c41d48160d11c71648ac07dbb82f79dfdbacf67da843c23d6bd2c3d2807d
     "
 ));
 
