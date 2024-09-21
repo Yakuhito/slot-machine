@@ -47,6 +47,7 @@
         right_right_value_hash right_data_hash ; right slot info
     )
     name_hash
+    value_hash
     left_value_hash
     right_value_hash
     price
@@ -68,7 +69,7 @@
             ; create new slot
             (create_slot_with_hint SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash
-                    name_hash
+                    value_hash
                     left_value_hash
                     right_value_hash
                     (sha256 2 
@@ -79,16 +80,16 @@
                         (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
                     ) ; sha256tree data
                 )
-                name_hash
+                value_hash
             ) 
             ; create new left slot
             (create_slot_with_hint SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash left_value_hash left_left_value_hash name_hash left_data_hash)
+                (get_slot_value_hash left_value_hash left_left_value_hash value_hash left_data_hash)
                 left_value_hash
             ) 
             ; create new right slot
             (create_slot_with_hint SLOT_1ST_CURRY_HASH
-                (get_slot_value_hash right_value_hash name_hash right_right_value_hash right_data_hash)
+                (get_slot_value_hash right_value_hash value_hash right_right_value_hash right_data_hash)
                 right_value_hash
             ) 
             
@@ -142,6 +143,7 @@
             Current_State
             solution
             name_hash
+            (sha256 1 name_hash)
             (sha256 1 left_value) 
             (sha256 1 right_value) 
             (*
