@@ -339,9 +339,9 @@ impl Cns {
             start_time,
             secret_hash: secret.tree_hash().into(),
             precommitment_amount,
-            left_left_value_hash: left_slot_value.neighbors.left_value,
+            left_left_value_hash: left_slot_value.neighbors.left_value.tree_hash().into(),
             left_data_hash: left_slot_value.after_neigbors_data_hash().into(),
-            right_right_value_hash: right_slot_value.neighbors.right_value,
+            right_right_value_hash: right_slot_value.neighbors.right_value.tree_hash().into(),
             right_data_hash: right_slot_value.after_neigbors_data_hash().into(),
         });
 
