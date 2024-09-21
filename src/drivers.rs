@@ -458,7 +458,6 @@ pub fn launch_cns(
     );
 
     let slots = preroller.spend(ctx)?;
-    println!("preroller slots: {:?}", slots);
 
     // Secure everything we've done with the preroll coin
     security_coin_conditions =
@@ -899,7 +898,11 @@ mod tests {
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
             let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            print_spend_bundle_to_file(
+                spends.clone(),
+                Signature::default(),
+                &("sb.debug.".to_string() + &i.to_string()),
+            );
             sim.spend_coins(spends, &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);

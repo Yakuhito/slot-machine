@@ -281,6 +281,25 @@ impl Cns {
             ),
         ];
 
+        println!(
+            "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
+            new_slots[0].info.value.unwrap().name_hash.tree_hash(),
+            new_slots[0].coin.puzzle_hash,
+            new_slots[0].info.value_hash
+        );
+        println!(
+            "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
+            new_slots[1].info.value.unwrap().name_hash.tree_hash(),
+            new_slots[1].coin.puzzle_hash,
+            new_slots[1].info.value_hash
+        );
+        println!(
+            "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
+            new_slots[2].info.value.unwrap().name_hash.tree_hash(),
+            new_slots[2].coin.puzzle_hash,
+            new_slots[2].info.value_hash
+        );
+
         // spend precommit coin
         let precommit_coin_id = precommit_coin.coin.coin_id();
         precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
