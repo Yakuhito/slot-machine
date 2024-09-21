@@ -115,10 +115,11 @@
             )
 
             ; todo: debug
-            (list REMARK "slot 1st cury hash zzzzzzzzzzz" SLOT_1ST_CURRY_HASH)
-            (list REMARK "precommit 1st cury hash zzzzzzzz" PRECOMMIT_1ST_CURRY_HASH)
-            (list REMARK "name hash is zzzzzzzzzzzzzzz" name_hash)
-
+            (list REMARK secret_hash)
+            (list REMARK name_hash)
+            (list REMARK version)
+            (list REMARK name_nft_launcher_id)
+            (list REMARK start_time)
         ) ; conditions
     )
   )
