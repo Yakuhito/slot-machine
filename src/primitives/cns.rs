@@ -238,6 +238,7 @@ impl Cns {
                 * 60
                 * 24
                 * 366;
+        println!("expiration: {expiration}");
 
         let name_nft_launcher_id = precommit_coin
             .value

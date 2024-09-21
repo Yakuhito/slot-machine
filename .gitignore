@@ -169,4 +169,4 @@ cython_debug/
 
 # Added by yak
 main.sym
-sb.debug
+sb.debug*
