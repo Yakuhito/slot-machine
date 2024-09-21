@@ -491,8 +491,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, PrecommitCoin,
-        SlotNeigborsInfo, SLOT32_MIN_VALUE,
+        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
+        CnsPrecommitValue, PrecommitCoin, SlotNeigborsInfo, SLOT32_MIN_VALUE,
     };
 
     use super::*;
@@ -898,6 +898,7 @@ mod tests {
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
             let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
             sim.spend_coins(spends, &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);

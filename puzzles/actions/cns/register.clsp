@@ -55,18 +55,7 @@
         Current_State ; new state
         (list
             (list ASSERT_SECONDS_ABSOLUTE start_time)
-
-            (list
-                CREATE_PUZZLE_ANNOUNCEMENT
-                (sha256 2
-                    name_hash
-                    (sha256 2
-                        (sha256 1 version)
-                        (sha256 1 name_nft_launcher_id)
-                    )
-                )
-            )
-
+            
             ; spend left slot
             (spend_slot SLOT_1ST_CURRY_HASH 
                 (get_slot_value_hash left_value_hash left_left_value_hash right_value_hash left_data_hash)
