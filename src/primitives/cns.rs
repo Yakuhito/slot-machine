@@ -3,10 +3,8 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_wallet_sdk::{
-    announcement_id, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext,
-};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
+use clvm_traits::FromClvm;
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -283,6 +281,7 @@ impl Cns {
         ];
 
         // spend precommit coin
+        let precommit_coin_id = precommit_coin.coin.coin_id();
         precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
@@ -326,26 +325,10 @@ impl Cns {
 
         ctx.spend(my_coin, my_spend)?;
 
-        let ann_bytes: Bytes32 = CnsRegisterAnnouncement {
-            name,
-            version,
-            name_nft_launcher_id,
-        }
-        .tree_hash()
-        .into();
         Ok((
-            Conditions::new()
-                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, ann_bytes)),
+            Conditions::new().assert_concurrent_spend(precommit_coin_id),
             new_cns,
             new_slots,
         ))
     }
-}
-
-#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
-pub struct CnsRegisterAnnouncement {
-    pub name: String,
-    pub version: u32,
-    pub name_nft_launcher_id: Bytes32,
 }
