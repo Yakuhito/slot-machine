@@ -238,7 +238,6 @@ impl Cns {
                 * 60
                 * 24
                 * 366;
-        println!("expiration: {expiration}");
 
         let name_nft_launcher_id = precommit_coin
             .value
@@ -281,17 +280,24 @@ impl Cns {
             ),
         ];
 
-        println!(
-            "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
-            new_slots[0].info.value.unwrap().name_hash.tree_hash(),
-            new_slots[0].coin.puzzle_hash,
-            new_slots[0].info.value_hash
-        );
+        println!("expiration: {:?}", name_hash.tree_hash());
+        println!("expiration: {:?}", left_slot_value.name_hash.tree_hash());
+        println!("expiration: {:?}", right_slot_value.name_hash.tree_hash());
+        println!("expiration: {:?}", version);
+        println!("expiration: {:?}", name_nft_launcher_id);
+        println!("expiration: {:?}", expiration);
         println!(
             "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
             new_slots[1].info.value.unwrap().name_hash.tree_hash(),
             new_slots[1].coin.puzzle_hash,
             new_slots[1].info.value_hash
+        );
+
+        println!(
+            "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
+            new_slots[0].info.value.unwrap().name_hash.tree_hash(),
+            new_slots[0].coin.puzzle_hash,
+            new_slots[0].info.value_hash
         );
         println!(
             "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
