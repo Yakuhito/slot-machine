@@ -73,11 +73,11 @@
                     left_value_hash
                     right_value_hash
                     (sha256 2 
+                        (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
                         (sha256 2
-                            (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
                             (sha256 1 version)
+                            (sha256 1 name_nft_launcher_id)
                         )
-                        (sha256 1 name_nft_launcher_id)
                     ) ; sha256tree data
                 )
                 value_hash
@@ -93,15 +93,15 @@
             (list REMARK (sha256 1 version))
             (list REMARK (sha256 1 name_nft_launcher_id))
             (list REMARK (sha256 2
-                            (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
                             (sha256 1 version)
+                            (sha256 1 name_nft_launcher_id)
                         ))
             (list REMARK (sha256 2 
+                        (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
                         (sha256 2
-                            (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
                             (sha256 1 version)
+                            (sha256 1 name_nft_launcher_id)
                         )
-                        (sha256 1 name_nft_launcher_id)
                     ))
             ; todo: debug
 
