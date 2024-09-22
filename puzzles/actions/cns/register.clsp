@@ -81,29 +81,7 @@
                     ) ; sha256tree data
                 )
                 value_hash
-            ) 
-            ; todo: debug
-            (list REMARK value_hash)
-            (list REMARK left_value_hash)
-            (list REMARK right_value_hash)
-            (list REMARK version)
-            (list REMARK name_nft_launcher_id)
-            (list REMARK (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
-            (list REMARK (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price))))))
-            (list REMARK (sha256 1 version))
-            (list REMARK (sha256 1 name_nft_launcher_id))
-            (list REMARK (sha256 2
-                            (sha256 1 version)
-                            (sha256 1 name_nft_launcher_id)
-                        ))
-            (list REMARK (sha256 2 
-                        (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
-                        (sha256 2
-                            (sha256 1 version)
-                            (sha256 1 name_nft_launcher_id)
-                        )
-                    ))
-            ; todo: debug
+            )
 
             ; create new left slot
             (create_slot_with_hint SLOT_1ST_CURRY_HASH 
