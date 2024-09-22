@@ -4,7 +4,7 @@ use chia::{
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::{clvm_tuple, FromClvm};
+use clvm_traits::FromClvm;
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -279,51 +279,6 @@ impl Cns {
                 ),
             ),
         ];
-
-        println!("expiration: {:?}", name_hash.tree_hash());
-        println!("expiration: {:?}", left_slot_value.name_hash.tree_hash());
-        println!("expiration: {:?}", right_slot_value.name_hash.tree_hash());
-        println!("expiration: {:?}", version);
-        println!("expiration: {:?}", name_nft_launcher_id);
-        println!("expiration: {:?}", expiration);
-        println!("expiration hash: {:?}", expiration.tree_hash());
-        println!("version hash: {:?}", version.tree_hash());
-        println!(
-            "name_nft_launcher_id hash: {:?}",
-            name_nft_launcher_id.tree_hash()
-        );
-        println!(
-            "expiration and version hash: {:?}",
-            clvm_tuple!(expiration, version).tree_hash()
-        );
-        println!(
-            "after neighbors hash: {:?}",
-            clvm_tuple!(clvm_tuple!(expiration, version), name_nft_launcher_id).tree_hash()
-        );
-        println!("slot 1 value: {:?}", new_slots[1].info.value.unwrap());
-        println!(
-            "after neighbors hash: {:?}",
-            new_slots[1].info.value.unwrap().after_neigbors_data_hash()
-        );
-        println!(
-            "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
-            new_slots[1].info.value.unwrap().name_hash.tree_hash(),
-            new_slots[1].coin.puzzle_hash,
-            new_slots[1].info.value_hash
-        );
-
-        println!(
-            "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
-            new_slots[0].info.value.unwrap().name_hash.tree_hash(),
-            new_slots[0].coin.puzzle_hash,
-            new_slots[0].info.value_hash
-        );
-        println!(
-            "new slot: value hash {:?} - ph: {:?} full data hash {:?}",
-            new_slots[2].info.value.unwrap().name_hash.tree_hash(),
-            new_slots[2].coin.puzzle_hash,
-            new_slots[2].info.value_hash
-        );
 
         // spend precommit coin
         let precommit_coin_id = precommit_coin.coin.coin_id();
