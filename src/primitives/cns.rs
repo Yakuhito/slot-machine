@@ -4,7 +4,7 @@ use chia::{
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::FromClvm;
+use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -327,6 +327,98 @@ impl Cns {
 
         Ok((
             Conditions::new().assert_concurrent_spend(precommit_coin_id),
+            new_cns,
+            new_slots,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn expire_name(
+        self,
+        ctx: &mut SpendContext,
+        slot: Slot<CnsSlotValue>,
+        left_slot: Slot<CnsSlotValue>,
+        right_slot: Slot<CnsSlotValue>,
+    ) -> Result<(Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+        // spend slots
+        let Some(slot_value) = slot.info.value else {
+            return Err(DriverError::Custom("Missing slot value".to_string()));
+        };
+        let Some(left_slot_value) = left_slot.info.value else {
+            return Err(DriverError::Custom("Missing left slot value".to_string()));
+        };
+        let Some(right_slot_value) = right_slot.info.value else {
+            return Err(DriverError::Custom("Missing right slot value".to_string()));
+        };
+
+        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
+
+        slot.spend(ctx, spender_inner_puzzle_hash)?;
+        left_slot.spend(ctx, spender_inner_puzzle_hash)?;
+        right_slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        let new_slots_proof = SlotProof {
+            parent_parent_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+        };
+
+        let new_slots = vec![
+            Slot::new(
+                new_slots_proof,
+                SlotInfo::from_value(
+                    self.info.launcher_id,
+                    left_slot_value.with_neighbors(
+                        left_slot_value.neighbors.left_value,
+                        right_slot_value.name_hash,
+                    ),
+                ),
+            ),
+            Slot::new(
+                new_slots_proof,
+                SlotInfo::from_value(
+                    self.info.launcher_id,
+                    right_slot_value.with_neighbors(
+                        left_slot_value.name_hash,
+                        right_slot_value.neighbors.right_value,
+                    ),
+                ),
+            ),
+        ];
+
+        // finally, spend self
+        let expire = CnsAction::Expire(CnsExpireActionSolution {
+            value: slot_value.name_hash,
+            left_value: left_slot_value.name_hash,
+            left_left_value: left_slot_value.neighbors.left_value,
+            left_rest_hash: left_slot_value.after_neigbors_data_hash().into(),
+            right_value: right_slot_value.name_hash,
+            right_right_value: right_slot_value.neighbors.right_value,
+            right_rest_hash: right_slot_value.after_neigbors_data_hash().into(),
+            expiration: slot_value.expiration,
+            data_hash: clvm_tuple!(slot_value.version, slot_value.launcher_id)
+                .tree_hash()
+                .into(),
+        });
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, vec![expire])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let new_cns = Cns::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child CNS singleton".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        Ok((
+            Conditions::new().assert_concurrent_spend(slot.coin.coin_id()),
             new_cns,
             new_slots,
         ))
