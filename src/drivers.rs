@@ -491,8 +491,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
-        CnsPrecommitValue, PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+        AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, PrecommitCoin,
+        SlotNeigborsInfo, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
     };
 
     use super::*;
