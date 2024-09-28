@@ -57,13 +57,13 @@
             ; create new left slot
             (create_slot_with_hint SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash left_value left_left_value right_value left_rest_hash)
-                left_value
+                (sha256 1 left_value)
             ) 
             
             ; create new right slot
             (create_slot_with_hint SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash right_value left_value right_right_value right_rest_hash)
-                right_value
+                (sha256 1 right_value)
             ) 
         ) ; conditions
     )

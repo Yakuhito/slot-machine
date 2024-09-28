@@ -735,8 +735,9 @@ mod tests {
         };
 
         let premine_nft = "premine";
+        let premine_name_hash: Bytes32 = premine_nft.tree_hash().into();
         let premine_nft = CnsSlotValue {
-            name_hash: premine_nft.tree_hash().into(),
+            name_hash: premine_name_hash,
             neighbors: SlotNeigborsInfo {
                 left_value: SLOT32_MIN_VALUE.into(),
                 right_value: SLOT32_MAX_VALUE.into(),
@@ -894,11 +895,11 @@ mod tests {
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
             let spends = ctx.take();
-            print_spend_bundle_to_file(
-                spends.clone(),
-                Signature::default(),
-                &("sb.debug.".to_string() + &i.to_string()),
-            );
+            // print_spend_bundle_to_file(
+            //     spends.clone(),
+            //     Signature::default(),
+            //     &("sb.debug.".to_string() + &i.to_string()),
+            // );
             sim.spend_coins(spends, &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
@@ -911,6 +912,30 @@ mod tests {
             cns.info.state.registration_base_price,
             test_price_schedule[3].1, // 0, 2, 4, 6 updated the price
         );
+
+        // expire initial slot
+        let initial_slot = slots
+            .iter()
+            .find(|s| s.info.value.unwrap().name_hash == premine_name_hash)
+            .unwrap();
+        let left_slot = slots
+            .iter()
+            .find(|s| {
+                s.info.value.unwrap().name_hash
+                    == initial_slot.info.value.unwrap().neighbors.left_value
+            })
+            .unwrap();
+        let right_slot = slots
+            .iter()
+            .find(|s| {
+                s.info.value.unwrap().name_hash
+                    == initial_slot.info.value.unwrap().neighbors.right_value
+            })
+            .unwrap();
+
+        let (_, _, _) = cns.expire_name(ctx, *initial_slot, *left_slot, *right_slot)?;
+
+        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
         Ok(())
     }
