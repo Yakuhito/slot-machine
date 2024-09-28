@@ -3,7 +3,9 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{
+    announcement_id, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext,
+};
 use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
@@ -419,6 +421,65 @@ impl Cns {
 
         Ok((
             Conditions::new().assert_concurrent_spend(slot.coin.coin_id()),
+            new_cns,
+            new_slots,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn oracle(
+        self,
+        ctx: &mut SpendContext,
+        slot: Slot<CnsSlotValue>,
+    ) -> Result<(Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+        // spend slots
+        let Some(slot_value) = slot.info.value else {
+            return Err(DriverError::Custom("Missing slot value".to_string()));
+        };
+
+        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
+
+        slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        let new_slots_proof = SlotProof {
+            parent_parent_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+        };
+
+        let new_slots = vec![Slot::new(
+            new_slots_proof,
+            SlotInfo::from_value(self.info.launcher_id, slot_value),
+        )];
+
+        // finally, spend self
+        let expire = CnsAction::Oralce(CnsOracleActionSolution {
+            value: slot_value.name_hash,
+            rest_hash: clvm_tuple!(slot_value.neighbors, slot_value.after_neigbors_data_hash())
+                .tree_hash()
+                .into(),
+        });
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, vec![expire])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let new_cns = Cns::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child CNS singleton".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
+        Ok((
+            Conditions::new()
+                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, slot_value_hash)),
             new_cns,
             new_slots,
         ))

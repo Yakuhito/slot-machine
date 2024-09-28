@@ -491,8 +491,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, PrecommitCoin,
-        SlotNeigborsInfo, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
+        CnsPrecommitValue, PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
     };
 
     use super::*;
@@ -894,12 +894,14 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
+            // test on-chain oracle for current name
+
             let spends = ctx.take();
-            // print_spend_bundle_to_file(
-            //     spends.clone(),
-            //     Signature::default(),
-            //     &("sb.debug.".to_string() + &i.to_string()),
-            // );
+            print_spend_bundle_to_file(
+                spends.clone(),
+                Signature::default(),
+                &("sb.debug.".to_string() + &i.to_string()),
+            );
             sim.spend_coins(spends, &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
