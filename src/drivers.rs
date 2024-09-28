@@ -894,7 +894,20 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
+            slots.retain(|s| *s != left_slot && *s != right_slot);
+
+            let oracle_slot = new_slots[1];
+            slots.extend(new_slots);
+
+            cns = new_cns;
+
             // test on-chain oracle for current name
+            let (oracle_conds, new_cns, new_slots) = cns.oracle(ctx, oracle_slot)?;
+
+            let user_coin = sim.new_coin(user_puzzle_hash, 0);
+            StandardLayer::new(user_pk).spend(ctx, user_coin, oracle_conds)?;
 
             let spends = ctx.take();
             print_spend_bundle_to_file(
@@ -904,7 +917,7 @@ mod tests {
             );
             sim.spend_coins(spends, &[user_sk.clone()])?;
 
-            slots.retain(|s| *s != left_slot && *s != right_slot);
+            slots.retain(|s| *s != oracle_slot);
             slots.extend(new_slots);
 
             cns = new_cns;
