@@ -83,7 +83,7 @@ impl Cns {
 pub enum CnsAction {
     Expire(CnsExpireActionSolution),
     Extend(CnsExtendActionSolution),
-    Oralce(CnsOracleActionSolution),
+    Oracle(CnsOracleActionSolution),
     Register(CnsRegisterActionSolution),
     Update(CnsUpdateActionSolution),
     UpdatePrice(DelegatedStateActionSolution<CnsState>),
@@ -121,7 +121,7 @@ impl Cns {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                CnsAction::Oralce(solution) => {
+                CnsAction::Oracle(solution) => {
                     let layer = CnsOracleAction::new(self.info.launcher_id);
 
                     let puzzle = layer.construct_puzzle(ctx)?;
@@ -541,7 +541,7 @@ impl Cns {
         )];
 
         // finally, spend self
-        let expire = CnsAction::Oralce(CnsOracleActionSolution {
+        let oracle = CnsAction::Oracle(CnsOracleActionSolution {
             value: slot_value.name_hash,
             rest_hash: clvm_tuple!(slot_value.neighbors, slot_value.after_neigbors_data_hash())
                 .tree_hash()
@@ -550,7 +550,7 @@ impl Cns {
 
         let my_coin = self.coin;
         let my_constants = self.info.constants;
-        let my_spend = self.spend(ctx, vec![expire])?;
+        let my_spend = self.spend(ctx, vec![oracle])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
         let new_cns = Cns::from_parent_spend(
             &mut ctx.allocator,
@@ -602,7 +602,7 @@ impl Cns {
         )];
 
         // spend self
-        let expire = CnsAction::Update(CnsUpdateActionSolution {
+        let update = CnsAction::Update(CnsUpdateActionSolution {
             value: slot_value.name_hash,
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             expiration: slot_value.expiration,
@@ -615,7 +615,7 @@ impl Cns {
 
         let my_coin = self.coin;
         let my_constants = self.info.constants;
-        let my_spend = self.spend(ctx, vec![expire])?;
+        let my_spend = self.spend(ctx, vec![update])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
         let new_cns = Cns::from_parent_spend(
             &mut ctx.allocator,
