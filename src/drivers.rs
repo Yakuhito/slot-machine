@@ -493,8 +493,9 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, CnsRegisterAction,
-        PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
+        CnsPrecommitValue, CnsRegisterAction, PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE,
+        SLOT32_MIN_VALUE,
     };
 
     use super::*;
@@ -980,7 +981,11 @@ mod tests {
                 did.info.inner_puzzle_hash().into(),
             )?;
 
-            did.spend_with(ctx, &user_puzzle, update_conds)?;
+            let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
+
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            sim.spend_coins(spends, &[user_sk.clone()])?;
 
             slots.retain(|s| *s != update_slot);
             slots.extend(new_slots.clone());
