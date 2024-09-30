@@ -62,17 +62,6 @@
                     )
                 )
             )
-
-            ;; todo: debug
-            (list REMARK name expiration PAYOUT_PUZZLE_HASH renew_amount)
-            (list REMARK (sha256tree (c name expiration)))
-            (list REMARK (sha256tree 
-                        (list
-                            (sha256tree (c name expiration)) ; nonce
-                            (list PAYOUT_PUZZLE_HASH renew_amount) ; notarized payment
-                        )
-                    ))
-            ;; todo: debug
         ) ; conditions
     )
 )
