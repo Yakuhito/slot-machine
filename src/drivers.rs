@@ -912,6 +912,57 @@ mod tests {
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
             slots.retain(|s| *s != oracle_slot);
+            slots.extend(new_slots.clone());
+
+            // test on-chain extend mechanism for current name
+            println!("on-chain extend mechanism 1");
+            let extension_years: u64 = (i + 1).into();
+            let extension_slot = new_slots[0];
+            let pay_for_extension: u64 =
+                extension_years * new_cns.info.state.registration_base_price;
+            println!("on-chain extend mechanism 2");
+
+            let (notarized_payment, extend_conds, new_cns, new_slots) =
+                new_cns.extend(ctx, name, extension_slot, pay_for_extension)?;
+            println!("on-chain extend mechanism 3");
+
+            let user_coin = sim.new_coin(user_puzzle_hash, pay_for_extension);
+            let offer_coin = Coin::new(
+                user_coin.coin_id(),
+                SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+                pay_for_extension,
+            );
+            println!("on-chain extend mechanism 4");
+
+            StandardLayer::new(user_pk).spend(
+                ctx,
+                user_coin,
+                extend_conds.create_coin(
+                    SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+                    pay_for_extension,
+                    vec![],
+                ),
+            )?;
+            println!("on-chain extend mechanism 5");
+
+            let offer_puzzle = ctx.settlement_payments_puzzle()?;
+            let offer_spend = CoinSpend::new(
+                offer_coin,
+                ctx.serialize(&offer_puzzle)?,
+                ctx.serialize(&vec![notarized_payment])?,
+            );
+            sim.spend_coins(vec![offer_spend], &[])?;
+            println!("on-chain extend mechanism 6");
+
+            let spends = ctx.take();
+            print_spend_bundle_to_file(
+                spends.clone(),
+                Signature::default(),
+                &("sb.debug.".to_string() + &i.to_string()),
+            );
+            sim.spend_coins(spends, &[user_sk.clone()])?;
+
+            slots.retain(|s| *s != extension_slot);
             slots.extend(new_slots);
 
             cns = new_cns;
