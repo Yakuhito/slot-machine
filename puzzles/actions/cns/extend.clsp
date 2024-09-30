@@ -2,7 +2,7 @@
 ;; Used to extend the registration of a name
 
 ;; Remember that the slot format is (value (left_value right_value) expiration version . launcher_id)
-;;  but we're only interested in 'expiration'
+;;  but we're only interested in 'expiration' (and name to get correct price factor based on length)
 
 (mod (
     OFFER_MOD_HASH
@@ -56,12 +56,23 @@
                     OFFER_MOD_HASH
                     (sha256tree 
                         (list
-                            (sha256tree name expiration) ; nonce
+                            (sha256tree (c name expiration)) ; nonce
                             (list PAYOUT_PUZZLE_HASH renew_amount) ; notarized payment
                         )
                     )
                 )
             )
+
+            ;; todo: debug
+            (list REMARK name expiration PAYOUT_PUZZLE_HASH renew_amount)
+            (list REMARK (sha256tree (c name expiration)))
+            (list REMARK (sha256tree 
+                        (list
+                            (sha256tree (c name expiration)) ; nonce
+                            (list PAYOUT_PUZZLE_HASH renew_amount) ; notarized payment
+                        )
+                    ))
+            ;; todo: debug
         ) ; conditions
     )
 )
