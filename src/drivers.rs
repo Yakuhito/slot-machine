@@ -919,12 +919,10 @@ mod tests {
 
             // test on-chain extend mechanism for current name
             let extension_years: u64 = (i + 1).into();
-            println!("extension_years: {extension_years}");
             let extension_slot = new_slots[0];
             let pay_for_extension: u64 = extension_years
                 * cns.info.state.registration_base_price
                 * CnsRegisterAction::get_price_factor(&name).unwrap_or(1);
-            println!("pay_for_extension: {pay_for_extension}");
 
             let (notarized_payment, extend_conds, new_cns, new_slots) =
                 cns.extend(ctx, name, extension_slot, pay_for_extension)?;
