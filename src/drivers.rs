@@ -953,10 +953,10 @@ mod tests {
                 ctx.serialize(&offer_puzzle)?,
                 ctx.serialize(&vec![notarized_payment])?,
             );
-            sim.spend_coins(vec![offer_spend], &[])?;
             println!("on-chain extend mechanism 6");
 
-            let spends = ctx.take();
+            let mut spends = ctx.take();
+            spends.append(&mut vec![offer_spend]);
             print_spend_bundle_to_file(
                 spends.clone(),
                 Signature::default(),

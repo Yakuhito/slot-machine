@@ -43,7 +43,7 @@
                 (get_slot_value_hash
                     name
                     neighbors_hash
-                    (+ expiration (* 60 60 24 366 (check_years (/ renew_amount (* (f Current_State) (get_price_factor (strlen name))))))))
+                    (+ expiration (* 60 60 24 366 (check_years (/ renew_amount (* (f Current_State) (get_price_factor (strlen name)))))))
                     rest_hash
                 )
                 (sha256 name)
