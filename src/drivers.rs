@@ -485,7 +485,9 @@ pub fn launch_cns(
 #[cfg(test)]
 mod tests {
     use chia::{
-        clvm_utils::CurriedProgram, protocol::SpendBundle, puzzles::cat::GenesisByCoinIdTailArgs,
+        clvm_utils::CurriedProgram,
+        protocol::SpendBundle,
+        puzzles::{cat::GenesisByCoinIdTailArgs, singleton::SINGLETON_LAUNCHER_PUZZLE_HASH},
     };
     use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
     use hex_literal::hex;
@@ -755,6 +757,7 @@ mod tests {
         let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
 
         let user_pk = user_sk.public_key();
+        let user_puzzle = StandardLayer::new(user_pk);
         let user_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(user_pk).into();
 
         let offer_amount = 2;
@@ -800,6 +803,12 @@ mod tests {
         for i in 0..7 {
             println!("i: {i}");
 
+            // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
+            let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+            let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
+            let name_controller_launcher_id = launcher_coin.coin_id();
+            let (_, did) = launcher.create_simple_did(ctx, &user_puzzle)?;
+
             // create precommit coin
             let reg_amount = if i % 2 == 1 {
                 cns.info.state.registration_base_price
@@ -812,7 +821,7 @@ mod tests {
             let name = "aaaaaa".to_string() + &i.to_string();
             let name_hash: Bytes32 = name.tree_hash().into();
 
-            let name_launcher_id = Bytes32::new([4 + i; 32]);
+            let name_launcher_id = did.info.launcher_id;
             let secret = Bytes32::default();
 
             let value = CnsPrecommitValue::new(secret, name.clone(), 1, name_launcher_id, 100);
@@ -917,7 +926,7 @@ mod tests {
             cns = new_cns;
 
             // test on-chain extend mechanism for current name
-            let extension_years: u64 = (i + 1).into();
+            let extension_years: u64 = i as u64 + 1;
             let extension_slot = new_slots[0];
             let pay_for_extension: u64 = extension_years
                 * cns.info.state.registration_base_price
@@ -958,6 +967,8 @@ mod tests {
             slots.extend(new_slots);
 
             cns = new_cns;
+
+            // test on-chain mechanism for name updates
         }
 
         assert_eq!(

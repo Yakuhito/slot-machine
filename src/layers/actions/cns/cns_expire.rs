@@ -105,5 +105,6 @@ pub struct CnsExpireActionSolution {
     pub right_right_value: Bytes32,
     pub right_rest_hash: Bytes32,
     pub expiration: u64,
+    #[clvm(rest)]
     pub data_hash: Bytes32,
 }

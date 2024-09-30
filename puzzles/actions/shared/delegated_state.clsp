@@ -9,7 +9,7 @@
 (mod (
   OTHER_SINGLETON_STRUCT
   Current_State
-  (new_state other_singleton_inner_puzzle_hash)
+  (new_state . other_singleton_inner_puzzle_hash)
 )
   (include condition_codes.clib)
   (include sha256tree.clib)

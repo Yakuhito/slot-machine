@@ -573,4 +573,69 @@ impl Cns {
             new_slots,
         ))
     }
+
+    pub fn update(
+        self,
+        ctx: &mut SpendContext,
+        slot: Slot<CnsSlotValue>,
+        new_version: u32,
+        new_launcher_id: Bytes32,
+        announcer_inner_puzzle_hash: Bytes32,
+    ) -> Result<(Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+        // spend slots
+        let Some(slot_value) = slot.info.value else {
+            return Err(DriverError::Custom("Missing slot value".to_string()));
+        };
+
+        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
+
+        slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        let new_slots_proof = SlotProof {
+            parent_parent_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+        };
+
+        let new_slots = vec![Slot::new(
+            new_slots_proof,
+            SlotInfo::from_value(self.info.launcher_id, slot_value),
+        )];
+
+        // spend self
+        let expire = CnsAction::Update(CnsUpdateActionSolution {
+            value: slot_value.name_hash,
+            neighbors_hash: slot_value.neighbors.tree_hash().into(),
+            expiration: slot_value.expiration,
+            current_version: slot_value.version,
+            current_launcher_id: slot_value.launcher_id,
+            new_version,
+            new_launcher_id,
+            announcer_inner_puzzle_hash,
+        });
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, vec![expire])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let new_cns = Cns::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child CNS singleton".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
+        Ok((
+            Conditions::new()
+                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, slot_value_hash)),
+            new_cns,
+            new_slots,
+        ))
+    }
 }

@@ -8,14 +8,16 @@
     SINGLETON_LAUNCHER_PUZZLE_HASH_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
-    value
-    neighbors_hash ; (sha256tree (left_value . right_value))
-    expiration
-    current_version
-    current_launcher_id
-    new_version
-    new_launcher_id
-    announcer_inner_puzzle_hash
+    (
+        value
+        neighbors_hash ; (sha256tree (left_value . right_value))
+        expiration
+        current_version
+        current_launcher_id
+        new_version
+        new_launcher_id .
+        announcer_inner_puzzle_hash
+    )
 )
     (include condition_codes.clib)
     (include curry.clib)

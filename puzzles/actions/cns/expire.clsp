@@ -10,7 +10,7 @@
         value
         left_value left_left_value left_rest_hash
         right_value right_right_value right_rest_hash
-        expiration
+        expiration .
         data_hash ; (sha256tree (c version launcher_id))
     )
 )
