@@ -35,7 +35,7 @@
         (list
             ; spend slot
             (spend_slot SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash  name neighbors_hash expiration rest_hash)
+                (get_slot_value_hash name neighbors_hash expiration rest_hash)
             )
             
             ; create new slot

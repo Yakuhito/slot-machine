@@ -1,7 +1,11 @@
 use chia::{
     clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
-    puzzles::{singleton::SingletonSolution, LineageProof, Proof},
+    puzzles::{
+        offer::{NotarizedPayment, Payment},
+        singleton::SingletonSolution,
+        LineageProof, Proof,
+    },
 };
 use chia_wallet_sdk::{
     announcement_id, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext,
@@ -421,6 +425,90 @@ impl Cns {
 
         Ok((
             Conditions::new().assert_concurrent_spend(slot.coin.coin_id()),
+            new_cns,
+            new_slots,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::type_complexity)]
+    pub fn extend(
+        self,
+        ctx: &mut SpendContext,
+        name: String,
+        slot: Slot<CnsSlotValue>,
+        renew_amount: u64,
+    ) -> Result<(NotarizedPayment, Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+        // spend slots
+        let Some(slot_value) = slot.info.value else {
+            return Err(DriverError::Custom("Missing slot value".to_string()));
+        };
+
+        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
+
+        slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        let new_slots_proof = SlotProof {
+            parent_parent_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+        };
+
+        let new_expiration = slot_value.expiration
+            + (renew_amount
+                / (CnsRegisterAction::get_price_factor(&name).unwrap_or(1)
+                    * self.info.state.registration_base_price))
+                * 60
+                * 60
+                * 24
+                * 366;
+        let new_slots = vec![Slot::new(
+            new_slots_proof,
+            SlotInfo::from_value(
+                self.info.launcher_id,
+                slot_value.with_expiration(new_expiration),
+            ),
+        )];
+
+        // finally, spend self
+        let extend = CnsAction::Extend(CnsExtendActionSolution {
+            renew_amount,
+            name: name.clone(),
+            neighbors_hash: slot_value.neighbors.tree_hash().into(),
+            expiration: slot_value.expiration,
+            rest_hash: clvm_tuple!(slot_value.version, slot_value.launcher_id)
+                .tree_hash()
+                .into(),
+        });
+
+        let notarized_payment = NotarizedPayment {
+            nonce: clvm_tuple!(name, slot_value.expiration).tree_hash().into(),
+            payments: vec![Payment {
+                puzzle_hash: self.info.constants.precommit_payout_puzzle_hash,
+                amount: renew_amount,
+                memos: vec![],
+            }],
+        };
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, vec![extend])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let new_cns = Cns::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child CNS singleton".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        Ok((
+            notarized_payment,
+            Conditions::new().assert_concurrent_spend(slot.coin.coin_id()), // todo: not really secure
             new_cns,
             new_slots,
         ))

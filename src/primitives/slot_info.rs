@@ -161,6 +161,16 @@ impl CnsSlotValue {
         }
         .tree_hash()
     }
+
+    pub fn with_expiration(self, expiration: u64) -> Self {
+        Self {
+            name_hash: self.name_hash,
+            neighbors: self.neighbors,
+            expiration,
+            version: self.version,
+            launcher_id: self.launcher_id,
+        }
+    }
 }
 
 impl Ord for CnsSlotValue {

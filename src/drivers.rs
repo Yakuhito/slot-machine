@@ -909,13 +909,7 @@ mod tests {
             let user_coin = sim.new_coin(user_puzzle_hash, 0);
             StandardLayer::new(user_pk).spend(ctx, user_coin, oracle_conds)?;
 
-            let spends = ctx.take();
-            print_spend_bundle_to_file(
-                spends.clone(),
-                Signature::default(),
-                &("sb.debug.".to_string() + &i.to_string()),
-            );
-            sim.spend_coins(spends, &[user_sk.clone()])?;
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
             slots.retain(|s| *s != oracle_slot);
             slots.extend(new_slots);
