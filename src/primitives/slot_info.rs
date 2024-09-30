@@ -171,6 +171,16 @@ impl CnsSlotValue {
             launcher_id: self.launcher_id,
         }
     }
+
+    pub fn with_version_and_launcher_id(self, version: u32, launcher_id: Bytes32) -> Self {
+        Self {
+            name_hash: self.name_hash,
+            neighbors: self.neighbors,
+            expiration: self.expiration,
+            version,
+            launcher_id,
+        }
+    }
 }
 
 impl Ord for CnsSlotValue {

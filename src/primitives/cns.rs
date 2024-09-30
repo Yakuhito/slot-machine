@@ -598,7 +598,10 @@ impl Cns {
 
         let new_slots = vec![Slot::new(
             new_slots_proof,
-            SlotInfo::from_value(self.info.launcher_id, slot_value),
+            SlotInfo::from_value(
+                self.info.launcher_id,
+                slot_value.with_version_and_launcher_id(new_version, new_launcher_id),
+            ),
         )];
 
         // spend self
