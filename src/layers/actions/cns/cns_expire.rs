@@ -5,7 +5,6 @@ use chia::{
 use chia_wallet_sdk::{DriverError, Layer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
-use hex::encode;
 use hex_literal::hex;
 
 use crate::{Slot, SpendContextExt};
@@ -37,10 +36,6 @@ impl Layer for CnsExpireAction {
         ctx: &mut chia_wallet_sdk::SpendContext,
         solution: CnsExpireActionSolution,
     ) -> Result<NodePtr, DriverError> {
-        println!(
-            "expire solution: {:?}",
-            encode(ctx.serialize(&solution)?.into_bytes())
-        );
         solution
             .to_clvm(&mut ctx.allocator)
             .map_err(DriverError::ToClvm)

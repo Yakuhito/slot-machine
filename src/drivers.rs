@@ -491,9 +491,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
-        CnsPrecommitValue, CnsRegisterAction, PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE,
-        SLOT32_MIN_VALUE,
+        AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, CnsRegisterAction,
+        PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
     };
 
     use super::*;
@@ -926,7 +925,6 @@ mod tests {
 
             let (notarized_payment, extend_conds, new_cns, new_slots) =
                 cns.extend(ctx, name, extension_slot, pay_for_extension)?;
-            println!("on-chain extend mechanism 3");
 
             let user_coin = sim.new_coin(user_puzzle_hash, pay_for_extension);
             let offer_coin = Coin::new(
@@ -934,7 +932,6 @@ mod tests {
                 SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
                 pay_for_extension,
             );
-            println!("on-chain extend mechanism 4");
 
             StandardLayer::new(user_pk).spend(
                 ctx,
@@ -945,7 +942,6 @@ mod tests {
                     vec![],
                 ),
             )?;
-            println!("on-chain extend mechanism 5");
 
             let offer_puzzle = ctx.settlement_payments_puzzle()?;
             let offer_spend = CoinSpend::new(
@@ -953,15 +949,9 @@ mod tests {
                 ctx.serialize(&offer_puzzle)?,
                 ctx.serialize(&vec![notarized_payment])?,
             );
-            println!("on-chain extend mechanism 6");
 
             let mut spends = ctx.take();
             spends.append(&mut vec![offer_spend]);
-            print_spend_bundle_to_file(
-                spends.clone(),
-                Signature::default(),
-                &("sb.debug.".to_string() + &i.to_string()),
-            );
             sim.spend_coins(spends, &[user_sk.clone()])?;
 
             slots.retain(|s| *s != extension_slot);
