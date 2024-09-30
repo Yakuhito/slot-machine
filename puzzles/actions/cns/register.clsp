@@ -126,15 +126,15 @@
     )
   )
 
-  (defun validate_and_get_length (name length)
+  (defun strlen_and_validate (name)
     (if name
         (if (validate_char (substr name 0 1))
-            (validate_and_get_length (substr name 1) (+ length 1))
+            (+ 1 (strlen_and_validate (substr name 1)))
             ; else 
             (x)
         )
         ; else
-        length
+        ()
     )
   )
 
@@ -148,7 +148,7 @@
             (sha256 1 left_value) 
             (sha256 1 right_value) 
             (*
-                (get_price_factor (validate_and_get_length name_reveal ())) 
+                (get_price_factor (strlen_and_validate name_reveal)) 
                 (f Current_State)
             )
         )
