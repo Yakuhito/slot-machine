@@ -492,7 +492,8 @@ mod tests {
 
     use crate::{
         print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
-        CnsPrecommitValue, PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+        CnsPrecommitValue, CnsRegisterAction, PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE,
+        SLOT32_MIN_VALUE,
     };
 
     use super::*;
@@ -914,16 +915,19 @@ mod tests {
             slots.retain(|s| *s != oracle_slot);
             slots.extend(new_slots.clone());
 
+            cns = new_cns;
+
             // test on-chain extend mechanism for current name
-            println!("on-chain extend mechanism 1");
             let extension_years: u64 = (i + 1).into();
+            println!("extension_years: {extension_years}");
             let extension_slot = new_slots[0];
-            let pay_for_extension: u64 =
-                extension_years * new_cns.info.state.registration_base_price;
-            println!("on-chain extend mechanism 2");
+            let pay_for_extension: u64 = extension_years
+                * cns.info.state.registration_base_price
+                * CnsRegisterAction::get_price_factor(&name).unwrap_or(1);
+            println!("pay_for_extension: {pay_for_extension}");
 
             let (notarized_payment, extend_conds, new_cns, new_slots) =
-                new_cns.extend(ctx, name, extension_slot, pay_for_extension)?;
+                cns.extend(ctx, name, extension_slot, pay_for_extension)?;
             println!("on-chain extend mechanism 3");
 
             let user_coin = sim.new_coin(user_puzzle_hash, pay_for_extension);
