@@ -630,10 +630,16 @@ impl Cns {
 
         ctx.spend(my_coin, my_spend)?;
 
-        let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
+        let msg: Bytes32 = clvm_tuple!(
+            slot_value.name_hash,
+            clvm_tuple!(new_version, new_launcher_id)
+        )
+        .tree_hash()
+        .into();
         Ok((
             Conditions::new()
-                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, slot_value_hash)),
+                .assert_concurrent_spend(slot.coin.coin_id()) // todo: not secure
+                .send_message(18, msg.into(), vec![ctx.alloc(&my_coin.puzzle_hash)?]),
             new_cns,
             new_slots,
         ))

@@ -55,13 +55,16 @@
                 value
             )
 
-            ; assert message from current launcher
+            ; assert message from current owner
             (list
                 RECEIVE_MESSAGE
                 18 ; puzzle-puzzle
                 (sha256 2
-                    (sha256 1 current_version)
-                    (sha256 1 current_launcher_id)
+                    (sha256 1 value)
+                    (sha256 2
+                        (sha256 1 new_version)
+                        (sha256 1 new_launcher_id)
+                    )
                 )
                 (curry_hashes SINGLETON_MOD_HASH
                     (sha256 2

@@ -806,7 +806,6 @@ mod tests {
             // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
             let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
             let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
-            let name_controller_launcher_id = launcher_coin.coin_id();
             let (_, did) = launcher.create_simple_did(ctx, &user_puzzle)?;
 
             // create precommit coin
@@ -964,11 +963,29 @@ mod tests {
             sim.spend_coins(spends, &[user_sk.clone()])?;
 
             slots.retain(|s| *s != extension_slot);
-            slots.extend(new_slots);
+            slots.extend(new_slots.clone());
 
             cns = new_cns;
 
             // test on-chain mechanism for name updates
+            let new_version: u32 = i + 1;
+            let new_launcher_id = Bytes32::new([4 + i as u8; 32]);
+            let update_slot = new_slots[0];
+
+            let (update_conds, new_cns, new_slots) = cns.update(
+                ctx,
+                update_slot,
+                new_version,
+                new_launcher_id,
+                did.info.inner_puzzle_hash().into(),
+            )?;
+
+            did.spend_with(ctx, &user_puzzle, update_conds)?;
+
+            slots.retain(|s| *s != update_slot);
+            slots.extend(new_slots.clone());
+
+            cns = new_cns;
         }
 
         assert_eq!(
