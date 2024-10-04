@@ -489,15 +489,32 @@ mod tests {
         protocol::SpendBundle,
         puzzles::{cat::GenesisByCoinIdTailArgs, singleton::SINGLETON_LAUNCHER_PUZZLE_HASH},
     };
-    use chia_wallet_sdk::{test_secret_keys, Simulator, SpendWithConditions, TESTNET11_CONSTANTS};
+    use chia_wallet_sdk::{
+        test_secret_keys, NftMint, Simulator, SpendWithConditions, TESTNET11_CONSTANTS,
+    };
     use hex_literal::hex;
 
     use crate::{
         AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, CnsRegisterAction,
-        PrecommitCoin, SlotNeigborsInfo, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+        PrecommitCoin, SlotNeigborsInfo, ANY_METADATA_UPDATER_HASH, SLOT32_MAX_VALUE,
+        SLOT32_MIN_VALUE,
     };
 
     use super::*;
+
+    fn cat_nft_metadata_for_testing() -> CatNftMetadata {
+        CatNftMetadata {
+            code: "TDBX".to_string(),
+            name: "Testnet dexie bucks".to_string(),
+            description: "    Testnet version of dexie bucks".to_string(),
+            image_uris: vec!["https://icons-testnet.dexie.space/d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad.webp".to_string()],
+            image_hash: Bytes32::from(
+                hex!("c84607c0e4cb4a878cc34ba913c90504ed0aac0f4484c2078529b9e42387da99")
+            ),
+            metadata_uris: vec!["https://icons-testnet.dexie.space/test.json".to_string()],
+            metadata_hash: Bytes32::from([2; 32]),
+        }
+    }
 
     #[test]
     fn test_catalog() -> anyhow::Result<()> {
@@ -531,17 +548,7 @@ mod tests {
                     "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                 )),
                 owner_puzzle_hash: Bytes32::from([1; 32]),
-                metadata: CatNftMetadata {
-                    code: "TDBX".to_string(),
-                    name: "Testnet dexie bucks".to_string(),
-                    description: "    Testnet version of dexie bucks".to_string(),
-                    image_uris: vec!["https://icons-testnet.dexie.space/d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad.webp".to_string()],
-                    image_hash: Bytes32::from(
-                        hex!("c84607c0e4cb4a878cc34ba913c90504ed0aac0f4484c2078529b9e42387da99")
-                    ),
-                    metadata_uris: vec!["https://icons-testnet.dexie.space/test.json".to_string()],
-                    metadata_hash: Bytes32::from([2; 32]),
-                },
+                metadata: cat_nft_metadata_for_testing(),
             }),
         };
         let cats_to_launch = vec![premine_cat];
@@ -1016,6 +1023,35 @@ mod tests {
         let (_, _, _) = cns.expire_name(ctx, *initial_slot, *left_slot, *right_slot)?;
 
         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_nft_with_any_metadata_updater() -> anyhow::Result<()> {
+        let ctx = &mut SpendContext::new();
+        let mut sim = Simulator::new();
+
+        let (sk, pk, p2_puzzle_hash, coin) = sim.new_p2(1)?;
+        let p2 = StandardLayer::new(pk);
+
+        let nft_launcher = Launcher::new(coin.coin_id(), 1);
+
+        let royalty_puzzle_hash = Bytes32::from([7; 32]);
+        let (create_nft, nft) = nft_launcher.mint_nft(
+            ctx,
+            NftMint::<CatNftMetadata> {
+                metadata: cat_nft_metadata_for_testing(),
+                metadata_updater_puzzle_hash: ANY_METADATA_UPDATER_HASH.into(),
+                royalty_puzzle_hash,
+                royalty_ten_thousandths: 100,
+                p2_puzzle_hash,
+                owner: None,
+            },
+        )?;
+        p2.spend(ctx, coin, create_nft)?;
+
+        sim.spend_coins(ctx.take(), &[sk])?;
 
         Ok(())
     }
