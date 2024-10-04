@@ -492,8 +492,6 @@ mod tests {
     use chia_wallet_sdk::{
         test_secret_keys, Nft, NftMint, Simulator, SpendWithConditions, TESTNET11_CONSTANTS,
     };
-    use clvm_traits::clvm_list;
-    use hex::encode;
     use hex_literal::hex;
 
     use crate::{
