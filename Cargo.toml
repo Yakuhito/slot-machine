@@ -20,7 +20,7 @@ serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
 hex = "0.4.3"
 
-chia-wallet-sdk = { git = "https://github.com/Rigidity/chia-wallet-sdk.git", rev = "da42dcb8b5cfea13490861af7b505ac38af67311"}
+chia-wallet-sdk = { git = "https://github.com/Rigidity/chia-wallet-sdk.git", rev = "f70e765f2406cbc137b108593a6ba3bdba2c2c2d"}
 
 [dev-dependencies]
 anyhow = "1.0.86"

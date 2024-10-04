@@ -51,21 +51,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c6cb57a04249c6480766f7f7cef5467412af1490f8d1e243141daddada3264f"
 
 [[package]]
-name = "android-tzdata"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e999941b234f3131b00bc13c22d06e8c5ff726d1b6318ac7eb276997bbb4fef0"
-
-[[package]]
-name = "android_system_properties"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "819e7219dbd41043ac279b19830f2efc897156490d7fd6ea916720117ee66311"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "anyhow"
 version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -198,12 +183,6 @@ dependencies = [
  "threadpool",
  "zeroize",
 ]
-
-[[package]]
-name = "bumpalo"
-version = "3.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
 
 [[package]]
 name = "byteorder"
@@ -351,7 +330,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-client"
 version = "0.14.0"
-source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=da42dcb8b5cfea13490861af7b505ac38af67311#da42dcb8b5cfea13490861af7b505ac38af67311"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=f70e765f2406cbc137b108593a6ba3bdba2c2c2d#f70e765f2406cbc137b108593a6ba3bdba2c2c2d"
 dependencies = [
  "chia-protocol",
  "chia-sdk-types",
@@ -359,8 +338,6 @@ dependencies = [
  "chia-traits 0.11.0",
  "futures-util",
  "hex",
- "serde",
- "serde_with",
  "thiserror",
  "tokio",
  "tokio-tungstenite",
@@ -371,7 +348,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-derive"
 version = "0.14.0"
-source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=da42dcb8b5cfea13490861af7b505ac38af67311#da42dcb8b5cfea13490861af7b505ac38af67311"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=f70e765f2406cbc137b108593a6ba3bdba2c2c2d#f70e765f2406cbc137b108593a6ba3bdba2c2c2d"
 dependencies = [
  "convert_case",
  "quote",
@@ -381,7 +358,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-driver"
 version = "0.14.0"
-source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=da42dcb8b5cfea13490861af7b505ac38af67311#da42dcb8b5cfea13490861af7b505ac38af67311"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=f70e765f2406cbc137b108593a6ba3bdba2c2c2d#f70e765f2406cbc137b108593a6ba3bdba2c2c2d"
 dependencies = [
  "chia-bls 0.13.0",
  "chia-protocol",
@@ -399,7 +376,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-offers"
 version = "0.14.0"
-source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=da42dcb8b5cfea13490861af7b505ac38af67311#da42dcb8b5cfea13490861af7b505ac38af67311"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=f70e765f2406cbc137b108593a6ba3bdba2c2c2d#f70e765f2406cbc137b108593a6ba3bdba2c2c2d"
 dependencies = [
  "bech32",
  "chia-bls 0.13.0",
@@ -412,7 +389,7 @@ dependencies = [
  "clvm-utils",
  "clvmr",
  "flate2",
- "indexmap 2.4.0",
+ "indexmap",
  "once_cell",
  "thiserror",
 ]
@@ -420,7 +397,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-signer"
 version = "0.14.0"
-source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=da42dcb8b5cfea13490861af7b505ac38af67311#da42dcb8b5cfea13490861af7b505ac38af67311"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=f70e765f2406cbc137b108593a6ba3bdba2c2c2d#f70e765f2406cbc137b108593a6ba3bdba2c2c2d"
 dependencies = [
  "chia-bls 0.13.0",
  "chia-consensus",
@@ -434,7 +411,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-test"
 version = "0.14.0"
-source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=da42dcb8b5cfea13490861af7b505ac38af67311#da42dcb8b5cfea13490861af7b505ac38af67311"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=f70e765f2406cbc137b108593a6ba3bdba2c2c2d#f70e765f2406cbc137b108593a6ba3bdba2c2c2d"
 dependencies = [
  "anyhow",
  "bip39",
@@ -452,7 +429,7 @@ dependencies = [
  "fastrand",
  "futures-channel",
  "futures-util",
- "indexmap 2.4.0",
+ "indexmap",
  "itertools",
  "log",
  "rand",
@@ -465,7 +442,7 @@ dependencies = [
 [[package]]
 name = "chia-sdk-types"
 version = "0.14.0"
-source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=da42dcb8b5cfea13490861af7b505ac38af67311#da42dcb8b5cfea13490861af7b505ac38af67311"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=f70e765f2406cbc137b108593a6ba3bdba2c2c2d#f70e765f2406cbc137b108593a6ba3bdba2c2c2d"
 dependencies = [
  "chia-bls 0.13.0",
  "chia-consensus",
@@ -516,7 +493,7 @@ dependencies = [
 [[package]]
 name = "chia-wallet-sdk"
 version = "0.14.0"
-source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=da42dcb8b5cfea13490861af7b505ac38af67311#da42dcb8b5cfea13490861af7b505ac38af67311"
+source = "git+https://github.com/Rigidity/chia-wallet-sdk.git?rev=f70e765f2406cbc137b108593a6ba3bdba2c2c2d#f70e765f2406cbc137b108593a6ba3bdba2c2c2d"
 dependencies = [
  "bech32",
  "chia-protocol",
@@ -527,7 +504,7 @@ dependencies = [
  "chia-sdk-test",
  "chia-sdk-types",
  "hex",
- "indexmap 2.4.0",
+ "indexmap",
  "rand",
  "rand_chacha",
  "thiserror",
@@ -556,19 +533,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "chrono"
-version = "0.4.38"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
-dependencies = [
- "android-tzdata",
- "iana-time-zone",
- "num-traits",
- "serde",
- "windows-targets",
 ]
 
 [[package]]
@@ -648,12 +612,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "core-foundation-sys"
-version = "0.8.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
-
-[[package]]
 name = "cpufeatures"
 version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -694,41 +652,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "darling"
-version = "0.20.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f63b86c8a8826a49b8c21f08a2d07338eec8d900540f8630dc76284be802989"
-dependencies = [
- "darling_core",
- "darling_macro",
-]
-
-[[package]]
-name = "darling_core"
-version = "0.20.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95133861a8032aaea082871032f5815eb9e98cef03fa916ab4500513994df9e5"
-dependencies = [
- "fnv",
- "ident_case",
- "proc-macro2",
- "quote",
- "strsim",
- "syn",
-]
-
-[[package]]
-name = "darling_macro"
-version = "0.20.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d336a2a514f6ccccaa3e09b02d41d35330c07ddf03a62165fcec10bb561c7806"
-dependencies = [
- "darling_core",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "data-encoding"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -766,7 +689,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b42b6fa04a440b495c8b04d0e71b707c585f83cb9cb28cf8cd0d976c315e31b4"
 dependencies = [
  "powerfmt",
- "serde",
 ]
 
 [[package]]
@@ -1037,12 +959,6 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
-
-[[package]]
-name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
@@ -1105,35 +1021,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fcc0b4a115bf80b728eb8ea024ad5bd707b615bfed49e0665b6e0f86fd082d9"
 
 [[package]]
-name = "iana-time-zone"
-version = "0.1.60"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7ffbb5a1b541ea2561f8c41c087286cc091e21e556a4f09a8f6cbf17b69b141"
-dependencies = [
- "android_system_properties",
- "core-foundation-sys",
- "iana-time-zone-haiku",
- "js-sys",
- "wasm-bindgen",
- "windows-core",
-]
-
-[[package]]
-name = "iana-time-zone-haiku"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "ident_case"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
-
-[[package]]
 name = "idna"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1145,24 +1032,12 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
-dependencies = [
- "autocfg",
- "hashbrown 0.12.3",
- "serde",
-]
-
-[[package]]
-name = "indexmap"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93ead53efc7ea8ed3cfb0c79fc8023fbb782a5432b52830b6518941cebe6505c"
 dependencies = [
  "equivalent",
- "hashbrown 0.14.5",
- "serde",
+ "hashbrown",
 ]
 
 [[package]]
@@ -1179,15 +1054,6 @@ name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
-
-[[package]]
-name = "js-sys"
-version = "0.3.70"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1868808506b929d7b0cfa8f75951347aa71bb21144b7791bae35d9bccfcfe37a"
-dependencies = [
- "wasm-bindgen",
-]
 
 [[package]]
 name = "k256"
@@ -1259,7 +1125,7 @@ version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ee39891760e7d94734f6f63fedc29a2e4a152f836120753a72503f09fcf904"
 dependencies = [
- "hashbrown 0.14.5",
+ "hashbrown",
 ]
 
 [[package]]
@@ -1877,36 +1743,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_with"
-version = "3.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69cecfa94848272156ea67b2b1a53f20fc7bc638c4a46d2f8abde08f05f4b857"
-dependencies = [
- "base64",
- "chrono",
- "hex",
- "indexmap 1.9.3",
- "indexmap 2.4.0",
- "serde",
- "serde_derive",
- "serde_json",
- "serde_with_macros",
- "time",
-]
-
-[[package]]
-name = "serde_with_macros"
-version = "3.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8fee4991ef4f274617a51ad4af30519438dacb2f56ac773b08a1922ff743350"
-dependencies = [
- "darling",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1993,12 +1829,6 @@ dependencies = [
  "base64ct",
  "der",
 ]
-
-[[package]]
-name = "strsim"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "subtle"
@@ -2156,7 +1986,7 @@ version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
- "indexmap 2.4.0",
+ "indexmap",
  "toml_datetime",
  "winnow 0.5.40",
 ]
@@ -2167,7 +1997,7 @@ version = "0.22.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "583c44c02ad26b0c3f3066fe629275e50627026c51ac2e595cca4c230ce1ce1d"
 dependencies = [
- "indexmap 2.4.0",
+ "indexmap",
  "toml_datetime",
  "winnow 0.6.18",
 ]
@@ -2295,70 +2125,6 @@ name = "wasi"
 version = "0.11.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
-
-[[package]]
-name = "wasm-bindgen"
-version = "0.2.93"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a82edfc16a6c469f5f44dc7b571814045d60404b55a0ee849f9bcfa2e63dd9b5"
-dependencies = [
- "cfg-if",
- "once_cell",
- "wasm-bindgen-macro",
-]
-
-[[package]]
-name = "wasm-bindgen-backend"
-version = "0.2.93"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9de396da306523044d3302746f1208fa71d7532227f15e347e2d93e4145dd77b"
-dependencies = [
- "bumpalo",
- "log",
- "once_cell",
- "proc-macro2",
- "quote",
- "syn",
- "wasm-bindgen-shared",
-]
-
-[[package]]
-name = "wasm-bindgen-macro"
-version = "0.2.93"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "585c4c91a46b072c92e908d99cb1dcdf95c5218eeb6f3bf1efa991ee7a68cccf"
-dependencies = [
- "quote",
- "wasm-bindgen-macro-support",
-]
-
-[[package]]
-name = "wasm-bindgen-macro-support"
-version = "0.2.93"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afc340c74d9005395cf9dd098506f7f44e38f2b4a21c6aaacf9a105ea5e1e836"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
- "wasm-bindgen-backend",
- "wasm-bindgen-shared",
-]
-
-[[package]]
-name = "wasm-bindgen-shared"
-version = "0.2.93"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c62a0a307cb4a311d3a07867860911ca130c3494e8c2719593806c08bc5d0484"
-
-[[package]]
-name = "windows-core"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ab640c8d7e35bf8ba19b884ba838ceb4fba93a4e8c65a9059d08afcfc683d9"
-dependencies = [
- "windows-targets",
-]
 
 [[package]]
 name = "windows-sys"

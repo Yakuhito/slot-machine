@@ -14,8 +14,8 @@ use chia::{
     },
 };
 use chia_wallet_sdk::{
-    AggSig, AggSigKind, Condition, Conditions, DriverError, Launcher, Layer, Offer,
-    RequiredSignature, Spend, SpendContext, StandardLayer,
+    AggSig, AggSigConstants, AggSigKind, Condition, Conditions, DriverError, Launcher, Layer,
+    Offer, RequiredSignature, Spend, SpendContext, StandardLayer,
 };
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::NodePtr;
@@ -194,7 +194,7 @@ pub fn sign_standard_transaction(
             agg_sig_me.public_key,
             agg_sig_me.message.clone(),
         ),
-        consensus_constants,
+        &AggSigConstants::new(consensus_constants.agg_sig_me_additional_data),
     );
 
     Ok(sign(sk, required_signature.final_message()))
@@ -490,14 +490,16 @@ mod tests {
         puzzles::{cat::GenesisByCoinIdTailArgs, singleton::SINGLETON_LAUNCHER_PUZZLE_HASH},
     };
     use chia_wallet_sdk::{
-        test_secret_keys, NftMint, Simulator, SpendWithConditions, TESTNET11_CONSTANTS,
+        test_secret_keys, Nft, NftMint, Simulator, SpendWithConditions, TESTNET11_CONSTANTS,
     };
+    use clvm_traits::clvm_list;
+    use hex::encode;
     use hex_literal::hex;
 
     use crate::{
         AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, CnsRegisterAction,
-        PrecommitCoin, SlotNeigborsInfo, ANY_METADATA_UPDATER_HASH, SLOT32_MAX_VALUE,
-        SLOT32_MIN_VALUE,
+        PrecommitCoin, SlotNeigborsInfo, SpendContextExt, ANY_METADATA_UPDATER_HASH,
+        SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
     };
 
     use super::*;
@@ -1051,6 +1053,31 @@ mod tests {
         )?;
         p2.spend(ctx, coin, create_nft)?;
 
+        // actually try to run updater
+        let new_metadata = CatNftMetadata {
+            code: "XXX".to_string(),
+            name: "Test Name".to_string(),
+            description: "Test desc".to_string(),
+            image_uris: vec!["img URI".to_string()],
+            image_hash: Bytes32::from([31; 32]),
+            metadata_uris: vec!["meta URI".to_string()],
+            metadata_hash: Bytes32::from([8; 32]),
+        };
+
+        let metadata_update = Spend {
+            puzzle: ctx.any_metadata_updater()?,
+            solution: new_metadata.to_clvm(&mut ctx.allocator)?,
+        };
+
+        let new_nft: Nft<CatNftMetadata> = nft.transfer_with_metadata(
+            ctx,
+            &p2,
+            p2_puzzle_hash,
+            metadata_update,
+            Conditions::new(),
+        )?;
+
+        assert_eq!(new_nft.info.metadata, new_metadata);
         sim.spend_coins(ctx.take(), &[sk])?;
 
         Ok(())

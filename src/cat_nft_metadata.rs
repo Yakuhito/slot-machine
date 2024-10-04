@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use chia::protocol::Bytes32;
 use clvm_traits::{ClvmDecoder, ClvmEncoder, FromClvm, FromClvmError, Raw, ToClvm, ToClvmError};
 
@@ -14,14 +16,14 @@ pub struct CatNftMetadata {
 
 impl<N, D: ClvmDecoder<Node = N>> FromClvm<D> for CatNftMetadata {
     fn from_clvm(decoder: &D, node: N) -> Result<Self, FromClvmError> {
-        let items = Vec::<(String, Raw<N>)>::from_clvm(decoder, node)?;
+        let items: Vec<(String, Raw<N>)> = FromClvm::from_clvm(decoder, node)?;
         let mut metadata = Self::default();
 
         for (key, Raw(ptr)) in items {
             match key.as_str() {
-                "c" => metadata.code = String::from_clvm(decoder, ptr)?,
-                "n" => metadata.name = String::from_clvm(decoder, ptr)?,
-                "d" => metadata.description = String::from_clvm(decoder, ptr)?,
+                "c" => metadata.code = FromClvm::from_clvm(decoder, ptr)?,
+                "n" => metadata.name = FromClvm::from_clvm(decoder, ptr)?,
+                "d" => metadata.description = FromClvm::from_clvm(decoder, ptr)?,
                 "u" => metadata.image_uris = FromClvm::from_clvm(decoder, ptr)?,
                 "h" => metadata.image_hash = FromClvm::from_clvm(decoder, ptr)?,
                 "mu" => metadata.metadata_uris = FromClvm::from_clvm(decoder, ptr)?,
