@@ -18,6 +18,18 @@
     (include sha256tree.clib)
     (include curry.clib)
 
+    (defun flatten_list ((first_thing . the_rest))
+      (if first_thing
+        (c (f first_thing) (flatten_list (c (r first_thing) the_rest)))
+        ; else
+        (if the_rest
+          (flatten_list the_rest)
+          ; else
+          ()
+        )
+      )
+    )
+
     (c
         (list
           CREATE_COIN
@@ -33,6 +45,6 @@
           1
           HINT
         )
-        Conditions
+        (flatten_list Conditions)
     )
 )

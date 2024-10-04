@@ -21,15 +21,8 @@
   (include merkle_utils.clib)
   (include sha256tree.clib)
 
-  (defun merge_lists (short_list long_list)
-    (if short_list
-      (c (f short_list) (merge_lists (r short_list) long_list))
-      long_list
-    )
-  )
-
   (defun merge_conditions (short_list (state . long_list))
-    (c state (merge_lists short_list long_list))
+    (c state (c short_list long_list))
   )
 
   (defun run_actions (
