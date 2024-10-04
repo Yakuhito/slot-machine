@@ -21,28 +21,23 @@
   (include merkle_utils.clib)
   (include sha256tree.clib)
 
-  (defun merge_conditions (short_list (state . long_list))
-    (c state (c short_list long_list))
-  )
-
   (defun run_actions (
     MERKLE_ROOT
-    (state . conditions)
+    current_conditions
+    (state . new_conditions)
     remaining_actions
   )
     (if remaining_actions
       ; (f remaining_actions) = (proof puzzle . solution)
       (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (f (r (f remaining_actions)))) (f (f remaining_actions))))
-        (merge_conditions 
-          conditions
-          (run_actions
-            MERKLE_ROOT
-            (a
-              (f (r (f remaining_actions)))
-              (list state (r (r (f remaining_actions))))
-            )
-            (r remaining_actions)
+        (run_actions
+          MERKLE_ROOT
+          (c new_conditions current_conditions)
+          (a
+            (f (r (f remaining_actions)))
+            (list state (r (r (f remaining_actions))))
           )
+          (r remaining_actions)
         )
         ; else
         (x)
@@ -50,7 +45,7 @@
       ; else
       (c
         state
-        conditions
+        (c new_conditions current_conditions)
       )
     )
   )
@@ -60,7 +55,7 @@
     (list
       MERKLE_ROOT
       STATE
-      (run_actions MERKLE_ROOT (list STATE) actions)
+      (run_actions MERKLE_ROOT (list) (list STATE) actions)
       finalizer_solution
     )
   )
