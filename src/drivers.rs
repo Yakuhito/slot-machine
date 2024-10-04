@@ -801,8 +801,6 @@ mod tests {
 
         let mut slots = slots.clone();
         for i in 0..7 {
-            println!("i: {i}");
-
             // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
             let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
             let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
