@@ -35,7 +35,7 @@
     (c
         Current_State ; new state
         (list
-            ; assert it really expired
+            ; assert it actually expired
             (list ASSERT_SECONDS_ABSOLUTE expiration)
 
             ; spend main slot

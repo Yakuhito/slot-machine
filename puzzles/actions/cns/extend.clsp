@@ -2,7 +2,7 @@
 ;; Used to extend the registration of a name
 
 ;; Remember that the slot format is (value (left_value right_value) expiration version . launcher_id)
-;;   but we're only interested in 'expiration' (and name to get correct price factor based on length)
+;;  but we're only interested in 'expiration' (and name to get correct price factor based on length)
 
 (mod (
     OFFER_MOD_HASH

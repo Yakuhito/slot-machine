@@ -5,7 +5,7 @@
                 (if (= length 5)
                     8
                     ; else length > 6
-                    (if (> length (q . 31)) (x) 1)
+                    (if (> length 31) (x) 1)
                 )
                 ; else 2 < length < 5
                 (if (= length 3)
