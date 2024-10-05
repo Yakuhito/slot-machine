@@ -7,7 +7,7 @@
 ;;  left_value/right_value are the key's of the slot's neighbors
 ;;  version is used for versioning the 'launcher_id' attribute - for now, the only valid value is 1
 ;;  launcher_id is, for version 1, a 32-byte value that specifies the name NFT's launcher id
-;;      in the future, launcher_id might point to a namespace/sub-registry, for example
+;;       in the future, launcher_id might point to a namespace/sub-registry, for example
 
 ;; Also note that anyone can extend a name registration, but only the name NFT may update the version/launcher_id data
 
