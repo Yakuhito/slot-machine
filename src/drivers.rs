@@ -486,17 +486,21 @@ pub fn launch_cns(
 mod tests {
     use chia::{
         clvm_utils::CurriedProgram,
-        protocol::SpendBundle,
-        puzzles::{cat::GenesisByCoinIdTailArgs, singleton::SINGLETON_LAUNCHER_PUZZLE_HASH},
+        protocol::{Bytes, SpendBundle},
+        puzzles::{
+            cat::GenesisByCoinIdTailArgs,
+            singleton::{SingletonSolution, SINGLETON_LAUNCHER_PUZZLE_HASH},
+        },
     };
     use chia_wallet_sdk::{
-        test_secret_keys, Nft, NftMint, Simulator, SpendWithConditions, TESTNET11_CONSTANTS,
+        test_secret_keys, Nft, NftMint, Simulator, SingletonLayer, SpendWithConditions,
+        TESTNET11_CONSTANTS,
     };
     use hex_literal::hex;
 
     use crate::{
         AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, CnsRegisterAction,
-        PrecommitCoin, SlotNeigborsInfo, SpendContextExt, ANY_METADATA_UPDATER_HASH,
+        PrecommitCoin, Reserve, SlotNeigborsInfo, SpendContextExt, ANY_METADATA_UPDATER_HASH,
         SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
     };
 
@@ -1078,6 +1082,74 @@ mod tests {
         assert_eq!(new_nft.info.metadata, new_metadata);
         sim.spend_coins(ctx.take(), &[sk])?;
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_xch_reserve() -> anyhow::Result<()> {
+        let ctx = &mut SpendContext::new();
+        let mut sim = Simulator::new();
+
+        // we are creating 101 mojos
+        // one will go into the controller singleton
+        // 100 will go into the reserve, which will then be spent
+        // the same 100 mojos will be reserved as fee - tx only goes through if all spends are successful
+        let (sk, pk, p2_puzzle_hash, coin) = sim.new_p2(101)?;
+        let p2 = StandardLayer::new(pk);
+
+        let launcher = Launcher::new(coin.coin_id(), 1);
+        let (create_launcher, controller_coin) = launcher.clone().spend(ctx, p2_puzzle_hash, ())?;
+        let launcher_id = controller_coin.parent_coin_info;
+
+        let reserve = Reserve::new(coin.coin_id(), 100, launcher_id, ());
+        p2.spend(
+            ctx,
+            coin,
+            create_launcher
+                .create_coin(reserve.coin.puzzle_hash, 100, vec![])
+                .reserve_fee(100),
+        )?;
+
+        let reserve_ph = reserve.coin.puzzle_hash;
+        reserve.spend(ctx, p2_puzzle_hash)?;
+
+        let controller_output_conds = Conditions::new()
+            .create_coin(p2_puzzle_hash, 1, vec![])
+            .send_message(
+                19,
+                Bytes::default(),
+                vec![ctx.alloc(&reserve_ph)?, ctx.alloc(&100)?],
+            );
+        let controller_delegated_puzzle =
+            clvm_quote!(controller_output_conds).to_clvm(&mut ctx.allocator)?;
+
+        let controller: SingletonLayer<StandardLayer> = SingletonLayer::new(launcher_id, p2);
+        let controller_puzzle = controller.construct_puzzle(ctx)?;
+        let controller_solution = controller.construct_solution(
+            ctx,
+            SingletonSolution {
+                lineage_proof: Proof::Eve(EveProof {
+                    parent_parent_coin_info: launcher.coin().parent_coin_info,
+                    parent_amount: 1,
+                }),
+                amount: 1,
+                inner_solution: StandardSolution {
+                    original_public_key: None,
+                    delegated_puzzle: controller_delegated_puzzle,
+                    solution: ctx.allocator.nil(),
+                },
+            },
+        )?;
+
+        let controller_puzzle = ctx.serialize(&controller_puzzle)?;
+        let controller_solution = ctx.serialize(&controller_solution)?;
+        ctx.insert(CoinSpend::new(
+            controller_coin,
+            controller_puzzle,
+            controller_solution,
+        ));
+
+        sim.spend_coins(ctx.take(), &[sk])?;
         Ok(())
     }
 }
