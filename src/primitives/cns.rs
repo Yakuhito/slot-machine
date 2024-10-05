@@ -12,6 +12,7 @@ use chia_wallet_sdk::{
 };
 use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
+use hex::encode;
 
 use crate::{
     ActionLayer, ActionLayerSolution, CnsExpireAction, CnsExpireActionSolution, CnsExtendAction,
@@ -317,6 +318,14 @@ impl Cns {
                 vec![register]
             },
         )?;
+        println!(
+            "my puzzle: {:?}",
+            encode(ctx.serialize(&my_spend.puzzle)?.into_bytes())
+        );
+        println!(
+            "my solution: {:?}",
+            encode(ctx.serialize(&my_spend.solution)?.into_bytes())
+        );
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
         let new_cns = Cns::from_parent_spend(
             &mut ctx.allocator,

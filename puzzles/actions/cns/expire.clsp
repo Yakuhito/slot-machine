@@ -1,5 +1,5 @@
 ; expire.clsp by yakuhito
-;; Used to expire (i.e., remove) a name from the system
+;; Used to expire (i.e., remove) a name from the registry
 
 ;; Remember that the slot format is (value (left_value right_value) expiration version . launcher_id)
 
@@ -16,7 +16,6 @@
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
-    (include cns_price.clib)
     (include curry.clib)
     (include slots.clib)
 

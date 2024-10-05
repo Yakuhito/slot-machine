@@ -499,9 +499,9 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        AddCatInfo, CatNftMetadata, CatalogPrecommitValue, CnsPrecommitValue, CnsRegisterAction,
-        PrecommitCoin, Reserve, SlotNeigborsInfo, SpendContextExt, ANY_METADATA_UPDATER_HASH,
-        SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+        print_spend_bundle_to_file, AddCatInfo, CatNftMetadata, CatalogPrecommitValue,
+        CnsPrecommitValue, CnsRegisterAction, PrecommitCoin, Reserve, SlotNeigborsInfo,
+        SpendContextExt, ANY_METADATA_UPDATER_HASH, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
     };
 
     use super::*;
@@ -811,22 +811,15 @@ mod tests {
 
         sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
 
-        // Register CAT
+        // Register name
 
         let mut slots = slots.clone();
         for i in 0..7 {
+            println!("i: {i}");
             // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
             let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
             let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
             let (_, did) = launcher.create_simple_did(ctx, &user_puzzle)?;
-
-            // create precommit coin
-            let reg_amount = if i % 2 == 1 {
-                cns.info.state.registration_base_price
-            } else {
-                price_scheduler.info.price_schedule[price_scheduler.info.generation].1
-            };
-            let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
 
             // name is "aa" + "a" * i + "{i}"
             let name = if i == 0 {
@@ -835,6 +828,15 @@ mod tests {
                 "aa".to_string() + &"a".repeat(i).to_string() + &i.to_string()
             };
             let name_hash: Bytes32 = name.tree_hash().into();
+
+            // create precommit coin
+            let reg_amount = if i % 2 == 1 {
+                cns.info.state.registration_base_price
+            } else {
+                price_scheduler.info.price_schedule[price_scheduler.info.generation].1
+            };
+            let reg_amount = reg_amount * CnsRegisterAction::get_price_factor(&name).unwrap_or(1);
+            let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
 
             let name_launcher_id = did.info.launcher_id;
             let secret = Bytes32::default();
