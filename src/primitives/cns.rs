@@ -432,8 +432,11 @@ impl Cns {
 
         ctx.spend(my_coin, my_spend)?;
 
+        let mut extend_ann: Vec<u8> = slot_value.name_hash.to_vec();
+        extend_ann.insert(0, b'x');
         Ok((
-            Conditions::new().assert_concurrent_spend(slot.coin.coin_id()),
+            Conditions::new()
+                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, extend_ann)),
             new_cns,
             new_slots,
         ))
@@ -490,7 +493,9 @@ impl Cns {
         });
 
         let notarized_payment = NotarizedPayment {
-            nonce: clvm_tuple!(name, slot_value.expiration).tree_hash().into(),
+            nonce: clvm_tuple!(name.clone(), slot_value.expiration)
+                .tree_hash()
+                .into(),
             payments: vec![Payment {
                 puzzle_hash: self.info.constants.precommit_payout_puzzle_hash,
                 amount: renew_amount,
@@ -516,9 +521,12 @@ impl Cns {
 
         ctx.spend(my_coin, my_spend)?;
 
+        let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, name).tree_hash().to_vec();
+        extend_ann.insert(0, b'o');
         Ok((
             notarized_payment,
-            Conditions::new().assert_concurrent_spend(slot.coin.coin_id()), // todo: not really secure
+            Conditions::new()
+                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, extend_ann)),
             new_cns,
             new_slots,
         ))
@@ -574,10 +582,11 @@ impl Cns {
 
         ctx.spend(my_coin, my_spend)?;
 
-        let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
+        let mut oracle_ann = slot_value.tree_hash().to_vec();
+        oracle_ann.insert(0, b'o');
         Ok((
             Conditions::new()
-                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, slot_value_hash)),
+                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, oracle_ann)),
             new_cns,
             new_slots,
         ))
@@ -649,9 +658,7 @@ impl Cns {
         .tree_hash()
         .into();
         Ok((
-            Conditions::new()
-                .assert_concurrent_spend(slot.coin.coin_id()) // todo: not secure
-                .send_message(18, msg.into(), vec![ctx.alloc(&my_coin.puzzle_hash)?]),
+            Conditions::new().send_message(18, msg.into(), vec![ctx.alloc(&my_coin.puzzle_hash)?]),
             new_cns,
             new_slots,
         ))
