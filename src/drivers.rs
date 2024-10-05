@@ -828,8 +828,12 @@ mod tests {
             };
             let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
 
-            // name is "aaaaaa{i}"
-            let name = "aaaaaa".to_string() + &i.to_string();
+            // name is "aa" + "a" * i + "{i}"
+            let name = if i == 0 {
+                "aa0".to_string()
+            } else {
+                "aa".to_string() + &"a".repeat(i).to_string() + &i.to_string()
+            };
             let name_hash: Bytes32 = name.tree_hash().into();
 
             let name_launcher_id = did.info.launcher_id;
@@ -980,7 +984,7 @@ mod tests {
             cns = new_cns;
 
             // test on-chain mechanism for name updates
-            let new_version: u32 = i + 1;
+            let new_version: u32 = i as u32 + 1;
             let new_launcher_id = Bytes32::new([4 + i as u8; 32]);
             let update_slot = new_slots[0];
 
