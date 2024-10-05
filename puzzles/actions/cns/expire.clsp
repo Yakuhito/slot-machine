@@ -38,6 +38,9 @@
             ; assert it actually expired
             (list ASSERT_SECONDS_ABSOLUTE expiration)
 
+            ; announcement
+            (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'x' value))
+
             ; spend main slot
             (spend_slot SLOT_1ST_CURRY_HASH 
                 (get_slot_value_hash value left_value right_value (sha256 2  (sha256 1 expiration) data_hash))

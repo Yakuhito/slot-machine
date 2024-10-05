@@ -25,7 +25,7 @@
             )
 
             ; announce value
-            (list CREATE_PUZZLE_ANNOUNCEMENT data_treehash)
+            (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'o' data_treehash))
         )
     )
 
