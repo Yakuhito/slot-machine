@@ -9,6 +9,9 @@ pub enum CliError {
     #[error("csv: {0}")]
     Csv(#[from] csv::Error),
 
+    #[error("sqlx: {0}")]
+    Sqlx(#[from] sqlx::Error),
+
     #[error("that's not a clear 'yes'")]
     YesNoPromptRejected,
 }

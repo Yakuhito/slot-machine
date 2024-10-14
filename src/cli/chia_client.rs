@@ -87,6 +87,14 @@ impl ChiaRpcClient {
         Self::new("https://api.coinset.org")
     }
 
+    pub fn coinset(testnet11: bool) -> Self {
+        if testnet11 {
+            Self::coinset_testnet11()
+        } else {
+            Self::coinset_mainnet()
+        }
+    }
+
     pub async fn get_blockchain_state(&self) -> Result<BlockchainStateResponse, Box<dyn Error>> {
         let url = format!("{}/get_blockchain_state", self.base_url);
         let res = self

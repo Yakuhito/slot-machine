@@ -51,9 +51,7 @@ pub async fn run_cli() {
 
     let res = match args.command {
         Commands::Catalog { action } => match action {
-            CatalogCliAction::InitiateLaunch => {
-                initiate_catalog_launch("catalog_premine_testnet11.csv").await
-            }
+            CatalogCliAction::InitiateLaunch => initiate_catalog_launch(true).await,
             CatalogCliAction::UnrollLaunch => {
                 todo!("not yet implemented");
             }

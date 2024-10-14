@@ -1,15 +1,20 @@
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::time::Duration;
 
-pub struct Database {
+use super::CliError;
+
+pub static CATALOG_LAUNCH_LAUNCHER_ID_KEY: &str = "catalog-launch_launcher-id";
+pub static CATALOG_LAUNCH_GENERATION_KEY: &str = "catalog-launch_generation";
+
+pub struct Db {
     pool: Pool<Sqlite>,
 }
 
-impl Database {
-    // Initializes a new database and creates the table if it doesn't exist
-    pub async fn new() -> Result<Self, sqlx::Error> {
+impl Db {
+    pub async fn new() -> Result<Self, CliError> {
         let pool = SqlitePoolOptions::new()
-            .connect_timeout(Duration::from_secs(5))
+            .idle_timeout(Duration::from_secs(5))
+            .acquire_timeout(Duration::from_secs(5))
             .connect("sqlite://data.db")
             .await?;
 
@@ -28,8 +33,7 @@ impl Database {
         Ok(Self { pool })
     }
 
-    // Saves a key-value pair into the database
-    pub async fn save_key_value(&self, key: &str, value: &str) -> Result<(), sqlx::Error> {
+    pub async fn save_key_value(&self, key: &str, value: &str) -> Result<(), CliError> {
         sqlx::query(
             "
             INSERT INTO key_value_store (key, value) 
@@ -40,13 +44,13 @@ impl Database {
         .bind(key)
         .bind(value)
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(CliError::Sqlx)?;
 
         Ok(())
     }
 
-    // Retrieves a value from the database by key
-    pub async fn get_value_by_key(&self, key: &str) -> Result<Option<String>, sqlx::Error> {
+    pub async fn get_value_by_key(&self, key: &str) -> Result<Option<String>, CliError> {
         let row = sqlx::query(
             "
             SELECT value FROM key_value_store WHERE key = ?1
@@ -54,8 +58,23 @@ impl Database {
         )
         .bind(key)
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .map_err(CliError::Sqlx)?;
 
         Ok(row.map(|r| r.get(0)))
+    }
+
+    pub async fn remove_key(&self, key: &str) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM key_value_store WHERE key = ?1
+            ",
+        )
+        .bind(key)
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
     }
 }
