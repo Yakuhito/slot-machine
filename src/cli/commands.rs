@@ -46,13 +46,13 @@ enum CnsCliAction {
     VerifDeployment,
 }
 
-pub fn run_cli() {
+pub async fn run_cli() {
     let args = Cli::parse();
 
     let res = match args.command {
         Commands::Catalog { action } => match action {
             CatalogCliAction::InitiateLaunch => {
-                initiate_catalog_launch("catalog_premine_testnet11.csv")
+                initiate_catalog_launch("catalog_premine_testnet11.csv").await
             }
             CatalogCliAction::UnrollLaunch => {
                 todo!("not yet implemented");

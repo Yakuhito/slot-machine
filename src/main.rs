@@ -1,5 +1,6 @@
 mod cli;
 
-fn main() {
-    cli::run_cli();
+#[tokio::main]
+async fn main() {
+    cli::run_cli().await;
 }

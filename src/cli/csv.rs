@@ -1,16 +1,16 @@
 use chia::protocol::Bytes32;
 use chia_wallet_sdk::decode_address;
 use csv::ReaderBuilder;
-use hex::FromHex;
 use serde::Deserialize;
 use std::fs::File;
 use std::path::Path;
 
+use super::utils::hex_string_to_bytes32;
 use super::utils::CliError;
 
 #[derive(Debug, Deserialize)]
 pub struct CatalogPremineRecord {
-    #[serde(with = "hex_string")]
+    #[serde(with = "hex_string_to_bytes32")]
     pub asset_id: Bytes32,
     #[serde(deserialize_with = "decode_bech32m")]
     pub owner: Bytes32,
@@ -19,22 +19,8 @@ pub struct CatalogPremineRecord {
     pub precision: u8,
     #[serde(deserialize_with = "deserialize_string_array")]
     pub image_uris: Vec<String>,
-    #[serde(with = "hex_string")]
+    #[serde(with = "hex_string_to_bytes32")]
     pub image_hash: Bytes32,
-}
-
-mod hex_string {
-    use super::*;
-    use serde::{self, Deserialize, Deserializer};
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Bytes32, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: &str = Deserialize::deserialize(deserializer)?;
-        let bytes = <[u8; 32]>::from_hex(s).map_err(serde::de::Error::custom)?;
-        Ok(Bytes32::new(bytes))
-    }
 }
 
 fn decode_bech32m<'de, D>(deserializer: D) -> Result<Bytes32, D::Error>

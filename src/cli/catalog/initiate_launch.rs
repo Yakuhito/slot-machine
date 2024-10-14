@@ -1,9 +1,10 @@
 use crate::cli::{
+    chia_client::ChiaRpcClient,
     csv::load_catalog_premine_csv,
     utils::{yes_no_prompt, CliError},
 };
 
-pub fn initiate_catalog_launch(csv_filename: &str) -> Result<(), CliError> {
+pub async fn initiate_catalog_launch(csv_filename: &str) -> Result<(), CliError> {
     println!("Welcome to the CATalog launch setup, deployer.");
 
     yes_no_prompt(
@@ -17,6 +18,19 @@ pub fn initiate_catalog_launch(csv_filename: &str) -> Result<(), CliError> {
     println!("Loading premine data...");
 
     let data = load_catalog_premine_csv(csv_filename)?;
+    println!(
+        "Loaded {} CATs to be premined. First few records:",
+        data.len()
+    );
+    for record in data.iter().take(7) {
+        println!("  code: {:?}, name: {:?}", record.code, record.name);
+    }
+
+    // todo: debug
+    let client = ChiaRpcClient::coinset_testnet11();
+    let blockchain_state = client.get_blockchain_state().await.unwrap();
+    println!("Current state: {:?}", blockchain_state);
+    // yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
     Ok(())
 }
