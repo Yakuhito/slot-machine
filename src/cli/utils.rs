@@ -1,4 +1,7 @@
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    num::ParseIntError,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -11,6 +14,12 @@ pub enum CliError {
 
     #[error("sqlx: {0}")]
     Sqlx(#[from] sqlx::Error),
+
+    #[error("couldn't parse int: {0}")]
+    ParseInt(#[from] ParseIntError),
+
+    #[error("bech32: {0}")]
+    Bech32(#[from] bech32::Error),
 
     #[error("that's not a clear 'yes'")]
     YesNoPromptRejected,

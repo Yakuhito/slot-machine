@@ -2711,6 +2711,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-std",
+ "bech32",
  "bip39",
  "chia",
  "chia-wallet-sdk",

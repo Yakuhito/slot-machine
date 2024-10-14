@@ -33,31 +33,29 @@ pub struct CatalogConstants {
 }
 
 impl CatalogConstants {
-    pub fn with_price_singleton(mut self, price_singleton_launcher_id: Bytes32) -> Self {
-        self.price_singleton_launcher_id = price_singleton_launcher_id;
-        self
-    }
-}
-
-pub enum CatalogConstantsPresets {
-    Testnet,
-    Mainnet,
-}
-
-impl CatalogConstantsPresets {
-    pub fn value(self) -> CatalogConstants {
-        match self {
-            CatalogConstantsPresets::Testnet => CatalogConstants {
-                royalty_address: Bytes32::from([1; 32]).tree_hash().into(),
+    pub fn get(testnet11: bool) -> Self {
+        if testnet11 {
+            return CatalogConstants {
+                royalty_address: Bytes32::from(hex!(
+                    "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
+                )),
                 royalty_ten_thousandths: 100,
-                precommit_payout_puzzle_hash: Bytes32::from([2; 32]).tree_hash().into(),
+                precommit_payout_puzzle_hash: Bytes32::from(hex!(
+                    "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
+                )),
                 relative_block_height: 8,
                 price_singleton_launcher_id: Bytes32::from(hex!(
                     "0000000000000000000000000000000000000000000000000000000000000000"
                 )),
-            },
-            CatalogConstantsPresets::Mainnet => unimplemented!("oops - this isn't implemented yet"),
+            };
         }
+
+        todo!("oops - catalog constants for mainnet are not yet available");
+    }
+
+    pub fn with_price_singleton(mut self, price_singleton_launcher_id: Bytes32) -> Self {
+        self.price_singleton_launcher_id = price_singleton_launcher_id;
+        self
     }
 }
 
