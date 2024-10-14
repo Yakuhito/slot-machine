@@ -29,7 +29,7 @@ enum CatalogAction {
     /// Launches a new CATalog deployment
     InitiateLaunch {
         /// Offer for initiating launch
-        #[arg(short, long, help = "Offer for initiating launch (2 mojos)")]
+        #[arg(short, long, help = "Offer for initiating launch (give 2 mojos)")]
         offer: String,
     },
     /// Unrolls an existing launch
