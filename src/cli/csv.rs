@@ -1,4 +1,5 @@
 use chia::protocol::Bytes32;
+use chia_wallet_sdk::decode_address;
 use csv::ReaderBuilder;
 use hex::FromHex;
 use serde::Deserialize;
@@ -7,18 +8,18 @@ use std::fs::File;
 use std::path::Path;
 
 #[derive(Debug, Deserialize)]
-struct CatalogPremineRecord {
+pub struct CatalogPremineRecord {
     #[serde(with = "hex_string")]
-    asset_id: Bytes32,
+    pub asset_id: Bytes32,
     #[serde(deserialize_with = "decode_bech32m")]
-    owner: Bytes32,
-    code: String,
-    name: String,
-    precision: u8,
+    pub owner: Bytes32,
+    pub code: String,
+    pub name: String,
+    pub precision: u8,
     #[serde(deserialize_with = "deserialize_string_array")]
-    image_uris: Vec<String>,
+    pub image_uris: Vec<String>,
     #[serde(with = "hex_string")]
-    image_hash: Bytes32,
+    pub image_hash: Bytes32,
 }
 
 mod hex_string {
@@ -40,21 +41,13 @@ where
     D: serde::Deserializer<'de>,
 {
     let s: &str = Deserialize::deserialize(deserializer)?;
-    let (hrp, data, _) = bech32::decode(s).map_err(serde::de::Error::custom)?;
+    let (res, hrp) = decode_address(s).map_err(serde::de::Error::custom)?;
 
     if hrp != "xch" && hrp != "txch" {
-        return Err(serde::de::Error::custom("Invalid Bech32m prefix"));
+        return Err(serde::de::Error::custom("Invalid bech32m prefix"));
     }
 
-    let bytes = Vec::from_base32(&data).map_err(serde::de::Error::custom)?;
-    let mut result = [0u8; 32];
-    if bytes.len() != 32 {
-        return Err(serde::de::Error::custom(
-            "Decoded Bech32m does not match expected length of 32 bytes",
-        ));
-    }
-    result.copy_from_slice(&bytes[..32]);
-    Ok(Bytes32(result))
+    Ok(Bytes32::new(res))
 }
 
 fn deserialize_string_array<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
