@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use super::catalog::initiate_catalog_launch;
+use super::initiate_catalog_launch;
 
 #[derive(Parser)]
 #[command(

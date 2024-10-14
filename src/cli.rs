@@ -1,9 +1,9 @@
-mod catalog;
-mod chia_client;
-mod commands;
-mod csv;
-mod database;
-mod utils;
+pub mod catalog;
+pub mod chia_client;
+pub mod commands;
+pub mod csv;
+pub mod database;
+pub mod utils;
 
 pub use catalog::*;
 pub use chia_client::*;

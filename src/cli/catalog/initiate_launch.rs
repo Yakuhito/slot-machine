@@ -1,16 +1,14 @@
 use chia_wallet_sdk::encode_address;
 
-use crate::{
-    cli::{
-        chia_client::ChiaRpcClient,
-        csv::load_catalog_premine_csv,
-        prompt_for_value,
-        utils::{yes_no_prompt, CliError},
-        Db, CATALOG_LAUNCH_CATS_PER_SPEND_KEY, CATALOG_LAUNCH_GENERATION_KEY,
-        CATALOG_LAUNCH_LAUNCHER_ID_KEY,
-    },
-    CatalogConstants,
+use crate::cli::{
+    chia_client::ChiaRpcClient,
+    csv::load_catalog_premine_csv,
+    prompt_for_value,
+    utils::{yes_no_prompt, CliError},
+    Db, CATALOG_LAUNCH_CATS_PER_SPEND_KEY, CATALOG_LAUNCH_GENERATION_KEY,
+    CATALOG_LAUNCH_LAUNCHER_ID_KEY,
 };
+use crate::primitives::CatalogConstants;
 
 pub async fn initiate_catalog_launch(testnet11: bool) -> Result<(), CliError> {
     println!("Welcome to the CATalog launch setup, deployer.");
@@ -86,8 +84,17 @@ pub async fn initiate_catalog_launch(testnet11: bool) -> Result<(), CliError> {
         constants.relative_block_height
     );
     println!("  price singleton id: (will be launched as well)");
+    yes_no_prompt("Do the constants above have the correct values?")?;
+
+    // todo: price schedule
+
+    // build spend bundle using drivers
 
     // yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
+
+    // launch
+    // follow in mempool; wait for confirmation
+    // save values to db for unroll
 
     Ok(())
 }
