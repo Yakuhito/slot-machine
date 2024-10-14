@@ -7,14 +7,6 @@ use crate::cli::{
 pub async fn initiate_catalog_launch(csv_filename: &str) -> Result<(), CliError> {
     println!("Welcome to the CATalog launch setup, deployer.");
 
-    yes_no_prompt(
-        format!(
-            "Premine data will be loaded from '{}' - do you confirm?",
-            csv_filename
-        )
-        .as_str(),
-    )?;
-
     println!("Loading premine data...");
 
     let data = load_catalog_premine_csv(csv_filename)?;
@@ -25,6 +17,14 @@ pub async fn initiate_catalog_launch(csv_filename: &str) -> Result<(), CliError>
     for record in data.iter().take(7) {
         println!("  code: {:?}, name: {:?}", record.code, record.name);
     }
+
+    yes_no_prompt(
+        format!(
+            "Premine data was be loaded from '{}' - is this the correct data?",
+            csv_filename
+        )
+        .as_str(),
+    )?;
 
     // todo: debug
     let client = ChiaRpcClient::coinset_testnet11();

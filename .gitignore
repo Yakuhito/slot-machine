@@ -170,3 +170,4 @@ cython_debug/
 # Added by yak
 main.sym
 sb.debug*
+data.db

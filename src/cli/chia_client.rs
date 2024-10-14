@@ -1,12 +1,9 @@
-use chia::protocol::{Bytes, Bytes32};
+use chia::protocol::Bytes32;
 use reqwest::Client;
 use serde::Deserialize;
 use std::error::Error;
 
-use super::utils::{
-    hex_string_to_bytes, hex_string_to_bytes32, hex_string_to_bytes32_maybe,
-    hex_string_to_bytes_maybe,
-};
+use super::utils::{hex_string_to_bytes32, hex_string_to_bytes32_maybe};
 
 #[derive(Debug)]
 pub struct ChiaRpcClient {

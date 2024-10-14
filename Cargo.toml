@@ -24,6 +24,8 @@ csv = "1.3.0"
 thiserror = "1.0.64"
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.6", features = ["sqlite", "runtime-async-std-native-tls"] }
+async-std = "1.10"
 
 chia-wallet-sdk = { git = "https://github.com/Rigidity/chia-wallet-sdk.git", rev = "f70e765f2406cbc137b108593a6ba3bdba2c2c2d"}
 
