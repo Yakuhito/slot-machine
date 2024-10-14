@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "Slot Machine CLI",
-    about = "A CLI for interacting with the first two slot PoCs, CATalog and CNS"
+    about = "A CLI for interacting with the first two dApps using the slot primitive, CATalog and CNS"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -12,10 +12,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Interact with CATalog
     Catalog {
         #[command(subcommand)]
         action: CatalogAction,
     },
+    /// Interact with CNS
     Cns {
         #[command(subcommand)]
         action: CnsAction,
@@ -24,14 +26,26 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum CatalogAction {
-    InitiateLaunch,
-    ContinueLaunch,
+    /// Launches a new CATalog deployment
+    InitiateLaunch {
+        /// Offer for initiating launch
+        #[arg(short, long, help = "Offer for initiating launch (2 mojos)")]
+        offer: String,
+    },
+    /// Unrolls an existing launch
+    UnrollLaunch,
+    /// Verifies the built-in deployment is valid
+    VerifDeployment,
 }
 
 #[derive(Subcommand)]
 enum CnsAction {
+    /// Launches a new CNS deployment
     InitiateLaunch,
-    ContinueLaunch,
+    /// Unrolls an existing launch
+    UnrollLaunch,
+    /// Verifies the built-in deployment is valid
+    VerifDeployment,
 }
 
 fn main() {
@@ -39,10 +53,28 @@ fn main() {
 
     match args.command {
         Commands::Catalog { action } => match action {
-            CatalogAction::InitiateLaunch => todo!("to implement catalog intiate-launch"),
-            CatalogAction::ContinueLaunch => todo!("to implement catalog continue-launch"),
+            CatalogAction::InitiateLaunch { offer } => {
+                // Implement the logic here
+                println!("Initiating CATalog launch with offer: {}", offer);
+            }
+            CatalogAction::UnrollLaunch => {
+                todo!("not yet implemented");
+            }
+            CatalogAction::VerifDeployment => {
+                todo!("not yet implemented");
+            }
         },
 
-        Commands::Cns { action } => todo!("to implement :)"),
+        Commands::Cns { action } => match action {
+            CnsAction::InitiateLaunch => {
+                todo!("not yet implemented");
+            }
+            CnsAction::UnrollLaunch => {
+                todo!("not yet implemented");
+            }
+            CnsAction::VerifDeployment => {
+                todo!("not yet implemented");
+            }
+        },
     }
 }
