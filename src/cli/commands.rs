@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 
+use super::catalog::initiate_catalog_launch;
+
 #[derive(Parser)]
 #[command(
     name = "Slot Machine CLI",
@@ -15,23 +17,19 @@ enum Commands {
     /// Interact with CATalog
     Catalog {
         #[command(subcommand)]
-        action: CatalogAction,
+        action: CatalogCliAction,
     },
     /// Interact with CNS
     Cns {
         #[command(subcommand)]
-        action: CnsAction,
+        action: CnsCliAction,
     },
 }
 
 #[derive(Subcommand)]
-enum CatalogAction {
+enum CatalogCliAction {
     /// Launches a new CATalog deployment
-    InitiateLaunch {
-        /// Offer for initiating launch
-        #[arg(short, long, help = "Offer for initiating launch (give 2 mojos)")]
-        offer: String,
-    },
+    InitiateLaunch,
     /// Unrolls an existing launch
     UnrollLaunch,
     /// Verifies the built-in deployment is valid
@@ -39,7 +37,7 @@ enum CatalogAction {
 }
 
 #[derive(Subcommand)]
-enum CnsAction {
+enum CnsCliAction {
     /// Launches a new CNS deployment
     InitiateLaunch,
     /// Unrolls an existing launch
@@ -51,30 +49,33 @@ enum CnsAction {
 pub fn run_cli() {
     let args = Cli::parse();
 
-    match args.command {
+    let res = match args.command {
         Commands::Catalog { action } => match action {
-            CatalogAction::InitiateLaunch { offer } => {
-                // Implement the logic here
-                println!("Initiating CATalog launch with offer: {}", offer);
+            CatalogCliAction::InitiateLaunch => {
+                initiate_catalog_launch("catalog_premine_testnet11.csv")
             }
-            CatalogAction::UnrollLaunch => {
+            CatalogCliAction::UnrollLaunch => {
                 todo!("not yet implemented");
             }
-            CatalogAction::VerifDeployment => {
+            CatalogCliAction::VerifDeployment => {
                 todo!("not yet implemented");
             }
         },
 
         Commands::Cns { action } => match action {
-            CnsAction::InitiateLaunch => {
+            CnsCliAction::InitiateLaunch => {
                 todo!("not yet implemented");
             }
-            CnsAction::UnrollLaunch => {
+            CnsCliAction::UnrollLaunch => {
                 todo!("not yet implemented");
             }
-            CnsAction::VerifDeployment => {
+            CnsCliAction::VerifDeployment => {
                 todo!("not yet implemented");
             }
         },
+    };
+
+    if let Err(err) = res {
+        eprintln!("Error: {err}");
     }
 }

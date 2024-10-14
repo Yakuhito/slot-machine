@@ -3,9 +3,10 @@ use chia_wallet_sdk::decode_address;
 use csv::ReaderBuilder;
 use hex::FromHex;
 use serde::Deserialize;
-use std::error::Error;
 use std::fs::File;
 use std::path::Path;
+
+use super::utils::CliError;
 
 #[derive(Debug, Deserialize)]
 pub struct CatalogPremineRecord {
@@ -63,13 +64,15 @@ where
     Ok(strs)
 }
 
-pub fn load_catalog<P: AsRef<Path>>(path: P) -> Result<Vec<CatalogPremineRecord>, Box<dyn Error>> {
+pub fn load_catalog_premine_csv<P: AsRef<Path>>(
+    path: P,
+) -> Result<Vec<CatalogPremineRecord>, CliError> {
     let file = File::open(path)?;
     let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
 
     let mut records = Vec::new();
     for result in rdr.deserialize() {
-        let record: CatalogPremineRecord = result?;
+        let record: CatalogPremineRecord = result.map_err(CliError::Csv)?;
         records.push(record);
     }
 
