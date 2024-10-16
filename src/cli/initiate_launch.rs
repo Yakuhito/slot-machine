@@ -1,5 +1,3 @@
-use chia_wallet_sdk::encode_address;
-
 use crate::cli::{
     chia_client::ChiaRpcClient,
     csv::load_catalog_premine_csv,
@@ -8,7 +6,8 @@ use crate::cli::{
     Db, CATALOG_LAUNCH_CATS_PER_SPEND_KEY, CATALOG_LAUNCH_GENERATION_KEY,
     CATALOG_LAUNCH_LAUNCHER_ID_KEY,
 };
-use crate::primitives::CatalogConstants;
+use crate::CatalogConstants;
+use chia_wallet_sdk::encode_address;
 
 pub async fn initiate_catalog_launch(testnet11: bool) -> Result<(), CliError> {
     println!("Welcome to the CATalog launch setup, deployer.");
