@@ -1,12 +1,15 @@
-use crate::cli::{
-    chia_client::ChiaRpcClient,
-    csv::load_catalog_premine_csv,
-    prompt_for_value,
-    utils::{yes_no_prompt, CliError},
-    Db, CATALOG_LAUNCH_CATS_PER_SPEND_KEY, CATALOG_LAUNCH_GENERATION_KEY,
-    CATALOG_LAUNCH_LAUNCHER_ID_KEY,
-};
 use crate::CatalogConstants;
+use crate::{
+    cli::{
+        chia_client::ChiaRpcClient,
+        csv::load_catalog_premine_csv,
+        prompt_for_value,
+        utils::{yes_no_prompt, CliError},
+        Db, CATALOG_LAUNCH_CATS_PER_SPEND_KEY, CATALOG_LAUNCH_GENERATION_KEY,
+        CATALOG_LAUNCH_LAUNCHER_ID_KEY,
+    },
+    price_schedule_for_catalog,
+};
 use chia_wallet_sdk::encode_address;
 
 pub async fn initiate_catalog_launch(testnet11: bool) -> Result<(), CliError> {
@@ -85,11 +88,17 @@ pub async fn initiate_catalog_launch(testnet11: bool) -> Result<(), CliError> {
     println!("  price singleton id: (will be launched as well)");
     yes_no_prompt("Do the constants above have the correct values?")?;
 
-    // todo: price schedule
+    let price_schedule = price_schedule_for_catalog(testnet11);
+
+    println!("Price schedule:");
+    for (block, mojo_price) in price_schedule.iter() {
+        println!("  {}: {:.12} XCH", block, *mojo_price as f64 / 1e12);
+    }
+    yes_no_prompt("Is the price schedule correct?")?;
 
     // build spend bundle using drivers
 
-    // yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
+    yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
     // launch
     // follow in mempool; wait for confirmation
