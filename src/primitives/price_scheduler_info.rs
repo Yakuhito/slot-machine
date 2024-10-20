@@ -20,6 +20,30 @@ pub static BLOCK_REWARD_SCHEDULE: Lazy<PriceSchedule> = Lazy::new(|| {
         (20_183_040, 125_000_000_000),
     ]
 });
+pub static CATALOG_BLOCK_COST_MULTIPLIER: u64 = 8; // registering a CAT costs 8 blocks
+
+pub fn price_schedule_for_catalog(testnet11: bool) -> PriceSchedule {
+    if testnet11 {
+        let pivot_block = 1_550_000;
+        let mut schedule: PriceSchedule = Vec::with_capacity(8 + BLOCK_REWARD_SCHEDULE.len());
+
+        for i in 0..BLOCK_REWARD_SCHEDULE.len() {
+            schedule.push((
+                pivot_block + (i as u32) * 4608,
+                1_000_000_000_000 + 2 * i as u64,
+            ));
+        }
+        for (block, mojo_reward) in BLOCK_REWARD_SCHEDULE.iter() {
+            schedule.push((*block, mojo_reward * CATALOG_BLOCK_COST_MULTIPLIER));
+        }
+        return schedule;
+    }
+
+    BLOCK_REWARD_SCHEDULE
+        .iter()
+        .map(|(block, mojo_reward)| (*block, mojo_reward * CATALOG_BLOCK_COST_MULTIPLIER))
+        .collect()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PriceSchedulerInfo {
