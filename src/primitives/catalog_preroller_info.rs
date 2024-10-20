@@ -89,6 +89,50 @@ impl CatalogPrerollerInfo {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_schedule(
+        ctx: &mut SpendContext,
+        launcher_id: Bytes32,
+        everything_to_launch: Vec<AddCat>,
+        cats_per_unroll: u64,
+        unroll_generation: usize,
+        target_puzzle_hash: Bytes32,
+        royalty_puzzle_hash_hash: Bytes32,
+        royalty_ten_thousandths: u16,
+    ) -> Result<Option<Self>, DriverError> {
+        let cats_by_unroll: Vec<Vec<AddCat>> = everything_to_launch
+            .chunks(cats_per_unroll as usize)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+
+        let mut generation = cats_by_unroll.len() - 1;
+        let mut next_puzzle_hash = target_puzzle_hash;
+
+        if unroll_generation > generation {
+            return Ok(None);
+        }
+        while generation > unroll_generation {
+            let info = CatalogPrerollerInfo::new(
+                launcher_id,
+                cats_by_unroll[generation].clone(),
+                next_puzzle_hash,
+                royalty_puzzle_hash_hash,
+                royalty_ten_thousandths,
+            );
+            next_puzzle_hash = info.inner_puzzle_hash(ctx)?.into();
+
+            generation -= 1;
+        }
+
+        Ok(Some(Self::new(
+            launcher_id,
+            cats_by_unroll[generation].clone(),
+            next_puzzle_hash,
+            royalty_puzzle_hash_hash,
+            royalty_ten_thousandths,
+        )))
+    }
+
     pub fn parse(allocator: &Allocator, puzzle: Puzzle) -> Result<Option<Self>, DriverError> {
         let Some(layers) = CatalogPrerollerLayers::parse_puzzle(allocator, puzzle)? else {
             return Ok(None);

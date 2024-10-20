@@ -92,11 +92,15 @@ pub async fn initiate_catalog_launch(testnet11: bool) -> Result<(), CliError> {
 
     println!("Price schedule:");
     for (block, mojo_price) in price_schedule.iter() {
-        println!("  {}: {:.12} XCH", block, *mojo_price as f64 / 1e12);
+        println!(
+            "  price after block {}: {:.12} XCH",
+            block,
+            *mojo_price as f64 / 1e12
+        );
     }
     yes_no_prompt("Is the price schedule correct?")?;
 
-    // build spend bundle using drivers
+    // build launch spend bundle using drivers
 
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 

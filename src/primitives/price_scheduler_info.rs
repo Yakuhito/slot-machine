@@ -27,7 +27,7 @@ pub fn price_schedule_for_catalog(testnet11: bool) -> PriceSchedule {
         let pivot_block = 1_550_000;
         let mut schedule: PriceSchedule = Vec::with_capacity(8 + BLOCK_REWARD_SCHEDULE.len());
 
-        for i in 0..BLOCK_REWARD_SCHEDULE.len() {
+        for i in 0..5 {
             schedule.push((
                 pivot_block + (i as u32) * 4608,
                 1_000_000_000_000 + 2 * i as u64,

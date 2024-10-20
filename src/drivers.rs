@@ -200,6 +200,118 @@ pub fn sign_standard_transaction(
     Ok(sign(sk, required_signature.final_message()))
 }
 
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)]
+pub fn initiate_catalog_launch(
+    ctx: &mut SpendContext,
+    offer: Offer,
+    price_schedule: PriceSchedule,
+    initial_registration_price: u64,
+    cats_to_launch: Vec<AddCat>,
+    cats_per_unroll: u64,
+    catalog_constants: CatalogConstants,
+    consensus_constants: &ConsensusConstants,
+) -> Result<(Signature, SecretKey, PriceScheduler, CatalogPreroller), DriverError> {
+    let offer = parse_one_sided_offer(ctx, offer)?;
+    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+
+    let security_coin_id = offer.security_coin.coin_id();
+
+    let mut security_coin_conditions = Conditions::new();
+
+    // Create preroll coin launcher
+    let preroll_launcher = Launcher::new(security_coin_id, 1);
+    let preroll_launcher_coin = preroll_launcher.coin();
+    let catalog_launcher_id = preroll_launcher_coin.coin_id();
+
+    // Launch price scheduler
+    let price_scheduler_launcher = Launcher::new(security_coin_id, 2);
+    let price_scheduler_launcher_coin = price_scheduler_launcher.coin();
+    let price_scheduler_launcher_id = price_scheduler_launcher_coin.coin_id();
+    let catalog_constants = catalog_constants.with_price_singleton(price_scheduler_launcher_id);
+
+    let price_scheduler_0th_gen_info = PriceSchedulerInfo::new(
+        price_scheduler_launcher_id,
+        price_schedule.clone(),
+        0,
+        catalog_launcher_id,
+    );
+
+    let schedule_ptr = price_schedule.to_clvm(&mut ctx.allocator)?;
+    let (conds, price_scheduler_0th_gen_coin) =
+        price_scheduler_launcher.with_singleton_amount(1).spend(
+            ctx,
+            price_scheduler_0th_gen_info.inner_puzzle_hash().into(),
+            schedule_ptr,
+        )?;
+
+    // this creates the launcher & secures the spend
+    security_coin_conditions = security_coin_conditions.extend(conds);
+
+    let price_scheduler = PriceScheduler::new(
+        price_scheduler_0th_gen_coin,
+        Proof::Eve(EveProof {
+            parent_parent_coin_info: price_scheduler_launcher_coin.parent_coin_info,
+            parent_amount: price_scheduler_launcher_coin.amount,
+        }),
+        price_scheduler_0th_gen_info,
+    );
+
+    // Spend preroll coin launcher
+    let royalty_puzzle_hash = catalog_constants.royalty_address;
+    let trade_price_percentage = catalog_constants.royalty_ten_thousandths;
+
+    let target_catalog_info = CatalogInfo::new(
+        catalog_launcher_id,
+        CatalogState {
+            registration_price: initial_registration_price,
+        },
+        catalog_constants,
+    );
+    let target_catalog_inner_puzzle_hash = target_catalog_info.clone().inner_puzzle_hash();
+    let preroll_info = CatalogPrerollerInfo::new(
+        catalog_launcher_id,
+        cats_to_launch,
+        target_catalog_inner_puzzle_hash.into(),
+        royalty_puzzle_hash.tree_hash().into(),
+        trade_price_percentage,
+    );
+
+    let preroll_coin_inner_ph = preroll_info.clone().inner_puzzle_hash(ctx)?;
+    let (conds, preroller_coin) =
+        preroll_launcher
+            .with_singleton_amount(1)
+            .spend(ctx, preroll_coin_inner_ph.into(), ())?;
+
+    // this creates the launcher & secures the spend
+    security_coin_conditions = security_coin_conditions.extend(conds);
+
+    let preroller = CatalogPreroller::new(
+        preroller_coin,
+        Proof::Eve(EveProof {
+            parent_parent_coin_info: preroll_launcher_coin.parent_coin_info,
+            parent_amount: preroll_launcher_coin.amount,
+        }),
+        preroll_info,
+    );
+    // Spend security coin
+    let security_coin_sig = spend_security_coin(
+        ctx,
+        offer.security_coin,
+        security_coin_conditions,
+        &offer.security_coin_sk,
+        consensus_constants,
+    )?;
+
+    // Finally, return the data
+    Ok((
+        offer.aggregated_signature + &security_coin_sig,
+        offer.security_coin_sk,
+        price_scheduler,
+        preroller,
+    ))
+}
+
 #[allow(clippy::type_complexity)]
 pub fn launch_catalog(
     ctx: &mut SpendContext,

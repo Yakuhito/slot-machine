@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use chia::protocol::Bytes32;
 use clvm_traits::{ClvmDecoder, ClvmEncoder, FromClvm, FromClvmError, Raw, ToClvm, ToClvmError};
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatNftMetadata {
     pub code: String,
     pub name: String,
@@ -15,6 +15,23 @@ pub struct CatNftMetadata {
     pub metadata_hash: Bytes32,
     pub license_uris: Vec<String>,
     pub license_hash: Bytes32,
+}
+
+impl Default for CatNftMetadata {
+    fn default() -> Self {
+        Self {
+            code: "???".to_string(),
+            name: "Unknown CAT".to_string(),
+            description: "(no description provided)".to_string(),
+            precision: 3,
+            image_uris: Vec::default(),        // todo: default image URI?
+            image_hash: Bytes32::default(),    // todo: default image hash
+            metadata_uris: Vec::default(),     // todo: default metadata?
+            metadata_hash: Bytes32::default(), // todo: default metadta hash?
+            license_uris: Vec::default(),      // todo: host default license for CATs
+            license_hash: Bytes32::default(),  // todo: hash default license
+        }
+    }
 }
 
 impl<N, D: ClvmDecoder<Node = N>> FromClvm<D> for CatNftMetadata {
