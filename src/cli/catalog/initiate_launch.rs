@@ -1,4 +1,3 @@
-use crate::CatalogConstants;
 use crate::{
     cli::{
         chia_client::ChiaRpcClient,
@@ -10,9 +9,12 @@ use crate::{
     },
     price_schedule_for_catalog,
 };
-use chia_wallet_sdk::encode_address;
+use crate::{initiate_catalog_launch, CatalogConstants};
+use chia_wallet_sdk::{
+    encode_address, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+};
 
-pub async fn initiate_catalog_launch(testnet11: bool) -> Result<(), CliError> {
+pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     println!("Welcome to the CATalog launch setup, deployer.");
 
     println!("Opening database...");
@@ -63,8 +65,9 @@ pub async fn initiate_catalog_launch(testnet11: bool) -> Result<(), CliError> {
         }
     }
 
-    let cats_per_spend_str = prompt_for_value("How many CATs should be deployed per spend?")?;
-    let cats_per_spend: u64 = cats_per_spend_str.parse().map_err(CliError::ParseInt)?;
+    let cats_per_unroll_str =
+        prompt_for_value("How many CATs should be deployed per unroll spend?")?;
+    let cats_per_unroll: u64 = cats_per_unroll_str.parse().map_err(CliError::ParseInt)?;
 
     let constants = CatalogConstants::get(testnet11);
     let prefix = if testnet11 { "txch" } else { "xch" };
@@ -100,7 +103,29 @@ pub async fn initiate_catalog_launch(testnet11: bool) -> Result<(), CliError> {
     }
     yes_no_prompt("Is the price schedule correct?")?;
 
-    // build launch spend bundle using drivers
+    println!("A one-sided offer (2 mojos) will be needed for launch.");
+    println!(
+        r#"Reference wallet command: chia rpc wallet create_offer_for_ids '{{"offer":{{"1":-1}},"fee":4200000000,"driver_dict":{{}},"validate_only":false}}'"#
+    );
+    let offer = prompt_for_value("Offer: ")?;
+    println!("Offer: '{}'", offer);
+
+    let ctx = &mut SpendContext::new();
+    let (sig, _, scheduler, preroller) = initiate_catalog_launch(
+        ctx,
+        Offer::decode(&offer).map_err(CliError::Offer)?,
+        price_schedule,
+        price_schedule[0].1 * 2,
+        cats_to_launch,
+        cats_per_unroll,
+        CatalogConstants::get(testnet11),
+        if testnet11 {
+            &TESTNET11_CONSTANTS
+        } else {
+            &MAINNET_CONSTANTS
+        },
+    )
+    .map_err(CliError::Driver)?;
 
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 

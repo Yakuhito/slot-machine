@@ -1,3 +1,4 @@
+use chia_wallet_sdk::{DriverError, OfferError};
 use std::{
     io::{self, Write},
     num::ParseIntError,
@@ -14,6 +15,12 @@ pub enum CliError {
 
     #[error("sqlx: {0}")]
     Sqlx(#[from] sqlx::Error),
+
+    #[error("offer: {0}")]
+    Offer(#[from] OfferError),
+
+    #[error("driver: {0}")]
+    Driver(#[from] DriverError),
 
     #[error("couldn't parse int: {0}")]
     ParseInt(#[from] ParseIntError),

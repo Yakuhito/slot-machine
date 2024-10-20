@@ -269,13 +269,19 @@ pub fn initiate_catalog_launch(
         catalog_constants,
     );
     let target_catalog_inner_puzzle_hash = target_catalog_info.clone().inner_puzzle_hash();
-    let preroll_info = CatalogPrerollerInfo::new(
+    let preroll_info = CatalogPrerollerInfo::from_schedule(
+        ctx,
         catalog_launcher_id,
         cats_to_launch,
+        cats_per_unroll,
+        0,
         target_catalog_inner_puzzle_hash.into(),
         royalty_puzzle_hash.tree_hash().into(),
         trade_price_percentage,
-    );
+    )?
+    .ok_or(DriverError::Custom(
+        "Could not build launch preroller info".to_string(),
+    ))?;
 
     let preroll_coin_inner_ph = preroll_info.clone().inner_puzzle_hash(ctx)?;
     let (conds, preroller_coin) =
