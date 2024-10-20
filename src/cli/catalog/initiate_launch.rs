@@ -27,12 +27,12 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     } else {
         "catalog_premine_mainnet.csv"
     };
-    let data = load_catalog_premine_csv(csv_filename)?;
+    let cats_to_launch = load_catalog_premine_csv(csv_filename)?;
     println!(
         "Loaded {} CATs to be premined. First few records:",
-        data.len()
+        cats_to_launch.len()
     );
-    for record in data.iter().take(7) {
+    for record in cats_to_launch.iter().take(7) {
         println!("  code: {:?}, name: {:?}", record.code, record.name);
     }
 
@@ -111,12 +111,13 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     println!("Offer: '{}'", offer);
 
     let ctx = &mut SpendContext::new();
+    let initial_registration_price = price_schedule[0].1 * 2;
     let (sig, _, scheduler, preroller) = initiate_catalog_launch(
         ctx,
         Offer::decode(&offer).map_err(CliError::Offer)?,
         price_schedule,
-        price_schedule[0].1 * 2,
-        cats_to_launch,
+        initial_registration_price,
+        todo!("convert cats_to_launch to a vector of AddCat"),
         cats_per_unroll,
         CatalogConstants::get(testnet11),
         if testnet11 {
