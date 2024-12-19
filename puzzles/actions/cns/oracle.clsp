@@ -4,7 +4,7 @@
 (mod (
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
-    (value . rest_hash) ; rest_hash = (sha256tree (list (left_value . right_value) expiration version . launcher_id))
+    (value . rest_hash) ; rest_hash = (sha256tree (list (left_value . right_value) expiration . launcher_id))
 )
     (include condition_codes.clib)
     (include sha256tree.clib)

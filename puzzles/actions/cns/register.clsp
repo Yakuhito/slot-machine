@@ -1,11 +1,10 @@
 ; register.clsp by yakuhito
 ;; Responsible for registering new names into the name registry (CNS)
 
-;; Unlike CATalog slot's value is (value (left_value . right_value) expiration version . launcher_id) where:
+;; Unlike CATalog slot's value is (value (left_value . right_value) expiration . launcher_id) where:
 ;;  value is the slot 'key'/id and is defined as (sha256 1 name)
 ;;  expiration is a timestamp that says when the name will expire
 ;;  left_value/right_value are the key's of the slot's neighbors
-;;  version is used for versioning the 'launcher_id' attribute - for now, the only valid value is 1
 ;;  launcher_id is, for version 1, a 32-byte value that specifies the name NFT's launcher id
 ;;       in the future, launcher_id might point to a namespace/sub-registry, for example
 
