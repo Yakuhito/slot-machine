@@ -25,14 +25,13 @@ pub trait SpendContextExt {
     fn slot_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn any_metadata_updater(&mut self) -> Result<NodePtr, DriverError>;
     fn state_shcheduler_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn catalog_preroller_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn verification_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn reserve_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn cns_register_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn cns_update_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn cns_extend_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn cns_expire_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn cns_oracle_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn xchandles_register_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn xchandles_update_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn xchandles_extend_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn xchandles_expire_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn xchandles_oracle_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -87,11 +86,6 @@ impl SpendContextExt for SpendContext {
         self.puzzle(STATE_SCHEDULER_PUZZLE_HASH, &STATE_SCHEDULER_PUZZLE)
     }
 
-    /// Allocate the catalog preroller puzzle and return its pointer.
-    fn catalog_preroller_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(CATALOG_PREROLLER_PUZZLE_HASH, &CATALOG_PREROLLER_PUZZLE)
-    }
-
     /// Allocate the verification puzzle and return its pointer.
     fn verification_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(VERIFICATION_LAYER_PUZZLE_HASH, &VERIFICATION_LAYER_PUZZLE)
@@ -102,29 +96,29 @@ impl SpendContextExt for SpendContext {
         self.puzzle(RESERVE_PUZZLE_HASH, &RESERVE_PUZZLE)
     }
 
-    /// Allocate the CNS register puzzle and return its pointer.
-    fn cns_register_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(CNS_REGISTER_PUZZLE_HASH, &CNS_REGISTER_PUZZLE)
+    /// Allocate the XCHandles register puzzle and return its pointer.
+    fn xchandles_register_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(XCHANDLES_REGISTER_PUZZLE_HASH, &XCHANDLES_REGISTER_PUZZLE)
     }
 
-    /// Allocate the CNS register puzzle and return its pointer.
-    fn cns_update_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(CNS_UPDATE_PUZZLE_HASH, &CNS_UPDATE_PUZZLE)
+    /// Allocate the XCHandles update puzzle and return its pointer.
+    fn xchandles_update_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(XCHANDLES_UPDATE_PUZZLE_HASH, &XCHANDLES_UPDATE_PUZZLE)
     }
 
-    /// Allocate the CNS extend puzzle and return its pointer.
-    fn cns_extend_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(CNS_EXTEND_PUZZLE_HASH, &CNS_EXTEND_PUZZLE)
+    /// Allocate the XCHandles extend puzzle and return its pointer.
+    fn xchandles_extend_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(XCHANDLES_EXTEND_PUZZLE_HASH, &XCHANDLES_EXTEND_PUZZLE)
     }
 
-    /// Allocate the CNS expire puzzle and return its pointer.
-    fn cns_expire_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(CNS_EXPIRE_PUZZLE_HASH, &CNS_EXPIRE_PUZZLE)
+    /// Allocate the XCHandles expire puzzle and return its pointer.
+    fn xchandles_expire_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(XCHANDLES_EXPIRE_PUZZLE_HASH, &XCHANDLES_EXPIRE_PUZZLE)
     }
 
-    /// Allocate the CNS expire puzzle and return its pointer.
-    fn cns_oracle_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(CNS_ORACLE_PUZZLE_HASH, &CNS_ORACLE_PUZZLE)
+    /// Allocate the XCHandles oracle puzzle and return its pointer.
+    fn xchandles_oracle_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(XCHANDLES_ORACLE_PUZZLE_HASH, &XCHANDLES_ORACLE_PUZZLE)
     }
 }
 
@@ -154,14 +148,13 @@ mod tests {
         assert_puzzle_hash!(SLOT_PUZZLE => SLOT_PUZZLE_HASH);
         assert_puzzle_hash!(ANY_METADATA_UPDATER => ANY_METADATA_UPDATER_HASH);
         assert_puzzle_hash!(STATE_SCHEDULER_PUZZLE => STATE_SCHEDULER_PUZZLE_HASH);
-        assert_puzzle_hash!(CATALOG_PREROLLER_PUZZLE => CATALOG_PREROLLER_PUZZLE_HASH);
         assert_puzzle_hash!(VERIFICATION_LAYER_PUZZLE => VERIFICATION_LAYER_PUZZLE_HASH);
         assert_puzzle_hash!(RESERVE_PUZZLE => RESERVE_PUZZLE_HASH);
-        assert_puzzle_hash!(CNS_REGISTER_PUZZLE => CNS_REGISTER_PUZZLE_HASH);
-        assert_puzzle_hash!(CNS_UPDATE_PUZZLE => CNS_UPDATE_PUZZLE_HASH);
-        assert_puzzle_hash!(CNS_EXTEND_PUZZLE => CNS_EXTEND_PUZZLE_HASH);
-        assert_puzzle_hash!(CNS_EXPIRE_PUZZLE => CNS_EXPIRE_PUZZLE_HASH);
-        assert_puzzle_hash!(CNS_ORACLE_PUZZLE => CNS_ORACLE_PUZZLE_HASH);
+        assert_puzzle_hash!(XCHANDLES_REGISTER_PUZZLE => XCHANDLES_REGISTER_PUZZLE_HASH);
+        assert_puzzle_hash!(XCHANDLES_UPDATE_PUZZLE => XCHANDLES_UPDATE_PUZZLE_HASH);
+        assert_puzzle_hash!(XCHANDLES_EXTEND_PUZZLE => XCHANDLES_EXTEND_PUZZLE_HASH);
+        assert_puzzle_hash!(XCHANDLES_EXPIRE_PUZZLE => XCHANDLES_EXPIRE_PUZZLE_HASH);
+        assert_puzzle_hash!(XCHANDLES_ORACLE_PUZZLE => XCHANDLES_ORACLE_PUZZLE_HASH);
 
         Ok(())
     }
