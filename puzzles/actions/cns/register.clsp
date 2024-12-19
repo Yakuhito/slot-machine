@@ -5,10 +5,10 @@
 ;;  value is the slot 'key'/id and is defined as (sha256 1 name)
 ;;  expiration is a timestamp that says when the name will expire
 ;;  left_value/right_value are the key's of the slot's neighbors
-;;  launcher_id is, for version 1, a 32-byte value that specifies the name NFT's launcher id
+;;  launcher_id is a 32-byte value that specifies the name NFT's launcher id
 ;;       in the future, launcher_id might point to a namespace/sub-registry, for example
 
-;; Also note that anyone can extend a name registration, but only the name NFT may update the version/launcher_id data
+;; Also note that anyone can extend a name registration, but only the name NFT may update the launcher_id data
 
 (mod (
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
@@ -37,7 +37,6 @@
     ( 
         ; start 'also included in the pre-commit coin'
         name_nft_launcher_id
-        version
         start_time
         secret_hash
         ; end
@@ -66,31 +65,25 @@
             )
             
             ; create new slot
-            (create_slot_with_hint SLOT_1ST_CURRY_HASH
+            (create_slot SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash
                     value_hash
                     left_value_hash
                     right_value_hash
                     (sha256 2 
                         (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
-                        (sha256 2
-                            (sha256 1 version)
-                            (sha256 1 name_nft_launcher_id)
-                        )
+                        (sha256 1 name_nft_launcher_id)
                     ) ; sha256tree data
                 )
-                value_hash
             )
 
             ; create new left slot
-            (create_slot_with_hint SLOT_1ST_CURRY_HASH 
+            (create_slot SLOT_1ST_CURRY_HASH 
                 (get_slot_value_hash left_value_hash left_left_value_hash value_hash left_data_hash)
-                left_value_hash
             ) 
             ; create new right slot
-            (create_slot_with_hint SLOT_1ST_CURRY_HASH
+            (create_slot SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash right_value_hash value_hash right_right_value_hash right_data_hash)
-                right_value_hash
             ) 
             
             ; consume precommit coin
@@ -105,13 +98,10 @@
                             name_hash
                         )
                         (sha256 2
-                            (sha256 2
-                                (sha256 1 version)
-                                (sha256 1 name_nft_launcher_id)
-                            )
+                            (sha256 1 name_nft_launcher_id)
                             (sha256 1 start_time)
                         )
-                    ) ; data in precommit coin reveal will be (c (c secret name) (c (c version name_nft_launcher_id) start_time)))
+                    ) ; data in precommit coin reveal will be (c (c secret name) (c name_nft_launcher_id start_time)))
                 )
             )
         ) ; conditions

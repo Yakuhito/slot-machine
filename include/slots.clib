@@ -10,14 +10,14 @@
     )
   )
 
-  (defun create_slot_with_hint (SLOT_1ST_CURRY_HASH slot_value_hash hint)
+  (defun create_slot (SLOT_1ST_CURRY_HASH slot_value_hash)
     (list
       CREATE_COIN
       (curry_hashes SLOT_1ST_CURRY_HASH
         (sha256 1 slot_value_hash)
       )
       0
-      hint
+      (list SLOT_1ST_CURRY_HASH)
     )
   )
 )

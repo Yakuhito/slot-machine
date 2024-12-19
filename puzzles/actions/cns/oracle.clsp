@@ -4,33 +4,24 @@
 (mod (
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
-    (value . rest_hash) ; rest_hash = (sha256tree (list (left_value . right_value) expiration . launcher_id))
+    data_treehash ; rest_hash = (sha256tree (list value (left_value . right_value) expiration . launcher_id))
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
     (include curry.clib)
     (include slots.clib)
 
-    (defun main (SLOT_1ST_CURRY_HASH hint data_treehash)
+    (c
+        Current_State ; new state
         (list
             ; spend slot
-            (spend_slot SLOT_1ST_CURRY_HASH 
-                data_treehash
-            )
+            (spend_slot SLOT_1ST_CURRY_HASH data_treehash)
 
             ; create new slot
-            (create_slot_with_hint SLOT_1ST_CURRY_HASH
-                data_treehash
-                hint
-            )
+            (create_slot SLOT_1ST_CURRY_HASH data_treehash)
 
             ; announce value
             (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'o' data_treehash))
-        )
-    )
-
-    (c
-        Current_State ; new state
-        (main SLOT_1ST_CURRY_HASH value (sha256 2 (sha256 1 value) rest_hash)) ; conditions
+        ) ; conditions
     )
 )

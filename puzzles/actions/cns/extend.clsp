@@ -42,14 +42,13 @@
             (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256 2 (sha256 1 renew_amount) (sha256 1 name))))
             
             ; create new slot
-            (create_slot_with_hint SLOT_1ST_CURRY_HASH
+            (create_slot SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash
                     name
                     neighbors_hash
                     (+ expiration (* 60 60 24 366 (check_years (/ renew_amount (* (f Current_State) (get_price_factor (strlen name)))))))
                     launcher_id_hash
                 )
-                (sha256 name)
             ) 
             
             ; assert payment

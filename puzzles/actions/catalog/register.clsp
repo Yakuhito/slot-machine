@@ -91,11 +91,11 @@
           (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash right_tail_hash left_tail_hash right_right_tail_hash))
           
           ; create new slot
-          (create_slot_with_hint SLOT_1ST_CURRY_HASH (get_slot_value_hash tail_hash left_tail_hash right_tail_hash) tail_hash) 
+          (create_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash tail_hash left_tail_hash right_tail_hash)) 
           ; create new left slot
-          (create_slot_with_hint SLOT_1ST_CURRY_HASH (get_slot_value_hash left_tail_hash left_left_tail_hash tail_hash) left_tail_hash) 
+          (create_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash left_tail_hash left_left_tail_hash tail_hash)) 
           ; create new right slot
-          (create_slot_with_hint SLOT_1ST_CURRY_HASH (get_slot_value_hash right_tail_hash tail_hash right_right_tail_hash) right_tail_hash) 
+          (create_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash right_tail_hash tail_hash right_right_tail_hash)) 
           
           ; consume precommit coin
           (list
