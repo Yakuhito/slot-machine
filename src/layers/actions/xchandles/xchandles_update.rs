@@ -106,9 +106,7 @@ pub struct XchandlesUpdateActionSolution {
     pub value_hash: Bytes32,
     pub neighbors_hash: Bytes32,
     pub expiration: u64,
-    pub current_version: u32,
     pub current_launcher_id: Bytes32,
-    pub new_version: u32,
     pub new_launcher_id: Bytes32,
     #[clvm(rest)]
     pub announcer_inner_puzzle_hash: Bytes32,

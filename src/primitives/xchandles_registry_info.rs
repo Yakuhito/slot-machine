@@ -13,7 +13,7 @@ use crate::{
     XchandlesUpdateAction,
 };
 
-pub type XchandlesLayers = SingletonLayer<ActionLayer<XchandlesState>>;
+pub type XchandlesRegistryLayers = SingletonLayer<ActionLayer<XchandlesRegistryState>>;
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
@@ -53,13 +53,17 @@ impl XchandlesConstants {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct XchandlesRegistryInfo {
     pub launcher_id: Bytes32,
-    pub state: XchandlesState,
+    pub state: XchandlesRegistryState,
 
     pub constants: XchandlesConstants,
 }
 
 impl XchandlesRegistryInfo {
-    pub fn new(launcher_id: Bytes32, state: XchandlesState, constants: XchandlesConstants) -> Self {
+    pub fn new(
+        launcher_id: Bytes32,
+        state: XchandlesRegistryState,
+        constants: XchandlesConstants,
+    ) -> Self {
         Self {
             launcher_id,
             state,
@@ -67,7 +71,7 @@ impl XchandlesRegistryInfo {
         }
     }
 
-    pub fn with_state(mut self, state: XchandlesState) -> Self {
+    pub fn with_state(mut self, state: XchandlesRegistryState) -> Self {
         self.state = state;
         self
     }
@@ -95,7 +99,7 @@ impl XchandlesRegistryInfo {
     }
 
     #[must_use]
-    pub fn into_layers(self) -> XchandlesLayers {
+    pub fn into_layers(self) -> XchandlesRegistryLayers {
         SingletonLayer::new(
             self.launcher_id,
             ActionLayer::from_action_puzzle_hashes(
@@ -111,7 +115,7 @@ impl XchandlesRegistryInfo {
         puzzle: Puzzle,
         constants: XchandlesConstants,
     ) -> Result<Option<Self>, DriverError> {
-        let Some(layers) = XchandlesLayers::parse_puzzle(allocator, puzzle)? else {
+        let Some(layers) = XchandlesRegistryLayers::parse_puzzle(allocator, puzzle)? else {
             return Ok(None);
         };
 
@@ -124,7 +128,7 @@ impl XchandlesRegistryInfo {
         Ok(Some(Self::from_layers(layers, constants)))
     }
 
-    pub fn from_layers(layers: XchandlesLayers, constants: XchandlesConstants) -> Self {
+    pub fn from_layers(layers: XchandlesRegistryLayers, constants: XchandlesConstants) -> Self {
         Self {
             launcher_id: layers.launcher_id,
             state: layers.inner_puzzle.state,

@@ -106,5 +106,5 @@ pub struct XchandlesExpireActionSolution {
     pub right_rest_hash: Bytes32,
     pub expiration: u64,
     #[clvm(rest)]
-    pub data_hash: Bytes32,
+    pub launcher_id_hash: Bytes32,
 }

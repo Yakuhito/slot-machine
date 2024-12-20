@@ -97,22 +97,20 @@ impl PartialOrd for CatalogSlotValue {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct CnsSlotValue {
+pub struct XchandlesSlotValue {
     pub name_hash: Bytes32,
     pub neighbors: SlotNeigborsInfo,
     pub expiration: u64,
-    pub version: u32,
     #[clvm(rest)]
     pub launcher_id: Bytes32,
 }
 
-impl CnsSlotValue {
+impl XchandlesSlotValue {
     pub fn new(
         name_hash: Bytes32,
         left_name_hash: Bytes32,
         right_name_hash: Bytes32,
         expiration: u64,
-        version: u32,
         launcher_id: Bytes32,
     ) -> Self {
         Self {
@@ -122,7 +120,6 @@ impl CnsSlotValue {
                 right_value: right_name_hash,
             },
             expiration,
-            version,
             launcher_id,
         }
     }
@@ -135,7 +132,6 @@ impl CnsSlotValue {
                 right_value: right_name_hash,
             },
             expiration: 0,
-            version: 0,
             launcher_id: Bytes32::default(),
         }
     }
@@ -148,15 +144,13 @@ impl CnsSlotValue {
                 right_value: right_name_hash,
             },
             expiration: self.expiration,
-            version: self.version,
             launcher_id: self.launcher_id,
         }
     }
 
     pub fn after_neigbors_data_hash(&self) -> TreeHash {
-        CnsSlotValueWithoutNameAndNeighbors {
+        XchandlesSlotValueWithoutNameAndNeighbors {
             expiration: self.expiration,
-            version: self.version,
             launcher_id: self.launcher_id,
         }
         .tree_hash()
@@ -167,23 +161,21 @@ impl CnsSlotValue {
             name_hash: self.name_hash,
             neighbors: self.neighbors,
             expiration,
-            version: self.version,
             launcher_id: self.launcher_id,
         }
     }
 
-    pub fn with_version_and_launcher_id(self, version: u32, launcher_id: Bytes32) -> Self {
+    pub fn with_launcher_id(self, launcher_id: Bytes32) -> Self {
         Self {
             name_hash: self.name_hash,
             neighbors: self.neighbors,
             expiration: self.expiration,
-            version,
             launcher_id,
         }
     }
 }
 
-impl Ord for CnsSlotValue {
+impl Ord for XchandlesSlotValue {
     fn cmp(&self, other: &Self) -> Ordering {
         let self_num = BigInt::from_signed_bytes_be(&self.name_hash);
         let other_num = BigInt::from_signed_bytes_be(&other.name_hash);
@@ -192,7 +184,7 @@ impl Ord for CnsSlotValue {
     }
 }
 
-impl PartialOrd for CnsSlotValue {
+impl PartialOrd for XchandlesSlotValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -200,9 +192,8 @@ impl PartialOrd for CnsSlotValue {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct CnsSlotValueWithoutNameAndNeighbors {
+pub struct XchandlesSlotValueWithoutNameAndNeighbors {
     pub expiration: u64,
-    pub version: u32,
     #[clvm(rest)]
     pub launcher_id: Bytes32,
 }

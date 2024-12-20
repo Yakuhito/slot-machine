@@ -22,8 +22,8 @@ use crate::{
 };
 
 use super::{
-    PrecommitCoin, Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesInfo,
-    XchandlesPrecommitValue, XchandlesSlotValue, XchandlesState,
+    PrecommitCoin, Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesPrecommitValue,
+    XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue,
 };
 
 #[derive(Debug, Clone)]
@@ -36,12 +36,12 @@ pub struct XchandlesRegistry {
 }
 
 impl XchandlesRegistry {
-    pub fn new(coin: Coin, proof: Proof, info: XchandlesInfo) -> Self {
+    pub fn new(coin: Coin, proof: Proof, info: XchandlesRegistryInfo) -> Self {
         Self { coin, proof, info }
     }
 }
 
-impl Xchandles {
+impl XchandlesRegistry {
     pub fn from_parent_spend(
         allocator: &mut Allocator,
         parent_coin: Coin,
@@ -52,7 +52,8 @@ impl Xchandles {
     where
         Self: Sized,
     {
-        let Some(parent_info) = XchandlesInfo::parse(allocator, parent_puzzle, constants)? else {
+        let Some(parent_info) = XchandlesRegistryInfo::parse(allocator, parent_puzzle, constants)?
+        else {
             return Ok(None);
         };
 
@@ -63,7 +64,7 @@ impl Xchandles {
         });
 
         let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
-        let new_state = ActionLayer::<XchandlesState>::get_new_state(
+        let new_state = ActionLayer::<XchandlesRegistryState>::get_new_state(
             allocator,
             parent_info.state,
             parent_solution.inner_solution,
@@ -73,7 +74,7 @@ impl Xchandles {
 
         let new_coin = Coin::new(parent_coin.coin_id(), new_info.puzzle_hash().into(), 1);
 
-        Ok(Some(Xchandles {
+        Ok(Some(XchandlesRegistry {
             coin: new_coin,
             proof,
             info: new_info,
@@ -87,10 +88,10 @@ pub enum XchandlesAction {
     Oracle(XchandlesOracleActionSolution),
     Register(XchandlesRegisterActionSolution),
     Update(XchandlesUpdateActionSolution),
-    UpdatePrice(DelegatedStateActionSolution<XchandlesState>),
+    UpdatePrice(DelegatedStateActionSolution<XchandlesRegistryState>),
 }
 
-impl Xchandles {
+impl XchandlesRegistry {
     pub fn spend(
         self,
         ctx: &mut SpendContext,
@@ -185,7 +186,7 @@ impl Xchandles {
                     proofs: layers
                         .inner_puzzle
                         .get_proofs(
-                            &XchandlesInfo::action_puzzle_hashes(
+                            &XchandlesRegistryInfo::action_puzzle_hashes(
                                 self.info.launcher_id,
                                 &self.info.constants,
                             ),
@@ -210,7 +211,7 @@ impl Xchandles {
         right_slot: Slot<XchandlesSlotValue>,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
         price_update: Option<XchandlesAction>,
-    ) -> Result<(Conditions, Xchandles, Vec<Slot<XchandlesSlotValue>>), DriverError> {
+    ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
@@ -227,7 +228,6 @@ impl Xchandles {
         let name: String = precommit_coin.value.secret_and_name.name.clone();
         let name_hash: Bytes32 = name.tree_hash().into();
 
-        let version = precommit_coin.value.version_and_launcher.version;
         let secret = precommit_coin.value.secret_and_name.secret;
 
         let start_time = precommit_coin.value.start_time;
@@ -247,10 +247,7 @@ impl Xchandles {
                 * 24
                 * 366;
 
-        let name_nft_launcher_id = precommit_coin
-            .value
-            .version_and_launcher
-            .name_nft_launcher_id;
+        let name_nft_launcher_id = precommit_coin.value.name_nft_launcher_id;
 
         let new_slots_proof = SlotProof {
             parent_parent_info: self.coin.parent_coin_info,
@@ -273,7 +270,6 @@ impl Xchandles {
                         left_slot_value.name_hash,
                         right_slot_value.name_hash,
                         expiration,
-                        version,
                         name_nft_launcher_id,
                     ),
                 ),
@@ -299,7 +295,6 @@ impl Xchandles {
             left_value: left_slot_value.name_hash,
             right_value: right_slot_value.name_hash,
             name_nft_launcher_id,
-            version,
             start_time,
             secret_hash: secret.tree_hash().into(),
             precommitment_amount,
@@ -320,7 +315,7 @@ impl Xchandles {
             },
         )?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_xchandles = Xchandles::from_parent_spend(
+        let new_xchandles = XchandlesRegistry::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -347,7 +342,7 @@ impl Xchandles {
         slot: Slot<XchandlesSlotValue>,
         left_slot: Slot<XchandlesSlotValue>,
         right_slot: Slot<XchandlesSlotValue>,
-    ) -> Result<(Conditions, Xchandles, Vec<Slot<XchandlesSlotValue>>), DriverError> {
+    ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(slot_value) = slot.info.value else {
             return Err(DriverError::Custom("Missing slot value".to_string()));
@@ -403,16 +398,14 @@ impl Xchandles {
             right_right_value: right_slot_value.neighbors.right_value,
             right_rest_hash: right_slot_value.after_neigbors_data_hash().into(),
             expiration: slot_value.expiration,
-            data_hash: clvm_tuple!(slot_value.version, slot_value.launcher_id)
-                .tree_hash()
-                .into(),
+            launcher_id_hash: slot_value.launcher_id.tree_hash().into(),
         });
 
         let my_coin = self.coin;
         let my_constants = self.info.constants;
         let my_spend = self.spend(ctx, vec![expire])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_xchandles = Xchandles::from_parent_spend(
+        let new_xchandles = XchandlesRegistry::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -447,7 +440,7 @@ impl Xchandles {
         (
             NotarizedPayment,
             Conditions,
-            Xchandles,
+            XchandlesRegistry,
             Vec<Slot<XchandlesSlotValue>>,
         ),
         DriverError,
@@ -488,9 +481,7 @@ impl Xchandles {
             name: name.clone(),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             expiration: slot_value.expiration,
-            rest_hash: clvm_tuple!(slot_value.version, slot_value.launcher_id)
-                .tree_hash()
-                .into(),
+            launcher_id_hash: slot_value.launcher_id.tree_hash().into(),
         });
 
         let notarized_payment = NotarizedPayment {
@@ -509,7 +500,7 @@ impl Xchandles {
         let my_spend = self.spend(ctx, vec![extend])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
 
-        let new_xchandles = Xchandles::from_parent_spend(
+        let new_xchandles = XchandlesRegistry::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -538,7 +529,7 @@ impl Xchandles {
         self,
         ctx: &mut SpendContext,
         slot: Slot<XchandlesSlotValue>,
-    ) -> Result<(Conditions, Xchandles, Vec<Slot<XchandlesSlotValue>>), DriverError> {
+    ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(slot_value) = slot.info.value else {
             return Err(DriverError::Custom("Missing slot value".to_string()));
@@ -567,7 +558,7 @@ impl Xchandles {
         let my_constants = self.info.constants;
         let my_spend = self.spend(ctx, vec![oracle])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_xchandles = Xchandles::from_parent_spend(
+        let new_xchandles = XchandlesRegistry::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -594,10 +585,9 @@ impl Xchandles {
         self,
         ctx: &mut SpendContext,
         slot: Slot<XchandlesSlotValue>,
-        new_version: u32,
         new_launcher_id: Bytes32,
         announcer_inner_puzzle_hash: Bytes32,
-    ) -> Result<(Conditions, Xchandles, Vec<Slot<XchandlesSlotValue>>), DriverError> {
+    ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(slot_value) = slot.info.value else {
             return Err(DriverError::Custom("Missing slot value".to_string()));
@@ -616,7 +606,7 @@ impl Xchandles {
             new_slots_proof,
             SlotInfo::from_value(
                 self.info.launcher_id,
-                slot_value.with_version_and_launcher_id(new_version, new_launcher_id),
+                slot_value.with_launcher_id(new_launcher_id),
             ),
         )];
 
@@ -625,9 +615,7 @@ impl Xchandles {
             value_hash: slot_value.name_hash.tree_hash().into(),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             expiration: slot_value.expiration,
-            current_version: slot_value.version,
             current_launcher_id: slot_value.launcher_id,
-            new_version,
             new_launcher_id,
             announcer_inner_puzzle_hash,
         });
@@ -636,7 +624,7 @@ impl Xchandles {
         let my_constants = self.info.constants;
         let my_spend = self.spend(ctx, vec![update])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_xchandles = Xchandles::from_parent_spend(
+        let new_xchandles = XchandlesRegistry::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -644,17 +632,14 @@ impl Xchandles {
             my_constants,
         )?
         .ok_or(DriverError::Custom(
-            "Could not parse child CNS singleton".to_string(),
+            "Could not parse child XCHandles singleton".to_string(),
         ))?;
 
         ctx.spend(my_coin, my_spend)?;
 
-        let msg: Bytes32 = clvm_tuple!(
-            slot_value.name_hash,
-            clvm_tuple!(new_version, new_launcher_id)
-        )
-        .tree_hash()
-        .into();
+        let msg: Bytes32 = clvm_tuple!(clvm_tuple!(slot_value.name_hash, slot_value.launcher_id))
+            .tree_hash()
+            .into();
         Ok((
             Conditions::new().send_message(18, msg.into(), vec![ctx.alloc(&my_coin.puzzle_hash)?]),
             new_xchandles,

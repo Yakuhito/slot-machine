@@ -150,7 +150,6 @@ pub struct XchandlesRegisterActionSolution {
     pub left_value: Bytes32,
     pub right_value: Bytes32,
     pub name_nft_launcher_id: Bytes32,
-    pub version: u32,
     pub start_time: u64,
     pub secret_hash: Bytes32,
     pub precommitment_amount: u64,

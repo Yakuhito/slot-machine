@@ -111,5 +111,5 @@ pub struct XchandlesExtendActionSolution {
     pub neighbors_hash: Bytes32,
     pub expiration: u64,
     #[clvm(rest)]
-    pub rest_hash: Bytes32,
+    pub launcher_id_hash: Bytes32,
 }
