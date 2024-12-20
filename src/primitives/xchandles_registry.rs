@@ -14,44 +14,45 @@ use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    ActionLayer, ActionLayerSolution, CnsExpireAction, CnsExpireActionSolution, CnsExtendAction,
-    CnsExtendActionSolution, CnsOracleAction, CnsOracleActionSolution, CnsRegisterAction,
-    CnsRegisterActionSolution, CnsUpdateAction, CnsUpdateActionSolution, DelegatedStateAction,
-    DelegatedStateActionSolution,
+    ActionLayer, ActionLayerSolution, DelegatedStateAction, DelegatedStateActionSolution,
+    XchandlesExpireAction, XchandlesExpireActionSolution, XchandlesExtendAction,
+    XchandlesExtendActionSolution, XchandlesOracleAction, XchandlesOracleActionSolution,
+    XchandlesRegisterAction, XchandlesRegisterActionSolution, XchandlesUpdateAction,
+    XchandlesUpdateActionSolution,
 };
 
 use super::{
-    CnsConstants, CnsInfo, CnsPrecommitValue, CnsSlotValue, CnsState, PrecommitCoin, Slot,
-    SlotInfo, SlotProof,
+    PrecommitCoin, Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesInfo,
+    XchandlesPrecommitValue, XchandlesSlotValue, XchandlesState,
 };
 
 #[derive(Debug, Clone)]
 #[must_use]
-pub struct Cns {
+pub struct XchandlesRegistry {
     pub coin: Coin,
     pub proof: Proof,
 
-    pub info: CnsInfo,
+    pub info: XchandlesRegistryInfo,
 }
 
-impl Cns {
-    pub fn new(coin: Coin, proof: Proof, info: CnsInfo) -> Self {
+impl XchandlesRegistry {
+    pub fn new(coin: Coin, proof: Proof, info: XchandlesInfo) -> Self {
         Self { coin, proof, info }
     }
 }
 
-impl Cns {
+impl Xchandles {
     pub fn from_parent_spend(
         allocator: &mut Allocator,
         parent_coin: Coin,
         parent_puzzle: Puzzle,
         parent_solution: NodePtr,
-        constants: CnsConstants,
+        constants: XchandlesConstants,
     ) -> Result<Option<Self>, DriverError>
     where
         Self: Sized,
     {
-        let Some(parent_info) = CnsInfo::parse(allocator, parent_puzzle, constants)? else {
+        let Some(parent_info) = XchandlesInfo::parse(allocator, parent_puzzle, constants)? else {
             return Ok(None);
         };
 
@@ -62,7 +63,7 @@ impl Cns {
         });
 
         let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
-        let new_state = ActionLayer::<CnsState>::get_new_state(
+        let new_state = ActionLayer::<XchandlesState>::get_new_state(
             allocator,
             parent_info.state,
             parent_solution.inner_solution,
@@ -72,7 +73,7 @@ impl Cns {
 
         let new_coin = Coin::new(parent_coin.coin_id(), new_info.puzzle_hash().into(), 1);
 
-        Ok(Some(Cns {
+        Ok(Some(Xchandles {
             coin: new_coin,
             proof,
             info: new_info,
@@ -80,20 +81,20 @@ impl Cns {
     }
 }
 
-pub enum CnsAction {
-    Expire(CnsExpireActionSolution),
-    Extend(CnsExtendActionSolution),
-    Oracle(CnsOracleActionSolution),
-    Register(CnsRegisterActionSolution),
-    Update(CnsUpdateActionSolution),
-    UpdatePrice(DelegatedStateActionSolution<CnsState>),
+pub enum XchandlesAction {
+    Expire(XchandlesExpireActionSolution),
+    Extend(XchandlesExtendActionSolution),
+    Oracle(XchandlesOracleActionSolution),
+    Register(XchandlesRegisterActionSolution),
+    Update(XchandlesUpdateActionSolution),
+    UpdatePrice(DelegatedStateActionSolution<XchandlesState>),
 }
 
-impl Cns {
+impl Xchandles {
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        actions: Vec<CnsAction>,
+        actions: Vec<XchandlesAction>,
     ) -> Result<Spend, DriverError> {
         let layers = self.info.into_layers();
 
@@ -102,16 +103,16 @@ impl Cns {
         let action_spends: Vec<Spend> = actions
             .into_iter()
             .map(|action| match action {
-                CnsAction::Expire(solution) => {
-                    let layer = CnsExpireAction::new(self.info.launcher_id);
+                XchandlesAction::Expire(solution) => {
+                    let layer = XchandlesExpireAction::new(self.info.launcher_id);
 
                     let puzzle = layer.construct_puzzle(ctx)?;
                     let solution = layer.construct_solution(ctx, solution)?;
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                CnsAction::Extend(solution) => {
-                    let layer = CnsExtendAction::new(
+                XchandlesAction::Extend(solution) => {
+                    let layer = XchandlesExtendAction::new(
                         self.info.launcher_id,
                         self.info.constants.precommit_payout_puzzle_hash,
                     );
@@ -121,16 +122,16 @@ impl Cns {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                CnsAction::Oracle(solution) => {
-                    let layer = CnsOracleAction::new(self.info.launcher_id);
+                XchandlesAction::Oracle(solution) => {
+                    let layer = XchandlesOracleAction::new(self.info.launcher_id);
 
                     let puzzle = layer.construct_puzzle(ctx)?;
                     let solution = layer.construct_solution(ctx, solution)?;
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                CnsAction::Register(solution) => {
-                    let layer = CnsRegisterAction::new(
+                XchandlesAction::Register(solution) => {
+                    let layer = XchandlesRegisterAction::new(
                         self.info.launcher_id,
                         self.info.constants.precommit_payout_puzzle_hash,
                         self.info.constants.relative_block_height,
@@ -141,15 +142,15 @@ impl Cns {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                CnsAction::Update(solution) => {
-                    let layer = CnsUpdateAction::new(self.info.launcher_id);
+                XchandlesAction::Update(solution) => {
+                    let layer = XchandlesUpdateAction::new(self.info.launcher_id);
 
                     let puzzle = layer.construct_puzzle(ctx)?;
                     let solution = layer.construct_solution(ctx, solution)?;
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                CnsAction::UpdatePrice(solution) => {
+                XchandlesAction::UpdatePrice(solution) => {
                     let layer =
                         DelegatedStateAction::new(self.info.constants.price_singleton_launcher_id);
 
@@ -184,7 +185,7 @@ impl Cns {
                     proofs: layers
                         .inner_puzzle
                         .get_proofs(
-                            &CnsInfo::action_puzzle_hashes(
+                            &XchandlesInfo::action_puzzle_hashes(
                                 self.info.launcher_id,
                                 &self.info.constants,
                             ),
@@ -205,11 +206,11 @@ impl Cns {
     pub fn register_name(
         self,
         ctx: &mut SpendContext,
-        left_slot: Slot<CnsSlotValue>,
-        right_slot: Slot<CnsSlotValue>,
-        precommit_coin: PrecommitCoin<CnsPrecommitValue>,
-        price_update: Option<CnsAction>,
-    ) -> Result<(Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+        left_slot: Slot<XchandlesSlotValue>,
+        right_slot: Slot<XchandlesSlotValue>,
+        precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
+        price_update: Option<XchandlesAction>,
+    ) -> Result<(Conditions, Xchandles, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
@@ -232,14 +233,15 @@ impl Cns {
         let start_time = precommit_coin.value.start_time;
         let precommitment_amount = precommit_coin.coin.amount;
 
-        let base_price = if let Some(CnsAction::UpdatePrice(ref price_update)) = price_update {
+        let base_price = if let Some(XchandlesAction::UpdatePrice(ref price_update)) = price_update
+        {
             price_update.new_state.registration_base_price
         } else {
             self.info.state.registration_base_price
         };
         let expiration = start_time
             + (precommitment_amount
-                / (base_price * CnsRegisterAction::get_price_factor(&name).unwrap_or(1)))
+                / (base_price * XchandlesRegisterAction::get_price_factor(&name).unwrap_or(1)))
                 * 60
                 * 60
                 * 24
@@ -266,7 +268,7 @@ impl Cns {
                 new_slots_proof,
                 SlotInfo::from_value(
                     self.info.launcher_id,
-                    CnsSlotValue::new(
+                    XchandlesSlotValue::new(
                         name_hash,
                         left_slot_value.name_hash,
                         right_slot_value.name_hash,
@@ -291,7 +293,7 @@ impl Cns {
         precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
-        let register = CnsAction::Register(CnsRegisterActionSolution {
+        let register = XchandlesAction::Register(XchandlesRegisterActionSolution {
             name_hash,
             name_reveal: name.clone(),
             left_value: left_slot_value.name_hash,
@@ -318,7 +320,7 @@ impl Cns {
             },
         )?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_cns = Cns::from_parent_spend(
+        let new_xchandles = Xchandles::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -333,7 +335,7 @@ impl Cns {
 
         Ok((
             Conditions::new().assert_concurrent_spend(precommit_coin_id),
-            new_cns,
+            new_xchandles,
             new_slots,
         ))
     }
@@ -342,10 +344,10 @@ impl Cns {
     pub fn expire_name(
         self,
         ctx: &mut SpendContext,
-        slot: Slot<CnsSlotValue>,
-        left_slot: Slot<CnsSlotValue>,
-        right_slot: Slot<CnsSlotValue>,
-    ) -> Result<(Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+        slot: Slot<XchandlesSlotValue>,
+        left_slot: Slot<XchandlesSlotValue>,
+        right_slot: Slot<XchandlesSlotValue>,
+    ) -> Result<(Conditions, Xchandles, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(slot_value) = slot.info.value else {
             return Err(DriverError::Custom("Missing slot value".to_string()));
@@ -392,7 +394,7 @@ impl Cns {
         ];
 
         // finally, spend self
-        let expire = CnsAction::Expire(CnsExpireActionSolution {
+        let expire = XchandlesAction::Expire(XchandlesExpireActionSolution {
             value: slot_value.name_hash,
             left_value: left_slot_value.name_hash,
             left_left_value: left_slot_value.neighbors.left_value,
@@ -410,7 +412,7 @@ impl Cns {
         let my_constants = self.info.constants;
         let my_spend = self.spend(ctx, vec![expire])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_cns = Cns::from_parent_spend(
+        let new_xchandles = Xchandles::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -428,7 +430,7 @@ impl Cns {
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, extend_ann)),
-            new_cns,
+            new_xchandles,
             new_slots,
         ))
     }
@@ -439,9 +441,17 @@ impl Cns {
         self,
         ctx: &mut SpendContext,
         name: String,
-        slot: Slot<CnsSlotValue>,
+        slot: Slot<XchandlesSlotValue>,
         renew_amount: u64,
-    ) -> Result<(NotarizedPayment, Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+    ) -> Result<
+        (
+            NotarizedPayment,
+            Conditions,
+            Xchandles,
+            Vec<Slot<XchandlesSlotValue>>,
+        ),
+        DriverError,
+    > {
         // spend slots
         let Some(slot_value) = slot.info.value else {
             return Err(DriverError::Custom("Missing slot value".to_string()));
@@ -458,7 +468,7 @@ impl Cns {
 
         let new_expiration = slot_value.expiration
             + (renew_amount
-                / (CnsRegisterAction::get_price_factor(&name).unwrap_or(1)
+                / (XchandlesRegisterAction::get_price_factor(&name).unwrap_or(1)
                     * self.info.state.registration_base_price))
                 * 60
                 * 60
@@ -473,7 +483,7 @@ impl Cns {
         )];
 
         // finally, spend self
-        let extend = CnsAction::Extend(CnsExtendActionSolution {
+        let extend = XchandlesAction::Extend(XchandlesExtendActionSolution {
             renew_amount,
             name: name.clone(),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
@@ -499,7 +509,7 @@ impl Cns {
         let my_spend = self.spend(ctx, vec![extend])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
 
-        let new_cns = Cns::from_parent_spend(
+        let new_xchandles = Xchandles::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -518,7 +528,7 @@ impl Cns {
             notarized_payment,
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, extend_ann)),
-            new_cns,
+            new_xchandles,
             new_slots,
         ))
     }
@@ -527,8 +537,8 @@ impl Cns {
     pub fn oracle(
         self,
         ctx: &mut SpendContext,
-        slot: Slot<CnsSlotValue>,
-    ) -> Result<(Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+        slot: Slot<XchandlesSlotValue>,
+    ) -> Result<(Conditions, Xchandles, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(slot_value) = slot.info.value else {
             return Err(DriverError::Custom("Missing slot value".to_string()));
@@ -549,18 +559,15 @@ impl Cns {
         )];
 
         // finally, spend self
-        let oracle = CnsAction::Oracle(CnsOracleActionSolution {
-            value: slot_value.name_hash,
-            rest_hash: clvm_tuple!(slot_value.neighbors, slot_value.after_neigbors_data_hash())
-                .tree_hash()
-                .into(),
+        let oracle = XchandlesAction::Oracle(XchandlesOracleActionSolution {
+            data_treehash: slot_value.tree_hash().into(),
         });
 
         let my_coin = self.coin;
         let my_constants = self.info.constants;
         let my_spend = self.spend(ctx, vec![oracle])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_cns = Cns::from_parent_spend(
+        let new_xchandles = Xchandles::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -578,7 +585,7 @@ impl Cns {
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, oracle_ann)),
-            new_cns,
+            new_xchandles,
             new_slots,
         ))
     }
@@ -586,11 +593,11 @@ impl Cns {
     pub fn update(
         self,
         ctx: &mut SpendContext,
-        slot: Slot<CnsSlotValue>,
+        slot: Slot<XchandlesSlotValue>,
         new_version: u32,
         new_launcher_id: Bytes32,
         announcer_inner_puzzle_hash: Bytes32,
-    ) -> Result<(Conditions, Cns, Vec<Slot<CnsSlotValue>>), DriverError> {
+    ) -> Result<(Conditions, Xchandles, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(slot_value) = slot.info.value else {
             return Err(DriverError::Custom("Missing slot value".to_string()));
@@ -614,8 +621,8 @@ impl Cns {
         )];
 
         // spend self
-        let update = CnsAction::Update(CnsUpdateActionSolution {
-            value: slot_value.name_hash,
+        let update = XchandlesAction::Update(XchandlesUpdateActionSolution {
+            value_hash: slot_value.name_hash.tree_hash().into(),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             expiration: slot_value.expiration,
             current_version: slot_value.version,
@@ -629,7 +636,7 @@ impl Cns {
         let my_constants = self.info.constants;
         let my_spend = self.spend(ctx, vec![update])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_cns = Cns::from_parent_spend(
+        let new_xchandles = Xchandles::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,
@@ -650,7 +657,7 @@ impl Cns {
         .into();
         Ok((
             Conditions::new().send_message(18, msg.into(), vec![ctx.alloc(&my_coin.puzzle_hash)?]),
-            new_cns,
+            new_xchandles,
             new_slots,
         ))
     }

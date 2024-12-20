@@ -8,28 +8,29 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::Allocator;
 
 use crate::{
-    ActionLayer, ActionLayerArgs, CnsExpireAction, CnsExtendAction, CnsOracleAction,
-    CnsRegisterAction, CnsUpdateAction, DefaultFinalizerArgs, DelegatedStateActionArgs,
+    ActionLayer, ActionLayerArgs, DefaultFinalizerArgs, DelegatedStateActionArgs,
+    XchandlesExpireAction, XchandlesExtendAction, XchandlesOracleAction, XchandlesRegisterAction,
+    XchandlesUpdateAction,
 };
 
-pub type CnsLayers = SingletonLayer<ActionLayer<CnsState>>;
+pub type XchandlesLayers = SingletonLayer<ActionLayer<XchandlesState>>;
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
 #[clvm(list)]
-pub struct CnsState {
+pub struct XchandlesRegistryState {
     pub registration_base_price: u64,
 }
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub struct CnsConstants {
+pub struct XchandlesConstants {
     pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
     pub price_singleton_launcher_id: Bytes32,
 }
 
-impl CnsConstants {
+impl XchandlesConstants {
     pub fn new(
         precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
@@ -50,15 +51,15 @@ impl CnsConstants {
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub struct CnsInfo {
+pub struct XchandlesRegistryInfo {
     pub launcher_id: Bytes32,
-    pub state: CnsState,
+    pub state: XchandlesState,
 
-    pub constants: CnsConstants,
+    pub constants: XchandlesConstants,
 }
 
-impl CnsInfo {
-    pub fn new(launcher_id: Bytes32, state: CnsState, constants: CnsConstants) -> Self {
+impl XchandlesRegistryInfo {
+    pub fn new(launcher_id: Bytes32, state: XchandlesState, constants: XchandlesConstants) -> Self {
         Self {
             launcher_id,
             state,
@@ -66,32 +67,35 @@ impl CnsInfo {
         }
     }
 
-    pub fn with_state(mut self, state: CnsState) -> Self {
+    pub fn with_state(mut self, state: XchandlesState) -> Self {
         self.state = state;
         self
     }
 
-    pub fn action_puzzle_hashes(launcher_id: Bytes32, constants: &CnsConstants) -> [Bytes32; 6] {
+    pub fn action_puzzle_hashes(
+        launcher_id: Bytes32,
+        constants: &XchandlesConstants,
+    ) -> [Bytes32; 6] {
         [
-            CnsExpireAction::new(launcher_id).tree_hash().into(),
-            CnsExtendAction::new(launcher_id, constants.precommit_payout_puzzle_hash)
+            XchandlesExpireAction::new(launcher_id).tree_hash().into(),
+            XchandlesExtendAction::new(launcher_id, constants.precommit_payout_puzzle_hash)
                 .tree_hash()
                 .into(),
-            CnsOracleAction::new(launcher_id).tree_hash().into(),
-            CnsRegisterAction::new(
+            XchandlesOracleAction::new(launcher_id).tree_hash().into(),
+            XchandlesRegisterAction::new(
                 launcher_id,
                 constants.precommit_payout_puzzle_hash,
                 constants.relative_block_height,
             )
             .tree_hash()
             .into(),
-            CnsUpdateAction::new(launcher_id).tree_hash().into(),
+            XchandlesUpdateAction::new(launcher_id).tree_hash().into(),
             DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id).into(),
         ]
     }
 
     #[must_use]
-    pub fn into_layers(self) -> CnsLayers {
+    pub fn into_layers(self) -> XchandlesLayers {
         SingletonLayer::new(
             self.launcher_id,
             ActionLayer::from_action_puzzle_hashes(
@@ -105,9 +109,9 @@ impl CnsInfo {
     pub fn parse(
         allocator: &mut Allocator,
         puzzle: Puzzle,
-        constants: CnsConstants,
+        constants: XchandlesConstants,
     ) -> Result<Option<Self>, DriverError> {
-        let Some(layers) = CnsLayers::parse_puzzle(allocator, puzzle)? else {
+        let Some(layers) = XchandlesLayers::parse_puzzle(allocator, puzzle)? else {
             return Ok(None);
         };
 
@@ -120,7 +124,7 @@ impl CnsInfo {
         Ok(Some(Self::from_layers(layers, constants)))
     }
 
-    pub fn from_layers(layers: CnsLayers, constants: CnsConstants) -> Self {
+    pub fn from_layers(layers: XchandlesLayers, constants: XchandlesConstants) -> Self {
         Self {
             launcher_id: layers.launcher_id,
             state: layers.inner_puzzle.state,
