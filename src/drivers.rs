@@ -1086,9 +1086,7 @@ mod tests {
             let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
 
             println!("before spend 3 {}", i); // todo: debug
-            let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            sim.spend_coins(spends, &[user_sk.clone()])?;
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
             println!("after spend 3 {}", i); // todo: debug
 
             slots.retain(|s| *s != update_slot);

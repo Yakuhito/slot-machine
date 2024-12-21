@@ -475,11 +475,6 @@ impl XchandlesRegistry {
                 slot_value.with_expiration(new_expiration),
             ),
         )];
-        println!("new slot coin (extend): {:?}", new_slots[0].coin); // todo: debug
-        println!(
-            "new slot value hash (extend): {:?}",
-            new_slots[0].info.value.unwrap().tree_hash()
-        ); // todo: debug
 
         // finally, spend self
         let extend = XchandlesRegistryAction::Extend(XchandlesExtendActionSolution {
@@ -601,9 +596,6 @@ impl XchandlesRegistry {
 
         let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
 
-        println!("slot value: {:?}", slot_value); // todo: debug
-        println!("slot value hash: {:?}", slot_value.tree_hash()); // todo: debug
-        println!("slot coin: {:?}", slot.coin); // todo: debug
         slot.spend(ctx, spender_inner_puzzle_hash)?;
 
         let new_slots_proof = SlotProof {
