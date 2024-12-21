@@ -12,8 +12,8 @@
     (renew_amount name neighbors_hash expiration . launcher_id_hash)
 )
     (include condition_codes.clib)
+    (include xchandles_price.clib)
     (include sha256tree.clib)
-    (include cns_price.clib)
     (include curry.clib)
     (include slots.clib)
 

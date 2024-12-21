@@ -17,7 +17,7 @@
   (handle_hash handle_reveal left_value right_value . solution) ; see the 'main' function for rest of arguments 
 )
   (include condition_codes.clib)
-  (include cns_price.clib)
+  (include xchandles_price.clib)
   (include curry.clib)
   (include slots.clib)
 

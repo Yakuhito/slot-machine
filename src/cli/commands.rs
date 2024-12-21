@@ -19,10 +19,10 @@ enum Commands {
         #[command(subcommand)]
         action: CatalogCliAction,
     },
-    /// Interact with CNS
-    Cns {
+    /// Interact with XCHandles
+    Xchandles {
         #[command(subcommand)]
-        action: CnsCliAction,
+        action: XchandlesCliAction,
     },
 }
 
@@ -30,18 +30,18 @@ enum Commands {
 enum CatalogCliAction {
     /// Launches a new CATalog deployment
     InitiateLaunch,
-    /// Unrolls an existing launch
-    UnrollLaunch,
+    /// Continues/finishes an existing launch
+    ContinueLaunch,
     /// Verifies the built-in deployment is valid
     VerifDeployment,
 }
 
 #[derive(Subcommand)]
-enum CnsCliAction {
-    /// Launches a new CNS deployment
+enum XchandlesCliAction {
+    /// Launches a new XCHandles deployment
     InitiateLaunch,
-    /// Unrolls an existing launch
-    UnrollLaunch,
+    /// Continues/finishes an existing launch
+    ContinueLaunch,
     /// Verifies the built-in deployment is valid
     VerifDeployment,
 }
@@ -52,7 +52,7 @@ pub async fn run_cli() {
     let res = match args.command {
         Commands::Catalog { action } => match action {
             CatalogCliAction::InitiateLaunch => catalog_initiate_launch(true).await,
-            CatalogCliAction::UnrollLaunch => {
+            CatalogCliAction::ContinueLaunch => {
                 todo!("not yet implemented");
             }
             CatalogCliAction::VerifDeployment => {
@@ -60,14 +60,14 @@ pub async fn run_cli() {
             }
         },
 
-        Commands::Cns { action } => match action {
-            CnsCliAction::InitiateLaunch => {
+        Commands::Xchandles { action } => match action {
+            XchandlesCliAction::InitiateLaunch => {
                 todo!("not yet implemented");
             }
-            CnsCliAction::UnrollLaunch => {
+            XchandlesCliAction::ContinueLaunch => {
                 todo!("not yet implemented");
             }
-            CnsCliAction::VerifDeployment => {
+            XchandlesCliAction::VerifDeployment => {
                 todo!("not yet implemented");
             }
         },
