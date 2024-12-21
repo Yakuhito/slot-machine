@@ -463,8 +463,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
-        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
+        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegistryAction,
         ANY_METADATA_UPDATER_HASH,
     };
@@ -704,7 +704,6 @@ mod tests {
             )?;
 
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-            println!("created precommit :)"); // TODO: debug
 
             // call the 'register' action on CATalog
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -962,8 +961,6 @@ mod tests {
             let price_update = if i % 2 == 1 {
                 let new_price = test_price_schedule[i / 2];
                 assert_ne!(new_price, registry.info.state.registration_base_price);
-                println!("new_price {}", new_price); // todo: debug
-                println!("old price {}", registry.info.state.registration_base_price); // todo: debug
 
                 let (
                     new_price_singleton_coin,
@@ -991,7 +988,6 @@ mod tests {
                 None
             };
 
-            println!("before register_handle {}", i); // todo: debug
             let (secure_cond, new_registry, new_slots) = registry.register_handle(
                 ctx,
                 left_slot,
@@ -999,7 +995,6 @@ mod tests {
                 precommit_coin,
                 price_update,
             )?;
-            println!("after register_handle {}", i); // todo: debug
 
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
             let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
@@ -1008,9 +1003,7 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-            println!("before spend 1 {}", i); // todo: debug
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-            println!("after spend 1 {}", i); // todo: debug
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
@@ -1069,9 +1062,7 @@ mod tests {
             let mut spends = ctx.take();
             spends.append(&mut vec![offer_spend]);
 
-            println!("before spend 2 {}", i); // todo: debug
             sim.spend_coins(spends, &[user_sk.clone()])?;
-            println!("after spend 2 {}", i); // todo: debug
 
             slots.retain(|s| *s != extension_slot);
             slots.extend(new_slots.clone());
@@ -1091,9 +1082,7 @@ mod tests {
 
             let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
 
-            println!("before spend 3 {}", i); // todo: debug
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-            println!("after spend 3 {}", i); // todo: debug
 
             slots.retain(|s| *s != update_slot);
             slots.extend(new_slots.clone());
