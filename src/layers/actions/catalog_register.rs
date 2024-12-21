@@ -15,7 +15,8 @@ use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    CatalogInfo, CatalogSlotValue, PrecommitCoin, Slot, SpendContextExt, UniquenessPrelauncher,
+    CatalogRegistryInfo, CatalogSlotValue, PrecommitCoin, Slot, SpendContextExt,
+    UniquenessPrelauncher,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +45,7 @@ impl CatalogRegisterAction {
         }
     }
 
-    pub fn from_info(info: &CatalogInfo) -> Self {
+    pub fn from_info(info: &CatalogRegistryInfo) -> Self {
         Self {
             launcher_id: info.launcher_id,
             royalty_puzzle_hash_hash: info.constants.royalty_address.tree_hash().into(),

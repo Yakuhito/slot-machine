@@ -638,14 +638,15 @@ mod tests {
         },
     };
     use chia_wallet_sdk::{
-        test_secret_keys, Nft, NftMint, Simulator, SingletonLayer, SpendWithConditions,
-        TESTNET11_CONSTANTS,
+        test_secret_keys, CurriedPuzzle, Nft, NftMint, Simulator, SingletonLayer,
+        SpendWithConditions, TESTNET11_CONSTANTS,
     };
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogSlotValue, PrecommitCoin, Reserve, Slot,
-        SlotNeigborsInfo, SpendContextExt, XchandlesPrecommitValue, XchandlesRegisterAction,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
+        DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot, SlotNeigborsInfo,
+        SpendContextExt, XchandlesPrecommitValue, XchandlesRegisterAction,
         ANY_METADATA_UPDATER_HASH, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
     };
 
@@ -676,7 +677,7 @@ mod tests {
         // setup config
 
         let initial_registration_price = 2000;
-        let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250), (4, 125)];
+        let test_price_schedule = vec![1000, 500, 250, 125];
 
         let catalog_constants = CatalogRegistryConstants {
             royalty_address: Bytes32::from([7; 32]),
@@ -697,7 +698,7 @@ mod tests {
         let user_pk = user_sk.public_key();
         let user_puzzle_hash = StandardArgs::curry_tree_hash(user_pk).into();
 
-        let offer_amount = 2 as u64;
+        let offer_amount = 1 as u64;
         let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
         let offer_spend = StandardLayer::new(launcher_pk).spend_with_conditions(
             ctx,
@@ -721,13 +722,33 @@ mod tests {
             )?,
         });
 
-        // Launch catalog & price singleton
-        let (_, security_sk, mut price_scheduler, mut catalog, slots) = launch_catalog_registry(
+        // Launch price singleton
+        let price_singleton_launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+        let price_singleton_launcher =
+            Launcher::new(price_singleton_launcher_coin.parent_coin_info, 1);
+
+        let price_singleton_launcher_id = price_singleton_launcher.coin().coin_id();
+
+        let price_singleton_inner_puzzle = ctx.alloc(&1)?;
+        let price_singleton_inner_puzzle_hash = ctx.tree_hash(price_singleton_inner_puzzle);
+        let (_, mut price_singleton_coin) =
+            price_singleton_launcher.spend(ctx, price_singleton_inner_puzzle_hash.into(), ())?;
+
+        let price_singleton_puzzle = CurriedProgram {
+            program: ctx.singleton_top_layer()?,
+            args: SingletonArgs::new(price_singleton_launcher_id, price_singleton_inner_puzzle),
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let mut price_singleton_proof: Proof = Proof::Eve(EveProof {
+            parent_parent_coin_info: price_singleton_launcher_coin.parent_coin_info,
+            parent_amount: price_singleton_launcher_coin.amount,
+        });
+
+        // Launch catalog
+        let (_, security_sk, mut catalog, slots) = launch_catalog_registry(
             ctx,
             offer,
-            test_price_schedule.clone(),
             initial_registration_price,
-            cats_to_launch,
             catalog_constants,
             &TESTNET11_CONSTANTS,
         )?;
@@ -736,13 +757,13 @@ mod tests {
 
         // Register CAT
 
-        let mut slots = slots.clone();
+        let mut slots: Vec<Slot<CatalogSlotValue>> = slots.clone().into();
         for i in 0..7 {
             // create precommit coin
-            let reg_amount = if i % 2 == 1 {
-                catalog.info.state.registration_price
+            let reg_amount = if i % 2 == 0 {
+                test_price_schedule[i / 2]
             } else {
-                price_scheduler.info.price_schedule[price_scheduler.info.generation].1
+                catalog.info.state.registration_price
             };
             let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
             let tail = CurriedProgram {
@@ -752,9 +773,12 @@ mod tests {
             .to_clvm(&mut ctx.allocator)?; // pretty much a random TAIL - we're not actually launching it
             let tail_hash = ctx.tree_hash(tail);
 
-            let eve_nft_inner_puzzle =
-                clvm_quote!(Conditions::new().create_coin(Bytes32::new([4 + i; 32]), 1, vec![]))
-                    .to_clvm(&mut ctx.allocator)?;
+            let eve_nft_inner_puzzle = clvm_quote!(Conditions::new().create_coin(
+                Bytes32::new([4 + i as u8; 32]),
+                1,
+                vec![]
+            ))
+            .to_clvm(&mut ctx.allocator)?;
             let eve_nft_inner_puzzle_hash = ctx.tree_hash(eve_nft_inner_puzzle);
 
             let value = CatalogPrecommitValue {
@@ -812,11 +836,51 @@ mod tests {
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
             let price_update = if i % 2 == 0 {
-                let price_scheduler_child = price_scheduler.child();
-                let update_action = price_scheduler.catalog_price_update_action();
+                let new_price = reg_amount;
+                assert_ne!(new_price, catalog.info.state.registration_price);
 
-                price_scheduler.spend(ctx, catalog.info.inner_puzzle_hash().into())?;
-                price_scheduler = price_scheduler_child.unwrap();
+                let new_state = CatalogRegistryState {
+                    registration_price: new_price,
+                };
+                let update_action =
+                    CatalogRegistryAction::UpdatePrice(DelegatedStateActionSolution {
+                        new_state,
+                        other_singleton_inner_puzzle_hash: price_singleton_inner_puzzle_hash.into(),
+                    });
+
+                // Spend price singleton
+                let message: Bytes32 = new_state.tree_hash().into();
+                let price_singleton_inner_solution = Conditions::new()
+                    .send_message(
+                        18,
+                        message.into(),
+                        vec![catalog.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+                    )
+                    .create_coin(price_singleton_inner_puzzle_hash.into(), 1, vec![]);
+                let price_singleton_inner_solution =
+                    price_singleton_inner_solution.to_clvm(&mut ctx.allocator)?;
+                let price_singleton_solution = SingletonSolution {
+                    lineage_proof: price_singleton_proof,
+                    amount: 1,
+                    inner_solution: price_singleton_inner_solution,
+                }
+                .to_clvm(&mut ctx.allocator)?;
+
+                let price_singleton_spend =
+                    Spend::new(price_singleton_puzzle, price_singleton_solution);
+                ctx.spend(price_singleton_coin, price_singleton_spend)?;
+
+                // compute price singleton info for next spend
+                price_singleton_proof = Proof::Lineage(LineageProof {
+                    parent_parent_coin_info: price_singleton_coin.parent_coin_info,
+                    parent_inner_puzzle_hash: price_singleton_inner_puzzle_hash.into(),
+                    parent_amount: price_singleton_coin.amount,
+                });
+                price_singleton_coin = Coin::new(
+                    price_singleton_coin.coin_id(),
+                    price_singleton_coin.puzzle_hash,
+                    1,
+                );
 
                 Some(update_action)
             } else {
@@ -854,7 +918,7 @@ mod tests {
 
         assert_eq!(
             catalog.info.state.registration_price,
-            test_price_schedule[3].1, // 0, 2, 4, 6 updated the price
+            test_price_schedule[3], // 0, 2, 4, 6 updated the price
         );
 
         Ok(())
