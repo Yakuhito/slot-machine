@@ -22,8 +22,9 @@ use clvmr::NodePtr;
 
 use crate::{
     CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
-    CatalogSlotValue, Slot, Slot1stCurryArgs, SlotInfo, SlotProof, SLOT32_MAX_VALUE,
-    SLOT32_MIN_VALUE,
+    CatalogSlotValue, Slot, Slot1stCurryArgs, SlotInfo, SlotProof, XchandlesConstants,
+    XchandlesRegistry, XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue,
+    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
 };
 
 pub struct SecuredOneSidedOffer {
@@ -200,6 +201,87 @@ pub fn sign_standard_transaction(
     Ok(sign(sk, required_signature.final_message()))
 }
 
+// Spends the eve signleton, whose only job is to create the
+//   slot 'premine' (leftmost and rightmost slots) and
+//   transition to the actual registry puzzle
+fn spend_eve_coin_and_create_registry<S>(
+    ctx: &mut SpendContext,
+    launcher: Launcher,
+    target_inner_puzzle_hash: Bytes32,
+    left_slot_value: S,
+    right_slot_value: S,
+) -> Result<(Conditions, Coin, Proof, [Slot<S>; 2]), DriverError>
+where
+    S: Copy + ToTreeHash,
+{
+    let launcher_coin = launcher.coin();
+    let launcher_id = launcher_coin.coin_id();
+
+    let left_slot_info = SlotInfo::from_value(launcher_id, left_slot_value);
+    let left_slot_puzzle_hash = Slot::<S>::puzzle_hash(&left_slot_info);
+
+    let right_slot_info = SlotInfo::from_value(launcher_id, right_slot_value);
+    let right_slot_puzzle_hash = Slot::<S>::puzzle_hash(&right_slot_info);
+
+    let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id).into();
+    let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
+        .create_coin(left_slot_puzzle_hash.into(), 0, vec![slot_hint.into()])
+        .create_coin(right_slot_puzzle_hash.into(), 0, vec![slot_hint.into()])
+        .create_coin(target_inner_puzzle_hash, 1, vec![launcher_id.into()],))
+    .to_clvm(&mut ctx.allocator)?;
+
+    let eve_singleton_inner_puzzle_hash = ctx.tree_hash(eve_singleton_inner_puzzle);
+    let eve_singleton_proof = Proof::Eve(EveProof {
+        parent_parent_coin_info: launcher_coin.parent_coin_info,
+        parent_amount: launcher_coin.amount,
+    });
+
+    let (security_coin_conditions, eve_coin) =
+        launcher
+            .with_singleton_amount(1)
+            .spend(ctx, eve_singleton_inner_puzzle_hash.into(), ())?;
+
+    let eve_coin_solution = SingletonSolution {
+        lineage_proof: eve_singleton_proof,
+        amount: 1,
+        inner_solution: NodePtr::NIL,
+    }
+    .to_clvm(&mut ctx.allocator)?;
+
+    let eve_singleton_puzzle = CurriedProgram {
+        program: ctx.singleton_top_layer()?,
+        args: SingletonArgs::new(launcher_id, eve_singleton_inner_puzzle),
+    }
+    .to_clvm(&mut ctx.allocator)?;
+    let eve_singleton_spend = Spend::new(eve_singleton_puzzle, eve_coin_solution);
+    ctx.spend(eve_coin, eve_singleton_spend)?;
+
+    let new_registry_coin = Coin::new(
+        eve_coin.coin_id(),
+        SingletonArgs::curry_tree_hash(launcher_id, target_inner_puzzle_hash.into()).into(),
+        1,
+    );
+    let new_proof = Proof::Lineage(LineageProof {
+        parent_parent_coin_info: eve_coin.parent_coin_info,
+        parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
+        parent_amount: 1,
+    });
+
+    let slot_proof = SlotProof {
+        parent_parent_info: eve_coin.parent_coin_info,
+        parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
+    };
+    let left_slot = Slot::new(slot_proof, left_slot_info);
+    let right_slot = Slot::new(slot_proof, right_slot_info);
+
+    Ok((
+        security_coin_conditions.assert_concurrent_spend(eve_coin.coin_id()),
+        new_registry_coin,
+        new_proof,
+        [left_slot, right_slot],
+    ))
+}
+
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
 pub fn launch_catalog_registry(
@@ -229,7 +311,6 @@ pub fn launch_catalog_registry(
     let registry_launcher_coin = registry_launcher.coin();
     let registry_launcher_id = registry_launcher_coin.coin_id();
 
-    // Spend coin launcher
     let catalog_registry_info = CatalogRegistryInfo::new(
         registry_launcher_id,
         CatalogRegistryState {
@@ -239,77 +320,26 @@ pub fn launch_catalog_registry(
     );
     let catalog_inner_puzzle_hash = catalog_registry_info.clone().inner_puzzle_hash();
 
-    let left_slot_info = SlotInfo::from_value(
-        registry_launcher_id,
-        CatalogSlotValue::new(
-            SLOT32_MIN_VALUE.into(),
-            SLOT32_MIN_VALUE.into(),
-            SLOT32_MAX_VALUE.into(),
-        ),
-    );
-    let left_slot_puzzle_hash = Slot::<CatalogSlotValue>::puzzle_hash(&left_slot_info);
-
-    let right_slot_info = SlotInfo::from_value(
-        registry_launcher_id,
-        CatalogSlotValue::new(
-            SLOT32_MAX_VALUE.into(),
-            SLOT32_MIN_VALUE.into(),
-            SLOT32_MAX_VALUE.into(),
-        ),
-    );
-    let right_slot_puzzle_hash = Slot::<CatalogSlotValue>::puzzle_hash(&right_slot_info);
-
-    let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(registry_launcher_id).into();
-    let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
-        .create_coin(left_slot_puzzle_hash.into(), 0, vec![slot_hint.into()])
-        .create_coin(right_slot_puzzle_hash.into(), 0, vec![slot_hint.into()])
-        .create_coin(
+    let (new_security_coin_conditions, new_catalog_registry_coin, catalog_proof, slots) =
+        spend_eve_coin_and_create_registry(
+            ctx,
+            registry_launcher,
             catalog_inner_puzzle_hash.into(),
-            1,
-            vec![registry_launcher_id.into()],
-        ))
-    .to_clvm(&mut ctx.allocator)?;
-
-    let eve_singleton_inner_puzzle_hash = ctx.tree_hash(eve_singleton_inner_puzzle);
-    let eve_singleton_proof = Proof::Eve(EveProof {
-        parent_parent_coin_info: registry_launcher_coin.parent_coin_info,
-        parent_amount: registry_launcher_coin.amount,
-    });
-
-    let (conds, catalog_eve_coin) = registry_launcher.with_singleton_amount(1).spend(
-        ctx,
-        eve_singleton_inner_puzzle_hash.into(),
-        (),
-    )?;
+            CatalogSlotValue::new(
+                SLOT32_MIN_VALUE.into(),
+                SLOT32_MIN_VALUE.into(),
+                SLOT32_MAX_VALUE.into(),
+            ),
+            CatalogSlotValue::new(
+                SLOT32_MAX_VALUE.into(),
+                SLOT32_MIN_VALUE.into(),
+                SLOT32_MAX_VALUE.into(),
+            ),
+        )?;
 
     // this creates the launcher & secures the spend
-    security_coin_conditions = security_coin_conditions.extend(conds);
+    security_coin_conditions = security_coin_conditions.extend(new_security_coin_conditions);
 
-    let eve_coin_solution = SingletonSolution {
-        lineage_proof: eve_singleton_proof,
-        amount: 1,
-        inner_solution: NodePtr::NIL,
-    }
-    .to_clvm(&mut ctx.allocator)?;
-
-    let eve_singleton_puzzle = CurriedProgram {
-        program: ctx.singleton_top_layer()?,
-        args: SingletonArgs::new(registry_launcher_id, eve_singleton_inner_puzzle),
-    }
-    .to_clvm(&mut ctx.allocator)?;
-    let catalog_eve_spend = Spend::new(eve_singleton_puzzle, eve_coin_solution);
-    ctx.spend(catalog_eve_coin, catalog_eve_spend)?;
-
-    let new_catalog_registry_coin = Coin::new(
-        catalog_eve_coin.coin_id(),
-        SingletonArgs::curry_tree_hash(registry_launcher_id, catalog_inner_puzzle_hash).into(),
-        1,
-    );
-    let catalog_proof = Proof::Lineage(LineageProof {
-        parent_parent_coin_info: catalog_eve_coin.parent_coin_info,
-        parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
-        parent_amount: 1,
-    });
     let catalog_registry = CatalogRegistry::new(
         new_catalog_registry_coin,
         catalog_proof,
@@ -325,312 +355,96 @@ pub fn launch_catalog_registry(
         consensus_constants,
     )?;
 
-    // We have enough data to also offer slot proofs
-    let left_slot = Slot::new(
-        SlotProof {
-            parent_parent_info: catalog_eve_coin.parent_coin_info,
-            parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
-        },
-        left_slot_info,
-    );
-    let right_slot = Slot::new(
-        SlotProof {
-            parent_parent_info: catalog_eve_coin.parent_coin_info,
-            parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
-        },
-        right_slot_info,
-    );
-
     // Finally, return the data
     Ok((
         offer.aggregated_signature + &security_coin_sig,
         offer.security_coin_sk,
         catalog_registry,
-        [left_slot, right_slot],
+        slots,
     ))
 }
 
-// #[allow(clippy::type_complexity)]
-// pub fn launch_catalog(
-//     ctx: &mut SpendContext,
-//     offer: Offer,
-//     price_schedule: PriceSchedule,
-//     initial_registration_price: u64,
-//     cats_to_launch: Vec<AddCat>,
-//     catalog_constants: CatalogConstants,
-//     consensus_constants: &ConsensusConstants,
-// ) -> Result<
-//     (
-//         Signature,
-//         SecretKey,
-//         PriceScheduler,
-//         Catalog,
-//         Vec<Slot<CatalogSlotValue>>,
-//     ),
-//     DriverError,
-// > {
-//     let offer = parse_one_sided_offer(ctx, offer)?;
-//     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+#[allow(clippy::type_complexity)]
+pub fn launch_xchandles_registry(
+    ctx: &mut SpendContext,
+    offer: Offer,
+    initial_base_registration_price: u64,
+    xchandles_constants: XchandlesConstants,
+    consensus_constants: &ConsensusConstants,
+) -> Result<
+    (
+        Signature,
+        SecretKey,
+        XchandlesRegistry,
+        [Slot<XchandlesSlotValue>; 2],
+    ),
+    DriverError,
+> {
+    let offer = parse_one_sided_offer(ctx, offer)?;
+    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-//     let security_coin_id = offer.security_coin.coin_id();
+    let security_coin_id = offer.security_coin.coin_id();
 
-//     let mut security_coin_conditions = Conditions::new();
+    let mut security_coin_conditions = Conditions::new();
 
-//     // Create preroll coin launcher
-//     let preroll_launcher = Launcher::new(security_coin_id, 1);
-//     let preroll_launcher_coin = preroll_launcher.coin();
-//     let catalog_launcher_id = preroll_launcher_coin.coin_id();
+    // Create registry coin launcher
+    let registry_launcher = Launcher::new(security_coin_id, 1);
+    let registry_launcher_coin = registry_launcher.coin();
+    let registry_launcher_id = registry_launcher_coin.coin_id();
 
-//     // Launch price scheduler
-//     let price_scheduler_launcher = Launcher::new(security_coin_id, 2);
-//     let price_scheduler_launcher_coin = price_scheduler_launcher.coin();
-//     let price_scheduler_launcher_id = price_scheduler_launcher_coin.coin_id();
-//     let catalog_constants = catalog_constants.with_price_singleton(price_scheduler_launcher_id);
+    // Spend intermediary coin and create registry
+    let target_xchandles_info = XchandlesRegistryInfo::new(
+        registry_launcher_id,
+        XchandlesRegistryState {
+            registration_base_price: initial_base_registration_price,
+        },
+        xchandles_constants,
+    );
+    let target_xchandles_inner_puzzle_hash = target_xchandles_info.clone().inner_puzzle_hash();
+    let (new_security_coin_conditions, new_xchandles_coin, xchandles_proof, slots) =
+        spend_eve_coin_and_create_registry(
+            ctx,
+            registry_launcher,
+            target_xchandles_inner_puzzle_hash.into(),
+            XchandlesSlotValue::new(
+                SLOT32_MIN_VALUE.into(),
+                SLOT32_MIN_VALUE.into(),
+                SLOT32_MAX_VALUE.into(),
+                u64::MAX,
+                registry_launcher_id,
+            ),
+            XchandlesSlotValue::new(
+                SLOT32_MAX_VALUE.into(),
+                SLOT32_MIN_VALUE.into(),
+                SLOT32_MAX_VALUE.into(),
+                u64::MAX,
+                registry_launcher_id,
+            ),
+        )?;
 
-//     let price_scheduler_0th_gen_info = PriceSchedulerInfo::new(
-//         price_scheduler_launcher_id,
-//         price_schedule.clone(),
-//         0,
-//         catalog_launcher_id,
-//     );
+    // this creates the launcher & secures the spend
+    security_coin_conditions = security_coin_conditions.extend(new_security_coin_conditions);
 
-//     let schedule_ptr = price_schedule.to_clvm(&mut ctx.allocator)?;
-//     let (conds, price_scheduler_0th_gen_coin) =
-//         price_scheduler_launcher.with_singleton_amount(1).spend(
-//             ctx,
-//             price_scheduler_0th_gen_info.inner_puzzle_hash().into(),
-//             schedule_ptr,
-//         )?;
+    let xchandles_registry =
+        XchandlesRegistry::new(new_xchandles_coin, xchandles_proof, target_xchandles_info);
 
-//     // this creates the launcher & secures the spend
-//     security_coin_conditions = security_coin_conditions.extend(conds);
+    // Spend security coin
+    let security_coin_sig = spend_security_coin(
+        ctx,
+        offer.security_coin,
+        security_coin_conditions,
+        &offer.security_coin_sk,
+        consensus_constants,
+    )?;
 
-//     let price_scheduler = PriceScheduler::new(
-//         price_scheduler_0th_gen_coin,
-//         Proof::Eve(EveProof {
-//             parent_parent_coin_info: price_scheduler_launcher_coin.parent_coin_info,
-//             parent_amount: price_scheduler_launcher_coin.amount,
-//         }),
-//         price_scheduler_0th_gen_info,
-//     );
-
-//     // Spend preroll coin launcher
-//     let royalty_puzzle_hash = catalog_constants.royalty_address;
-//     let trade_price_percentage = catalog_constants.royalty_ten_thousandths;
-
-//     let target_catalog_info = CatalogInfo::new(
-//         catalog_launcher_id,
-//         CatalogState {
-//             registration_price: initial_registration_price,
-//         },
-//         catalog_constants,
-//     );
-//     let target_catalog_inner_puzzle_hash = target_catalog_info.clone().inner_puzzle_hash();
-//     let preroll_info = CatalogPrerollerInfo::new(
-//         catalog_launcher_id,
-//         cats_to_launch,
-//         target_catalog_inner_puzzle_hash.into(),
-//         royalty_puzzle_hash.tree_hash().into(),
-//         trade_price_percentage,
-//     );
-
-//     let preroll_coin_inner_ph = preroll_info.clone().inner_puzzle_hash(ctx)?;
-//     let (conds, preroller_coin) =
-//         preroll_launcher
-//             .with_singleton_amount(1)
-//             .spend(ctx, preroll_coin_inner_ph.into(), ())?;
-
-//     // this creates the launcher & secures the spend
-//     security_coin_conditions = security_coin_conditions.extend(conds);
-
-//     let preroller = CatalogPreroller::new(
-//         preroller_coin,
-//         Proof::Eve(EveProof {
-//             parent_parent_coin_info: preroll_launcher_coin.parent_coin_info,
-//             parent_amount: preroll_launcher_coin.amount,
-//         }),
-//         preroll_info,
-//     );
-
-//     // Spend preroll coin until the Catalog is created
-//     let catalog_coin = Coin::new(
-//         preroller.coin.coin_id(),
-//         SingletonArgs::curry_tree_hash(catalog_launcher_id, target_catalog_inner_puzzle_hash)
-//             .into(),
-//         1,
-//     );
-//     let catalog = Catalog::new(
-//         catalog_coin,
-//         Proof::Lineage(LineageProof {
-//             parent_parent_coin_info: preroller.coin.parent_coin_info,
-//             parent_inner_puzzle_hash: preroll_coin_inner_ph.into(),
-//             parent_amount: 1,
-//         }),
-//         target_catalog_info,
-//     );
-
-//     let slots = preroller.spend(ctx, royalty_puzzle_hash)?;
-
-//     // Secure everything we've done with the preroll coin
-//     security_coin_conditions =
-//         security_coin_conditions.assert_concurrent_spend(catalog.coin.parent_coin_info);
-
-//     // Spend security coin
-//     let security_coin_sig = spend_security_coin(
-//         ctx,
-//         offer.security_coin,
-//         security_coin_conditions,
-//         &offer.security_coin_sk,
-//         consensus_constants,
-//     )?;
-
-//     // Finally, return the data
-//     Ok((
-//         offer.aggregated_signature + &security_coin_sig,
-//         offer.security_coin_sk,
-//         price_scheduler,
-//         catalog,
-//         slots,
-//     ))
-// }
-
-// #[allow(clippy::type_complexity)]
-// pub fn launch_cns(
-//     ctx: &mut SpendContext,
-//     offer: Offer,
-//     price_schedule: PriceSchedule,
-//     initial_base_registration_price: u64,
-//     names_to_launch: Vec<CnsSlotValue>,
-//     cns_constants: CnsConstants,
-//     consensus_constants: &ConsensusConstants,
-// ) -> Result<
-//     (
-//         Signature,
-//         SecretKey,
-//         PriceScheduler,
-//         Cns,
-//         Vec<Slot<CnsSlotValue>>,
-//     ),
-//     DriverError,
-// > {
-//     let offer = parse_one_sided_offer(ctx, offer)?;
-//     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
-
-//     let security_coin_id = offer.security_coin.coin_id();
-
-//     let mut security_coin_conditions = Conditions::new();
-
-//     // Create preroll coin launcher
-//     let preroll_launcher = Launcher::new(security_coin_id, 1);
-//     let preroll_launcher_coin = preroll_launcher.coin();
-//     let cns_launcher_id = preroll_launcher_coin.coin_id();
-
-//     // Launch price scheduler
-//     let price_scheduler_launcher = Launcher::new(security_coin_id, 2);
-//     let price_scheduler_launcher_coin = price_scheduler_launcher.coin();
-//     let price_scheduler_launcher_id = price_scheduler_launcher_coin.coin_id();
-//     let cns_constants = cns_constants.with_price_singleton(price_scheduler_launcher_id);
-
-//     let price_scheduler_0th_gen_info = PriceSchedulerInfo::new(
-//         price_scheduler_launcher_id,
-//         price_schedule.clone(),
-//         0,
-//         cns_launcher_id,
-//     );
-
-//     let schedule_ptr = price_schedule.to_clvm(&mut ctx.allocator)?;
-//     let (conds, price_scheduler_0th_gen_coin) =
-//         price_scheduler_launcher.with_singleton_amount(1).spend(
-//             ctx,
-//             price_scheduler_0th_gen_info.inner_puzzle_hash().into(),
-//             schedule_ptr,
-//         )?;
-
-//     // this creates the launcher & secures the spend
-//     security_coin_conditions = security_coin_conditions.extend(conds);
-
-//     let price_scheduler = PriceScheduler::new(
-//         price_scheduler_0th_gen_coin,
-//         Proof::Eve(EveProof {
-//             parent_parent_coin_info: price_scheduler_launcher_coin.parent_coin_info,
-//             parent_amount: price_scheduler_launcher_coin.amount,
-//         }),
-//         price_scheduler_0th_gen_info,
-//     );
-
-//     // Spend preroll coin launcher
-//     let target_cns_info = CnsInfo::new(
-//         cns_launcher_id,
-//         CnsState {
-//             registration_base_price: initial_base_registration_price,
-//         },
-//         cns_constants,
-//     );
-//     let target_cns_inner_puzzle_hash = target_cns_info.clone().inner_puzzle_hash();
-//     let preroll_info = CnsPrerollerInfo::new(
-//         cns_launcher_id,
-//         names_to_launch,
-//         target_cns_inner_puzzle_hash.into(),
-//     );
-
-//     let preroll_coin_inner_ph = preroll_info.clone().inner_puzzle_hash(ctx)?;
-//     let (conds, preroller_coin) =
-//         preroll_launcher
-//             .with_singleton_amount(1)
-//             .spend(ctx, preroll_coin_inner_ph.into(), ())?;
-
-//     // this creates the launcher & secures the spend
-//     security_coin_conditions = security_coin_conditions.extend(conds);
-
-//     let preroller = CnsPreroller::new(
-//         preroller_coin,
-//         Proof::Eve(EveProof {
-//             parent_parent_coin_info: preroll_launcher_coin.parent_coin_info,
-//             parent_amount: preroll_launcher_coin.amount,
-//         }),
-//         preroll_info,
-//     );
-
-//     // Spend preroll coin until the Catalog is created
-//     let cns_coin = Coin::new(
-//         preroller.coin.coin_id(),
-//         SingletonArgs::curry_tree_hash(cns_launcher_id, target_cns_inner_puzzle_hash).into(),
-//         1,
-//     );
-//     let catalog = Cns::new(
-//         cns_coin,
-//         Proof::Lineage(LineageProof {
-//             parent_parent_coin_info: preroller.coin.parent_coin_info,
-//             parent_inner_puzzle_hash: preroll_coin_inner_ph.into(),
-//             parent_amount: 1,
-//         }),
-//         target_cns_info,
-//     );
-
-//     let slots = preroller.spend(ctx)?;
-
-//     // Secure everything we've done with the preroll coin
-//     security_coin_conditions =
-//         security_coin_conditions.assert_concurrent_spend(catalog.coin.parent_coin_info);
-
-//     // Spend security coin
-//     let security_coin_sig = spend_security_coin(
-//         ctx,
-//         offer.security_coin,
-//         security_coin_conditions,
-//         &offer.security_coin_sk,
-//         consensus_constants,
-//     )?;
-
-//     // Finally, return the data
-//     Ok((
-//         offer.aggregated_signature + &security_coin_sig,
-//         offer.security_coin_sk,
-//         price_scheduler,
-//         catalog,
-//         slots,
-//     ))
-// }
+    // Finally, return the data
+    Ok((
+        offer.aggregated_signature + &security_coin_sig,
+        offer.security_coin_sk,
+        xchandles_registry,
+        slots,
+    ))
+}
 
 #[cfg(test)]
 mod tests {

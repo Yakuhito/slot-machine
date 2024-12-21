@@ -2710,7 +2710,6 @@ name = "slot-machine"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "async-std",
  "bech32",
  "bip39",
  "chia",
@@ -2723,7 +2722,6 @@ dependencies = [
  "hex",
  "hex-literal",
  "num-bigint",
- "once_cell",
  "openssl",
  "openssl-sys",
  "reqwest",

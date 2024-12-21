@@ -12,7 +12,6 @@ clvmr = "0.8.0"
 chia = "0.13.0"
 hex-literal = "0.4.1"
 clvm-traits = "0.13.0"
-once_cell = "1.19.0"
 num-bigint = "0.4.6"
 bip39 = "2.0.0"
 getrandom = "0.2.15"
@@ -25,7 +24,6 @@ thiserror = "1.0.64"
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.6", features = ["sqlite", "runtime-async-std-native-tls"] }
-async-std = "1.10"
 bech32 = "0.9.1"
 
 chia-wallet-sdk = { git = "https://github.com/Rigidity/chia-wallet-sdk.git", rev = "f70e765f2406cbc137b108593a6ba3bdba2c2c2d"}
