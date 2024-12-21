@@ -12,36 +12,37 @@ use crate::{
 };
 
 use super::{
-    CatalogConstants, CatalogInfo, CatalogPrecommitValue, CatalogSlotValue, CatalogState,
-    PrecommitCoin, Slot, SlotInfo, SlotProof, UniquenessPrelauncher,
+    CatalogPrecommitValue, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
+    CatalogSlotValue, PrecommitCoin, Slot, SlotInfo, SlotProof, UniquenessPrelauncher,
 };
 
 #[derive(Debug, Clone)]
 #[must_use]
-pub struct Catalog {
+pub struct CatalogRegistry {
     pub coin: Coin,
     pub proof: Proof,
-    pub info: CatalogInfo,
+    pub info: CatalogRegistryInfo,
 }
 
-impl Catalog {
-    pub fn new(coin: Coin, proof: Proof, info: CatalogInfo) -> Self {
+impl CatalogRegistry {
+    pub fn new(coin: Coin, proof: Proof, info: CatalogRegistryInfo) -> Self {
         Self { coin, proof, info }
     }
 }
 
-impl Catalog {
+impl CatalogRegistry {
     pub fn from_parent_spend(
         allocator: &mut Allocator,
         parent_coin: Coin,
         parent_puzzle: Puzzle,
         parent_solution: NodePtr,
-        constants: CatalogConstants,
+        constants: CatalogRegistryConstants,
     ) -> Result<Option<Self>, DriverError>
     where
         Self: Sized,
     {
-        let Some(parent_info) = CatalogInfo::parse(allocator, parent_puzzle, constants)? else {
+        let Some(parent_info) = CatalogRegistryInfo::parse(allocator, parent_puzzle, constants)?
+        else {
             return Ok(None);
         };
 
@@ -52,7 +53,7 @@ impl Catalog {
         });
 
         let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
-        let new_state = ActionLayer::<CatalogState>::get_new_state(
+        let new_state = ActionLayer::<CatalogRegistryState>::get_new_state(
             allocator,
             parent_info.state,
             parent_solution.inner_solution,
@@ -62,7 +63,7 @@ impl Catalog {
 
         let new_coin = Coin::new(parent_coin.coin_id(), new_info.puzzle_hash().into(), 1);
 
-        Ok(Some(Catalog {
+        Ok(Some(CatalogRegistry {
             coin: new_coin,
             proof,
             info: new_info,
@@ -70,16 +71,16 @@ impl Catalog {
     }
 }
 
-pub enum CatalogAction {
+pub enum CatalogRegistryAction {
     Register(CatalogRegisterActionSolution),
-    UpdatePrice(DelegatedStateActionSolution<CatalogState>),
+    UpdatePrice(DelegatedStateActionSolution<CatalogRegistryState>),
 }
 
-impl Catalog {
+impl CatalogRegistry {
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        actions: Vec<CatalogAction>,
+        actions: Vec<CatalogRegistryAction>,
     ) -> Result<Spend, DriverError> {
         let layers = self.info.into_layers();
 
@@ -88,7 +89,7 @@ impl Catalog {
         let action_spends: Vec<Spend> = actions
             .into_iter()
             .map(|action| match action {
-                CatalogAction::Register(solution) => {
+                CatalogRegistryAction::Register(solution) => {
                     let layer = CatalogRegisterAction::from_info(&self.info);
 
                     let puzzle = layer.construct_puzzle(ctx)?;
@@ -96,7 +97,7 @@ impl Catalog {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                CatalogAction::UpdatePrice(solution) => {
+                CatalogRegistryAction::UpdatePrice(solution) => {
                     let layer =
                         DelegatedStateAction::new(self.info.constants.price_singleton_launcher_id);
 
@@ -131,7 +132,7 @@ impl Catalog {
                     proofs: layers
                         .inner_puzzle
                         .get_proofs(
-                            &CatalogInfo::action_puzzle_hashes(
+                            &CatalogRegistryInfo::action_puzzle_hashes(
                                 self.info.launcher_id,
                                 &self.info.constants,
                             ),
@@ -157,8 +158,8 @@ impl Catalog {
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         eve_nft_inner_spend: Spend,
-        price_update: Option<CatalogAction>,
-    ) -> Result<(Conditions, Catalog, Vec<Slot<CatalogSlotValue>>), DriverError> {
+        price_update: Option<CatalogRegistryAction>,
+    ) -> Result<(Conditions, CatalogRegistry, Vec<Slot<CatalogSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
@@ -239,7 +240,7 @@ impl Catalog {
         nft.spend(ctx, eve_nft_inner_spend)?;
 
         // finally, spend self
-        let register = CatalogAction::Register(CatalogRegisterActionSolution {
+        let register = CatalogRegistryAction::Register(CatalogRegisterActionSolution {
             tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,
             left_tail_hash: left_slot_value.asset_id,
@@ -260,7 +261,7 @@ impl Catalog {
             },
         )?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_catalog = Catalog::from_parent_spend(
+        let new_catalog = CatalogRegistry::from_parent_spend(
             &mut ctx.allocator,
             my_coin,
             my_puzzle,

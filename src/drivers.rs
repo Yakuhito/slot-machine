@@ -1,7 +1,6 @@
 use bip39::Mnemonic;
 use chia::{
     bls::{sign, SecretKey, Signature},
-    clvm_utils::ToTreeHash,
     consensus::consensus_constants::ConsensusConstants,
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
@@ -20,11 +19,7 @@ use chia_wallet_sdk::{
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::NodePtr;
 
-use crate::{
-    AddCat, Catalog, CatalogConstants, CatalogInfo, CatalogPreroller, CatalogPrerollerInfo,
-    CatalogSlotValue, CatalogState, Cns, CnsConstants, CnsInfo, CnsPreroller, CnsPrerollerInfo,
-    CnsSlotValue, CnsState, PriceSchedule, PriceScheduler, PriceSchedulerInfo, Slot,
-};
+use crate::{CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo};
 
 pub struct SecureOneSidedOffer {
     pub coin_spends: Vec<CoinSpend>,
@@ -202,16 +197,13 @@ pub fn sign_standard_transaction(
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
-pub fn initiate_catalog_launch(
+pub fn launch_catalog_registry(
     ctx: &mut SpendContext,
     offer: Offer,
-    price_schedule: PriceSchedule,
     initial_registration_price: u64,
-    cats_to_launch: Vec<AddCat>,
-    cats_per_unroll: u64,
     catalog_constants: CatalogConstants,
     consensus_constants: &ConsensusConstants,
-) -> Result<(Signature, SecretKey, PriceScheduler, CatalogPreroller), DriverError> {
+) -> Result<(Signature, SecretKey), DriverError> {
     let offer = parse_one_sided_offer(ctx, offer)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
@@ -219,51 +211,18 @@ pub fn initiate_catalog_launch(
 
     let mut security_coin_conditions = Conditions::new();
 
-    // Create preroll coin launcher
-    let preroll_launcher = Launcher::new(security_coin_id, 1);
-    let preroll_launcher_coin = preroll_launcher.coin();
-    let catalog_launcher_id = preroll_launcher_coin.coin_id();
+    // Create coin launcher
+    let registry_launcher = Launcher::new(security_coin_id, 1);
+    let registry_launcher_coin = registry_launcher.coin();
+    let registry_launcher_id = registry_launcher_coin.coin_id();
 
-    // Launch price scheduler
-    let price_scheduler_launcher = Launcher::new(security_coin_id, 2);
-    let price_scheduler_launcher_coin = price_scheduler_launcher.coin();
-    let price_scheduler_launcher_id = price_scheduler_launcher_coin.coin_id();
-    let catalog_constants = catalog_constants.with_price_singleton(price_scheduler_launcher_id);
-
-    let price_scheduler_0th_gen_info = PriceSchedulerInfo::new(
-        price_scheduler_launcher_id,
-        price_schedule.clone(),
-        0,
-        catalog_launcher_id,
-    );
-
-    let schedule_ptr = price_schedule.to_clvm(&mut ctx.allocator)?;
-    let (conds, price_scheduler_0th_gen_coin) =
-        price_scheduler_launcher.with_singleton_amount(1).spend(
-            ctx,
-            price_scheduler_0th_gen_info.inner_puzzle_hash().into(),
-            schedule_ptr,
-        )?;
-
-    // this creates the launcher & secures the spend
-    security_coin_conditions = security_coin_conditions.extend(conds);
-
-    let price_scheduler = PriceScheduler::new(
-        price_scheduler_0th_gen_coin,
-        Proof::Eve(EveProof {
-            parent_parent_coin_info: price_scheduler_launcher_coin.parent_coin_info,
-            parent_amount: price_scheduler_launcher_coin.amount,
-        }),
-        price_scheduler_0th_gen_info,
-    );
-
-    // Spend preroll coin launcher
+    // Spend coin launcher
     let royalty_puzzle_hash = catalog_constants.royalty_address;
     let trade_price_percentage = catalog_constants.royalty_ten_thousandths;
 
-    let target_catalog_info = CatalogInfo::new(
-        catalog_launcher_id,
-        CatalogState {
+    let catalog_registry_info = CatalogRegistryInfo::new(
+        registry_launcher_id,
+        CatalogRegistryState {
             registration_price: initial_registration_price,
         },
         catalog_constants,

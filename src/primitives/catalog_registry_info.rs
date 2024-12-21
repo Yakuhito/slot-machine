@@ -13,18 +13,18 @@ use crate::{
     DelegatedStateActionArgs,
 };
 
-pub type CatalogLayers = SingletonLayer<ActionLayer<CatalogState>>;
+pub type CatalogRegistryLayers = SingletonLayer<ActionLayer<CatalogRegistryState>>;
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
 #[clvm(list)]
-pub struct CatalogState {
+pub struct CatalogRegistryState {
     pub registration_price: u64,
 }
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub struct CatalogConstants {
+pub struct CatalogRegistryConstants {
     pub royalty_address: Bytes32,
     pub royalty_ten_thousandths: u16,
     pub precommit_payout_puzzle_hash: Bytes32,
@@ -32,10 +32,10 @@ pub struct CatalogConstants {
     pub price_singleton_launcher_id: Bytes32,
 }
 
-impl CatalogConstants {
+impl CatalogRegistryConstants {
     pub fn get(testnet11: bool) -> Self {
         if testnet11 {
-            return CatalogConstants {
+            return CatalogRegistryConstants {
                 royalty_address: Bytes32::from(hex!(
                     "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
                 )),
@@ -61,15 +61,19 @@ impl CatalogConstants {
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub struct CatalogInfo {
+pub struct CatalogRegistryInfo {
     pub launcher_id: Bytes32,
-    pub state: CatalogState,
+    pub state: CatalogRegistryState,
 
-    pub constants: CatalogConstants,
+    pub constants: CatalogRegistryConstants,
 }
 
-impl CatalogInfo {
-    pub fn new(launcher_id: Bytes32, state: CatalogState, constants: CatalogConstants) -> Self {
+impl CatalogRegistryInfo {
+    pub fn new(
+        launcher_id: Bytes32,
+        state: CatalogRegistryState,
+        constants: CatalogRegistryConstants,
+    ) -> Self {
         Self {
             launcher_id,
             state,
@@ -77,14 +81,14 @@ impl CatalogInfo {
         }
     }
 
-    pub fn with_state(mut self, state: CatalogState) -> Self {
+    pub fn with_state(mut self, state: CatalogRegistryState) -> Self {
         self.state = state;
         self
     }
 
     pub fn action_puzzle_hashes(
         launcher_id: Bytes32,
-        constants: &CatalogConstants,
+        constants: &CatalogRegistryConstants,
     ) -> [Bytes32; 2] {
         let register_action_hash = CatalogRegisterActionArgs::curry_tree_hash(
             launcher_id,
@@ -102,7 +106,7 @@ impl CatalogInfo {
     }
 
     #[must_use]
-    pub fn into_layers(self) -> CatalogLayers {
+    pub fn into_layers(self) -> CatalogRegistryLayers {
         SingletonLayer::new(
             self.launcher_id,
             ActionLayer::from_action_puzzle_hashes(
@@ -116,9 +120,9 @@ impl CatalogInfo {
     pub fn parse(
         allocator: &mut Allocator,
         puzzle: Puzzle,
-        constants: CatalogConstants,
+        constants: CatalogRegistryConstants,
     ) -> Result<Option<Self>, DriverError> {
-        let Some(layers) = CatalogLayers::parse_puzzle(allocator, puzzle)? else {
+        let Some(layers) = CatalogRegistryLayers::parse_puzzle(allocator, puzzle)? else {
             return Ok(None);
         };
 
@@ -131,7 +135,7 @@ impl CatalogInfo {
         Ok(Some(Self::from_layers(layers, constants)))
     }
 
-    pub fn from_layers(layers: CatalogLayers, constants: CatalogConstants) -> Self {
+    pub fn from_layers(layers: CatalogRegistryLayers, constants: CatalogRegistryConstants) -> Self {
         Self {
             launcher_id: layers.launcher_id,
             state: layers.inner_puzzle.state,

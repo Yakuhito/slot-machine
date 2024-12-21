@@ -5,8 +5,6 @@ use serde::Deserialize;
 use std::fs::File;
 use std::path::Path;
 
-use crate::AddCat;
-
 use super::utils::hex_string_to_bytes32;
 use super::utils::CliError;
 

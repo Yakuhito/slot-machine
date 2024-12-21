@@ -1,8 +1,6 @@
-mod catalog;
-mod catalog_info;
+mod catalog_registry;
+mod catalog_registry_info;
 mod precommit_coin;
-mod price_scheduler;
-mod price_scheduler_info;
 mod reserve;
 mod slot;
 mod slot_info;
@@ -12,8 +10,8 @@ mod verification_info;
 mod xchandles_registry;
 mod xchandles_registry_info;
 
-pub use catalog::*;
-pub use catalog_info::*;
+pub use catalog_registry::*;
+pub use catalog_registry_info::*;
 pub use precommit_coin::*;
 pub use reserve::*;
 pub use slot::*;
