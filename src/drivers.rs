@@ -923,7 +923,9 @@ mod tests {
                 ),
             )?;
 
+            println!("before spend 0 {}", i); // todo: debug
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("after spend 0 {}", i); // todo: debug
 
             // call the 'register' action on CNS
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -958,8 +960,10 @@ mod tests {
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
             let price_update = if i % 2 == 1 {
-                let new_price = reg_amount;
+                let new_price = test_price_schedule[i / 2];
                 assert_ne!(new_price, registry.info.state.registration_base_price);
+                println!("new_price {}", new_price); // todo: debug
+                println!("old price {}", registry.info.state.registration_base_price); // todo: debug
 
                 let (
                     new_price_singleton_coin,
@@ -987,6 +991,7 @@ mod tests {
                 None
             };
 
+            println!("before register_handle {}", i); // todo: debug
             let (secure_cond, new_registry, new_slots) = registry.register_handle(
                 ctx,
                 left_slot,
@@ -994,6 +999,7 @@ mod tests {
                 precommit_coin,
                 price_update,
             )?;
+            println!("after register_handle {}", i); // todo: debug
 
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
             let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);

@@ -1,20 +1,20 @@
 ; register.clsp by yakuhito
-;; Responsible for registering new names into the name registry (CNS)
+;; Responsible for registering new handles into the handle registry (XCHandles)
 
 ;; Unlike CATalog slot's value is (value (left_value . right_value) expiration . launcher_id) where:
-;;  value is the slot 'key'/id and is defined as (sha256 1 name)
+;;  value is the slot 'key'/id and is defined as (sha256 1 handle)
 ;;  left_value/right_value are the key's of the slot's neighbors
-;;  expiration is a timestamp that says when the name will expire
-;;  launcher_id is a 32-byte value that specifies the name NFT's launcher id
+;;  expiration is a timestamp that says when the handle will expire
+;;  launcher_id is a 32-byte value that specifies the handle NFT's launcher id
 ;;       in the future, launcher_id might point to a namespace/sub-registry, for example
 
-;; Also note that anyone can extend a name registration, but only the name NFT may update the launcher_id data
+;; Also note that anyone can extend a handle registration, but only the handle NFT may update the launcher_id data
 
 (mod (
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
   Current_State ; Truth
-  (name_hash name_reveal left_value right_value . solution) ; see the 'main' function for rest of arguments 
+  (handle_hash handle_reveal left_value right_value . solution) ; see the 'main' function for rest of arguments 
 )
   (include condition_codes.clib)
   (include cns_price.clib)
@@ -36,7 +36,7 @@
     Current_State
     ( 
         ; start 'also included in the pre-commit coin'
-        name_nft_launcher_id
+        handle_nft_launcher_id
         start_time
         secret_hash
         ; end
@@ -44,7 +44,7 @@
         left_left_value_hash left_data_hash ; left slot info
         right_right_value_hash right_data_hash ; right slot info
     )
-    name_hash
+    handle_hash
     value_hash
     left_value_hash
     right_value_hash
@@ -72,7 +72,7 @@
                     right_value_hash
                     (sha256 2 
                         (sha256 1 (+ start_time (* 60 60 24 366 (check_years (/ precommitment_amount price)))))
-                        (sha256 1 name_nft_launcher_id)
+                        (sha256 1 handle_nft_launcher_id)
                     ) ; sha256tree data
                 )
             )
@@ -95,13 +95,13 @@
                     (sha256 2
                         (sha256 2 
                             secret_hash
-                            name_hash
+                            handle_hash
                         )
                         (sha256 2
-                            (sha256 1 name_nft_launcher_id)
+                            (sha256 1 handle_nft_launcher_id)
                             (sha256 1 start_time)
                         )
-                    ) ; data in precommit coin reveal will be (c (c secret name) (c name_nft_launcher_id start_time)))
+                    ) ; data in precommit coin reveal will be (c (c secret handle) (c handle_nft_launcher_id start_time)))
                 )
             )
         ) ; conditions
@@ -115,10 +115,10 @@
     )
   )
 
-  (defun strlen_and_validate (name)
-    (if name
-        (if (validate_char (substr name 0 1))
-            (+ 1 (strlen_and_validate (substr name 1)))
+  (defun strlen_and_validate (handle)
+    (if handle
+        (if (validate_char (substr handle 0 1))
+            (+ 1 (strlen_and_validate (substr handle 1)))
             ; else 
             (x)
         )
@@ -127,17 +127,17 @@
     )
   )
 
-  (if (all (= name_hash (sha256 1 name_reveal)) (> name_hash left_value) (> right_value name_hash))
+  (if (all (= handle_hash (sha256 1 handle_reveal)) (> handle_hash left_value) (> right_value handle_hash))
     (main
             PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
             Current_State
             solution
-            name_hash
-            (sha256 1 name_hash)
+            handle_hash
+            (sha256 1 handle_hash)
             (sha256 1 left_value) 
             (sha256 1 right_value) 
             (*
-                (get_price_factor (strlen_and_validate name_reveal)) 
+                (get_price_factor (strlen_and_validate handle_reveal)) 
                 (f Current_State)
             )
         )
