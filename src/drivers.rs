@@ -754,7 +754,7 @@ mod tests {
             ctx,
             offer,
             initial_registration_price,
-            catalog_constants,
+            catalog_constants.with_price_singleton(price_singleton_launcher_id),
             &TESTNET11_CONSTANTS,
         )?;
 
@@ -764,8 +764,7 @@ mod tests {
 
         let mut slots: Vec<Slot<CatalogSlotValue>> = slots.into();
         for i in 0..7 {
-            println!("i: {}", i); // TODO: debug
-                                  // create precommit coin
+            // create precommit coin
             let reg_amount = if i % 2 == 1 {
                 test_price_schedule[i / 2]
             } else {
@@ -914,12 +913,7 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-            let spends = ctx.take();
-            // todo: debug
-            let spends = spends.clone();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            sim.spend_coins(spends, &[user_sk.clone()])?;
-            println!("spent catalog :)"); // TODO: debug
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
@@ -929,7 +923,7 @@ mod tests {
 
         assert_eq!(
             catalog.info.state.registration_price,
-            test_price_schedule[3], // 0, 2, 4, 6 updated the price
+            test_price_schedule[2], // 1, 3, 5 updated the price
         );
 
         Ok(())
