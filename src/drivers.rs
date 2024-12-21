@@ -302,7 +302,7 @@ pub fn launch_catalog_registry(
 
     let new_catalog_registry_coin = Coin::new(
         catalog_eve_coin.coin_id(),
-        catalog_inner_puzzle_hash.into(),
+        SingletonArgs::curry_tree_hash(registry_launcher_id, catalog_inner_puzzle_hash).into(),
         1,
     );
     let catalog_proof = Proof::Lineage(LineageProof {
@@ -758,18 +758,15 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
-        println!("before initial :)"); // TODO: debug
-        let spends = ctx.take();
-        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-        sim.spend_coins(spends, &[launcher_sk, security_sk])?;
-        println!("spent initial :)"); // TODO: debug
+        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
 
         // Register CAT
 
         let mut slots: Vec<Slot<CatalogSlotValue>> = slots.into();
         for i in 0..7 {
-            // create precommit coin
-            let reg_amount = if i % 2 == 0 {
+            println!("i: {}", i); // TODO: debug
+                                  // create precommit coin
+            let reg_amount = if i % 2 == 1 {
                 test_price_schedule[i / 2]
             } else {
                 catalog.info.state.registration_price
@@ -816,6 +813,7 @@ mod tests {
             )?;
 
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("created precommit :)"); // TODO: debug
 
             // call the 'register' action on CATalog
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -844,7 +842,7 @@ mod tests {
 
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
-            let price_update = if i % 2 == 0 {
+            let price_update = if i % 2 == 1 {
                 let new_price = reg_amount;
                 assert_ne!(new_price, catalog.info.state.registration_price);
 
@@ -917,7 +915,11 @@ mod tests {
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
             let spends = ctx.take();
+            // todo: debug
+            let spends = spends.clone();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
             sim.spend_coins(spends, &[user_sk.clone()])?;
+            println!("spent catalog :)"); // TODO: debug
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
