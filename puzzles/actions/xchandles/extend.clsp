@@ -1,15 +1,15 @@
 ; extend.clsp by yakuhito
-;; Used to extend the registration of a name
+;; Used to extend the registration of a handle
 
 ;; Remember that the slot format is (value (left_value right_value) expiration . launcher_id)
-;;  but we're only interested in 'expiration' (and name to get correct price factor based on length)
+;;  but we're only interested in 'expiration' (and handle to get correct price factor based on length)
 
 (mod (
     OFFER_MOD_HASH
     PAYOUT_PUZZLE_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
-    (renew_amount name neighbors_hash expiration . launcher_id_hash)
+    (renew_amount handle neighbors_hash expiration . launcher_id_hash)
 )
     (include condition_codes.clib)
     (include xchandles_price.clib)
@@ -17,9 +17,9 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_slot_value_hash (name neighbors_hash expiration launcher_id_hash)
+    (defun get_slot_value_hash (handle neighbors_hash expiration launcher_id_hash)
         (sha256 2
-            (sha256 1 (sha256 1 name))
+            (sha256 1 (sha256 1 handle))
             (sha256 2
                 neighbors_hash
                 (sha256 2
@@ -35,18 +35,18 @@
         (list
             ; spend slot
             (spend_slot SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash name neighbors_hash expiration launcher_id_hash)
+                (get_slot_value_hash handle neighbors_hash expiration launcher_id_hash)
             )
 
             ; announcement
-            (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256 2 (sha256 1 renew_amount) (sha256 1 name))))
+            (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256 2 (sha256 1 renew_amount) (sha256 1 handle))))
             
             ; create new slot
             (create_slot SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash
-                    name
+                    handle
                     neighbors_hash
-                    (+ expiration (* 60 60 24 366 (check_years (/ renew_amount (* (f Current_State) (get_price_factor (strlen name)))))))
+                    (+ expiration (* 60 60 24 366 (check_years (/ renew_amount (* (f Current_State) (get_price_factor (strlen handle)))))))
                     launcher_id_hash
                 )
             ) 
@@ -58,7 +58,7 @@
                     OFFER_MOD_HASH
                     (sha256tree 
                         (list
-                            (sha256tree (c name expiration)) ; nonce
+                            (sha256tree (c handle expiration)) ; nonce
                             (list PAYOUT_PUZZLE_HASH renew_amount) ; notarized payment
                         )
                     )

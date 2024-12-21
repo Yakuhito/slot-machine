@@ -1,5 +1,5 @@
 ; expire.clsp by yakuhito
-;; Used to expire (i.e., remove) a name from the registry
+;; Used to expire (i.e., remove) a handle from the registry
 
 ;; Remember that the slot format is (value (left_value right_value) expiration . launcher_id)
 

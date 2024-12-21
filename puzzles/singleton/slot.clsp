@@ -5,7 +5,7 @@
 
 ;; Warning: Slots do not assure uniqueness - a double-linked sorted list structure on top is required for that
 ;;          An attacker might intentionally omit a given slot to trick the dApp that it doesn't exist
-;;          For example, a naive name reigstration app might be tricked into registering the same name twice
+;;          For example, a naive handle reigstration app might be tricked into registering the same handle twice
 
 ;; Warning 2: This puzzle assumes the controller singleton has an amount of 1.
 
