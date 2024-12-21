@@ -107,7 +107,7 @@ impl XchandlesExtendActionArgs {
 #[clvm(solution)]
 pub struct XchandlesExtendActionSolution {
     pub renew_amount: u64,
-    pub name: String,
+    pub handle: String,
     pub neighbors_hash: Bytes32,
     pub expiration: u64,
     #[clvm(rest)]

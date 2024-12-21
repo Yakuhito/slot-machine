@@ -174,17 +174,17 @@ pub struct CatalogPrecommitValue<T = NodePtr> {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
-pub struct XchandlesSecretAndName {
+pub struct XchandlesSecretAndHandle {
     pub secret: Bytes32,
     #[clvm(rest)]
-    pub name: String,
+    pub handle: String,
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
 pub struct XchandlesPrecommitValue {
-    pub secret_and_name: XchandlesSecretAndName,
-    pub name_nft_launcher_id: Bytes32,
+    pub secret_and_handle: XchandlesSecretAndHandle,
+    pub handle_nft_launcher_id: Bytes32,
     #[clvm(rest)]
     pub start_time: u64,
 }
@@ -192,13 +192,13 @@ pub struct XchandlesPrecommitValue {
 impl XchandlesPrecommitValue {
     pub fn new(
         secret: Bytes32,
-        name: String,
-        name_nft_launcher_id: Bytes32,
+        handle: String,
+        handle_nft_launcher_id: Bytes32,
         start_time: u64,
     ) -> Self {
         Self {
-            secret_and_name: XchandlesSecretAndName { secret, name },
-            name_nft_launcher_id,
+            secret_and_handle: XchandlesSecretAndHandle { secret, handle },
+            handle_nft_launcher_id,
             start_time,
         }
     }

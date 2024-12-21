@@ -8,7 +8,7 @@ use chia::{
         offer::{
             NotarizedPayment, Payment, SettlementPaymentsSolution, SETTLEMENT_PAYMENTS_PUZZLE_HASH,
         },
-        singleton::{SingletonArgs, SingletonSolution, SingletonStruct},
+        singleton::{SingletonArgs, SingletonSolution},
         standard::{StandardArgs, StandardSolution},
         EveProof, LineageProof, Proof,
     },
@@ -22,9 +22,9 @@ use clvmr::NodePtr;
 
 use crate::{
     CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
-    CatalogSlotValue, Slot, Slot1stCurryArgs, SlotInfo, SlotProof, XchandlesConstants,
-    XchandlesRegistry, XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue,
-    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+    CatalogSlotValue, Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesRegistry,
+    XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue, SLOT32_MAX_VALUE,
+    SLOT32_MIN_VALUE,
 };
 
 pub struct SecuredOneSidedOffer {
@@ -204,6 +204,7 @@ pub fn sign_standard_transaction(
 // Spends the eve signleton, whose only job is to create the
 //   slot 'premine' (leftmost and rightmost slots) and
 //   transition to the actual registry puzzle
+#[allow(clippy::type_complexity)]
 fn spend_eve_coin_and_create_registry<S>(
     ctx: &mut SpendContext,
     launcher: Launcher,
@@ -450,23 +451,22 @@ pub fn launch_xchandles_registry(
 mod tests {
     use chia::{
         clvm_utils::CurriedProgram,
-        protocol::{Bytes, SpendBundle},
+        protocol::SpendBundle,
         puzzles::{
             cat::GenesisByCoinIdTailArgs,
             singleton::{SingletonSolution, SINGLETON_LAUNCHER_PUZZLE_HASH},
         },
     };
     use chia_wallet_sdk::{
-        test_secret_keys, CurriedPuzzle, Nft, NftMint, Simulator, SingletonLayer,
-        SpendWithConditions, TESTNET11_CONSTANTS,
+        test_secret_keys, Nft, NftMint, Simulator, SpendWithConditions, TESTNET11_CONSTANTS,
     };
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
-        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot,
-        SlotNeigborsInfo, SpendContextExt, XchandlesPrecommitValue, XchandlesRegisterAction,
-        ANY_METADATA_UPDATER_HASH, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
+        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegistryAction,
+        ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -488,6 +488,99 @@ mod tests {
         }
     }
 
+    // Launches a test singleton with an innter puzzle of '1'
+    // JUST FOR TESTING PURPOSES PLEASE DO NOT USE THIS THING IN PRODUCTION
+    fn launch_test_singleton(
+        ctx: &mut SpendContext,
+        sim: &mut Simulator,
+    ) -> Result<(Bytes32, Coin, Proof, NodePtr), DriverError> {
+        let price_singleton_launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+        let price_singleton_launcher =
+            Launcher::new(price_singleton_launcher_coin.parent_coin_info, 1);
+
+        let price_singleton_launcher_id = price_singleton_launcher.coin().coin_id();
+
+        let price_singleton_inner_puzzle = ctx.alloc(&1)?;
+        let price_singleton_inner_puzzle_hash = ctx.tree_hash(price_singleton_inner_puzzle);
+        let (_, price_singleton_coin) =
+            price_singleton_launcher.spend(ctx, price_singleton_inner_puzzle_hash.into(), ())?;
+
+        let price_singleton_puzzle = CurriedProgram {
+            program: ctx.singleton_top_layer()?,
+            args: SingletonArgs::new(price_singleton_launcher_id, price_singleton_inner_puzzle),
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let price_singleton_proof: Proof = Proof::Eve(EveProof {
+            parent_parent_coin_info: price_singleton_launcher_coin.parent_coin_info,
+            parent_amount: price_singleton_launcher_coin.amount,
+        });
+
+        Ok((
+            price_singleton_launcher_id,
+            price_singleton_coin,
+            price_singleton_proof,
+            price_singleton_puzzle,
+        ))
+    }
+
+    // Spends the price singleton to update the price of a registry
+    fn spend_price_singleton<S>(
+        ctx: &mut SpendContext,
+        price_singleton_coin: Coin,
+        price_singleton_proof: Proof,
+        price_singleton_puzzle: NodePtr,
+        new_state: S,
+        receiver_puzzle_hash: Bytes32,
+    ) -> Result<(Coin, Proof, DelegatedStateActionSolution<S>), DriverError>
+    where
+        S: ToTreeHash,
+    {
+        let price_singleton_inner_puzzle = ctx.alloc(&1)?;
+        let price_singleton_inner_puzzle_hash = ctx.tree_hash(price_singleton_inner_puzzle);
+
+        let message: Bytes32 = new_state.tree_hash().into();
+        let price_singleton_inner_solution = Conditions::new()
+            .send_message(
+                18,
+                message.into(),
+                vec![receiver_puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            )
+            .create_coin(price_singleton_inner_puzzle_hash.into(), 1, vec![]);
+
+        let price_singleton_inner_solution =
+            price_singleton_inner_solution.to_clvm(&mut ctx.allocator)?;
+        let price_singleton_solution = SingletonSolution {
+            lineage_proof: price_singleton_proof,
+            amount: 1,
+            inner_solution: price_singleton_inner_solution,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+
+        let price_singleton_spend = Spend::new(price_singleton_puzzle, price_singleton_solution);
+        ctx.spend(price_singleton_coin, price_singleton_spend)?;
+
+        // compute price singleton info for next spend
+        let next_price_singleton_proof = Proof::Lineage(LineageProof {
+            parent_parent_coin_info: price_singleton_coin.parent_coin_info,
+            parent_inner_puzzle_hash: price_singleton_inner_puzzle_hash.into(),
+            parent_amount: price_singleton_coin.amount,
+        });
+        let next_price_singleton_coin = Coin::new(
+            price_singleton_coin.coin_id(),
+            price_singleton_coin.puzzle_hash,
+            1,
+        );
+
+        Ok((
+            next_price_singleton_coin,
+            next_price_singleton_proof,
+            DelegatedStateActionSolution {
+                new_state,
+                other_singleton_inner_puzzle_hash: price_singleton_inner_puzzle_hash.into(),
+            },
+        ))
+    }
+
     #[test]
     fn test_catalog() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
@@ -496,7 +589,7 @@ mod tests {
         // setup config
 
         let initial_registration_price = 2000;
-        let test_price_schedule = vec![1000, 500, 250, 125];
+        let test_price_schedule = [1000, 500, 250];
 
         let catalog_constants = CatalogRegistryConstants {
             royalty_address: Bytes32::from([7; 32]),
@@ -517,7 +610,7 @@ mod tests {
         let user_pk = user_sk.public_key();
         let user_puzzle_hash = StandardArgs::curry_tree_hash(user_pk).into();
 
-        let offer_amount = 1 as u64;
+        let offer_amount = 1;
         let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
         let offer_spend = StandardLayer::new(launcher_pk).spend_with_conditions(
             ctx,
@@ -541,27 +634,12 @@ mod tests {
             )?,
         });
 
-        // Launch price singleton
-        let price_singleton_launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
-        let price_singleton_launcher =
-            Launcher::new(price_singleton_launcher_coin.parent_coin_info, 1);
-
-        let price_singleton_launcher_id = price_singleton_launcher.coin().coin_id();
-
-        let price_singleton_inner_puzzle = ctx.alloc(&1)?;
-        let price_singleton_inner_puzzle_hash = ctx.tree_hash(price_singleton_inner_puzzle);
-        let (_, mut price_singleton_coin) =
-            price_singleton_launcher.spend(ctx, price_singleton_inner_puzzle_hash.into(), ())?;
-
-        let price_singleton_puzzle = CurriedProgram {
-            program: ctx.singleton_top_layer()?,
-            args: SingletonArgs::new(price_singleton_launcher_id, price_singleton_inner_puzzle),
-        }
-        .to_clvm(&mut ctx.allocator)?;
-        let mut price_singleton_proof: Proof = Proof::Eve(EveProof {
-            parent_parent_coin_info: price_singleton_launcher_coin.parent_coin_info,
-            parent_amount: price_singleton_launcher_coin.amount,
-        });
+        let (
+            price_singleton_launcher_id,
+            mut price_singleton_coin,
+            mut price_singleton_proof,
+            price_singleton_puzzle,
+        ) = launch_test_singleton(ctx, &mut sim)?;
 
         // Launch catalog
         let (_, security_sk, mut catalog, slots) = launch_catalog_registry(
@@ -659,48 +737,26 @@ mod tests {
                 let new_price = reg_amount;
                 assert_ne!(new_price, catalog.info.state.registration_price);
 
-                let new_state = CatalogRegistryState {
-                    registration_price: new_price,
-                };
+                let (
+                    new_price_singleton_coin,
+                    new_price_singleton_proof,
+                    delegated_state_action_solution,
+                ) = spend_price_singleton(
+                    ctx,
+                    price_singleton_coin,
+                    price_singleton_proof,
+                    price_singleton_puzzle,
+                    CatalogRegistryState {
+                        registration_price: new_price,
+                    },
+                    catalog.coin.puzzle_hash,
+                )?;
+
+                price_singleton_coin = new_price_singleton_coin;
+                price_singleton_proof = new_price_singleton_proof;
+
                 let update_action =
-                    CatalogRegistryAction::UpdatePrice(DelegatedStateActionSolution {
-                        new_state,
-                        other_singleton_inner_puzzle_hash: price_singleton_inner_puzzle_hash.into(),
-                    });
-
-                // Spend price singleton
-                let message: Bytes32 = new_state.tree_hash().into();
-                let price_singleton_inner_solution = Conditions::new()
-                    .send_message(
-                        18,
-                        message.into(),
-                        vec![catalog.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
-                    )
-                    .create_coin(price_singleton_inner_puzzle_hash.into(), 1, vec![]);
-                let price_singleton_inner_solution =
-                    price_singleton_inner_solution.to_clvm(&mut ctx.allocator)?;
-                let price_singleton_solution = SingletonSolution {
-                    lineage_proof: price_singleton_proof,
-                    amount: 1,
-                    inner_solution: price_singleton_inner_solution,
-                }
-                .to_clvm(&mut ctx.allocator)?;
-
-                let price_singleton_spend =
-                    Spend::new(price_singleton_puzzle, price_singleton_solution);
-                ctx.spend(price_singleton_coin, price_singleton_spend)?;
-
-                // compute price singleton info for next spend
-                price_singleton_proof = Proof::Lineage(LineageProof {
-                    parent_parent_coin_info: price_singleton_coin.parent_coin_info,
-                    parent_inner_puzzle_hash: price_singleton_inner_puzzle_hash.into(),
-                    parent_amount: price_singleton_coin.amount,
-                });
-                price_singleton_coin = Coin::new(
-                    price_singleton_coin.coin_id(),
-                    price_singleton_coin.puzzle_hash,
-                    1,
-                );
+                    CatalogRegistryAction::UpdatePrice(delegated_state_action_solution);
 
                 Some(update_action)
             } else {
@@ -743,312 +799,328 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_cns() -> anyhow::Result<()> {
-    //     let ctx = &mut SpendContext::new();
-    //     let mut sim = Simulator::new();
+    #[test]
+    fn test_xchandles() -> anyhow::Result<()> {
+        let ctx = &mut SpendContext::new();
+        let mut sim = Simulator::new();
 
-    //     // setup config
+        // setup config
+        let initial_registration_price = 2000;
+        let test_price_schedule = [1000, 500, 250];
 
-    //     let initial_registration_price = 2000;
-    //     let test_price_schedule = vec![(1, 1000), (2, 500), (3, 250), (4, 125)];
+        let xchandles_constants = XchandlesConstants {
+            precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
+            relative_block_height: 1,
+            price_singleton_launcher_id: Bytes32::from(hex!(
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )),
+        };
 
-    //     let cns_constants = CnsConstants {
-    //         precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
-    //         relative_block_height: 1,
-    //         price_singleton_launcher_id: Bytes32::from(hex!(
-    //             "0000000000000000000000000000000000000000000000000000000000000000"
-    //         )),
-    //     };
+        // Create source offer
+        let [launcher_sk, user_sk]: [SecretKey; 2] = test_secret_keys(2)?.try_into().unwrap();
 
-    //     let premine_nft = "premine";
-    //     let premine_name_hash: Bytes32 = premine_nft.tree_hash().into();
-    //     let premine_nft = CnsSlotValue {
-    //         name_hash: premine_name_hash,
-    //         neighbors: SlotNeigborsInfo {
-    //             left_value: SLOT32_MIN_VALUE.into(),
-    //             right_value: SLOT32_MAX_VALUE.into(),
-    //         },
-    //         expiration: 0,
-    //         version: 1,
-    //         launcher_id: Bytes32::default(),
-    //     };
-    //     let names_to_launch = vec![premine_nft];
+        let launcher_pk = launcher_sk.public_key();
+        let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
 
-    //     // Create source offer
-    //     let [launcher_sk, user_sk]: [SecretKey; 2] = test_secret_keys(2)?.try_into().unwrap();
+        let user_pk = user_sk.public_key();
+        let user_puzzle = StandardLayer::new(user_pk);
+        let user_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(user_pk).into();
 
-    //     let launcher_pk = launcher_sk.public_key();
-    //     let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
+        let offer_amount = 1;
+        let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
+        let offer_spend = StandardLayer::new(launcher_pk).spend_with_conditions(
+            ctx,
+            Conditions::new().create_coin(
+                SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+                offer_amount,
+                vec![],
+            ),
+        )?;
 
-    //     let user_pk = user_sk.public_key();
-    //     let user_puzzle = StandardLayer::new(user_pk);
-    //     let user_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(user_pk).into();
+        let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
+        let solution = ctx.serialize(&offer_spend.solution)?;
+        let offer = Offer::new(SpendBundle {
+            coin_spends: vec![CoinSpend::new(offer_src_coin, puzzle_reveal, solution)],
+            aggregated_signature: sign_standard_transaction(
+                ctx,
+                offer_src_coin,
+                offer_spend,
+                &launcher_sk,
+                &TESTNET11_CONSTANTS,
+            )?,
+        });
 
-    //     let offer_amount = 2;
-    //     let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
-    //     let offer_spend = StandardLayer::new(launcher_pk).spend_with_conditions(
-    //         ctx,
-    //         Conditions::new().create_coin(
-    //             SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
-    //             offer_amount,
-    //             vec![],
-    //         ),
-    //     )?;
+        // Launch price singleton
+        let (
+            price_singleton_launcher_id,
+            mut price_singleton_coin,
+            mut price_singleton_proof,
+            price_singleton_puzzle,
+        ) = launch_test_singleton(ctx, &mut sim)?;
 
-    //     let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
-    //     let solution = ctx.serialize(&offer_spend.solution)?;
-    //     let offer = Offer::new(SpendBundle {
-    //         coin_spends: vec![CoinSpend::new(offer_src_coin, puzzle_reveal, solution)],
-    //         aggregated_signature: sign_standard_transaction(
-    //             ctx,
-    //             offer_src_coin,
-    //             offer_spend,
-    //             &launcher_sk,
-    //             &TESTNET11_CONSTANTS,
-    //         )?,
-    //     });
+        // Launch XCHandles
+        let (_, security_sk, mut registry, slots) = launch_xchandles_registry(
+            ctx,
+            offer,
+            initial_registration_price,
+            xchandles_constants.with_price_singleton(price_singleton_launcher_id),
+            &TESTNET11_CONSTANTS,
+        )?;
 
-    //     // Launch cns & price singleton
-    //     let (_, security_sk, mut price_scheduler, mut cns, slots) = launch_cns(
-    //         ctx,
-    //         offer,
-    //         test_price_schedule.clone(),
-    //         initial_registration_price,
-    //         names_to_launch,
-    //         cns_constants,
-    //         &TESTNET11_CONSTANTS,
-    //     )?;
+        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
 
-    //     sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
+        // Register 7 handles
 
-    //     // Register name
+        let mut slots: Vec<Slot<XchandlesSlotValue>> = slots.into();
+        for i in 0..7 {
+            // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
+            let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+            let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
+            let (_, did) = launcher.create_simple_did(ctx, &user_puzzle)?;
 
-    //     let mut slots = slots.clone();
-    //     for i in 0..7 {
-    //         // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
-    //         let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
-    //         let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
-    //         let (_, did) = launcher.create_simple_did(ctx, &user_puzzle)?;
+            // name is "aa" + "a" * i + "{i}"
+            let handle = if i == 0 {
+                "aa0".to_string()
+            } else {
+                "aa".to_string() + &"a".repeat(i).to_string() + &i.to_string()
+            };
+            let handle_hash: Bytes32 = handle.tree_hash().into();
 
-    //         // name is "aa" + "a" * i + "{i}"
-    //         let name = if i == 0 {
-    //             "aa0".to_string()
-    //         } else {
-    //             "aa".to_string() + &"a".repeat(i).to_string() + &i.to_string()
-    //         };
-    //         let name_hash: Bytes32 = name.tree_hash().into();
+            // create precommit coin
+            let reg_amount = if i % 2 == 1 {
+                test_price_schedule[i / 2]
+            } else {
+                registry.info.state.registration_base_price
+            };
+            let reg_amount =
+                reg_amount * XchandlesRegisterAction::get_price_factor(&handle).unwrap_or(1);
+            let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
 
-    //         // create precommit coin
-    //         let reg_amount = if i % 2 == 1 {
-    //             cns.info.state.registration_base_price
-    //         } else {
-    //             price_scheduler.info.price_schedule[price_scheduler.info.generation].1
-    //         };
-    //         let reg_amount = reg_amount * CnsRegisterAction::get_price_factor(&name).unwrap_or(1);
-    //         let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
+            let handle_launcher_id = did.info.launcher_id;
+            let secret = Bytes32::default();
 
-    //         let name_launcher_id = did.info.launcher_id;
-    //         let secret = Bytes32::default();
+            let value =
+                XchandlesPrecommitValue::new(secret, handle.clone(), handle_launcher_id, 100);
 
-    //         let value = CnsPrecommitValue::new(secret, name.clone(), 1, name_launcher_id, 100);
+            let precommit_coin = PrecommitCoin::new(
+                ctx,
+                user_coin.coin_id(),
+                registry.info.launcher_id,
+                xchandles_constants.relative_block_height,
+                xchandles_constants.precommit_payout_puzzle_hash,
+                value,
+                reg_amount,
+            )?;
 
-    //         let precommit_coin = PrecommitCoin::new(
-    //             ctx,
-    //             user_coin.coin_id(),
-    //             cns.info.launcher_id,
-    //             cns_constants.relative_block_height,
-    //             cns_constants.precommit_payout_puzzle_hash,
-    //             value,
-    //             reg_amount,
-    //         )?;
+            StandardLayer::new(user_pk).spend(
+                ctx,
+                user_coin,
+                Conditions::new().create_coin(
+                    precommit_coin.coin.puzzle_hash,
+                    precommit_coin.coin.amount,
+                    vec![],
+                ),
+            )?;
 
-    //         StandardLayer::new(user_pk).spend(
-    //             ctx,
-    //             user_coin,
-    //             Conditions::new().create_coin(
-    //                 precommit_coin.coin.puzzle_hash,
-    //                 precommit_coin.coin.amount,
-    //                 vec![],
-    //             ),
-    //         )?;
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
-    //         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            // call the 'register' action on CNS
+            slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
 
-    //         // call the 'register' action on CNS
-    //         slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
+            let slot_value_to_insert = XchandlesSlotValue::new(
+                handle_hash,
+                Bytes32::default(),
+                Bytes32::default(),
+                0,
+                Bytes32::default(),
+            );
 
-    //         let slot_value_to_insert = CnsSlotValue::new(
-    //             name_hash,
-    //             Bytes32::default(),
-    //             Bytes32::default(),
-    //             0,
-    //             0,
-    //             Bytes32::default(),
-    //         );
+            let mut left_slot: Option<Slot<XchandlesSlotValue>> = None;
+            let mut right_slot: Option<Slot<XchandlesSlotValue>> = None;
+            for slot in slots.iter() {
+                let slot_value = slot.info.value.unwrap();
 
-    //         let mut left_slot: Option<Slot<CnsSlotValue>> = None;
-    //         let mut right_slot: Option<Slot<CnsSlotValue>> = None;
-    //         for slot in slots.iter() {
-    //             let slot_value = slot.info.value.unwrap();
+                if slot_value < slot_value_to_insert {
+                    // slot belongs to the left
+                    if left_slot.is_none() || slot_value > left_slot.unwrap().info.value.unwrap() {
+                        left_slot = Some(*slot);
+                    }
+                } else {
+                    // slot belongs to the right
+                    if right_slot.is_none() || slot_value < right_slot.unwrap().info.value.unwrap()
+                    {
+                        right_slot = Some(*slot);
+                    }
+                }
+            }
 
-    //             if slot_value < slot_value_to_insert {
-    //                 // slot belongs to the left
-    //                 if left_slot.is_none() || slot_value > left_slot.unwrap().info.value.unwrap() {
-    //                     left_slot = Some(*slot);
-    //                 }
-    //             } else {
-    //                 // slot belongs to the right
-    //                 if right_slot.is_none() || slot_value < right_slot.unwrap().info.value.unwrap()
-    //                 {
-    //                     right_slot = Some(*slot);
-    //                 }
-    //             }
-    //         }
+            let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
-    //         let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
+            let price_update = if i % 2 == 1 {
+                let new_price = reg_amount;
+                assert_ne!(new_price, registry.info.state.registration_base_price);
 
-    //         let price_update = if i % 2 == 0 {
-    //             let price_scheduler_child = price_scheduler.child();
-    //             let update_action = price_scheduler.cns_price_update_action();
+                let (
+                    new_price_singleton_coin,
+                    new_price_singleton_proof,
+                    delegated_state_action_solution,
+                ) = spend_price_singleton(
+                    ctx,
+                    price_singleton_coin,
+                    price_singleton_proof,
+                    price_singleton_puzzle,
+                    XchandlesRegistryState {
+                        registration_base_price: new_price,
+                    },
+                    registry.coin.puzzle_hash,
+                )?;
 
-    //             price_scheduler.spend(ctx, cns.info.inner_puzzle_hash().into())?;
-    //             price_scheduler = price_scheduler_child.unwrap();
+                price_singleton_coin = new_price_singleton_coin;
+                price_singleton_proof = new_price_singleton_proof;
 
-    //             Some(update_action)
-    //         } else {
-    //             None
-    //         };
+                let update_action =
+                    XchandlesRegistryAction::UpdatePrice(delegated_state_action_solution);
 
-    //         let (secure_cond, new_cns, new_slots) =
-    //             cns.register_name(ctx, left_slot, right_slot, precommit_coin, price_update)?;
+                Some(update_action)
+            } else {
+                None
+            };
 
-    //         let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
-    //         let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
+            let (secure_cond, new_registry, new_slots) = registry.register_handle(
+                ctx,
+                left_slot,
+                right_slot,
+                precommit_coin,
+                price_update,
+            )?;
 
-    //         let funds_program = ctx.serialize(&funds_puzzle)?;
-    //         let solution_program = ctx.serialize(&NodePtr::NIL)?;
-    //         ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
+            let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
+            let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
 
-    //         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            let funds_program = ctx.serialize(&funds_puzzle)?;
+            let solution_program = ctx.serialize(&NodePtr::NIL)?;
+            ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-    //         slots.retain(|s| *s != left_slot && *s != right_slot);
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
-    //         let oracle_slot = new_slots[1];
-    //         slots.extend(new_slots);
+            slots.retain(|s| *s != left_slot && *s != right_slot);
 
-    //         cns = new_cns;
+            let oracle_slot = new_slots[1];
+            slots.extend(new_slots);
 
-    //         // test on-chain oracle for current name
-    //         let (oracle_conds, new_cns, new_slots) = cns.oracle(ctx, oracle_slot)?;
+            registry = new_registry;
 
-    //         let user_coin = sim.new_coin(user_puzzle_hash, 0);
-    //         StandardLayer::new(user_pk).spend(ctx, user_coin, oracle_conds)?;
+            // test on-chain oracle for current handle
+            let (oracle_conds, new_registry, new_slots) = registry.oracle(ctx, oracle_slot)?;
 
-    //         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            let user_coin = sim.new_coin(user_puzzle_hash, 0);
+            StandardLayer::new(user_pk).spend(ctx, user_coin, oracle_conds)?;
 
-    //         slots.retain(|s| *s != oracle_slot);
-    //         slots.extend(new_slots.clone());
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
-    //         cns = new_cns;
+            slots.retain(|s| *s != oracle_slot);
+            slots.extend(new_slots.clone());
 
-    //         // test on-chain extend mechanism for current name
-    //         let extension_years: u64 = i as u64 + 1;
-    //         let extension_slot = new_slots[0];
-    //         let pay_for_extension: u64 = extension_years
-    //             * cns.info.state.registration_base_price
-    //             * CnsRegisterAction::get_price_factor(&name).unwrap_or(1);
+            registry = new_registry;
 
-    //         let (notarized_payment, extend_conds, new_cns, new_slots) =
-    //             cns.extend(ctx, name, extension_slot, pay_for_extension)?;
+            // test on-chain extend mechanism for current handle
+            let extension_years: u64 = i as u64 + 1;
+            let extension_slot = new_slots[0];
+            let pay_for_extension: u64 = extension_years
+                * registry.info.state.registration_base_price
+                * XchandlesRegisterAction::get_price_factor(&handle).unwrap_or(1);
 
-    //         let user_coin = sim.new_coin(user_puzzle_hash, pay_for_extension);
-    //         let offer_coin = Coin::new(
-    //             user_coin.coin_id(),
-    //             SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
-    //             pay_for_extension,
-    //         );
+            let (notarized_payment, extend_conds, new_registry, new_slots) =
+                registry.extend(ctx, handle, extension_slot, pay_for_extension)?;
 
-    //         StandardLayer::new(user_pk).spend(
-    //             ctx,
-    //             user_coin,
-    //             extend_conds.create_coin(
-    //                 SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
-    //                 pay_for_extension,
-    //                 vec![],
-    //             ),
-    //         )?;
+            let user_coin = sim.new_coin(user_puzzle_hash, pay_for_extension);
+            let offer_coin = Coin::new(
+                user_coin.coin_id(),
+                SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+                pay_for_extension,
+            );
 
-    //         let offer_puzzle = ctx.settlement_payments_puzzle()?;
-    //         let offer_spend = CoinSpend::new(
-    //             offer_coin,
-    //             ctx.serialize(&offer_puzzle)?,
-    //             ctx.serialize(&vec![notarized_payment])?,
-    //         );
+            StandardLayer::new(user_pk).spend(
+                ctx,
+                user_coin,
+                extend_conds.create_coin(
+                    SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+                    pay_for_extension,
+                    vec![],
+                ),
+            )?;
 
-    //         let mut spends = ctx.take();
-    //         spends.append(&mut vec![offer_spend]);
-    //         sim.spend_coins(spends, &[user_sk.clone()])?;
+            let offer_puzzle = ctx.settlement_payments_puzzle()?;
+            let offer_spend = CoinSpend::new(
+                offer_coin,
+                ctx.serialize(&offer_puzzle)?,
+                ctx.serialize(&vec![notarized_payment])?,
+            );
 
-    //         slots.retain(|s| *s != extension_slot);
-    //         slots.extend(new_slots.clone());
+            let mut spends = ctx.take();
+            spends.append(&mut vec![offer_spend]);
+            sim.spend_coins(spends, &[user_sk.clone()])?;
 
-    //         cns = new_cns;
+            slots.retain(|s| *s != extension_slot);
+            slots.extend(new_slots.clone());
 
-    //         // test on-chain mechanism for name updates
-    //         let new_version: u32 = i as u32 + 1;
-    //         let new_launcher_id = Bytes32::new([4 + i as u8; 32]);
-    //         let update_slot = new_slots[0];
+            registry = new_registry;
 
-    //         let (update_conds, new_cns, new_slots) = cns.update(
-    //             ctx,
-    //             update_slot,
-    //             new_version,
-    //             new_launcher_id,
-    //             did.info.inner_puzzle_hash().into(),
-    //         )?;
+            // test on-chain mechanism for handle updates
+            let new_launcher_id = Bytes32::new([4 + i as u8; 32]);
+            let update_slot = new_slots[0];
 
-    //         let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
+            let (update_conds, new_registry, new_slots) = registry.update(
+                ctx,
+                update_slot,
+                new_launcher_id,
+                did.info.inner_puzzle_hash().into(),
+            )?;
 
-    //         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
 
-    //         slots.retain(|s| *s != update_slot);
-    //         slots.extend(new_slots.clone());
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
-    //         cns = new_cns;
-    //     }
+            slots.retain(|s| *s != update_slot);
+            slots.extend(new_slots.clone());
 
-    //     assert_eq!(
-    //         cns.info.state.registration_base_price,
-    //         test_price_schedule[3].1, // 0, 2, 4, 6 updated the price
-    //     );
+            registry = new_registry;
+        }
 
-    //     // expire initial slot
-    //     let initial_slot = slots
-    //         .iter()
-    //         .find(|s| s.info.value.unwrap().name_hash == premine_name_hash)
-    //         .unwrap();
-    //     let left_slot = slots
-    //         .iter()
-    //         .find(|s| {
-    //             s.info.value.unwrap().name_hash
-    //                 == initial_slot.info.value.unwrap().neighbors.left_value
-    //         })
-    //         .unwrap();
-    //     let right_slot = slots
-    //         .iter()
-    //         .find(|s| {
-    //             s.info.value.unwrap().name_hash
-    //                 == initial_slot.info.value.unwrap().neighbors.right_value
-    //         })
-    //         .unwrap();
+        assert_eq!(
+            registry.info.state.registration_base_price,
+            test_price_schedule[2], // 1, 3, 5 updated the price
+        );
 
-    //     let (_, _, _) = cns.expire_name(ctx, *initial_slot, *left_slot, *right_slot)?;
+        // expire one of the slots
+        // simulator doesn't have concept of time I suppose
+        let handle_to_expire = "aa0".to_string();
+        let handle_hash: Bytes32 = handle_to_expire.tree_hash().into();
+        let initial_slot = slots
+            .iter()
+            .find(|s| s.info.value.unwrap().handle_hash == handle_hash)
+            .unwrap();
+        let left_slot = slots
+            .iter()
+            .find(|s| {
+                s.info.value.unwrap().handle_hash
+                    == initial_slot.info.value.unwrap().neighbors.left_value
+            })
+            .unwrap();
+        let right_slot = slots
+            .iter()
+            .find(|s| {
+                s.info.value.unwrap().handle_hash
+                    == initial_slot.info.value.unwrap().neighbors.right_value
+            })
+            .unwrap();
 
-    //     sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        let (_, _, _) = registry.expire_handle(ctx, *initial_slot, *left_slot, *right_slot)?;
 
-    //     Ok(())
-    // }
+        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
+        Ok(())
+    }
 
     #[test]
     fn test_nft_with_any_metadata_updater() -> anyhow::Result<()> {

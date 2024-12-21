@@ -29,8 +29,8 @@ impl XchandlesRegisterAction {
         }
     }
 
-    pub fn get_price_factor(name: &str) -> Option<u64> {
-        match name.len() {
+    pub fn get_price_factor(handle: &str) -> Option<u64> {
+        match handle.len() {
             0..3 => None,
             3 => Some(64),
             4 => Some(32),
@@ -145,11 +145,11 @@ impl XchandlesRegisterActionArgs {
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct XchandlesRegisterActionSolution {
-    pub name_hash: Bytes32,
-    pub name_reveal: String,
+    pub handle_hash: Bytes32,
+    pub handle_reveal: String,
     pub left_value: Bytes32,
     pub right_value: Bytes32,
-    pub name_nft_launcher_id: Bytes32,
+    pub handle_nft_launcher_id: Bytes32,
     pub start_time: u64,
     pub secret_hash: Bytes32,
     pub precommitment_amount: u64,

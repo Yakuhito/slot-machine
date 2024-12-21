@@ -98,7 +98,7 @@ impl PartialOrd for CatalogSlotValue {
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
 pub struct XchandlesSlotValue {
-    pub name_hash: Bytes32,
+    pub handle_hash: Bytes32,
     pub neighbors: SlotNeigborsInfo,
     pub expiration: u64,
     #[clvm(rest)]
@@ -107,41 +107,45 @@ pub struct XchandlesSlotValue {
 
 impl XchandlesSlotValue {
     pub fn new(
-        name_hash: Bytes32,
-        left_name_hash: Bytes32,
-        right_name_hash: Bytes32,
+        handle_hash: Bytes32,
+        left_handle_hash: Bytes32,
+        right_handle_hash: Bytes32,
         expiration: u64,
         launcher_id: Bytes32,
     ) -> Self {
         Self {
-            name_hash,
+            handle_hash,
             neighbors: SlotNeigborsInfo {
-                left_value: left_name_hash,
-                right_value: right_name_hash,
+                left_value: left_handle_hash,
+                right_value: right_handle_hash,
             },
             expiration,
             launcher_id,
         }
     }
 
-    pub fn edge(name_hash: Bytes32, left_name_hash: Bytes32, right_name_hash: Bytes32) -> Self {
+    pub fn edge(
+        handle_hash: Bytes32,
+        left_handle_hash: Bytes32,
+        right_handle_hash: Bytes32,
+    ) -> Self {
         Self {
-            name_hash,
+            handle_hash,
             neighbors: SlotNeigborsInfo {
-                left_value: left_name_hash,
-                right_value: right_name_hash,
+                left_value: left_handle_hash,
+                right_value: right_handle_hash,
             },
             expiration: 0,
             launcher_id: Bytes32::default(),
         }
     }
 
-    pub fn with_neighbors(&self, left_name_hash: Bytes32, right_name_hash: Bytes32) -> Self {
+    pub fn with_neighbors(&self, left_handle_hash: Bytes32, right_handle_hash: Bytes32) -> Self {
         Self {
-            name_hash: self.name_hash,
+            handle_hash: self.handle_hash,
             neighbors: SlotNeigborsInfo {
-                left_value: left_name_hash,
-                right_value: right_name_hash,
+                left_value: left_handle_hash,
+                right_value: right_handle_hash,
             },
             expiration: self.expiration,
             launcher_id: self.launcher_id,
@@ -158,7 +162,7 @@ impl XchandlesSlotValue {
 
     pub fn with_expiration(self, expiration: u64) -> Self {
         Self {
-            name_hash: self.name_hash,
+            handle_hash: self.handle_hash,
             neighbors: self.neighbors,
             expiration,
             launcher_id: self.launcher_id,
@@ -167,7 +171,7 @@ impl XchandlesSlotValue {
 
     pub fn with_launcher_id(self, launcher_id: Bytes32) -> Self {
         Self {
-            name_hash: self.name_hash,
+            handle_hash: self.handle_hash,
             neighbors: self.neighbors,
             expiration: self.expiration,
             launcher_id,
@@ -177,8 +181,8 @@ impl XchandlesSlotValue {
 
 impl Ord for XchandlesSlotValue {
     fn cmp(&self, other: &Self) -> Ordering {
-        let self_num = BigInt::from_signed_bytes_be(&self.name_hash);
-        let other_num = BigInt::from_signed_bytes_be(&other.name_hash);
+        let self_num = BigInt::from_signed_bytes_be(&self.handle_hash);
+        let other_num = BigInt::from_signed_bytes_be(&other.handle_hash);
 
         self_num.cmp(&other_num)
     }

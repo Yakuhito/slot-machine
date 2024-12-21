@@ -82,7 +82,7 @@ impl XchandlesRegistry {
     }
 }
 
-pub enum XchandlesAction {
+pub enum XchandlesRegistryAction {
     Expire(XchandlesExpireActionSolution),
     Extend(XchandlesExtendActionSolution),
     Oracle(XchandlesOracleActionSolution),
@@ -95,7 +95,7 @@ impl XchandlesRegistry {
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        actions: Vec<XchandlesAction>,
+        actions: Vec<XchandlesRegistryAction>,
     ) -> Result<Spend, DriverError> {
         let layers = self.info.into_layers();
 
@@ -104,7 +104,7 @@ impl XchandlesRegistry {
         let action_spends: Vec<Spend> = actions
             .into_iter()
             .map(|action| match action {
-                XchandlesAction::Expire(solution) => {
+                XchandlesRegistryAction::Expire(solution) => {
                     let layer = XchandlesExpireAction::new(self.info.launcher_id);
 
                     let puzzle = layer.construct_puzzle(ctx)?;
@@ -112,7 +112,7 @@ impl XchandlesRegistry {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                XchandlesAction::Extend(solution) => {
+                XchandlesRegistryAction::Extend(solution) => {
                     let layer = XchandlesExtendAction::new(
                         self.info.launcher_id,
                         self.info.constants.precommit_payout_puzzle_hash,
@@ -123,7 +123,7 @@ impl XchandlesRegistry {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                XchandlesAction::Oracle(solution) => {
+                XchandlesRegistryAction::Oracle(solution) => {
                     let layer = XchandlesOracleAction::new(self.info.launcher_id);
 
                     let puzzle = layer.construct_puzzle(ctx)?;
@@ -131,7 +131,7 @@ impl XchandlesRegistry {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                XchandlesAction::Register(solution) => {
+                XchandlesRegistryAction::Register(solution) => {
                     let layer = XchandlesRegisterAction::new(
                         self.info.launcher_id,
                         self.info.constants.precommit_payout_puzzle_hash,
@@ -143,7 +143,7 @@ impl XchandlesRegistry {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                XchandlesAction::Update(solution) => {
+                XchandlesRegistryAction::Update(solution) => {
                     let layer = XchandlesUpdateAction::new(self.info.launcher_id);
 
                     let puzzle = layer.construct_puzzle(ctx)?;
@@ -151,7 +151,7 @@ impl XchandlesRegistry {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                XchandlesAction::UpdatePrice(solution) => {
+                XchandlesRegistryAction::UpdatePrice(solution) => {
                     let layer =
                         DelegatedStateAction::new(self.info.constants.price_singleton_launcher_id);
 
@@ -204,13 +204,13 @@ impl XchandlesRegistry {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn register_name(
+    pub fn register_handle(
         self,
         ctx: &mut SpendContext,
         left_slot: Slot<XchandlesSlotValue>,
         right_slot: Slot<XchandlesSlotValue>,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
-        price_update: Option<XchandlesAction>,
+        price_update: Option<XchandlesRegistryAction>,
     ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
@@ -225,29 +225,29 @@ impl XchandlesRegistry {
         left_slot.spend(ctx, spender_inner_puzzle_hash)?;
         right_slot.spend(ctx, spender_inner_puzzle_hash)?;
 
-        let name: String = precommit_coin.value.secret_and_name.name.clone();
-        let name_hash: Bytes32 = name.tree_hash().into();
+        let handle: String = precommit_coin.value.secret_and_handle.handle.clone();
+        let handle_hash: Bytes32 = handle.tree_hash().into();
 
-        let secret = precommit_coin.value.secret_and_name.secret;
+        let secret = precommit_coin.value.secret_and_handle.secret;
 
         let start_time = precommit_coin.value.start_time;
         let precommitment_amount = precommit_coin.coin.amount;
 
-        let base_price = if let Some(XchandlesAction::UpdatePrice(ref price_update)) = price_update
-        {
-            price_update.new_state.registration_base_price
-        } else {
-            self.info.state.registration_base_price
-        };
+        let base_price =
+            if let Some(XchandlesRegistryAction::UpdatePrice(ref price_update)) = price_update {
+                price_update.new_state.registration_base_price
+            } else {
+                self.info.state.registration_base_price
+            };
         let expiration = start_time
             + (precommitment_amount
-                / (base_price * XchandlesRegisterAction::get_price_factor(&name).unwrap_or(1)))
+                / (base_price * XchandlesRegisterAction::get_price_factor(&handle).unwrap_or(1)))
                 * 60
                 * 60
                 * 24
                 * 366;
 
-        let name_nft_launcher_id = precommit_coin.value.name_nft_launcher_id;
+        let handle_nft_launcher_id = precommit_coin.value.handle_nft_launcher_id;
 
         let new_slots_proof = SlotProof {
             parent_parent_info: self.coin.parent_coin_info,
@@ -258,7 +258,8 @@ impl XchandlesRegistry {
                 new_slots_proof,
                 SlotInfo::from_value(
                     self.info.launcher_id,
-                    left_slot_value.with_neighbors(left_slot_value.neighbors.left_value, name_hash),
+                    left_slot_value
+                        .with_neighbors(left_slot_value.neighbors.left_value, handle_hash),
                 ),
             ),
             Slot::new(
@@ -266,11 +267,11 @@ impl XchandlesRegistry {
                 SlotInfo::from_value(
                     self.info.launcher_id,
                     XchandlesSlotValue::new(
-                        name_hash,
-                        left_slot_value.name_hash,
-                        right_slot_value.name_hash,
+                        handle_hash,
+                        left_slot_value.handle_hash,
+                        right_slot_value.handle_hash,
                         expiration,
-                        name_nft_launcher_id,
+                        handle_nft_launcher_id,
                     ),
                 ),
             ),
@@ -279,7 +280,7 @@ impl XchandlesRegistry {
                 SlotInfo::from_value(
                     self.info.launcher_id,
                     right_slot_value
-                        .with_neighbors(name_hash, right_slot_value.neighbors.right_value),
+                        .with_neighbors(handle_hash, right_slot_value.neighbors.right_value),
                 ),
             ),
         ];
@@ -289,12 +290,12 @@ impl XchandlesRegistry {
         precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
-        let register = XchandlesAction::Register(XchandlesRegisterActionSolution {
-            name_hash,
-            name_reveal: name.clone(),
-            left_value: left_slot_value.name_hash,
-            right_value: right_slot_value.name_hash,
-            name_nft_launcher_id,
+        let register = XchandlesRegistryAction::Register(XchandlesRegisterActionSolution {
+            handle_hash,
+            handle_reveal: handle.clone(),
+            left_value: left_slot_value.handle_hash,
+            right_value: right_slot_value.handle_hash,
+            handle_nft_launcher_id,
             start_time,
             secret_hash: secret.tree_hash().into(),
             precommitment_amount,
@@ -336,7 +337,7 @@ impl XchandlesRegistry {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn expire_name(
+    pub fn expire_handle(
         self,
         ctx: &mut SpendContext,
         slot: Slot<XchandlesSlotValue>,
@@ -372,7 +373,7 @@ impl XchandlesRegistry {
                     self.info.launcher_id,
                     left_slot_value.with_neighbors(
                         left_slot_value.neighbors.left_value,
-                        right_slot_value.name_hash,
+                        right_slot_value.handle_hash,
                     ),
                 ),
             ),
@@ -381,7 +382,7 @@ impl XchandlesRegistry {
                 SlotInfo::from_value(
                     self.info.launcher_id,
                     right_slot_value.with_neighbors(
-                        left_slot_value.name_hash,
+                        left_slot_value.handle_hash,
                         right_slot_value.neighbors.right_value,
                     ),
                 ),
@@ -389,12 +390,12 @@ impl XchandlesRegistry {
         ];
 
         // finally, spend self
-        let expire = XchandlesAction::Expire(XchandlesExpireActionSolution {
-            value: slot_value.name_hash,
-            left_value: left_slot_value.name_hash,
+        let expire = XchandlesRegistryAction::Expire(XchandlesExpireActionSolution {
+            value: slot_value.handle_hash,
+            left_value: left_slot_value.handle_hash,
             left_left_value: left_slot_value.neighbors.left_value,
             left_rest_hash: left_slot_value.after_neigbors_data_hash().into(),
-            right_value: right_slot_value.name_hash,
+            right_value: right_slot_value.handle_hash,
             right_right_value: right_slot_value.neighbors.right_value,
             right_rest_hash: right_slot_value.after_neigbors_data_hash().into(),
             expiration: slot_value.expiration,
@@ -418,7 +419,7 @@ impl XchandlesRegistry {
 
         ctx.spend(my_coin, my_spend)?;
 
-        let mut extend_ann: Vec<u8> = slot_value.name_hash.to_vec();
+        let mut extend_ann: Vec<u8> = slot_value.handle_hash.to_vec();
         extend_ann.insert(0, b'x');
         Ok((
             Conditions::new()
@@ -433,7 +434,7 @@ impl XchandlesRegistry {
     pub fn extend(
         self,
         ctx: &mut SpendContext,
-        name: String,
+        handle: String,
         slot: Slot<XchandlesSlotValue>,
         renew_amount: u64,
     ) -> Result<
@@ -461,7 +462,7 @@ impl XchandlesRegistry {
 
         let new_expiration = slot_value.expiration
             + (renew_amount
-                / (XchandlesRegisterAction::get_price_factor(&name).unwrap_or(1)
+                / (XchandlesRegisterAction::get_price_factor(&handle).unwrap_or(1)
                     * self.info.state.registration_base_price))
                 * 60
                 * 60
@@ -476,16 +477,16 @@ impl XchandlesRegistry {
         )];
 
         // finally, spend self
-        let extend = XchandlesAction::Extend(XchandlesExtendActionSolution {
+        let extend = XchandlesRegistryAction::Extend(XchandlesExtendActionSolution {
             renew_amount,
-            name: name.clone(),
+            handle: handle.clone(),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             expiration: slot_value.expiration,
             launcher_id_hash: slot_value.launcher_id.tree_hash().into(),
         });
 
         let notarized_payment = NotarizedPayment {
-            nonce: clvm_tuple!(name.clone(), slot_value.expiration)
+            nonce: clvm_tuple!(handle.clone(), slot_value.expiration)
                 .tree_hash()
                 .into(),
             payments: vec![Payment {
@@ -513,7 +514,7 @@ impl XchandlesRegistry {
 
         ctx.spend(my_coin, my_spend)?;
 
-        let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, name).tree_hash().to_vec();
+        let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, handle).tree_hash().to_vec();
         extend_ann.insert(0, b'e');
         Ok((
             notarized_payment,
@@ -550,7 +551,7 @@ impl XchandlesRegistry {
         )];
 
         // finally, spend self
-        let oracle = XchandlesAction::Oracle(XchandlesOracleActionSolution {
+        let oracle = XchandlesRegistryAction::Oracle(XchandlesOracleActionSolution {
             data_treehash: slot_value.tree_hash().into(),
         });
 
@@ -611,8 +612,8 @@ impl XchandlesRegistry {
         )];
 
         // spend self
-        let update = XchandlesAction::Update(XchandlesUpdateActionSolution {
-            value_hash: slot_value.name_hash.tree_hash().into(),
+        let update = XchandlesRegistryAction::Update(XchandlesUpdateActionSolution {
+            value_hash: slot_value.handle_hash.tree_hash().into(),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             expiration: slot_value.expiration,
             current_launcher_id: slot_value.launcher_id,
@@ -637,7 +638,7 @@ impl XchandlesRegistry {
 
         ctx.spend(my_coin, my_spend)?;
 
-        let msg: Bytes32 = clvm_tuple!(clvm_tuple!(slot_value.name_hash, slot_value.launcher_id))
+        let msg: Bytes32 = clvm_tuple!(clvm_tuple!(slot_value.handle_hash, slot_value.launcher_id))
             .tree_hash()
             .into();
         Ok((
