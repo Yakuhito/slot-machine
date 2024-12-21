@@ -66,7 +66,7 @@ pub const XCHANDLES_ORACLE_PUZZLE: [u8; 521] = hex!("ff02ffff01ff04ff0bffff04fff
 
 pub const XCHANDLES_ORACLE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    d058cd73b26b2ce268c433760d1f7bd77a926bfbf49200d72b4fec7bb531598a
+    594aa7ec5ccc704bb182309b8b41b531103a12eca6baf3135b4a3b9ef8394a67
     "
 ));
 

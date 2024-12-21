@@ -66,7 +66,7 @@ pub const XCHANDLES_EXPIRE_PUZZLE: [u8; 913] = hex!("ff02ffff01ff04ff0bffff04fff
 
 pub const XCHANDLES_EXPIRE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    69e3211cd0525f446861a893583f1986997dc36bc59aeded934f81fc8ef61450
+    b033c6af2d0c34961c8304af66c096f4fa8de0bb4bc30f3ab017cb26aa83532e
     "
 ));
 

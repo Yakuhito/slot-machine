@@ -71,7 +71,7 @@ pub const XCHANDLES_EXTEND_PUZZLE: [u8; 1133] = hex!("ff02ffff01ff04ff2fffff04ff
 
 pub const XCHANDLES_EXTEND_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    b7301ad06c46d2f7a71cc9a225e001ee6b0f4cdc4a12beae335c3e41876c1229
+    59abb661c91d82bb246da5111cd3c2c67c38b8c25fe2b26318c093356c6e29dc
     "
 ));
 
