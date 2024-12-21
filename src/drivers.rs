@@ -1,7 +1,7 @@
 use bip39::Mnemonic;
 use chia::{
     bls::{sign, SecretKey, Signature},
-    clvm_utils::ToTreeHash,
+    clvm_utils::{CurriedProgram, ToTreeHash},
     consensus::consensus_constants::ConsensusConstants,
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
@@ -292,7 +292,12 @@ pub fn launch_catalog_registry(
     }
     .to_clvm(&mut ctx.allocator)?;
 
-    let catalog_eve_spend = Spend::new(eve_singleton_inner_puzzle, eve_coin_solution);
+    let eve_singleton_puzzle = CurriedProgram {
+        program: ctx.singleton_top_layer()?,
+        args: SingletonArgs::new(registry_launcher_id, eve_singleton_inner_puzzle),
+    }
+    .to_clvm(&mut ctx.allocator)?;
+    let catalog_eve_spend = Spend::new(eve_singleton_puzzle, eve_coin_solution);
     ctx.spend(catalog_eve_coin, catalog_eve_spend)?;
 
     let new_catalog_registry_coin = Coin::new(
@@ -644,9 +649,9 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot, SlotNeigborsInfo,
-        SpendContextExt, XchandlesPrecommitValue, XchandlesRegisterAction,
+        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
+        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot,
+        SlotNeigborsInfo, SpendContextExt, XchandlesPrecommitValue, XchandlesRegisterAction,
         ANY_METADATA_UPDATER_HASH, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
     };
 
@@ -753,11 +758,15 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
-        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
+        println!("before initial :)"); // TODO: debug
+        let spends = ctx.take();
+        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+        sim.spend_coins(spends, &[launcher_sk, security_sk])?;
+        println!("spent initial :)"); // TODO: debug
 
         // Register CAT
 
-        let mut slots: Vec<Slot<CatalogSlotValue>> = slots.clone().into();
+        let mut slots: Vec<Slot<CatalogSlotValue>> = slots.into();
         for i in 0..7 {
             // create precommit coin
             let reg_amount = if i % 2 == 0 {
