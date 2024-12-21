@@ -21,7 +21,7 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_slot_data_hash (value_hash neighbors_hash version launcher_id)
+    (defun get_slot_data_hash (value_hash neighbors_hash expiration launcher_id)
         (sha256 2
             value_hash
             (sha256 2

@@ -3,8 +3,8 @@
 
 ;; Unlike CATalog slot's value is (value (left_value . right_value) expiration . launcher_id) where:
 ;;  value is the slot 'key'/id and is defined as (sha256 1 name)
-;;  expiration is a timestamp that says when the name will expire
 ;;  left_value/right_value are the key's of the slot's neighbors
+;;  expiration is a timestamp that says when the name will expire
 ;;  launcher_id is a 32-byte value that specifies the name NFT's launcher id
 ;;       in the future, launcher_id might point to a namespace/sub-registry, for example
 

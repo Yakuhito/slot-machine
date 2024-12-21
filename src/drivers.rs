@@ -463,8 +463,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
+        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegistryAction,
         ANY_METADATA_UPDATER_HASH,
     };
@@ -873,7 +873,8 @@ mod tests {
 
         let mut slots: Vec<Slot<XchandlesSlotValue>> = slots.into();
         for i in 0..7 {
-            // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
+            println!("registering handle {}", i); // todo: debug
+                                                  // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
             let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
             let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
             let (_, did) = launcher.create_simple_did(ctx, &user_puzzle)?;
@@ -1001,7 +1002,9 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
+            println!("before spend 1 {}", i); // todo: debug
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("after spend 1 {}", i); // todo: debug
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
@@ -1059,7 +1062,10 @@ mod tests {
 
             let mut spends = ctx.take();
             spends.append(&mut vec![offer_spend]);
+
+            println!("before spend 2 {}", i); // todo: debug
             sim.spend_coins(spends, &[user_sk.clone()])?;
+            println!("after spend 2 {}", i); // todo: debug
 
             slots.retain(|s| *s != extension_slot);
             slots.extend(new_slots.clone());
@@ -1079,7 +1085,11 @@ mod tests {
 
             let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
 
-            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("before spend 3 {}", i); // todo: debug
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            sim.spend_coins(spends, &[user_sk.clone()])?;
+            println!("after spend 3 {}", i); // todo: debug
 
             slots.retain(|s| *s != update_slot);
             slots.extend(new_slots.clone());

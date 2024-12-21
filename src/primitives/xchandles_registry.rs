@@ -324,7 +324,7 @@ impl XchandlesRegistry {
             my_constants,
         )?
         .ok_or(DriverError::Custom(
-            "Could not parse child CNS singleton".to_string(),
+            "Could not parse child XCHandles singleton".to_string(),
         ))?;
 
         ctx.spend(my_coin, my_spend)?;
@@ -414,7 +414,7 @@ impl XchandlesRegistry {
             my_constants,
         )?
         .ok_or(DriverError::Custom(
-            "Could not parse child CNS singleton".to_string(),
+            "Could not parse child XCHandles singleton".to_string(),
         ))?;
 
         ctx.spend(my_coin, my_spend)?;
@@ -475,6 +475,11 @@ impl XchandlesRegistry {
                 slot_value.with_expiration(new_expiration),
             ),
         )];
+        println!("new slot coin (extend): {:?}", new_slots[0].coin); // todo: debug
+        println!(
+            "new slot value hash (extend): {:?}",
+            new_slots[0].info.value.unwrap().tree_hash()
+        ); // todo: debug
 
         // finally, spend self
         let extend = XchandlesRegistryAction::Extend(XchandlesExtendActionSolution {
@@ -509,7 +514,7 @@ impl XchandlesRegistry {
             my_constants,
         )?
         .ok_or(DriverError::Custom(
-            "Could not parse child CNS singleton".to_string(),
+            "Could not parse child XCHandles singleton".to_string(),
         ))?;
 
         ctx.spend(my_coin, my_spend)?;
@@ -567,7 +572,7 @@ impl XchandlesRegistry {
             my_constants,
         )?
         .ok_or(DriverError::Custom(
-            "Could not parse child CNS singleton".to_string(),
+            "Could not parse child XCHandles singleton".to_string(),
         ))?;
 
         ctx.spend(my_coin, my_spend)?;
@@ -596,6 +601,9 @@ impl XchandlesRegistry {
 
         let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
 
+        println!("slot value: {:?}", slot_value); // todo: debug
+        println!("slot value hash: {:?}", slot_value.tree_hash()); // todo: debug
+        println!("slot coin: {:?}", slot.coin); // todo: debug
         slot.spend(ctx, spender_inner_puzzle_hash)?;
 
         let new_slots_proof = SlotProof {
@@ -638,7 +646,7 @@ impl XchandlesRegistry {
 
         ctx.spend(my_coin, my_spend)?;
 
-        let msg: Bytes32 = clvm_tuple!(clvm_tuple!(slot_value.handle_hash, slot_value.launcher_id))
+        let msg: Bytes32 = clvm_tuple!(slot_value.handle_hash, new_launcher_id)
             .tree_hash()
             .into();
         Ok((
