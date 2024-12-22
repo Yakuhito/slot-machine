@@ -18,6 +18,7 @@ pub struct PrecommitCoin<V> {
     pub coin: Coin,
     pub asset_id: Bytes32,
     pub proof: LineageProof,
+    pub inner_puzzle_hash: Bytes32,
 
     pub launcher_id: Bytes32,
     pub relative_block_height: u32,
@@ -26,6 +27,7 @@ pub struct PrecommitCoin<V> {
 }
 
 impl<V> PrecommitCoin<V> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         ctx: &mut SpendContext,
         parent_coin_id: Bytes32,
@@ -43,6 +45,14 @@ impl<V> PrecommitCoin<V> {
         let value_ptr = ctx.alloc(&value)?;
         let value_hash = ctx.tree_hash(value_ptr);
 
+        let inner_puzzle_hash: Bytes32 = PrecommitLayer::<V>::puzzle_hash(
+            launcher_id,
+            relative_block_height,
+            precommit_payout_puzzle_hash,
+            value_hash,
+        )
+        .into();
+
         Ok(Self {
             coin: Coin::new(
                 parent_coin_id,
@@ -58,6 +68,7 @@ impl<V> PrecommitCoin<V> {
             ),
             proof,
             asset_id,
+            inner_puzzle_hash,
             launcher_id,
             relative_block_height,
             precommit_payout_puzzle_hash,
@@ -118,9 +129,6 @@ impl<V> PrecommitCoin<V> {
             ),
         );
 
-        let value_ptr = ctx.alloc(&self.value)?;
-        let value_hash = ctx.tree_hash(value_ptr);
-
         layers.construct_solution(
             ctx,
             CatSolution {
@@ -133,13 +141,7 @@ impl<V> PrecommitCoin<V> {
                 this_coin_info: self.coin,
                 next_coin_proof: CoinProof {
                     parent_coin_info: self.coin.parent_coin_info,
-                    inner_puzzle_hash: PrecommitLayer::<V>::puzzle_hash(
-                        self.launcher_id,
-                        self.relative_block_height,
-                        self.precommit_payout_puzzle_hash,
-                        value_hash,
-                    )
-                    .into(),
+                    inner_puzzle_hash: self.inner_puzzle_hash,
                     amount: self.coin.amount,
                 },
                 prev_subtotal: 0,

@@ -96,7 +96,7 @@ pub const XCHANDLES_REGISTER_PUZZLE: [u8; 1640] = hex!("ff02ffff01ff02ffff03ffff
 
 pub const XCHANDLES_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    f215cac26f2c641a99c4df332ecba5ec64051f203b62b87b0ed2e9f4976a3603
+    57145e0799928ad981e4ece812ade08041b69681675e51d17e4af0ff2aaf9eec
     "
 ));
 

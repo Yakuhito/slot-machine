@@ -462,14 +462,14 @@ mod tests {
         },
     };
     use chia_wallet_sdk::{
-        test_secret_keys, Cat, Nft, NftMint, Simulator, SpendWithConditions, TESTNET11_CONSTANTS,
+        test_secret_keys, Cat, CatSpend, Nft, NftMint, Simulator, SpendWithConditions,
+        TESTNET11_CONSTANTS,
     };
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
-        XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegistryAction,
+        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
+        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         ANY_METADATA_UPDATER_HASH,
     };
 
@@ -654,12 +654,14 @@ mod tests {
         let (issue_cat, mut payment_cat) = Cat::single_issuance_eve(
             ctx,
             minter_coin.coin_id(),
-            1,
+            payment_cat_amount,
             Conditions::new().create_coin(minter_puzzle_hash, payment_cat_amount, vec![]),
         )?;
         minter_p2.spend(ctx, minter_coin, issue_cat)?;
 
-        sim.spend_coins(ctx.take(), &[minter_sk])?;
+        payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
+
+        sim.spend_coins(ctx.take(), &[minter_sk.clone()])?;
 
         // Launch catalog
         let (_, security_sk, mut catalog, slots) = launch_catalog_registry(
@@ -677,6 +679,7 @@ mod tests {
 
         let mut slots: Vec<Slot<CatalogSlotValue>> = slots.into();
         for i in 0..7 {
+            println!("registering cat {}", i);
             // create precommit coin
             let reg_amount = if i % 2 == 1 {
                 test_price_schedule[i / 2]
@@ -706,6 +709,8 @@ mod tests {
 
             let precommit_coin = PrecommitCoin::new(
                 ctx,
+                payment_cat.coin.coin_id(),
+                payment_cat.child_lineage_proof(),
                 user_coin.coin_id(),
                 catalog.info.launcher_id,
                 catalog_constants.relative_block_height,
@@ -714,17 +719,29 @@ mod tests {
                 reg_amount,
             )?;
 
-            StandardLayer::new(user_pk).spend(
+            let payment_cat_inner_spend = minter_p2.spend_with_conditions(
                 ctx,
-                user_coin,
-                Conditions::new().create_coin(
-                    precommit_coin.coin.puzzle_hash,
-                    precommit_coin.coin.amount,
-                    vec![],
-                ),
+                Conditions::new()
+                    .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, vec![])
+                    .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, vec![]),
             )?;
+            Cat::spend_all(
+                ctx,
+                &[CatSpend {
+                    cat: payment_cat,
+                    inner_spend: payment_cat_inner_spend,
+                    extra_delta: 0,
+                }],
+            )?;
+            println!("yak 5"); // todo: debug
+            payment_cat_amount -= reg_amount;
+            payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
-            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("creating precommit..."); // todo: debug
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            sim.spend_coins(spends, &[user_sk.clone(), minter_sk.clone()])?;
+            println!("precommit created!"); // todo: debug
 
             // call the 'register' action on CATalog
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -767,6 +784,7 @@ mod tests {
                     price_singleton_proof,
                     price_singleton_puzzle,
                     CatalogRegistryState {
+                        registration_asset_id: payment_cat.asset_id,
                         registration_price: new_price,
                     },
                     catalog.coin.puzzle_hash,

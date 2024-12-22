@@ -114,7 +114,7 @@ where
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         let prog_1st_curry = CurriedProgram {
-            program: ctx.precommit_coin_puzzle()?,
+            program: ctx.precommit_layer_puzzle()?,
             args: PrecommitLayer1stCurryArgs {
                 singleton_struct: SingletonStruct::new(self.launcher_id),
                 relative_block_height: self.relative_block_height,

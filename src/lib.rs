@@ -21,7 +21,7 @@ pub trait SpendContextExt {
     fn delegated_state_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn catalog_register_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn uniqueness_prelauncher_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn precommit_coin_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn precommit_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn slot_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn any_metadata_updater(&mut self) -> Result<NodePtr, DriverError>;
     fn verification_puzzle(&mut self) -> Result<NodePtr, DriverError>;
@@ -66,8 +66,8 @@ impl SpendContextExt for SpendContext {
     }
 
     /// Allocate the precommit coin puzzle and return its pointer.
-    fn precommit_coin_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(PRECOMMIT_COIN_PUZZLE_HASH, &PRECOMMIT_COIN_PUZZLE)
+    fn precommit_layer_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(PRECOMMIT_LAYER_PUZZLE_HASH, &PRECOMMIT_LAYER_PUZZLE)
     }
 
     /// Allocate the slot puzzle and return its pointer.
@@ -138,7 +138,7 @@ mod tests {
         assert_puzzle_hash!(DELEGATED_STATE_ACTION_PUZZLE => DELEGATED_STATE_ACTION_PUZZLE_HASH);
         assert_puzzle_hash!(CATALOG_REGISTER_PUZZLE => CATALOG_REGISTER_PUZZLE_HASH);
         assert_puzzle_hash!(UNIQUENESS_PRELAUNCHER_PUZZLE => UNIQUENESS_PRELAUNCHER_PUZZLE_HASH);
-        assert_puzzle_hash!(PRECOMMIT_COIN_PUZZLE => PRECOMMIT_COIN_PUZZLE_HASH);
+        assert_puzzle_hash!(PRECOMMIT_LAYER_PUZZLE => PRECOMMIT_LAYER_PUZZLE_HASH);
         assert_puzzle_hash!(SLOT_PUZZLE => SLOT_PUZZLE_HASH);
         assert_puzzle_hash!(ANY_METADATA_UPDATER => ANY_METADATA_UPDATER_HASH);
         assert_puzzle_hash!(VERIFICATION_LAYER_PUZZLE => VERIFICATION_LAYER_PUZZLE_HASH);

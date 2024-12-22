@@ -156,7 +156,7 @@ pub const CATALOG_REGISTER_PUZZLE: [u8; 1465] = hex!("ff02ffff01ff02ffff03ffff22
 
 pub const CATALOG_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    045a36efc8fa0c80d2231f2943f5d83c08572ba79d498c7ac677762dc383b533
+    2a5d9758bf9bfd7e63386526c94e56486b8b4378ad52caf7ecfd3ba8f1fbf27c
     "
 ));
 
