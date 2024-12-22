@@ -1,20 +1,23 @@
 use chia::{
     clvm_utils::TreeHash,
     protocol::{Bytes32, Coin},
-    puzzles::{cat::CatArgs, Proof},
+    puzzles::{
+        cat::{CatArgs, CatSolution},
+        CoinProof, LineageProof,
+    },
 };
-use chia_wallet_sdk::{CatLayer, DriverError, Layer, SpendContext};
+use chia_wallet_sdk::{CatLayer, DriverError, Layer, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
-use crate::PrecommitLayer;
+use crate::{PrecommitLayer, PrecommitLayerSolution};
 
 #[derive(Debug, Clone)]
 #[must_use]
 pub struct PrecommitCoin<V> {
     pub coin: Coin,
     pub asset_id: Bytes32,
-    pub proof: Proof,
+    pub proof: LineageProof,
 
     pub launcher_id: Bytes32,
     pub relative_block_height: u32,
@@ -26,7 +29,7 @@ impl<V> PrecommitCoin<V> {
     pub fn new(
         ctx: &mut SpendContext,
         parent_coin_id: Bytes32,
-        proof: Proof,
+        proof: LineageProof,
         asset_id: Bytes32,
         launcher_id: Bytes32,
         relative_block_height: u32,
@@ -95,5 +98,67 @@ impl<V> PrecommitCoin<V> {
         );
 
         layers.construct_puzzle(ctx)
+    }
+
+    pub fn construct_solution(
+        &self,
+        ctx: &mut SpendContext,
+        singleton_inner_puzzle_hash: Bytes32,
+    ) -> Result<NodePtr, DriverError>
+    where
+        V: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
+    {
+        let layers = CatLayer::<PrecommitLayer<V>>::new(
+            self.asset_id,
+            PrecommitLayer::<V>::new(
+                self.launcher_id,
+                self.relative_block_height,
+                self.precommit_payout_puzzle_hash,
+                self.value.clone(),
+            ),
+        );
+
+        let value_ptr = ctx.alloc(&self.value)?;
+        let value_hash = ctx.tree_hash(value_ptr);
+
+        layers.construct_solution(
+            ctx,
+            CatSolution {
+                inner_puzzle_solution: PrecommitLayerSolution {
+                    precommit_amount: self.coin.amount,
+                    singleton_inner_puzzle_hash,
+                },
+                lineage_proof: Some(self.proof),
+                prev_coin_id: self.coin.coin_id(),
+                this_coin_info: self.coin,
+                next_coin_proof: CoinProof {
+                    parent_coin_info: self.coin.parent_coin_info,
+                    inner_puzzle_hash: PrecommitLayer::<V>::puzzle_hash(
+                        self.launcher_id,
+                        self.relative_block_height,
+                        self.precommit_payout_puzzle_hash,
+                        value_hash,
+                    )
+                    .into(),
+                    amount: self.coin.amount,
+                },
+                prev_subtotal: 0,
+                extra_delta: 0,
+            },
+        )
+    }
+
+    pub fn spend(
+        &self,
+        ctx: &mut SpendContext,
+        spender_inner_puzzle_hash: Bytes32,
+    ) -> Result<(), DriverError>
+    where
+        V: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
+    {
+        let puzzle = self.construct_puzzle(ctx)?;
+        let solution = self.construct_solution(ctx, spender_inner_puzzle_hash)?;
+
+        ctx.spend(self.coin, Spend::new(puzzle, solution))
     }
 }

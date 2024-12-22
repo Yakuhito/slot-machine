@@ -16,7 +16,7 @@ use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    CatalogRegistryInfo, CatalogSlotValue, PrecommitCoin, Slot, SpendContextExt,
+    CatalogRegistryInfo, CatalogSlotValue, PrecommitLayer, Slot, SpendContextExt,
     UniquenessPrelauncher,
 };
 
@@ -183,7 +183,7 @@ impl CatalogRegisterActionArgs {
             nft_pack: NftPack::new(royalty_puzzle_hash_hash, trade_price_percentage),
             uniqueness_prelauncher_1st_curry_hash: UniquenessPrelauncher::<()>::first_curry_hash()
                 .into(),
-            precommit_1st_curry_hash: PrecommitCoin::<()>::first_curry_hash(
+            precommit_1st_curry_hash: PrecommitLayer::<()>::first_curry_hash(
                 launcher_id,
                 relative_block_height,
                 precommit_payout_puzzle_hash,

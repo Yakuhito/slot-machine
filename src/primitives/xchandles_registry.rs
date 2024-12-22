@@ -17,13 +17,13 @@ use crate::{
     ActionLayer, ActionLayerSolution, DelegatedStateAction, DelegatedStateActionSolution,
     XchandlesExpireAction, XchandlesExpireActionSolution, XchandlesExtendAction,
     XchandlesExtendActionSolution, XchandlesOracleAction, XchandlesOracleActionSolution,
-    XchandlesRegisterAction, XchandlesRegisterActionSolution, XchandlesUpdateAction,
-    XchandlesUpdateActionSolution,
+    XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegisterActionSolution,
+    XchandlesUpdateAction, XchandlesUpdateActionSolution,
 };
 
 use super::{
-    PrecommitCoin, Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesPrecommitValue,
-    XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue,
+    PrecommitCoin, Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesRegistryInfo,
+    XchandlesRegistryState, XchandlesSlotValue,
 };
 
 #[derive(Debug, Clone)]

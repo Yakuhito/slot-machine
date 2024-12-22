@@ -8,7 +8,7 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{PrecommitCoin, Slot, SpendContextExt};
+use crate::{PrecommitLayer, Slot, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesRegisterAction {
@@ -116,7 +116,7 @@ impl XchandlesRegisterActionArgs {
     ) -> Self {
         Self {
             cat_mod_hash: CAT_PUZZLE_HASH.into(),
-            precommit_1st_curry_hash: PrecommitCoin::<()>::first_curry_hash(
+            precommit_1st_curry_hash: PrecommitLayer::<()>::first_curry_hash(
                 launcher_id,
                 relative_block_height,
                 precommit_payout_puzzle_hash,
