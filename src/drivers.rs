@@ -928,8 +928,7 @@ mod tests {
 
         let mut slots: Vec<Slot<XchandlesSlotValue>> = slots.into();
         for i in 0..7 {
-            println!("registering handle {}", i); // todo: debug
-                                                  // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
+            // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
             let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
             let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
             let (_, did) = launcher.create_simple_did(ctx, &user_puzzle)?;
@@ -987,11 +986,7 @@ mod tests {
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
-            println!("before spend 0 {}", i); // todo: debug
-            let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            sim.spend_coins(spends, &[user_sk.clone(), minter_sk.clone()])?;
-            println!("after spend 0 {}", i); // todo: debug
+            sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
             // call the 'register' action on CNS
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
