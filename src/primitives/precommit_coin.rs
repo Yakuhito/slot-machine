@@ -1,14 +1,13 @@
 use chia::{
-    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::{Bytes32, Coin, CoinSpend},
-    puzzles::{cat::CatArgs, singleton::SingletonStruct, Proof},
+    clvm_utils::TreeHash,
+    protocol::{Bytes32, Coin},
+    puzzles::{cat::CatArgs, Proof},
 };
 use chia_wallet_sdk::{CatLayer, DriverError, Layer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
-use hex_literal::hex;
 
-use crate::{PrecommitLayer, SpendContextExt};
+use crate::PrecommitLayer;
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -83,7 +82,7 @@ impl<V> PrecommitCoin<V> {
 
     pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>
     where
-        V: ToClvm<Allocator> + Clone,
+        V: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
     {
         let layers = CatLayer::<PrecommitLayer<V>>::new(
             self.asset_id,
@@ -91,7 +90,7 @@ impl<V> PrecommitCoin<V> {
                 self.launcher_id,
                 self.relative_block_height,
                 self.precommit_payout_puzzle_hash,
-                self.value,
+                self.value.clone(),
             ),
         );
 
