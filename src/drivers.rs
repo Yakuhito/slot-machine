@@ -679,7 +679,6 @@ mod tests {
 
         let mut slots: Vec<Slot<CatalogSlotValue>> = slots.into();
         for i in 0..7 {
-            println!("registering cat {}", i);
             // create precommit coin
             let reg_amount = if i % 2 == 1 {
                 test_price_schedule[i / 2]
@@ -733,31 +732,7 @@ mod tests {
                     extra_delta: 0,
                 }],
             )?;
-            println!("payment cat coin {:?}", payment_cat.coin);
-            println!(
-                "payment cat lineage proof: {:?}",
-                payment_cat.child_lineage_proof()
-            );
-            println!(
-                "parent puzzle according to lp: {:?}",
-                CatArgs::curry_tree_hash(
-                    payment_cat.asset_id,
-                    payment_cat
-                        .child_lineage_proof()
-                        .parent_inner_puzzle_hash
-                        .into()
-                )
-            );
-            println!("precommit asset id: {:?}", precommit_coin.asset_id);
-            println!("precommit asset id 2 : {:?}", payment_cat.asset_id);
-            println!(
-                "precommit asset id hash : {:?}",
-                payment_cat.asset_id.tree_hash()
-            );
-            println!(
-                "precommit asset id hash 2 : {:?}",
-                catalog.info.state.registration_asset_id_hash
-            );
+
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
@@ -843,11 +818,7 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-            println!("before spend {}", i); // todo: debug
-            let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            sim.spend_coins(spends, &[user_sk.clone()])?;
-            println!("after spend {}", i); // todo: debug
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
