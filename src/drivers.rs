@@ -975,10 +975,6 @@ mod tests {
                     .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, vec![])
                     .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, vec![]),
             )?;
-
-            payment_cat_amount -= reg_amount;
-            payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
-
             Cat::spend_all(
                 ctx,
                 &[CatSpend {
@@ -988,8 +984,13 @@ mod tests {
                 }],
             )?;
 
+            payment_cat_amount -= reg_amount;
+            payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
+
             println!("before spend 0 {}", i); // todo: debug
-            sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            sim.spend_coins(spends, &[user_sk.clone(), minter_sk.clone()])?;
             println!("after spend 0 {}", i); // todo: debug
 
             // call the 'register' action on CNS
