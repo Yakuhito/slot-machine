@@ -7,13 +7,14 @@ use clvm_traits::FromClvm;
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    ActionLayer, ActionLayerSolution, CatalogRegisterAction, CatalogRegisterActionSolution,
-    DelegatedStateAction, DelegatedStateActionSolution, ANY_METADATA_UPDATER_HASH,
+    ActionLayer, ActionLayerSolution, CatalogPrecommitValue, CatalogRegisterAction,
+    CatalogRegisterActionSolution, DelegatedStateAction, DelegatedStateActionSolution,
+    ANY_METADATA_UPDATER_HASH,
 };
 
 use super::{
-    CatalogPrecommitValue, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
-    CatalogSlotValue, PrecommitCoin, Slot, SlotInfo, SlotProof, UniquenessPrelauncher,
+    CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue,
+    PrecommitCoin, Slot, SlotInfo, SlotProof, UniquenessPrelauncher,
 };
 
 #[derive(Debug, Clone)]

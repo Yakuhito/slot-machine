@@ -5,6 +5,7 @@
 ;;  but we're only interested in 'expiration' (and handle to get correct price factor based on length)
 
 (mod (
+    CAT_MOD_HASH
     OFFER_MOD_HASH
     PAYOUT_PUZZLE_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
@@ -46,7 +47,7 @@
                 (get_slot_value_hash
                     handle
                     neighbors_hash
-                    (+ expiration (* 60 60 24 366 (check_years (/ renew_amount (* (f Current_State) (get_price_factor (strlen handle)))))))
+                    (+ expiration (* 60 60 24 366 (check_years (/ renew_amount (* (r Current_State) (get_price_factor (strlen handle)))))))
                     launcher_id_hash
                 )
             ) 
@@ -55,7 +56,11 @@
             (list
                 ASSERT_PUZZLE_ANNOUNCEMENT
                 (sha256
-                    OFFER_MOD_HASH
+                    (curry_hashes CAT_MOD_HASH
+                        (sha256 1 CAT_MOD_HASH)
+                        (f Current_State) ; first item = hash of payment CAT asset id
+                        OFFER_MOD_HASH
+                    )
                     (sha256tree 
                         (list
                             (sha256tree (c handle expiration)) ; nonce

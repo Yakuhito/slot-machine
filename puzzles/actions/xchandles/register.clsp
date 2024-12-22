@@ -11,6 +11,7 @@
 ;; Also note that anyone can extend a handle registration, but only the handle NFT may update the launcher_id data
 
 (mod (
+  CAT_MOD_HASH
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
   Current_State ; Truth
@@ -32,7 +33,7 @@
   )
 
   (defun main (
-    PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
+    CAT_MOD_HASH PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
     Current_State
     ( 
         ; start 'also included in the pre-commit coin'
@@ -91,17 +92,21 @@
                 SEND_MESSAGE
                 18 ; puzzle-puzzle
                 precommitment_amount
-                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
-                    (sha256 2
-                        (sha256 2 
-                            secret_hash
-                            handle_hash
-                        )
+                (curry_hashes CAT_MOD_HASH
+                    (sha256 1 CAT_MOD_HASH)
+                    (f Current_State) ; first item = hash of payment CAT asset id
+                    (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                         (sha256 2
-                            (sha256 1 handle_nft_launcher_id)
-                            (sha256 1 start_time)
-                        )
-                    ) ; data in precommit coin reveal will be (c (c secret handle) (c handle_nft_launcher_id start_time)))
+                            (sha256 2 
+                                secret_hash
+                                handle_hash
+                            )
+                            (sha256 2
+                                (sha256 1 handle_nft_launcher_id)
+                                (sha256 1 start_time)
+                            )
+                        ) ; data in precommit coin reveal will be (c (c secret handle) (c handle_nft_launcher_id start_time)))
+                    )
                 )
             )
         ) ; conditions
@@ -129,7 +134,7 @@
 
   (if (all (= handle_hash (sha256 1 handle_reveal)) (> handle_hash left_value) (> right_value handle_hash))
     (main
-            PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
+            CAT_MOD_HASH PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
             Current_State
             solution
             handle_hash
@@ -138,7 +143,7 @@
             (sha256 1 right_value) 
             (*
                 (get_price_factor (strlen_and_validate handle_reveal)) 
-                (f Current_State)
+                (r Current_State) ; base price in token mojos
             )
         )
         ; else

@@ -19,6 +19,8 @@ pub type CatalogRegistryLayers = SingletonLayer<ActionLayer<CatalogRegistryState
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
 #[clvm(list)]
 pub struct CatalogRegistryState {
+    pub registration_asset_id: Bytes32,
+    #[clvm(rest)]
     pub registration_price: u64,
 }
 

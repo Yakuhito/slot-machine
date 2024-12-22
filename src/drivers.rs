@@ -289,6 +289,7 @@ pub fn launch_catalog_registry(
     ctx: &mut SpendContext,
     offer: Offer,
     initial_registration_price: u64,
+    initial_registration_asset_id: Bytes32,
     catalog_constants: CatalogRegistryConstants,
     consensus_constants: &ConsensusConstants,
 ) -> Result<
@@ -316,6 +317,7 @@ pub fn launch_catalog_registry(
         registry_launcher_id,
         CatalogRegistryState {
             registration_price: initial_registration_price,
+            registration_asset_id: initial_registration_asset_id,
         },
         catalog_constants,
     );
@@ -370,6 +372,7 @@ pub fn launch_xchandles_registry(
     ctx: &mut SpendContext,
     offer: Offer,
     initial_base_registration_price: u64,
+    initial_registration_asset_id: Bytes32,
     xchandles_constants: XchandlesConstants,
     consensus_constants: &ConsensusConstants,
 ) -> Result<
@@ -398,6 +401,7 @@ pub fn launch_xchandles_registry(
         registry_launcher_id,
         XchandlesRegistryState {
             registration_base_price: initial_base_registration_price,
+            registration_asset_id: initial_registration_asset_id,
         },
         xchandles_constants,
     );
@@ -458,7 +462,7 @@ mod tests {
         },
     };
     use chia_wallet_sdk::{
-        test_secret_keys, Nft, NftMint, Simulator, SpendWithConditions, TESTNET11_CONSTANTS,
+        test_secret_keys, Cat, Nft, NftMint, Simulator, SpendWithConditions, TESTNET11_CONSTANTS,
     };
     use hex_literal::hex;
 
@@ -641,11 +645,28 @@ mod tests {
             price_singleton_puzzle,
         ) = launch_test_singleton(ctx, &mut sim)?;
 
+        // Launch test CAT
+        let mut payment_cat_amount = 10_000_000;
+        let (minter_sk, minter_pk, minter_puzzle_hash, minter_coin) =
+            sim.new_p2(payment_cat_amount)?;
+        let minter_p2 = StandardLayer::new(minter_pk);
+
+        let (issue_cat, payment_cat) = Cat::single_issuance_eve(
+            ctx,
+            minter_coin.coin_id(),
+            1,
+            Conditions::new().create_coin(minter_puzzle_hash, payment_cat_amount, vec![]),
+        )?;
+        minter_p2.spend(ctx, minter_coin, issue_cat)?;
+
+        sim.spend_coins(ctx.take(), &[minter_sk])?;
+
         // Launch catalog
         let (_, security_sk, mut catalog, slots) = launch_catalog_registry(
             ctx,
             offer,
             initial_registration_price,
+            payment_cat.asset_id,
             catalog_constants.with_price_singleton(price_singleton_launcher_id),
             &TESTNET11_CONSTANTS,
         )?;
