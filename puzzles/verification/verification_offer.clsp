@@ -1,0 +1,48 @@
+; verification_offer.clsp by yakuhito
+;; This puzzle allows CAT issuers to create 'verification offers',
+;;  which are essentially offers where one side just wants to see
+;;  a verification be created.
+
+;; In other words, funds locked in this puzzle can only be unlocked
+;;  by issuing the desired verification.
+
+(mod (
+    SINGLETON_MOD_HASH
+    LAUNCHER_PUZZLE_HASH
+    VERIFIER_SINGLETON_STRUCT_HASH
+    VERIFICATION_INNER_PUZZLE_HASH
+    (verifier_parent_info verifier_inner_puzzle_hash . verifier_amount) ; verifier proof
+    payout_puzzle_hash
+    my_amount
+)
+    (include condition_codes.clib)
+    (include curry.clib)
+
+    (list
+        (list ASSERT_MY_AMOUNT my_amount)
+        (list CREATE_COIN payout_puzzle_hash my_amount (list payout_puzzle_hash))
+        (list
+            ASSERT_PUZZLE_ANNOUNCEMENT
+            (curry_hashes_inline SINGLETON_MOD_HASH
+                (sha256 2
+                    (sha256 1 SINGLETON_MOD_HASH)
+                    (sha256 2 
+                        (sha256 1
+                            (coinid
+                                verifier_parent_info
+                                (curry_hashes SINGLETON_MOD_HASH
+                                    VERIFIER_SINGLETON_STRUCT_HASH
+                                    verifier_inner_puzzle_hash
+                                )
+                                verifier_amount
+                            ) ; verification launcher id is used to check that the intended
+                              ; verifier created the verification
+                        )
+                        (sha256 1 LAUNCHER_PUZZLE_HASH)
+                    )
+                ) ; verification SINGLETON_STRUCT hash
+                VERIFICATION_INNER_PUZZLE_HASH ; verification inner puzzle hash
+            ) ; full verification singleton puzzle hash
+        )
+    )
+)

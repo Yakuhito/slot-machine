@@ -1,7 +1,7 @@
 ; verification.clsp by yakuhito
 ;; Verifier DIDs can create verification coins to e.g., endorse that
 ;;  CAT details are not misleading. This puzzle is meant to be wrapped
-;;  in a singlryon top layer.
+;;  in a singleton top layer.
 
 ;; This is the inner puzzle that allows the verification singleton to:
 ;;  - be spent in 'oracle' mode so the verification can be asserted on-chain
