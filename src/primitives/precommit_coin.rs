@@ -45,30 +45,22 @@ impl<V> PrecommitCoin<V> {
         let value_ptr = ctx.alloc(&value)?;
         let value_hash = ctx.tree_hash(value_ptr);
 
-        let inner_puzzle_hash: Bytes32 = PrecommitLayer::<V>::puzzle_hash(
+        let inner_puzzle_hash = PrecommitLayer::<V>::puzzle_hash(
             launcher_id,
             relative_block_height,
             precommit_payout_puzzle_hash,
             value_hash,
-        )
-        .into();
+        );
 
         Ok(Self {
             coin: Coin::new(
                 parent_coin_id,
-                PrecommitCoin::<V>::puzzle_hash(
-                    asset_id,
-                    launcher_id,
-                    relative_block_height,
-                    precommit_payout_puzzle_hash,
-                    value_hash,
-                )
-                .into(),
+                CatArgs::curry_tree_hash(asset_id, inner_puzzle_hash).into(),
                 precommit_amount,
             ),
             proof,
             asset_id,
-            inner_puzzle_hash,
+            inner_puzzle_hash: inner_puzzle_hash.into(),
             launcher_id,
             relative_block_height,
             precommit_payout_puzzle_hash,

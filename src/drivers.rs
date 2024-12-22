@@ -733,15 +733,17 @@ mod tests {
                     extra_delta: 0,
                 }],
             )?;
-            println!("yak 5"); // todo: debug
+            println!("payment cat coin {:?}", payment_cat.coin);
+            println!(
+                "payment cat lineage proof: {:?}",
+                payment_cat.child_lineage_proof()
+            );
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
-            println!("creating precommit..."); // todo: debug
             let spends = ctx.take();
             print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
             sim.spend_coins(spends, &[user_sk.clone(), minter_sk.clone()])?;
-            println!("precommit created!"); // todo: debug
 
             // call the 'register' action on CATalog
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -821,7 +823,11 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("before spend {}", i); // todo: debug
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            sim.spend_coins(spends, &[user_sk.clone()])?;
+            println!("after spend {}", i); // todo: debug
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
