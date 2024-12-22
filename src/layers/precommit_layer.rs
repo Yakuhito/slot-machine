@@ -3,7 +3,7 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{DriverError, SpendContext};
+use chia_wallet_sdk::{DriverError, Layer, Puzzle, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -17,7 +17,6 @@ pub struct PrecommitLayer<V> {
     pub relative_block_height: u32,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub value: V,
-    pub precommit_amount: u64,
 }
 
 impl<V> PrecommitLayer<V> {
@@ -26,14 +25,12 @@ impl<V> PrecommitLayer<V> {
         relative_block_height: u32,
         precommit_payout_puzzle_hash: Bytes32,
         value: V,
-        precommit_amount: u64,
     ) -> Self {
         Self {
             launcher_id,
             relative_block_height,
             precommit_payout_puzzle_hash,
             value,
-            precommit_amount,
         }
     }
 
@@ -69,11 +66,60 @@ impl<V> PrecommitLayer<V> {
         }
         .tree_hash()
     }
+}
 
-    pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>
-    where
-        V: ToClvm<Allocator> + Clone,
-    {
+impl<V> Layer for PrecommitLayer<V>
+where
+    V: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
+{
+    type Solution = PrecommitLayerSolution;
+
+    fn parse_puzzle(allocator: &Allocator, puzzle: Puzzle) -> Result<Option<Self>, DriverError> {
+        let Some(puzzle_2nd_curry) = puzzle.as_curried() else {
+            return Ok(None);
+        };
+
+        let curried = CurriedProgram::parse_puzzle(allocator, puzzle_2nd_curry.curried_ptr)?;
+        let puzzle_1st_curry = Puzzle::parse(allocator, curried.program);
+        let Some(puzzle_1st_curry) = puzzle_1st_curry.as_curried() else {
+            return Ok(None);
+        };
+
+        if puzzle_1st_curry.mod_hash != PRECOMMIT_LAYER_PUZZLE_HASH {
+            return Ok(None);
+        }
+
+        let args_2nd_curry =
+            PrecommitLayer2ndCurryArgs::<V>::from_clvm(allocator, puzzle_2nd_curry.args)?;
+        let args_1st_curry =
+            PrecommitLayer1stCurryArgs::from_clvm(allocator, puzzle_1st_curry.args)?;
+
+        Ok(Some(Self {
+            launcher_id: args_1st_curry.singleton_struct.launcher_id,
+            relative_block_height: args_1st_curry.relative_block_height,
+            precommit_payout_puzzle_hash: args_1st_curry.precommit_payout_puzzle_hash,
+            value: args_2nd_curry.value,
+        }))
+    }
+
+    fn parse_solution(
+        allocator: &Allocator,
+        solution: NodePtr,
+    ) -> Result<Self::Solution, DriverError> {
+        let solution = CatSolution::<NodePtr>::from_clvm(allocator, solution)?;
+        let inner_solution = I::parse_solution(allocator, solution.inner_puzzle_solution)?;
+        Ok(CatSolution {
+            inner_puzzle_solution: inner_solution,
+            lineage_proof: solution.lineage_proof,
+            prev_coin_id: solution.prev_coin_id,
+            this_coin_info: solution.this_coin_info,
+            next_coin_proof: solution.next_coin_proof,
+            prev_subtotal: solution.prev_subtotal,
+            extra_delta: solution.extra_delta,
+        })
+    }
+
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         let prog_1st_curry = CurriedProgram {
             program: ctx.precommit_coin_puzzle()?,
             args: PrecommitLayer1stCurryArgs {

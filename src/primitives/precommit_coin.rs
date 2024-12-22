@@ -87,7 +87,7 @@ impl<V> PrecommitCoin<V> {
     where
         V: ToClvm<Allocator> + Clone,
     {
-        CatLayer::<PrecommitLayer<V>>::new(
+        let layers = CatLayer::<PrecommitLayer<V>>::new(
             self.asset_id,
             PrecommitLayer::<V>::new(
                 self.launcher_id,
@@ -96,7 +96,8 @@ impl<V> PrecommitCoin<V> {
                 self.value,
                 self.precommit_amount,
             ),
-        )
-        .construct_puzzle(ctx)
+        );
+
+        layers.construct_puzzle(ctx)
     }
 }
