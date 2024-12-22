@@ -19,7 +19,7 @@ pub type XchandlesRegistryLayers = SingletonLayer<ActionLayer<XchandlesRegistryS
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
 #[clvm(list)]
 pub struct XchandlesRegistryState {
-    pub registration_asset_id: Bytes32,
+    pub registration_asset_id_hash: Bytes32,
     #[clvm(rest)]
     pub registration_base_price: u64,
 }

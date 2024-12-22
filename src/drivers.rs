@@ -317,7 +317,7 @@ pub fn launch_catalog_registry(
         registry_launcher_id,
         CatalogRegistryState {
             registration_price: initial_registration_price,
-            registration_asset_id: initial_registration_asset_id,
+            registration_asset_id_hash: initial_registration_asset_id.tree_hash().into(),
         },
         catalog_constants,
     );
@@ -401,7 +401,7 @@ pub fn launch_xchandles_registry(
         registry_launcher_id,
         XchandlesRegistryState {
             registration_base_price: initial_base_registration_price,
-            registration_asset_id: initial_registration_asset_id,
+            registration_asset_id_hash: initial_registration_asset_id.tree_hash().into(),
         },
         xchandles_constants,
     );
@@ -750,6 +750,14 @@ mod tests {
             );
             println!("precommit asset id: {:?}", precommit_coin.asset_id);
             println!("precommit asset id 2 : {:?}", payment_cat.asset_id);
+            println!(
+                "precommit asset id hash : {:?}",
+                payment_cat.asset_id.tree_hash()
+            );
+            println!(
+                "precommit asset id hash 2 : {:?}",
+                catalog.info.state.registration_asset_id_hash
+            );
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
@@ -798,7 +806,7 @@ mod tests {
                     price_singleton_proof,
                     price_singleton_puzzle,
                     CatalogRegistryState {
-                        registration_asset_id: payment_cat.asset_id,
+                        registration_asset_id_hash: payment_cat.asset_id.tree_hash().into(),
                         registration_price: new_price,
                     },
                     catalog.coin.puzzle_hash,
