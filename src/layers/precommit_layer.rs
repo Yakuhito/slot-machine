@@ -79,7 +79,10 @@ where
             return Ok(None);
         };
 
-        let curried = CurriedProgram::parse_puzzle(allocator, puzzle_2nd_curry.curried_ptr)?;
+        let Some(curried) = CurriedProgram::<NodePtr, NodePtr>::parse_puzzle(allocator, puzzle)?
+        else {
+            return Ok(None);
+        };
         let puzzle_1st_curry = Puzzle::parse(allocator, curried.program);
         let Some(puzzle_1st_curry) = puzzle_1st_curry.as_curried() else {
             return Ok(None);
@@ -106,17 +109,7 @@ where
         allocator: &Allocator,
         solution: NodePtr,
     ) -> Result<Self::Solution, DriverError> {
-        let solution = CatSolution::<NodePtr>::from_clvm(allocator, solution)?;
-        let inner_solution = I::parse_solution(allocator, solution.inner_puzzle_solution)?;
-        Ok(CatSolution {
-            inner_puzzle_solution: inner_solution,
-            lineage_proof: solution.lineage_proof,
-            prev_coin_id: solution.prev_coin_id,
-            this_coin_info: solution.this_coin_info,
-            next_coin_proof: solution.next_coin_proof,
-            prev_subtotal: solution.prev_subtotal,
-            extra_delta: solution.extra_delta,
-        })
+        PrecommitLayerSolution::from_clvm(allocator, solution).map_err(DriverError::FromClvm)
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
@@ -137,6 +130,16 @@ where
             },
         }
         .to_clvm(&mut ctx.allocator)?)
+    }
+
+    fn construct_solution(
+        &self,
+        ctx: &mut SpendContext,
+        solution: Self::Solution,
+    ) -> Result<NodePtr, DriverError> {
+        solution
+            .to_clvm(&mut ctx.allocator)
+            .map_err(DriverError::ToClvm)
     }
 }
 

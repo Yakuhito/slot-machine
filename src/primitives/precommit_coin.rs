@@ -21,7 +21,6 @@ pub struct PrecommitCoin<V> {
     pub relative_block_height: u32,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub value: V,
-    pub precommit_amount: u64,
 }
 
 impl<V> PrecommitCoin<V> {
@@ -61,7 +60,6 @@ impl<V> PrecommitCoin<V> {
             relative_block_height,
             precommit_payout_puzzle_hash,
             value,
-            precommit_amount,
         })
     }
 
@@ -94,7 +92,6 @@ impl<V> PrecommitCoin<V> {
                 self.relative_block_height,
                 self.precommit_payout_puzzle_hash,
                 self.value,
-                self.precommit_amount,
             ),
         );
 
