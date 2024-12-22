@@ -457,7 +457,7 @@ mod tests {
         clvm_utils::CurriedProgram,
         protocol::SpendBundle,
         puzzles::{
-            cat::GenesisByCoinIdTailArgs,
+            cat::{CatArgs, GenesisByCoinIdTailArgs},
             singleton::{SingletonSolution, SINGLETON_LAUNCHER_PUZZLE_HASH},
         },
     };
@@ -711,7 +711,7 @@ mod tests {
                 ctx,
                 payment_cat.coin.coin_id(),
                 payment_cat.child_lineage_proof(),
-                user_coin.coin_id(),
+                payment_cat.asset_id,
                 catalog.info.launcher_id,
                 catalog_constants.relative_block_height,
                 catalog_constants.precommit_payout_puzzle_hash,
@@ -738,6 +738,18 @@ mod tests {
                 "payment cat lineage proof: {:?}",
                 payment_cat.child_lineage_proof()
             );
+            println!(
+                "parent puzzle according to lp: {:?}",
+                CatArgs::curry_tree_hash(
+                    payment_cat.asset_id,
+                    payment_cat
+                        .child_lineage_proof()
+                        .parent_inner_puzzle_hash
+                        .into()
+                )
+            );
+            println!("precommit asset id: {:?}", precommit_coin.asset_id);
+            println!("precommit asset id 2 : {:?}", payment_cat.asset_id);
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
