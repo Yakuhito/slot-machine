@@ -12,6 +12,9 @@ A decentralized CAT registration system for the Chia blockchain. It allows CAT c
 A decentralized naming system for the Chia blockchain. The first version allows anyone to register a name and associate it to an address. Users receive an NFT that they can fully customize, with the ability to also add fields such as profile pictures.
 
 ## Quick Links
+ * [Post: The problem of uniqueness](https://blog.fireacademy.io/p/uniqueness-on-chain)
+ * [Post: Solving the problem of uniqueness](https://blog.fireacademy.io/p/solving-the-problem-of-uniqueness)
+ * [Post: Announcing CATalog and XCHandles](https://blog.fireacademy.io/p/announcing-catalog-and-xchandles)
  * [Presentation](https://pitch.com/v/uniqueness-fjrbf7)
 
 ## License
