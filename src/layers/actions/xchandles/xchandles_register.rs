@@ -48,7 +48,11 @@ impl Layer for XchandlesRegisterAction {
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.xchandles_register_puzzle()?,
-            args: XchandlesRegisterActionArgs::new(self.launcher_id, self.relative_block_height),
+            args: XchandlesRegisterActionArgs::new(
+                self.launcher_id,
+                self.relative_block_height,
+                self.precommit_payout_puzzle_hash,
+            ),
         }
         .to_clvm(&mut ctx.allocator)?)
     }
@@ -80,7 +84,11 @@ impl Layer for XchandlesRegisterAction {
 
 impl ToTreeHash for XchandlesRegisterAction {
     fn tree_hash(&self) -> TreeHash {
-        XchandlesRegisterActionArgs::curry_tree_hash(self.launcher_id, self.relative_block_height)
+        XchandlesRegisterActionArgs::curry_tree_hash(
+            self.launcher_id,
+            self.relative_block_height,
+            self.precommit_payout_puzzle_hash,
+        )
     }
 }
 
@@ -98,10 +106,15 @@ pub struct XchandlesRegisterActionArgs {
     pub cat_mod_hash: Bytes32,
     pub precommit_1st_curry_hash: Bytes32,
     pub slot_1st_curry_hash: Bytes32,
+    pub payout_puzzle_hash: Bytes32,
 }
 
 impl XchandlesRegisterActionArgs {
-    pub fn new(launcher_id: Bytes32, relative_block_height: u32) -> Self {
+    pub fn new(
+        launcher_id: Bytes32,
+        relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
+    ) -> Self {
         Self {
             cat_mod_hash: CAT_PUZZLE_HASH.into(),
             precommit_1st_curry_hash: PrecommitLayer::<()>::first_curry_hash(
@@ -110,15 +123,24 @@ impl XchandlesRegisterActionArgs {
             )
             .into(),
             slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id).into(),
+            payout_puzzle_hash,
         }
     }
 }
 
 impl XchandlesRegisterActionArgs {
-    pub fn curry_tree_hash(launcher_id: Bytes32, relative_block_height: u32) -> TreeHash {
+    pub fn curry_tree_hash(
+        launcher_id: Bytes32,
+        relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
+    ) -> TreeHash {
         CurriedProgram {
             program: XCHANDLES_REGISTER_PUZZLE_HASH,
-            args: XchandlesRegisterActionArgs::new(launcher_id, relative_block_height),
+            args: XchandlesRegisterActionArgs::new(
+                launcher_id,
+                relative_block_height,
+                payout_puzzle_hash,
+            ),
         }
         .tree_hash()
     }
@@ -134,6 +156,7 @@ pub struct XchandlesRegisterActionSolution {
     pub handle_nft_launcher_id: Bytes32,
     pub start_time: u64,
     pub secret_hash: Bytes32,
+    pub refund_puzzle_hash_hash: Bytes32,
     pub precommitment_amount: u64,
     pub left_left_value_hash: Bytes32,
     pub left_data_hash: Bytes32,

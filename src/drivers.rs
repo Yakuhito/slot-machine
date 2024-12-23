@@ -469,8 +469,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
-        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
+        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegistryAction,
         ANY_METADATA_UPDATER_HASH,
     };
@@ -681,8 +681,7 @@ mod tests {
 
         let mut slots: Vec<Slot<CatalogSlotValue>> = slots.into();
         for i in 0..7 {
-            println!("i: {}", i); // todo: debug
-                                  // create precommit coin
+            // create precommit coin
             let reg_amount = if i % 2 == 1 {
                 test_price_schedule[i / 2]
             } else {
@@ -824,11 +823,7 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-            println!("before final spend {}", i); // todo: debug
-            let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            sim.spend_coins(spends, &[user_sk.clone()])?;
-            println!("after final spend {}", i); // todo: debug
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
@@ -1071,7 +1066,6 @@ mod tests {
                 precommit_coin,
                 price_update,
             )?;
-
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
             let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
 

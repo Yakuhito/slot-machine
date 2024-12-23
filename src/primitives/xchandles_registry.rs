@@ -302,6 +302,7 @@ impl XchandlesRegistry {
             handle_nft_launcher_id,
             start_time,
             secret_hash: secret.tree_hash().into(),
+            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
             precommitment_amount,
             left_left_value_hash: left_slot_value.neighbors.left_value.tree_hash().into(),
             left_data_hash: left_slot_value.after_neigbors_data_hash().into(),
