@@ -11,7 +11,7 @@
     LAUNCHER_PUZZLE_HASH
     VERIFIER_SINGLETON_STRUCT_HASH
     VERIFICATION_INNER_PUZZLE_HASH
-    (verifier_parent_info verifier_inner_puzzle_hash verifier_amount) ; verifier proof
+    (verifier_parent_info verifier_inner_puzzle_hash verifier_amount) ; verifier launcher proof
     payout_puzzle_hash
     my_amount
 )
@@ -30,12 +30,16 @@
                     (sha256 2 
                         (sha256 1
                             (coinid
-                                verifier_parent_info
-                                (curry_hashes SINGLETON_MOD_HASH
-                                    VERIFIER_SINGLETON_STRUCT_HASH
-                                    verifier_inner_puzzle_hash
-                                )
-                                verifier_amount
+                                (coinid
+                                    verifier_parent_info
+                                    (curry_hashes SINGLETON_MOD_HASH
+                                        VERIFIER_SINGLETON_STRUCT_HASH
+                                        verifier_inner_puzzle_hash
+                                    )
+                                    verifier_amount
+                                ) ; launcher parent must be verifier DID
+                                LAUNCHER_PUZZLE_HASH
+                                0
                             ) ; verification launcher id is used to check that the intended
                               ; verifier created the verification
                         )

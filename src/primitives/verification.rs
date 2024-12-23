@@ -174,6 +174,7 @@ mod tests {
         let (create_did, did) = did_launcher.create_simple_did(ctx, &p2)?;
         p2.spend(ctx, coin, create_did)?;
 
+        let verifier_proof = did.child_lineage_proof();
         let did = did.update(
             ctx,
             &p2,
@@ -241,7 +242,7 @@ mod tests {
         let verification_payment_spend = verification_payment.inner_spend(
             ctx,
             &crate::VerificationPaymentsSolution {
-                verifier_proof: did.child_lineage_proof(),
+                verifier_proof,
                 payout_puzzle_hash: Bytes32::default(),
                 my_amount: 1337,
             },
