@@ -8,8 +8,10 @@
     RELATIVE_BLOCK_HEIGHT ; how many blocks to wait before this coin is spendable
     PRECOMMIT_PAYOUT_PUZZLE_HASH
     ; 2nd curry
+    REFUND_PUZZLE_HASH
     VALUE
-    precommit_amount ; received via message - commitment amount
+    refund
+    my_amount
     ; info about this coin's spender (singleton coin being spent)
     singleton_inner_puzzle_hash
   )
@@ -18,14 +20,20 @@
   (include sha256tree.clib)
   (include curry.clib)
 
+  (defun-inline send_funds (target_ph)
+    (list CREATE_COIN target_ph my_amount (list target_ph))
+  )
+
   (list 
-    (list ASSERT_MY_AMOUNT precommit_amount) ; ensure the required pre-commit amount was locked and not just supplied now
-    (list CREATE_COIN PRECOMMIT_PAYOUT_PUZZLE_HASH precommit_amount) ; all is given to parent singleton
     (list ASSERT_HEIGHT_RELATIVE RELATIVE_BLOCK_HEIGHT)
+    (list ASSERT_MY_AMOUNT my_amount)
+    (send_funds
+      (i refund REFUND_PUZZLE_HASH PRECOMMIT_PAYOUT_PUZZLE_HASH)
+    )
     (list
       RECEIVE_MESSAGE
-      18 ; puzzle-puzzle
-      precommit_amount
+      19 ; sender puzzle + receiver puzzle + receiver amount
+      refund
       (curry_hashes (f SINGLETON_STRUCT)
         (sha256tree SINGLETON_STRUCT)
         singleton_inner_puzzle_hash
