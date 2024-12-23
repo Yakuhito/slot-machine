@@ -50,13 +50,16 @@ impl<V> PrecommitLayer<V> {
     }
 
     pub fn puzzle_hash(
-        launcher_id: Bytes32,
+        controller_singleton_struct_hash: Bytes32,
         relative_block_height: u32,
         refund_puzzle_hash: Bytes32,
         value_hash: TreeHash,
     ) -> TreeHash {
         CurriedProgram {
-            program: Self::first_curry_hash(launcher_id, relative_block_height),
+            program: Self::first_curry_hash(
+                controller_singleton_struct_hash,
+                relative_block_height,
+            ),
             args: PrecommitLayer2ndCurryArgs {
                 refund_puzzle_hash,
                 value: value_hash,
