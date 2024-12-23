@@ -24,30 +24,33 @@
         (list CREATE_COIN payout_puzzle_hash my_amount (list payout_puzzle_hash))
         (list
             ASSERT_PUZZLE_ANNOUNCEMENT
-            (curry_hashes_inline SINGLETON_MOD_HASH
-                (sha256 2
-                    (sha256 1 SINGLETON_MOD_HASH)
-                    (sha256 2 
-                        (sha256 1
-                            (coinid
+            (sha256
+                (curry_hashes_inline SINGLETON_MOD_HASH
+                    (sha256 2
+                        (sha256 1 SINGLETON_MOD_HASH)
+                        (sha256 2 
+                            (sha256 1
                                 (coinid
-                                    verifier_parent_info
-                                    (curry_hashes SINGLETON_MOD_HASH
-                                        VERIFIER_SINGLETON_STRUCT_HASH
-                                        verifier_inner_puzzle_hash
-                                    )
-                                    verifier_amount
-                                ) ; launcher parent must be verifier DID
-                                LAUNCHER_PUZZLE_HASH
-                                0
-                            ) ; verification launcher id is used to check that the intended
-                              ; verifier created the verification
+                                    (coinid
+                                        verifier_parent_info
+                                        (curry_hashes SINGLETON_MOD_HASH
+                                            VERIFIER_SINGLETON_STRUCT_HASH
+                                            verifier_inner_puzzle_hash
+                                        )
+                                        verifier_amount
+                                    ) ; launcher parent must be verifier DID
+                                    LAUNCHER_PUZZLE_HASH
+                                    0
+                                ) ; verification launcher id is used to check that the intended
+                                ; verifier created the verification
+                            )
+                            (sha256 1 LAUNCHER_PUZZLE_HASH)
                         )
-                        (sha256 1 LAUNCHER_PUZZLE_HASH)
-                    )
-                ) ; verification SINGLETON_STRUCT hash
-                VERIFICATION_INNER_PUZZLE_HASH ; verification inner puzzle hash
-            ) ; full verification singleton puzzle hash
+                    ) ; verification SINGLETON_STRUCT hash
+                    VERIFICATION_INNER_PUZZLE_HASH ; verification inner puzzle hash
+                ) ; full verification singleton puzzle hash
+                ()
+            )
         )
     )
 )
