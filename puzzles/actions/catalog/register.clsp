@@ -24,10 +24,12 @@
   UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
+  PAYOUT_PUZZLE_HASH
   Current_State ; Truth
   ( 
     tail_hash ; full TAIL in the reveal of the pre-commit coin
     initial_nft_owner_ph ; also included in the pre-commit coin
+    refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
     left_tail_hash left_left_tail_hash ; left slot info
     right_tail_hash right_right_tail_hash . ; right slot info
     my_id
@@ -101,8 +103,8 @@
           ; consume precommit coin
           (list
             SEND_MESSAGE
-            18 ; puzzle-puzzle
-            (r Current_State) ; precommit_amount = registration fee = last value held in state
+            19 ; sender puzzle + receiver puzzle + receiver amount
+            PAYOUT_PUZZLE_HASH
             (curry_hashes CAT_MOD_HASH
               (sha256 1 CAT_MOD_HASH)
               (f Current_State) ; first item = hash of payment CAT asset id
@@ -111,8 +113,10 @@
                   (sha256 1 initial_nft_owner_ph)
                   tail_hash
                 ) ; precommit coin reveal will be (c initial_nft_owner_ph TAIL)
+                refund_puzzle_hash_hash
               )
-            )
+            ) ; receiver puzzle hash
+            (r Current_State) ; precommit_amount = registration fee = last value held in state
           ) 
         )
       ) ; conditions
