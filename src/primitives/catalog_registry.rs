@@ -216,7 +216,11 @@ impl CatalogRegistry {
 
         // spend precommit coin
         let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
-        precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
+        precommit_coin.spend(
+            ctx,
+            self.info.constants.precommit_payout_puzzle_hash,
+            spender_inner_puzzle_hash,
+        )?;
 
         // spend uniqueness prelauncher
         let uniqueness_prelauncher = UniquenessPrelauncher::<Bytes32>::new(

@@ -50,7 +50,6 @@ impl<V> PrecommitCoin<V> {
         let inner_puzzle_hash = PrecommitLayer::<V>::puzzle_hash(
             launcher_id,
             relative_block_height,
-            precommit_payout_puzzle_hash,
             refund_puzzle_hash,
             value_hash,
         );
@@ -76,7 +75,6 @@ impl<V> PrecommitCoin<V> {
         asset_id: Bytes32,
         launcher_id: Bytes32,
         relative_block_height: u32,
-        precommit_payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
         value_hash: TreeHash,
     ) -> TreeHash {
@@ -85,7 +83,6 @@ impl<V> PrecommitCoin<V> {
             PrecommitLayer::<V>::puzzle_hash(
                 launcher_id,
                 relative_block_height,
-                precommit_payout_puzzle_hash,
                 refund_puzzle_hash,
                 value_hash,
             ),
@@ -101,7 +98,6 @@ impl<V> PrecommitCoin<V> {
             PrecommitLayer::<V>::new(
                 self.launcher_id,
                 self.relative_block_height,
-                self.precommit_payout_puzzle_hash,
                 self.refund_puzzle_hash,
                 self.value.clone(),
             ),
@@ -113,7 +109,7 @@ impl<V> PrecommitCoin<V> {
     pub fn construct_solution(
         &self,
         ctx: &mut SpendContext,
-        refund: bool,
+        target_puzzle_hash: Bytes32,
         singleton_inner_puzzle_hash: Bytes32,
     ) -> Result<NodePtr, DriverError>
     where
@@ -124,7 +120,6 @@ impl<V> PrecommitCoin<V> {
             PrecommitLayer::<V>::new(
                 self.launcher_id,
                 self.relative_block_height,
-                self.precommit_payout_puzzle_hash,
                 self.refund_puzzle_hash,
                 self.value.clone(),
             ),
@@ -134,7 +129,7 @@ impl<V> PrecommitCoin<V> {
             ctx,
             CatSolution {
                 inner_puzzle_solution: PrecommitLayerSolution {
-                    refund,
+                    target_puzzle_hash,
                     my_amount: self.coin.amount,
                     singleton_inner_puzzle_hash,
                 },
@@ -155,14 +150,15 @@ impl<V> PrecommitCoin<V> {
     pub fn spend(
         &self,
         ctx: &mut SpendContext,
-        refund: bool,
+        target_puzzle_hash: Bytes32,
         spender_inner_puzzle_hash: Bytes32,
     ) -> Result<(), DriverError>
     where
         V: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
     {
         let puzzle = self.construct_puzzle(ctx)?;
-        let solution = self.construct_solution(ctx, refund, spender_inner_puzzle_hash)?;
+        let solution =
+            self.construct_solution(ctx, target_puzzle_hash, spender_inner_puzzle_hash)?;
 
         ctx.spend(self.coin, Spend::new(puzzle, solution))
     }

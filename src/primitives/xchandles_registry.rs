@@ -287,7 +287,11 @@ impl XchandlesRegistry {
 
         // spend precommit coin
         let precommit_coin_id = precommit_coin.coin.coin_id();
-        precommit_coin.spend(ctx, spender_inner_puzzle_hash)?;
+        precommit_coin.spend(
+            ctx,
+            self.info.constants.precommit_payout_puzzle_hash,
+            spender_inner_puzzle_hash,
+        )?;
 
         // finally, spend self
         let register = XchandlesRegistryAction::Register(XchandlesRegisterActionSolution {
