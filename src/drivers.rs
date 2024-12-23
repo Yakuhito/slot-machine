@@ -708,6 +708,8 @@ mod tests {
                 tail_reveal: tail,
             };
 
+            let refund_puzzle = ctx.alloc(&1)?;
+            let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
             let precommit_coin = PrecommitCoin::new(
                 ctx,
                 payment_cat.coin.coin_id(),
@@ -716,6 +718,7 @@ mod tests {
                 catalog.info.launcher_id,
                 catalog_constants.relative_block_height,
                 catalog_constants.precommit_payout_puzzle_hash,
+                refund_puzzle_hash.into(),
                 value,
                 reg_amount,
             )?;
@@ -956,6 +959,8 @@ mod tests {
             let value =
                 XchandlesPrecommitValue::new(secret, handle.clone(), handle_launcher_id, 100);
 
+            let refund_puzzle = ctx.alloc(&1)?;
+            let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
             let precommit_coin = PrecommitCoin::new(
                 ctx,
                 payment_cat.coin.coin_id(),
@@ -964,6 +969,7 @@ mod tests {
                 registry.info.launcher_id,
                 xchandles_constants.relative_block_height,
                 xchandles_constants.precommit_payout_puzzle_hash,
+                refund_puzzle_hash.into(),
                 value,
                 reg_amount,
             )?;

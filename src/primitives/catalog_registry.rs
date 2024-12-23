@@ -1,4 +1,5 @@
 use chia::{
+    clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
@@ -248,6 +249,7 @@ impl CatalogRegistry {
         let register = CatalogRegistryAction::Register(CatalogRegisterActionSolution {
             tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,
+            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
             left_tail_hash: left_slot_value.asset_id,
             left_left_tail_hash: left_slot_value.neighbors.left_value,
             right_tail_hash: right_slot_value.asset_id,

@@ -96,8 +96,8 @@ impl CatalogRegistryInfo {
             launcher_id,
             constants.royalty_address.tree_hash().into(),
             constants.royalty_ten_thousandths,
-            constants.precommit_payout_puzzle_hash,
             constants.relative_block_height,
+            constants.precommit_payout_puzzle_hash,
         )
         .tree_hash();
 
