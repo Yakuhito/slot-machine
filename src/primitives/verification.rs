@@ -153,15 +153,18 @@ impl Primitive for Verification {
 #[cfg(test)]
 mod tests {
     use anyhow::Ok;
-    use chia::{protocol::Bytes, puzzles::singleton::SINGLETON_LAUNCHER_PUZZLE_HASH};
+    use chia::{
+        protocol::Bytes,
+        puzzles::singleton::{SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH},
+    };
     use chia_wallet_sdk::{Conditions, Launcher, Puzzle, Simulator, StandardLayer};
 
-    use crate::VerifiedData;
+    use crate::{VerificationPayments, VerifiedData};
 
     use super::*;
 
     #[test]
-    fn test_verifications() -> anyhow::Result<()> {
+    fn test_verifications_and_verification_payments() -> anyhow::Result<()> {
         let mut sim = Simulator::new();
         let ctx = &mut SpendContext::new();
         let (sk, pk, _, coin) = sim.new_p2(1)?;
@@ -220,6 +223,31 @@ mod tests {
             oracle_spend.coin, // doesn't really matter
         )?
         .unwrap();
+
+        // create verification payment and spend it
+        let verification_inner_puzzle_hash = Verification::inner_puzzle_hash(
+            did.info.launcher_id,
+            verification.info.verified_data.clone(),
+        )
+        .into();
+        let verification_payment = VerificationPayments::new(
+            SingletonStruct::new(did.info.launcher_id)
+                .tree_hash()
+                .into(),
+            verification_inner_puzzle_hash,
+        );
+
+        let payment_coin = sim.new_coin(verification_payment.tree_hash().into(), 1337);
+        let verification_payment_spend = verification_payment.inner_spend(
+            ctx,
+            &crate::VerificationPaymentsSolution {
+                verifier_proof: did.child_lineage_proof(),
+                payout_puzzle_hash: Bytes32::default(),
+                my_amount: 1337,
+            },
+        )?;
+
+        ctx.spend(payment_coin, verification_payment_spend)?;
 
         // melt verification coin
         let revocation_singleton_inner_ph = did.info.inner_puzzle_hash().into();

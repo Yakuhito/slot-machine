@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::{CurriedProgram, TreeHash},
+    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
     puzzles::{
         singleton::{SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH},
@@ -28,6 +28,17 @@ impl VerificationPayments {
             verifier_singleton_struct_hash,
             verification_inner_puzzle_hash,
         }
+    }
+
+    pub fn tree_hash(&self) -> TreeHash {
+        CurriedProgram {
+            program: VERIFICATION_PAYMENTS_PUZZLE_HASH,
+            args: VerificationPaymentsArgs::new(
+                self.verifier_singleton_struct_hash,
+                self.verification_inner_puzzle_hash,
+            ),
+        }
+        .tree_hash()
     }
 
     pub fn inner_spend(

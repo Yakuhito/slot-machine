@@ -458,7 +458,7 @@ mod tests {
         protocol::SpendBundle,
         puzzles::{
             cat::GenesisByCoinIdTailArgs,
-            singleton::{SingletonSolution, SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH},
+            singleton::{SingletonSolution, SINGLETON_LAUNCHER_PUZZLE_HASH},
         },
     };
     use chia_wallet_sdk::{
@@ -471,7 +471,6 @@ mod tests {
     use crate::{
         print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
         CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
-        Verification, VerificationInfo, VerificationPayments, VerifiedData,
         XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegistryAction,
         ANY_METADATA_UPDATER_HASH,
     };
@@ -1257,72 +1256,6 @@ mod tests {
 
         assert_eq!(new_nft.info.metadata, new_metadata);
         sim.spend_coins(ctx.take(), &[sk])?;
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_verification_payments() -> anyhow::Result<()> {
-        let ctx = &mut SpendContext::new();
-        let mut sim = Simulator::new();
-
-        // 1. Create verifier DID
-        let (verifier_sk, verifier_pk, verifier_inner_puzzle_hash, verifier_prelauncher) =
-            sim.new_p2(1)?;
-        let verifier_p2 = StandardLayer::new(verifier_pk);
-        let verifier_launcher = Launcher::new(verifier_prelauncher.coin_id(), 3);
-        let (create_verifier_did, verifier_did) =
-            verifier_launcher.create_simple_did(ctx, &verifier_p2)?;
-
-        verifier_p2.spend(ctx, verifier_prelauncher, create_verifier_did)?;
-        sim.spend_coins(ctx.take(), &[verifier_sk.clone()])?;
-
-        // 2. Create XCH offer for verification and accept offer via verifier DID
-        let verified_data = VerifiedData {
-            version: 1,
-            asset_id: Bytes32::from([1; 32]),
-            data_hash: Bytes32::from([2; 32]),
-            category: "yaku".to_string(),
-            subcategory: "hito".to_string(),
-        };
-
-        let verification_launcher =
-            Launcher::new(verifier_did.coin.coin_id(), 0).with_singleton_amount(1);
-        let verification_launcher_id = verification_launcher.coin().coin_id();
-
-        let verification_inner_puzzle_hash: Bytes32 =
-            Verification::inner_puzzle_hash(verifier_did.info.launcher_id, verified_data.clone())
-                .into();
-        let (launch_verification, verification_coin) =
-            verification_launcher.spend(ctx, verification_inner_puzzle_hash, ())?;
-
-        // spend verifier DID to create launcher
-        let verifier_inner_spend = verifier_p2.spend_with_conditions(
-            ctx,
-            launch_verification
-                .create_coin(verifier_inner_puzzle_hash, 1, vec![])
-                .reserve_fee(1),
-        )?;
-        verifier_did.spend(ctx, verifier_inner_spend)?;
-
-        let verification = Verification::after_mint(
-            verification_launcher_id,
-            VerificationInfo {
-                launcher_id: verification_launcher_id,
-                revocation_singleton_launcher_id: verifier_did.info.launcher_id,
-                verified_data,
-            },
-        );
-        assert_eq!(verification.coin.coin_id(), verification_coin.coin_id());
-
-        let verification_payment = VerificationPayments::new(
-            SingletonStruct::new(verifier_did.info.launcher_id)
-                .tree_hash()
-                .into(),
-            verification_inner_puzzle_hash,
-        );
-
-        sim.spend_coins(ctx.take(), &[verifier_sk])?;
 
         Ok(())
     }
