@@ -1,4 +1,4 @@
-; verification_offer.clsp by yakuhito
+; verification_payments.clsp by yakuhito
 ;; This puzzle allows CAT issuers to create 'verification offers',
 ;;  which are essentially offers where one side just wants to see
 ;;  a verification be created.
@@ -11,7 +11,7 @@
     LAUNCHER_PUZZLE_HASH
     VERIFIER_SINGLETON_STRUCT_HASH
     VERIFICATION_INNER_PUZZLE_HASH
-    (verifier_parent_info verifier_inner_puzzle_hash . verifier_amount) ; verifier proof
+    (verifier_parent_info verifier_inner_puzzle_hash verifier_amount) ; verifier proof
     payout_puzzle_hash
     my_amount
 )

@@ -7,6 +7,7 @@ mod slot_info;
 mod uniqueness_prelauncher;
 mod verification;
 mod verification_info;
+mod verification_payments;
 mod xchandles_registry;
 mod xchandles_registry_info;
 
@@ -19,5 +20,6 @@ pub use slot_info::*;
 pub use uniqueness_prelauncher::*;
 pub use verification::*;
 pub use verification_info::*;
+pub use verification_payments::*;
 pub use xchandles_registry::*;
 pub use xchandles_registry_info::*;

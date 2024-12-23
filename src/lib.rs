@@ -31,6 +31,7 @@ pub trait SpendContextExt {
     fn xchandles_extend_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_expire_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_oracle_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn verification_payments_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -114,6 +115,14 @@ impl SpendContextExt for SpendContext {
     fn xchandles_oracle_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(XCHANDLES_ORACLE_PUZZLE_HASH, &XCHANDLES_ORACLE_PUZZLE)
     }
+
+    /// Allocate the verification payments puzzle and return its pointer.
+    fn verification_payments_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            VERIFICATION_PAYMENTS_PUZZLE_HASH,
+            &VERIFICATION_PAYMENTS_PUZZLE,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -148,6 +157,7 @@ mod tests {
         assert_puzzle_hash!(XCHANDLES_EXTEND_PUZZLE => XCHANDLES_EXTEND_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_EXPIRE_PUZZLE => XCHANDLES_EXPIRE_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_ORACLE_PUZZLE => XCHANDLES_ORACLE_PUZZLE_HASH);
+        assert_puzzle_hash!(VERIFICATION_PAYMENTS_PUZZLE => VERIFICATION_PAYMENTS_PUZZLE_HASH);
 
         Ok(())
     }
