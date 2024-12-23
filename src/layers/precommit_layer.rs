@@ -141,7 +141,7 @@ pub const PRECOMMIT_LAYER_PUZZLE: [u8; 546] = hex!("ff02ffff01ff04ffff04ff10ffff
 
 pub const PRECOMMIT_LAYER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    05771a8604d4ec81c07f9133847788a775b4928b04f73157c9a3275cb536bc01
+    258563f603a6fe6ab2f8866c798dfaf85c38c063fd2fff2d7b901dd918681b92
     "
 ));
 
