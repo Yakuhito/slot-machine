@@ -14,12 +14,12 @@ use crate::SpendContextExt;
 
 #[derive(Debug, Copy, Clone)]
 #[must_use]
-pub struct VerificationOffer {
+pub struct VerificationPayments {
     pub verifier_singleton_struct_hash: Bytes32,
     pub verification_inner_puzzle_hash: Bytes32,
 }
 
-impl VerificationOffer {
+impl VerificationPayments {
     pub fn new(
         verifier_singleton_struct_hash: Bytes32,
         verification_inner_puzzle_hash: Bytes32,
