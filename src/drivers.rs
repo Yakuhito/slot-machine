@@ -458,7 +458,7 @@ mod tests {
         protocol::SpendBundle,
         puzzles::{
             cat::GenesisByCoinIdTailArgs,
-            singleton::{SingletonSolution, SINGLETON_LAUNCHER_PUZZLE_HASH},
+            singleton::{SingletonSolution, SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH},
         },
     };
     use chia_wallet_sdk::{
@@ -681,7 +681,8 @@ mod tests {
 
         let mut slots: Vec<Slot<CatalogSlotValue>> = slots.into();
         for i in 0..7 {
-            // create precommit coin
+            println!("i: {}", i); // todo: debug
+                                  // create precommit coin
             let reg_amount = if i % 2 == 1 {
                 test_price_schedule[i / 2]
             } else {
@@ -715,7 +716,9 @@ mod tests {
                 payment_cat.coin.coin_id(),
                 payment_cat.child_lineage_proof(),
                 payment_cat.asset_id,
-                catalog.info.launcher_id,
+                SingletonStruct::new(catalog.info.launcher_id)
+                    .tree_hash()
+                    .into(),
                 catalog_constants.relative_block_height,
                 catalog_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),
@@ -741,9 +744,7 @@ mod tests {
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
-            let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            sim.spend_coins(spends, &[user_sk.clone(), minter_sk.clone()])?;
+            sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
             // call the 'register' action on CATalog
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -823,7 +824,11 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("before final spend {}", i); // todo: debug
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            sim.spend_coins(spends, &[user_sk.clone()])?;
+            println!("after final spend {}", i); // todo: debug
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
@@ -966,7 +971,9 @@ mod tests {
                 payment_cat.coin.coin_id(),
                 payment_cat.child_lineage_proof(),
                 payment_cat.asset_id,
-                registry.info.launcher_id,
+                SingletonStruct::new(registry.info.launcher_id)
+                    .tree_hash()
+                    .into(),
                 xchandles_constants.relative_block_height,
                 xchandles_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),

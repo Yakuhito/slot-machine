@@ -4,7 +4,8 @@
 
 (mod (
     ; 1st curry
-    SINGLETON_STRUCT ; owner/controller singleton
+    SINGLETON_MOD_HASH
+    SINGLETON_STRUCT_HASH ; owner/controller singleton
     RELATIVE_BLOCK_HEIGHT ; how many blocks to wait before this coin is spendable
     ; 2nd curry
     REFUND_PUZZLE_HASH
@@ -16,7 +17,6 @@
   )
 
   (include condition_codes.clib)
-  (include sha256tree.clib)
   (include curry.clib)
 
   (list 
@@ -27,8 +27,8 @@
       RECEIVE_MESSAGE
       19 ; sender puzzle + receiver puzzle + receiver amount
       target_puzzle_hash
-      (curry_hashes (f SINGLETON_STRUCT)
-        (sha256tree SINGLETON_STRUCT)
+      (curry_hashes SINGLETON_MOD_HASH
+        SINGLETON_STRUCT_HASH
         singleton_inner_puzzle_hash
       )
     )

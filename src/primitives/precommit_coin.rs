@@ -20,7 +20,7 @@ pub struct PrecommitCoin<V> {
     pub proof: LineageProof,
     pub inner_puzzle_hash: Bytes32,
 
-    pub launcher_id: Bytes32,
+    pub controller_singleton_struct_hash: Bytes32,
     pub relative_block_height: u32,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub refund_puzzle_hash: Bytes32,
@@ -34,7 +34,7 @@ impl<V> PrecommitCoin<V> {
         parent_coin_id: Bytes32,
         proof: LineageProof,
         asset_id: Bytes32,
-        launcher_id: Bytes32,
+        controller_singleton_struct_hash: Bytes32,
         relative_block_height: u32,
         precommit_payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
@@ -48,7 +48,7 @@ impl<V> PrecommitCoin<V> {
         let value_hash = ctx.tree_hash(value_ptr);
 
         let inner_puzzle_hash = PrecommitLayer::<V>::puzzle_hash(
-            launcher_id,
+            controller_singleton_struct_hash,
             relative_block_height,
             refund_puzzle_hash,
             value_hash,
@@ -63,7 +63,7 @@ impl<V> PrecommitCoin<V> {
             proof,
             asset_id,
             inner_puzzle_hash: inner_puzzle_hash.into(),
-            launcher_id,
+            controller_singleton_struct_hash,
             relative_block_height,
             precommit_payout_puzzle_hash,
             refund_puzzle_hash,
@@ -73,7 +73,7 @@ impl<V> PrecommitCoin<V> {
 
     pub fn puzzle_hash(
         asset_id: Bytes32,
-        launcher_id: Bytes32,
+        controller_singleton_struct_hash: Bytes32,
         relative_block_height: u32,
         refund_puzzle_hash: Bytes32,
         value_hash: TreeHash,
@@ -81,7 +81,7 @@ impl<V> PrecommitCoin<V> {
         CatArgs::curry_tree_hash(
             asset_id,
             PrecommitLayer::<V>::puzzle_hash(
-                launcher_id,
+                controller_singleton_struct_hash,
                 relative_block_height,
                 refund_puzzle_hash,
                 value_hash,
@@ -96,7 +96,7 @@ impl<V> PrecommitCoin<V> {
         let layers = CatLayer::<PrecommitLayer<V>>::new(
             self.asset_id,
             PrecommitLayer::<V>::new(
-                self.launcher_id,
+                self.controller_singleton_struct_hash,
                 self.relative_block_height,
                 self.refund_puzzle_hash,
                 self.value.clone(),
@@ -118,7 +118,7 @@ impl<V> PrecommitCoin<V> {
         let layers = CatLayer::<PrecommitLayer<V>>::new(
             self.asset_id,
             PrecommitLayer::<V>::new(
-                self.launcher_id,
+                self.controller_singleton_struct_hash,
                 self.relative_block_height,
                 self.refund_puzzle_hash,
                 self.value.clone(),
