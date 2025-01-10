@@ -1,0 +1,62 @@
+; exponential_premium.clsp by yakuhito
+;; Expired handles are auctioned off to prevent snipers. This program adds a premium to the
+;;   base price of a handle during the auction.
+
+;; This program returns the premium by approximating START_PREMIUM * 0.5^n,
+;;   where n is the number of days that have passed since the handle expired.
+;; Note that n is fractional - the premium after 1 hour should be START_PREMIUM * 0.5^(1/24).
+
+;; Inspired by ExponentialPremiumPirceOracle: https://github.com/ensdomains/ens-contracts/blob/master/contracts/ethregistrar/ExponentialPremiumPriceOracle.sol
+
+(mod (
+    BASE_PROGRAM ; compute base price using this program
+    START_PREMIUM
+    END_VALUE ; premium at the very end of the expiry auction
+    PRECISION ; 10 ** 18
+    BITS_LIST ; (list bit1 bit2 bit3 ...)
+    handle_info; (base_price handle expiration buy_time)
+)
+    (defconstant DAY 86400) ; seconds in a day = 60 * 60 * 24
+
+    (defun add_fractional_part (PRECISION bits_list acc fraction_part premium)
+        (if bits_list
+            (add_fractional_part
+                PRECISION
+                (r bits_list)
+                (lsh acc 1)
+                fraction_part
+                (+
+                    premium
+                    (if (logand fraction_part acc)
+                        (/ (* premium (f bits_list)) PRECISION)
+                        ; else
+                        0
+                    )
+                )
+            )
+            ; else
+            premium
+        )
+    )
+
+    (defun-inline calculate_premium ((base_price handle expiration buy_time))
+        (
+            PRECISION
+            BITS_LIST
+            1
+            (% (* 65536 (- buy_time expiration)) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
+            (/ START_PREMIUM (lsh 2 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
+        )
+    )
+
+    ; if premium is lower than END_VALUE, auction's over
+    (defun correct_premium (premium END_VALUE)
+        (if (> premium END_VALUE) (- premium END_VALUE) 0)
+    )
+
+    ; main
+    (+
+        (a BASE_PROGRAM (list handle_info)) ; base price (at auction end)
+        (correct_premium (calculate_premium handle_info) END_VALUE)
+    )
+)
