@@ -1,0 +1,12 @@
+; factor_pricing.clsp by yakuhito
+;; Price a handle based on the number of characters it has. Inspired by ENS.
+
+;; This is a pricing program and will return (price . registered_time) where 
+;;  price is the total price of the handle and registered_time is the time
+;;  that the user will own the handle for (e.g., 1 year, 2 years, and so on).
+
+(mod 
+    BASE_PRICE ; base price = price of a 6+ character handle with no numbers
+    (handle expiration buy_time)
+    num_years ; number of years to register the handle for
+)
