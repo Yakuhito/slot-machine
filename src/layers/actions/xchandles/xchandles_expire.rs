@@ -140,8 +140,9 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         Ok(Self {
             base_program: XchandlesFactorPricingPuzzleArgs::new(base_price).get_puzzle(ctx)?,
             start_premium: 100000000 * scale_factor, // start auction at $100 million
-            end_value: 372529029846191406 * scale_factor / 1_000_000_000_000_000_000, // 100000000 * 10 ** 18 // 2 ** 28
-            precision: 1000000000000000000,                                           // 10^18
+            end_value: (372529029846191406_u128 * scale_factor as u128 / 1_000_000_000_000_000_000)
+                as u64, // 100000000 * 10 ** 18 // 2 ** 28
+            precision: 1000000000000000000,          // 10^18
             // https://github.com/ensdomains/ens-contracts/blob/master/contracts/ethregistrar/ExponentialPremiumPriceOracle.sol
             bits_list: vec![
                 999989423469314432, // 0.5 ^ 1/65536 * (10 ** 18)
@@ -174,18 +175,24 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
     }
 }
 
-// impl<P> XchandlesExponentialPremiumRenewPuzzleArgs<P>
-// where
-//     P: ToTreeHash,
-// {
-//     pub fn curry_tree_hash(self) -> TreeHash {
-//         CurriedProgram {
-//             program: XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH,
-//             args: self,
-//         }
-//         .tree_hash()
-//     }
-// }
+impl<P> XchandlesExponentialPremiumRenewPuzzleArgs<P>
+where
+    P: ToTreeHash,
+{
+    pub fn curry_tree_hash(self) -> TreeHash {
+        CurriedProgram {
+            program: XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH,
+            args: XchandlesExponentialPremiumRenewPuzzleArgs::<TreeHash> {
+                base_program: self.base_program.tree_hash(),
+                start_premium: self.start_premium,
+                end_value: self.end_value,
+                precision: self.precision,
+                bits_list: self.bits_list,
+            },
+        }
+        .tree_hash()
+    }
+}
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
@@ -194,4 +201,45 @@ pub struct XchandlesExponentialPremiumRenewPuzzleSolution<S> {
     pub expiration: u64,
     pub buy_time: u64,
     pub pricing_program_solution: S,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
+    #[clvm(list)]
+    pub struct XchandlesPricingOutput {
+        pub price: u64,
+        #[clvm(rest)]
+        pub registered_time: u64,
+    }
+
+    #[test]
+    fn test_xchandles_exponential_premium_puzzle() -> Result<(), DriverError> {
+        let mut ctx = SpendContext::new();
+
+        let puzzle =
+            XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(&mut ctx, 1, 1000)?
+                .get_puzzle(&mut ctx)?;
+
+        for day in 0..28 {
+            for hour in 0..1 {
+                // todo: 1 -> 24
+                let solution = XchandlesExponentialPremiumRenewPuzzleSolution::<u64> {
+                    handle: "yakuhito".to_string(),
+                    expiration: 0,
+                    buy_time: day * 24 * 60 + hour * 60,
+                    pricing_program_solution: 1,
+                }
+                .to_clvm(&mut ctx.allocator)?;
+
+                let output = ctx.run(puzzle, solution)?;
+                let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
+                println!("day: {} hour: {} - price is {:}", day, hour, output.price);
+            }
+        }
+
+        Ok(())
+    }
 }
