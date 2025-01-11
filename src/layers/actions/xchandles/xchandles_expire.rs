@@ -112,11 +112,12 @@ pub struct XchandlesExpireActionSolution {
     pub launcher_id_hash: Bytes32,
 }
 
-pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 146] = hex!("ff02ffff01ff04ffff05ffff14ffff12ffff11ffff05ffff14ffff12ffff11ff8202ffff82017f80ff2f80ff028080ffff12ffff05ffff14ffff05ffff14ffff12ffff11ff8202ffff82017f80ff2f80ff028080ff2f8080ff2f8080ffff018301000080ff2f8080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff0183015180ff018080");
+pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 125] =
+    hex!("ff02ffff01ff04ffff04ffff11ff8202ffff82017f80ffff04ff02ffff04ffff0101ffff04ffff3dffff11ff8202ffff82017f80ff0280ffff04ffff14ffff11ff8202ffff82017f80ff0280ff808080808080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff0183015180ff018080");
 
 pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    700fd65481b04567370e40a58eebdc4c305d0b80bdd0703ea74b19d966893147
+    faa63cb8ac1800f95e0a4fa823e6755df7331c68d8f617b9adf5ea63fc889770
     "
 ));
 
@@ -206,6 +207,8 @@ pub struct XchandlesExponentialPremiumRenewPuzzleSolution<S> {
 
 #[cfg(test)]
 mod tests {
+    use clvmr::serde::node_to_bytes;
+
     use super::*;
 
     #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
@@ -223,9 +226,12 @@ mod tests {
         let puzzle =
             XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(&mut ctx, 0, 1000)?
                 .get_puzzle(&mut ctx)?;
-        // println!("puzzle: {:?}", Program::parse(&ctx.allocator, puzzle));
+        println!(
+            "puzzle: {:?}",
+            hex::encode(node_to_bytes(&ctx.allocator, puzzle).unwrap())
+        );
 
-        for day in 0..28 {
+        for day in 0..2 {
             for hour in 0..24 {
                 let solution = XchandlesExponentialPremiumRenewPuzzleSolution::<u64> {
                     handle: "yakuhito".to_string(),
@@ -236,11 +242,22 @@ mod tests {
                 .to_clvm(&mut ctx.allocator)?;
 
                 let output = ctx.run(puzzle, solution)?;
-                let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
+                // let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
                 println!(
-                    "day:\t{}\thour:\t{}\t- price is\t{:}",
-                    day, hour, output.price
+                    "day:\t{}\thour:\t{}\tbuy_time:\t{}\t- result is\t{:}",
+                    day,
+                    hour,
+                    day * 24 * 60 * 60 + hour * 60 * 60,
+                    // output.price
+                    hex::encode(node_to_bytes(&ctx.allocator, output).unwrap())
                 );
+                // todo: debug
+                if hour > 0 && hour % 6 == 0 {
+                    println!(
+                        "solution: {:?}",
+                        hex::encode(node_to_bytes(&ctx.allocator, solution).unwrap())
+                    );
+                }
             }
         }
 
