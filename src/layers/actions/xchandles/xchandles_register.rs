@@ -5,7 +5,7 @@ use chia::{
 };
 use chia_wallet_sdk::{DriverError, Layer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{PrecommitLayer, Slot, SpendContextExt};
@@ -212,6 +212,8 @@ pub struct XchandlesFactorPricingSolution {
 
 #[cfg(test)]
 mod tests {
+    use clvmr::reduction::EvalErr;
+
     use super::*;
 
     #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
@@ -263,6 +265,45 @@ mod tests {
                 }
             }
         }
+
+        // make sure the puzzle won't let us register a handle of length 2
+
+        let solution = XchandlesFactorPricingSolution {
+            handle: "aa".to_string(),
+            num_months: 1,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+
+        let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
+            panic!("Expected error");
+        };
+        assert_eq!(s, "clvm raise");
+
+        // make sure the puzzle won't let us register a handle of length 32
+
+        let solution = XchandlesFactorPricingSolution {
+            handle: "a".repeat(32),
+            num_months: 1,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+
+        let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
+            panic!("Expected error");
+        };
+        assert_eq!(s, "clvm raise");
+
+        // make sure the puzzle won't let us register a handle with invalid characters
+
+        let solution = XchandlesFactorPricingSolution {
+            handle: "yak@test".to_string(),
+            num_months: 1,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+
+        let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
+            panic!("Expected error");
+        };
+        assert_eq!(s, "clvm raise");
 
         Ok(())
     }
