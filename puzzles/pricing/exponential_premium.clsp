@@ -46,17 +46,16 @@
 
     (defun-inline main ((price_without_premium . registered_time))
         (c
-            ; (+
-            ;     price_without_premium
-            ;     (correct_premium (add_fractional_part
-            ;        PRECISION
-            ;        BITS_LIST
-            ;        1
-            ;        (/ (* 65536 (r (divmod (- buy_time expiration) DAY))) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
-            ;        (/ START_PREMIUM (lsh 1 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
-            ;     ) END_VALUE) ; premium
-            ; )
-            (list (- buy_time expiration) DAY (% 7 2) (% (- buy_time expiration) DAY) (divmod (- buy_time expiration) DAY))
+            (+
+                price_without_premium
+                (correct_premium (add_fractional_part
+                   PRECISION
+                   BITS_LIST
+                   1
+                   (/ (* 65536 (r (divmod (- buy_time expiration) DAY))) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
+                   (/ START_PREMIUM (lsh 1 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
+                ) END_VALUE) ; premium
+            )
             registered_time
         )
     )
