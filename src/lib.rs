@@ -33,6 +33,7 @@ pub trait SpendContextExt {
     fn xchandles_oracle_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn verification_payments_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_factor_pricing_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn xchandles_exponential_premium_renew_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -132,6 +133,14 @@ impl SpendContextExt for SpendContext {
             &XCHANDLES_FACTOR_PRICING_PUZZLE,
         )
     }
+
+    /// Allocate the XCHandles exponential premium renew puzzle and return its pointer.
+    fn xchandles_exponential_premium_renew_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH,
+            &XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -168,7 +177,7 @@ mod tests {
         assert_puzzle_hash!(XCHANDLES_ORACLE_PUZZLE => XCHANDLES_ORACLE_PUZZLE_HASH);
         assert_puzzle_hash!(VERIFICATION_PAYMENTS_PUZZLE => VERIFICATION_PAYMENTS_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_FACTOR_PRICING_PUZZLE => XCHANDLES_FACTOR_PRICING_PUZZLE_HASH);
-
+        assert_puzzle_hash!(XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE => XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH);
         Ok(())
     }
 }

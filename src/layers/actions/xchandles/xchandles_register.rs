@@ -164,11 +164,11 @@ pub struct XchandlesRegisterActionSolution {
     pub right_data_hash: Bytes32,
 }
 
-pub const XCHANDLES_FACTOR_PRICING_PUZZLE: [u8; 480] = hex!("ff02ffff01ff02ffff03ffff15ff17ff8080ffff01ff04ffff12ff17ff05ffff02ff0effff04ff02ffff04ffff0dff0b80ffff04ffff02ff0affff04ff02ffff04ff0bff80808080ff808080808080ffff12ff17ff048080ffff01ff088080ff0180ffff04ffff01ff8328de80ffff02ffff03ff05ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff016080ffff15ffff017bffff0cff05ff80ffff0101808080ffff01ff02ff0affff04ff02ffff04ffff0cff05ffff010180ff80808080ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff012f80ffff15ffff013affff0cff05ff80ffff0101808080ffff01ff10ffff0101ffff02ff0affff04ff02ffff04ffff0cff05ffff010180ff8080808080ffff01ff088080ff018080ff0180ff8080ff0180ff05ffff14ffff02ffff03ffff15ff05ffff010280ffff01ff02ffff03ffff15ff05ffff010480ffff01ff02ffff03ffff09ff05ffff010580ffff01ff0110ffff01ff02ffff03ffff15ff05ffff011f80ffff01ff0880ffff01ff010280ff018080ff0180ffff01ff02ffff03ffff09ff05ffff010380ffff01ff01820080ffff01ff014080ff018080ff0180ffff01ff088080ff0180ffff03ff0bffff0102ffff0101808080ff018080");
+pub const XCHANDLES_FACTOR_PRICING_PUZZLE: [u8; 481] = hex!("ff02ffff01ff02ffff03ffff15ff17ff8080ffff01ff04ffff12ff17ff05ffff02ff0effff04ff02ffff04ffff0dff0b80ffff04ffff02ff0affff04ff02ffff04ff0bff80808080ff808080808080ffff12ff17ff048080ffff01ff088080ff0180ffff04ffff01ff8401e28500ffff02ffff03ff05ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff016080ffff15ffff017bffff0cff05ff80ffff0101808080ffff01ff02ff0affff04ff02ffff04ffff0cff05ffff010180ff80808080ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff012f80ffff15ffff013affff0cff05ff80ffff0101808080ffff01ff10ffff0101ffff02ff0affff04ff02ffff04ffff0cff05ffff010180ff8080808080ffff01ff088080ff018080ff0180ff8080ff0180ff05ffff14ffff02ffff03ffff15ff05ffff010280ffff01ff02ffff03ffff15ff05ffff010480ffff01ff02ffff03ffff09ff05ffff010580ffff01ff0110ffff01ff02ffff03ffff15ff05ffff011f80ffff01ff0880ffff01ff010280ff018080ff0180ffff01ff02ffff03ffff09ff05ffff010380ffff01ff01820080ffff01ff014080ff018080ff0180ffff01ff088080ff0180ffff03ff0bffff0102ffff0101808080ff018080");
 
 pub const XCHANDLES_FACTOR_PRICING_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    10992ade5d979dead0cabc56425ea3c2b1089207f6aa033a6a13aa7f5fe9ab6f
+    2cd58a34df34d7deb42d9401672ee28a7d5149b36e89e320cdbeb5d504b34ff9
     "
 ));
 
@@ -207,7 +207,7 @@ impl XchandlesFactorPricingPuzzleArgs {
 #[clvm(solution)]
 pub struct XchandlesFactorPricingSolution {
     pub handle: String,
-    pub num_months: u64,
+    pub num_years: u64,
 }
 
 #[cfg(test)]
@@ -232,7 +232,7 @@ mod tests {
         let puzzle = XchandlesFactorPricingPuzzleArgs::new(base_price).get_puzzle(&mut ctx)?;
 
         for handle_length in 3..=31 {
-            for num_months in 1..=3 {
+            for num_years in 1..=3 {
                 for has_number in [false, true] {
                     let handle = if has_number {
                         "a".repeat(handle_length - 1) + "1"
@@ -240,7 +240,7 @@ mod tests {
                         "a".repeat(handle_length)
                     };
 
-                    let solution = XchandlesFactorPricingSolution { handle, num_months }
+                    let solution = XchandlesFactorPricingSolution { handle, num_years }
                         .to_clvm(&mut ctx.allocator)?;
 
                     let output = ctx.run(puzzle, solution)?;
@@ -258,10 +258,10 @@ mod tests {
                     if has_number {
                         expected_price /= 2;
                     }
-                    expected_price *= num_months;
+                    expected_price *= num_years;
 
                     assert_eq!(output.price, expected_price);
-                    assert_eq!(output.registered_time, num_months * 31 * 24 * 60 * 60);
+                    assert_eq!(output.registered_time, num_years * 366 * 24 * 60 * 60);
                 }
             }
         }
@@ -270,7 +270,7 @@ mod tests {
 
         let solution = XchandlesFactorPricingSolution {
             handle: "aa".to_string(),
-            num_months: 1,
+            num_years: 1,
         }
         .to_clvm(&mut ctx.allocator)?;
 
@@ -283,7 +283,7 @@ mod tests {
 
         let solution = XchandlesFactorPricingSolution {
             handle: "a".repeat(32),
-            num_months: 1,
+            num_years: 1,
         }
         .to_clvm(&mut ctx.allocator)?;
 
@@ -296,7 +296,7 @@ mod tests {
 
         let solution = XchandlesFactorPricingSolution {
             handle: "yak@test".to_string(),
-            num_months: 1,
+            num_years: 1,
         }
         .to_clvm(&mut ctx.allocator)?;
 

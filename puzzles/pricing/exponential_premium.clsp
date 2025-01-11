@@ -16,7 +16,7 @@
     BITS_LIST ; (list bit1 bit2 bit3 ...)
     handle
     expiration
-    buy_time ; 'time now'; assumes user is interested in passing in a value as late as possible
+    buy_time ; 'time now' - assumes user is interested in passing in a value as late as possible
     pricing_program_solution ; pricing_program_solution passed to BASE_PROGRAM
 )
     (defconstant DAY 86400) ; seconds in a day = 60 * 60 * 24

@@ -115,7 +115,7 @@ pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 305] = hex!("ff02ffff
 
 pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    b033c6af2d0c34961c8304af66c096f4fa8de0bb4bc30f3ab017cb26aa83532e
+    bc3b4f8e8efb1bd28b983d4235292906abca5894e02ab2df12c46823337e8cc3
     "
 ));
 
@@ -140,8 +140,8 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         Ok(Self {
             base_program: XchandlesFactorPricingPuzzleArgs::new(base_price).get_puzzle(ctx)?,
             start_premium: 100000000 * scale_factor, // start auction at $100 million
-            end_value: scale_factor,
-            precision: 1000000000000000000, // 10^18
+            end_value: 372529029846191406 * scale_factor / 1_000_000_000_000_000_000, // 100000000 * 10 ** 18 // 2 ** 28
+            precision: 1000000000000000000,                                           // 10^18
             // https://github.com/ensdomains/ens-contracts/blob/master/contracts/ethregistrar/ExponentialPremiumPriceOracle.sol
             bits_list: vec![
                 999989423469314432, // 0.5 ^ 1/65536 * (10 ** 18)
@@ -163,7 +163,29 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
             ],
         })
     }
+
+    pub fn get_puzzle(self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+        CurriedProgram {
+            program: ctx.xchandles_exponential_premium_renew_puzzle()?,
+            args: self,
+        }
+        .to_clvm(&mut ctx.allocator)
+        .map_err(DriverError::ToClvm)
+    }
 }
+
+// impl<P> XchandlesExponentialPremiumRenewPuzzleArgs<P>
+// where
+//     P: ToTreeHash,
+// {
+//     pub fn curry_tree_hash(self) -> TreeHash {
+//         CurriedProgram {
+//             program: XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH,
+//             args: self,
+//         }
+//         .tree_hash()
+//     }
+// }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
