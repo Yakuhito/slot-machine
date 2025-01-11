@@ -1,0 +1,21 @@
+; default_cat_maker.clsp by yakuhito
+;; Given an inner puzzle and a user-supplied solution, CAT makers return the full puzzle of a CAT
+;;   with the given inner puzzle. This allows the registry to support intermediary layers in
+;;   future CATs, such as the recently-proposed revocation layer.
+
+;; The default CAT maker assumes no intermediary layers between the CAT outer puzzle and the inner puzzle.
+
+(mod (
+    CAT_MOD_HASH
+    TAIL_HASH_HASH ; (sha256 1 TAIL_HASH)
+    inner_puzzle
+    user_solution ; unused
+)
+    (include curry.clib)
+
+    (curry_hashes_inline CAT_MOD_HASH
+        (sha256 1 CAT_MOD_HASH)
+        TAIL_HASH_HASH
+        inner_puzzle
+    )
+)
