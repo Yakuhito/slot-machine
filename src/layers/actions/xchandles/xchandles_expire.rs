@@ -111,17 +111,11 @@ pub struct XchandlesExpireActionSolution {
     pub launcher_id_hash: Bytes32,
 }
 
-// pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 305] = hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff81bfffff04ff8205ffff8080808080ffff02ff06ffff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff3dffff12ffff0183010000ffff11ff8202ffff82017f8080ff0480ffff04ffff05ffff14ff0bffff17ffff0102ffff05ffff14ffff11ff8202ffff82017f80ff048080808080ff808080808080808080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff01ff83015180ff02ffff03ff0bffff01ff02ff06ffff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff10ff5fffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ff8080ff018080ff8080808080808080ffff015f80ff0180ff018080");
-pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 120] = hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff81bfffff04ff8205ffff8080808080ffff05ffff14ff0bffff17ffff0101ffff05ffff14ffff11ff8202ffff82017f80ff02808080808080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff0183015180ff018080");
+pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 305] = hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff81bfffff04ff8205ffff8080808080ffff02ff06ffff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff3dffff12ffff0183010000ffff11ff8202ffff82017f8080ff0480ffff04ffff05ffff14ff0bffff17ffff0101ffff05ffff14ffff11ff8202ffff82017f80ff048080808080ff808080808080808080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff01ff83015180ff02ffff03ff0bffff01ff02ff06ffff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff10ff5fffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ff8080ff018080ff8080808080808080ffff015f80ff0180ff018080");
 
-// pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
-//     "
-//     bc3b4f8e8efb1bd28b983d4235292906abca5894e02ab2df12c46823337e8cc3
-//     "
-// ));
 pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    56130847169eb4734375fc501547c4472f33cded429905fb20a295c6828dd2da
+    b2aeb6b1cc1f963edaf4c37679c49c5e1aeec614e41dda0832c2026e528467f8
     "
 ));
 
@@ -230,8 +224,7 @@ mod tests {
                 .get_puzzle(&mut ctx)?;
 
         for day in 0..28 {
-            for hour in 0..1 {
-                // todo: 1 -> 24
+            for hour in 0..24 {
                 let solution = XchandlesExponentialPremiumRenewPuzzleSolution::<u64> {
                     handle: "yakuhito".to_string(),
                     expiration: 0,
@@ -242,7 +235,10 @@ mod tests {
 
                 let output = ctx.run(puzzle, solution)?;
                 let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
-                println!("day: {} hour: {} - price is {:}", day, hour, output.price);
+                println!(
+                    "day:\t{}\thour:\t{}\t- price is\t{:}",
+                    day, hour, output.price
+                );
             }
         }
 

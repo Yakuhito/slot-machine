@@ -51,14 +51,13 @@
         (c
             (+
                 price_without_premium
-                ; (add_fractional_part
-                ;    PRECISION
-                ;    BITS_LIST
-                ;    1
-                ;    (% (* 65536 (- buy_time expiration)) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
-                ;    (/ START_PREMIUM (lsh 1 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
-                ; ) ; premium
-                (/ START_PREMIUM (lsh 1 (/ (- buy_time expiration) DAY)))
+                (add_fractional_part
+                   PRECISION
+                   BITS_LIST
+                   1
+                   (% (* 65536 (- buy_time expiration)) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
+                   (/ START_PREMIUM (lsh 1 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
+                ) ; premium
             )
             registered_time
         )
