@@ -28,13 +28,10 @@
                 (r bits_list)
                 (lsh acc 1)
                 fraction_part
-                (+
+                (if (logand fraction_part acc)
+                    (/ (* premium (f bits_list)) PRECISION)
+                    ; else
                     premium
-                    (if (logand fraction_part acc)
-                        (/ (* premium (f bits_list)) PRECISION)
-                        ; else
-                        0
-                    )
                 )
             )
             ; else
@@ -49,16 +46,20 @@
 
     (defun-inline main ((price_without_premium . registered_time))
         (c
-            (+
-                price_without_premium
-                (add_fractional_part
-                   PRECISION
-                   BITS_LIST
-                   1
-                   (/ (* 65536 (% (- buy_time expiration) DAY)) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
-                   (/ START_PREMIUM (lsh 1 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
-                ) ; premium
-            )
+            ; (+
+            ;     price_without_premium
+            ;     (correct_premium (add_fractional_part
+            ;        PRECISION
+            ;        BITS_LIST
+            ;        1
+            ;        (/ (* 65536 (% (- buy_time expiration) DAY)) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
+            ;        (/ START_PREMIUM (lsh 1 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
+            ;     )) ; premium
+            ; )
+            
+            ; (/ (* 65536 (% (- buy_time expiration) DAY)) DAY)
+
+            (/ (* (- (/ (* (- buy_time expiration) PRECISION) DAY) (* (/ (/ (* (- buy_time expiration) PRECISION) DAY) PRECISION) PRECISION)) 65536) PRECISION)
             registered_time
         )
     )
