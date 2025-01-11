@@ -14,7 +14,9 @@
     END_VALUE ; premium at the very end of the expiry auction
     PRECISION ; 10 ** 18
     BITS_LIST ; (list bit1 bit2 bit3 ...)
-    handle_info ; (handle expiration buy_time)
+    handle
+    expiration
+    buy_time
     pricing_program_solution ; passed to BASE_PROGRAM
 )
     (defconstant DAY 86400) ; seconds in a day = 60 * 60 * 24
@@ -40,16 +42,6 @@
         )
     )
 
-    (defun-inline calculate_premium ((handle expiration buy_time))
-        (add_fractional_part
-            PRECISION
-            BITS_LIST
-            1
-            (% (* 65536 (- buy_time expiration)) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
-            (/ START_PREMIUM (lsh 2 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
-        )
-    )
-
     ; if premium is lower than END_VALUE, auction's over
     (defun correct_premium (premium END_VALUE)
         (if (> premium END_VALUE) (- premium END_VALUE) 0)
@@ -59,13 +51,19 @@
         (c
             (+
                 price_without_premium
-                (correct_premium (calculate_premium handle_info) END_VALUE) ; premium
+                (add_fractional_part
+                    PRECISION
+                    BITS_LIST
+                    1
+                    (% (* 65536 (- buy_time expiration)) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
+                    (/ START_PREMIUM (lsh 2 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
+                ) ; premium
             )
             registered_time
         )
     )
 
     (main
-        (a BASE_PROGRAM (list handle_info pricing_program_solution))
+        (a BASE_PROGRAM (list handle pricing_program_solution))
     )
 )

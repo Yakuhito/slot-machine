@@ -7,76 +7,65 @@
 
 ;; The price is determined by multiplying the base price by a factor. The factor is as follows:
 ;; - 6+ characters with no numbers: 2
-;; - 5 characters with no numbers: 8
-;; - 4 characters with no numbers: 32
+;; - 5 characters with no numbers: 16
+;; - 4 characters with no numbers: 64
 ;; - 3 characters with no numbers: 128
 ;; If the handle contains a number, the price is halved.
 
-(mod 
+(mod (
     BASE_PRICE ; base price = price of a 6+ character handle with at least one number
     handle
-    num_years ; number of years to register the handle for
+    num_years ; pricing_program_solution = number of years to register the handle for
+)
 
-    (defun get_price_factor (length has_numbers)
+    (defun get_price_factor (length number_of_numbers)
         (/
             (if (> length 2)
                 (if (> length 4)
                     (if (= length 5)
-                        8
+                        16
                         ; else length > 6
-                        (if (> length 31) (x) 1)
+                        (if (> length 31) (x) 2)
                     )
                     ; else 2 < length < 5
                     (if (= length 3)
                         128
                         ; else length = 4
-                        32
+                        (q . 64)
                     )
                 )
                 ; else length <= 2
                 (x)
             )
+            (i number_of_numbers 2 1) ; halve the price if handle contains numbers
         )
     )
 
-    (defun-inline is_digit (ch)
-        (all (> ch (- "0" 1)) (> (+ "9" 1) ch))
-    )
-
-    (defun has_numbers (handle)
-        (if handle
-            (if (is_digit (substr handle 0 1))
-                1
-                ; else 
-                (has_numbers (substr handle 1))
-            )
+    (defun-inline single_char_helper (ch rest)
+        (if (all (> ch (- "a" 1)) (> (+ "z" 1) ch)) ; letter (a-z)
+            (count_numbers_plus_validate rest)
             ; else
-            ()
-        )
-    )
-
-    (defun char_is_valid (ch)
-        (any
-            (all (> ch (- "a" 1)) (> (+ "z" 1) ch))
-            (all (> ch (- "0" 1)) (> (+ "9" 1) ch))
-        )
-    )
-
-    (defun handle_is_valid (handle)
-        (if handle
-            (if (handle_is_valid (substr handle 0 1))
-                (handle_is_valid (substr handle 1))
-                ; else 
-                0
+            (if (all (> ch (- "0" 1)) (> (+ "9" 1) ch)) ; digit (0-9)
+                (+ 1 (count_numbers_plus_validate rest))
+                ; else
+                (x) ; invalid character in handle
             )
+        )
+    )
+
+    ;; this function will return 1 if the handle contains numbers and 0 otherwise
+    ;; PLUS it will (x) if the handle contains invalid characters
+    (defun count_numbers_plus_validate (handle)
+        (if handle
+            (single_char_helper (substr handle 0 1) (substr handle 1))
             ; else
-            1
+            0
         )
     )
 
     ; main
-    (if (all (handle_is_valid handle) (> num_years 0))
-        (* num_years BASE_PRICE (get_price_factor (strlen handle) (has_numbers handle)))
+    (if (> num_years 0)
+        (* num_years BASE_PRICE (get_price_factor (strlen handle) (count_numbers_plus_validate handle)))
         ; else
         (x)
     )
