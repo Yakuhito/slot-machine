@@ -111,11 +111,11 @@ pub struct XchandlesExpireActionSolution {
     pub launcher_id_hash: Bytes32,
 }
 
-pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 305] = hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff81bfffff04ff8205ffff8080808080ffff02ff06ffff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff3dffff12ffff0183010000ffff11ff8202ffff82017f8080ff0480ffff04ffff05ffff14ff0bffff17ffff0101ffff05ffff14ffff11ff8202ffff82017f80ff048080808080ff808080808080808080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff01ff83015180ff02ffff03ff0bffff01ff02ff06ffff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff10ff5fffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ff8080ff018080ff8080808080808080ffff015f80ff0180ff018080");
+pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 315] = hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff81bfffff04ff8205ffff8080808080ffff02ff06ffff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff05ffff14ffff12ffff0183010000ffff3dffff11ff8202ffff82017f80ff048080ff048080ffff04ffff05ffff14ff0bffff17ffff0101ffff05ffff14ffff11ff8202ffff82017f80ff048080808080ff808080808080808080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff01ff83015180ff02ffff03ff0bffff01ff02ff06ffff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff10ff5fffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ff8080ff018080ff8080808080808080ffff015f80ff0180ff018080");
 
 pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    b2aeb6b1cc1f963edaf4c37679c49c5e1aeec614e41dda0832c2026e528467f8
+    1262abefeebd8bd797ff0217b83d61bc89bc936b035f025a74c1096b077e03ce
     "
 ));
 
@@ -142,7 +142,7 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
             start_premium: 100000000 * scale_factor, // start auction at $100 million
             end_value: (372529029846191406_u128 * scale_factor as u128 / 1_000_000_000_000_000_000)
                 as u64, // 100000000 * 10 ** 18 // 2 ** 28
-            precision: 1000000000000000000,          // 10^18
+            precision: 1_000_000_000_000_000_000,    // 10^18
             // https://github.com/ensdomains/ens-contracts/blob/master/contracts/ethregistrar/ExponentialPremiumPriceOracle.sol
             bits_list: vec![
                 999989423469314432, // 0.5 ^ 1/65536 * (10 ** 18)
