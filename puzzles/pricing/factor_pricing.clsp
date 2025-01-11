@@ -3,7 +3,7 @@
 
 ;; This is a pricing program and will return (price . registered_time) where 
 ;;  price is the total price of the handle and registered_time is the time
-;;  that the user will own the handle for (e.g., 1 year, 2 years, and so on).
+;;  that the user will own the handle for (e.g., 1 month, 2 months, and so on).
 
 ;; The price is determined by multiplying the base price by a factor. The factor is as follows:
 ;; - 6+ characters with no numbers: 2
@@ -13,10 +13,12 @@
 ;; If the handle contains a number, the price is halved.
 
 (mod (
-    BASE_PRICE ; base price = price of a 6+ character handle with at least one number
+    BASE_PRICE ; base price = price per month of a 6+ character handle with at least one number
     handle
-    num_years ; pricing_program_solution = number of years to register the handle for
+    num_months ; pricing_program_solution = number of months to register the handle for
 )
+
+    (defconstant MONTH_SECONDS 2678400) ; 31 days * 24 hours/day * 60 minutes/hour * 60 seconds/minute
 
     (defun get_price_factor (length number_of_numbers)
         (/
@@ -64,8 +66,11 @@
     )
 
     ; main
-    (if (> num_years 0)
-        (* num_years BASE_PRICE (get_price_factor (strlen handle) (count_numbers_plus_validate handle)))
+    (if (> num_months 0)
+        (c 
+            (* num_months BASE_PRICE (get_price_factor (strlen handle) (count_numbers_plus_validate handle)))
+            (* num_months MONTH_SECONDS)
+        )
         ; else
         (x)
     )
