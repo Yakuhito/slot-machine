@@ -9,6 +9,8 @@ use hex_literal::hex;
 
 use crate::{Slot, SpendContextExt};
 
+use super::XchandlesFactorPricingPuzzleArgs;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesExpireAction {
     pub launcher_id: Bytes32,
@@ -107,4 +109,67 @@ pub struct XchandlesExpireActionSolution {
     pub expiration: u64,
     #[clvm(rest)]
     pub launcher_id_hash: Bytes32,
+}
+
+pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 305] = hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff81bfffff04ff8205ffff8080808080ffff02ff06ffff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff3dffff12ffff0183010000ffff11ff8202ffff82017f8080ff0480ffff04ffff05ffff14ff0bffff17ffff0102ffff05ffff14ffff11ff8202ffff82017f80ff048080808080ff808080808080808080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff01ff83015180ff02ffff03ff0bffff01ff02ff06ffff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff10ff5fffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ff8080ff018080ff8080808080808080ffff015f80ff0180ff018080");
+
+pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
+    "
+    b033c6af2d0c34961c8304af66c096f4fa8de0bb4bc30f3ab017cb26aa83532e
+    "
+));
+
+#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct XchandlesExponentialPremiumRenewPuzzleArgs<P> {
+    pub base_program: P,
+    pub start_premium: u64,
+    pub end_value: u64,
+    pub precision: u64,
+    pub bits_list: Vec<u64>,
+}
+
+impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
+    // A scale factor is how many units of the payment token equate to $1
+    // For exampe, you'd use scale_factor=1000 for wUSDC.b
+    pub fn from_scale_factor(
+        ctx: &mut SpendContext,
+        base_price: u64,
+        scale_factor: u64,
+    ) -> Result<Self, DriverError> {
+        Ok(Self {
+            base_program: XchandlesFactorPricingPuzzleArgs::new(base_price).get_puzzle(ctx)?,
+            start_premium: 100000000 * scale_factor, // start auction at $100 million
+            end_value: scale_factor,
+            precision: 1000000000000000000, // 10^18
+            // https://github.com/ensdomains/ens-contracts/blob/master/contracts/ethregistrar/ExponentialPremiumPriceOracle.sol
+            bits_list: vec![
+                999989423469314432, // 0.5 ^ 1/65536 * (10 ** 18)
+                999978847050491904, // 0.5 ^ 2/65536 * (10 ** 18)
+                999957694548431104,
+                999915390886613504,
+                999830788931929088,
+                999661606496243712,
+                999323327502650752,
+                998647112890970240,
+                997296056085470080,
+                994599423483633152,
+                989228013193975424,
+                978572062087700096,
+                957603280698573696,
+                917004043204671232,
+                840896415253714560,
+                707106781186547584,
+            ],
+        })
+    }
+}
+
+#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(solution)]
+pub struct XchandlesExponentialPremiumRenewPuzzleSolution<S> {
+    pub handle: String,
+    pub expiration: u64,
+    pub buy_time: u64,
+    pub pricing_program_solution: S,
 }
