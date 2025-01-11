@@ -163,3 +163,30 @@ pub struct XchandlesRegisterActionSolution {
     pub right_right_value_hash: Bytes32,
     pub right_data_hash: Bytes32,
 }
+
+pub const XCHANDLES_FACTOR_PRICING_PUZZLE: [u8; 463] = hex!("ff02ffff01ff02ffff03ffff15ff17ff8080ffff01ff12ff17ff05ffff02ff06ffff04ff02ffff04ffff0dff0b80ffff04ffff02ff04ffff04ff02ffff04ff0bff80808080ff808080808080ffff01ff088080ff0180ffff04ffff01ffff02ffff03ff05ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff016080ffff15ffff017bffff0cff05ff80ffff0101808080ffff01ff02ff04ffff04ff02ffff04ffff0cff05ffff010180ff80808080ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff012f80ffff15ffff013affff0cff05ff80ffff0101808080ffff01ff10ffff0101ffff02ff04ffff04ff02ffff04ffff0cff05ffff010180ff8080808080ffff01ff088080ff018080ff0180ff8080ff0180ff05ffff14ffff02ffff03ffff15ff05ffff010280ffff01ff02ffff03ffff15ff05ffff010480ffff01ff02ffff03ffff09ff05ffff010580ffff01ff0110ffff01ff02ffff03ffff15ff05ffff011f80ffff01ff0880ffff01ff010280ff018080ff0180ffff01ff02ffff03ffff09ff05ffff010380ffff01ff01820080ffff01ff014080ff018080ff0180ffff01ff088080ff0180ffff03ff0bffff0102ffff0101808080ff018080");
+
+pub const XCHANDLES_FACTOR_PRICING_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
+    "
+    53b626adf546d867ed283a5719c4835ed52ae893b09eca27b7515e3f8909fa12
+    "
+));
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct XchandlesFactorPricingPuzzleArgs {
+    pub base_price: u64,
+}
+
+impl XchandlesFactorPricingPuzzleArgs {
+    pub fn new(base_price: u64) -> Self {
+        Self { base_price }
+    }
+}
+
+#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(solution)]
+pub struct XchandlesFactorPricingSolution {
+    pub handle: String,
+    pub num_years: u8,
+}
