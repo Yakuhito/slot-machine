@@ -16,14 +16,14 @@ use clvmr::{Allocator, NodePtr};
 use crate::{
     ActionLayer, ActionLayerSolution, DelegatedStateAction, DelegatedStateActionSolution,
     XchandlesExpireAction, XchandlesExpireActionSolution, XchandlesExtendAction,
-    XchandlesExtendActionSolution, XchandlesOracleAction, XchandlesOracleActionSolution,
-    XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegisterActionSolution,
-    XchandlesUpdateAction, XchandlesUpdateActionSolution,
+    XchandlesExtendActionSolution, XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction,
+    XchandlesOracleActionSolution, XchandlesPrecommitValue, XchandlesRegisterAction,
+    XchandlesRegisterActionSolution, XchandlesUpdateAction, XchandlesUpdateActionSolution,
 };
 
 use super::{
-    PrecommitCoin, Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesRegistryInfo,
-    XchandlesRegistryState, XchandlesSlotValue,
+    DefaultCatMakerArgs, PrecommitCoin, Slot, SlotInfo, SlotProof, XchandlesConstants,
+    XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue,
 };
 
 #[derive(Debug, Clone)]
@@ -83,12 +83,12 @@ impl XchandlesRegistry {
 }
 
 pub enum XchandlesRegistryAction {
-    Expire(XchandlesExpireActionSolution),
-    Extend(XchandlesExtendActionSolution),
+    Expire(XchandlesExpireActionSolution<NodePtr, (), NodePtr, u64>),
+    Extend(XchandlesExtendActionSolution<NodePtr, u64, NodePtr, ()>),
     Oracle(XchandlesOracleActionSolution),
-    Register(XchandlesRegisterActionSolution),
+    Register(XchandlesRegisterActionSolution<NodePtr, u64, NodePtr, ()>),
     Update(XchandlesUpdateActionSolution),
-    UpdatePrice(DelegatedStateActionSolution<XchandlesRegistryState>),
+    UpdateState(DelegatedStateActionSolution<XchandlesRegistryState>),
 }
 
 impl XchandlesRegistry {
@@ -105,7 +105,11 @@ impl XchandlesRegistry {
             .into_iter()
             .map(|action| match action {
                 XchandlesRegistryAction::Expire(solution) => {
-                    let layer = XchandlesExpireAction::new(self.info.launcher_id);
+                    let layer = XchandlesExpireAction::new(
+                        self.info.launcher_id,
+                        self.info.constants.precommit_payout_puzzle_hash,
+                        self.info.constants.relative_block_height,
+                    );
 
                     let puzzle = layer.construct_puzzle(ctx)?;
                     let solution = layer.construct_solution(ctx, solution)?;
@@ -151,7 +155,7 @@ impl XchandlesRegistry {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                XchandlesRegistryAction::UpdatePrice(solution) => {
+                XchandlesRegistryAction::UpdateState(solution) => {
                     let layer =
                         DelegatedStateAction::new(self.info.constants.price_singleton_launcher_id);
 
@@ -210,7 +214,8 @@ impl XchandlesRegistry {
         left_slot: Slot<XchandlesSlotValue>,
         right_slot: Slot<XchandlesSlotValue>,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
-        price_update: Option<XchandlesRegistryAction>,
+        base_handle_price: u64,
+        num_years: u64,
     ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
@@ -231,21 +236,9 @@ impl XchandlesRegistry {
         let secret = precommit_coin.value.secret_and_handle.secret;
 
         let start_time = precommit_coin.value.start_time;
-        let precommitment_amount = precommit_coin.coin.amount;
 
-        let base_price =
-            if let Some(XchandlesRegistryAction::UpdatePrice(ref price_update)) = price_update {
-                price_update.new_state.registration_base_price
-            } else {
-                self.info.state.registration_base_price
-            };
-        let expiration = start_time
-            + (precommitment_amount
-                / (base_price * XchandlesRegisterAction::get_price_factor(&handle).unwrap_or(1)))
-                * 60
-                * 60
-                * 24
-                * 366;
+        let expiration =
+            XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, num_years);
 
         let handle_nft_launcher_id = precommit_coin.value.handle_nft_launcher_id;
 
@@ -299,11 +292,20 @@ impl XchandlesRegistry {
             handle_reveal: handle.clone(),
             left_value: left_slot_value.handle_hash,
             right_value: right_slot_value.handle_hash,
+            pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
+                ctx,
+                base_handle_price,
+            )?,
+            pricing_puzzle_solution: num_years,
+            cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                precommit_coin.asset_id.tree_hash().into(),
+            )?,
+            cat_maker_solution: (),
             handle_nft_launcher_id,
             start_time,
             secret_hash: secret.tree_hash().into(),
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
-            precommitment_amount,
             left_left_value_hash: left_slot_value.neighbors.left_value.tree_hash().into(),
             left_data_hash: left_slot_value.after_neigbors_data_hash().into(),
             right_right_value_hash: right_slot_value.neighbors.right_value.tree_hash().into(),
@@ -312,14 +314,7 @@ impl XchandlesRegistry {
 
         let my_coin = self.coin;
         let my_constants = self.info.constants;
-        let my_spend = self.spend(
-            ctx,
-            if let Some(price_update) = price_update {
-                vec![price_update, register]
-            } else {
-                vec![register]
-            },
-        )?;
+        let my_spend = self.spend(ctx, vec![register])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
         let new_xchandles = XchandlesRegistry::from_parent_spend(
             &mut ctx.allocator,

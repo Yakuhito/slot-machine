@@ -173,10 +173,10 @@ impl XchandlesFactorPricingPuzzleArgs {
         Self { base_price }
     }
 
-    pub fn get_puzzle(self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+    pub fn get_puzzle(ctx: &mut SpendContext, base_price: u64) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.xchandles_factor_pricing_puzzle()?,
-            args: self,
+            args: XchandlesFactorPricingPuzzleArgs::new(base_price),
         }
         .to_clvm(&mut ctx.allocator)
         .map_err(DriverError::ToClvm)
@@ -235,7 +235,7 @@ mod tests {
         let mut ctx = SpendContext::new();
         let base_price = 1; // puzzle will only spit out factors
 
-        let puzzle = XchandlesFactorPricingPuzzleArgs::new(base_price).get_puzzle(&mut ctx)?;
+        let puzzle = XchandlesFactorPricingPuzzleArgs::get_puzzle(&mut ctx, base_price)?;
 
         for handle_length in 3..=31 {
             for num_years in 1..=3 {

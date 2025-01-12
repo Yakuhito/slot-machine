@@ -19,9 +19,10 @@ pub type XchandlesRegistryLayers = SingletonLayer<ActionLayer<XchandlesRegistryS
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
 #[clvm(list)]
 pub struct XchandlesRegistryState {
-    pub registration_asset_id_hash: Bytes32,
+    pub cat_maker_puzzle_hash: Bytes32,
+    pub pricing_puzzle_hash: Bytes32,
     #[clvm(rest)]
-    pub registration_base_price: u64,
+    pub expired_handle_pricing_puzzle_hash: Bytes32,
 }
 
 #[must_use]
@@ -83,7 +84,13 @@ impl XchandlesRegistryInfo {
         constants: &XchandlesConstants,
     ) -> [Bytes32; 6] {
         [
-            XchandlesExpireAction::new(launcher_id).tree_hash().into(),
+            XchandlesExpireAction::new(
+                launcher_id,
+                constants.precommit_payout_puzzle_hash,
+                constants.relative_block_height,
+            )
+            .tree_hash()
+            .into(),
             XchandlesExtendAction::new(launcher_id, constants.precommit_payout_puzzle_hash)
                 .tree_hash()
                 .into(),
