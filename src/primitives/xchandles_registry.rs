@@ -497,7 +497,7 @@ impl XchandlesRegistry {
             payments: vec![Payment {
                 puzzle_hash: self.info.constants.precommit_payout_puzzle_hash,
                 amount: renew_amount,
-                memos: vec![],
+                memos: None,
             }],
         };
 

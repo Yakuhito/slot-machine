@@ -5,7 +5,9 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use chia_wallet_sdk::{run_puzzle, DriverError, Layer, MerkleTree, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{
+    run_puzzle, DriverError, Layer, MerkleProof, MerkleTree, Puzzle, Spend, SpendContext,
+};
 use clvm_traits::{clvm_list, match_tuple};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -21,7 +23,7 @@ pub struct ActionLayer<S> {
 
 #[derive(Debug, Clone)]
 pub struct ActionLayerSolution {
-    pub proofs: Vec<(u32, Vec<Bytes32>)>,
+    pub proofs: Vec<MerkleProof>,
     pub action_spends: Vec<Spend>,
 }
 
@@ -35,7 +37,7 @@ impl<S> ActionLayer<S> {
     }
 
     pub fn from_action_puzzle_hashes(leaves: &[Bytes32], state: S, hint: Bytes32) -> Self {
-        let merkle_root = MerkleTree::new(leaves).root;
+        let merkle_root = MerkleTree::new(leaves).root();
 
         Self {
             merkle_root,
@@ -48,13 +50,13 @@ impl<S> ActionLayer<S> {
         &self,
         action_puzzle_hashes: &[Bytes32],
         action_spends_puzzle_hashes: &[Bytes32],
-    ) -> Option<Vec<(u32, Vec<Bytes32>)>> {
+    ) -> Option<Vec<MerkleProof>> {
         let merkle_tree = MerkleTree::new(action_puzzle_hashes);
 
-        let proofs: Vec<(u32, Vec<Bytes32>)> = action_spends_puzzle_hashes
+        let proofs: Vec<MerkleProof> = action_spends_puzzle_hashes
             .iter()
             .filter_map(|puzzle_hash| {
-                let proof = merkle_tree.get_proof(*puzzle_hash)?;
+                let proof = merkle_tree.proof(*puzzle_hash)?;
 
                 Some(proof)
             })
@@ -176,7 +178,7 @@ where
         let proofs = solution
             .actions
             .into_iter()
-            .map(|action| action.action_proof.to_rust())
+            .map(|action| action.action_proof)
             .collect();
 
         Ok(ActionLayerSolution {
@@ -214,7 +216,7 @@ where
                 .into_iter()
                 .zip(solution.proofs)
                 .map(|(spend, proof)| RawActionLayerSolutionItem {
-                    action_proof: RawProof::from_rust(proof),
+                    action_proof: proof,
                     action_puzzle_reveal: spend.puzzle,
                     action_solution: spend.solution,
                 })
@@ -299,29 +301,8 @@ impl ActionLayerArgs<TreeHash, TreeHash> {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
-pub struct RawProof {
-    pub path: u32,
-    #[clvm(rest)]
-    pub hashes: Vec<Bytes32>,
-}
-
-impl RawProof {
-    pub fn to_rust(&self) -> (u32, Vec<Bytes32>) {
-        (self.path, self.hashes.clone())
-    }
-
-    pub fn from_rust(proof: (u32, Vec<Bytes32>)) -> Self {
-        Self {
-            path: proof.0,
-            hashes: proof.1,
-        }
-    }
-}
-
-#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
 pub struct RawActionLayerSolutionItem<P, S> {
-    pub action_proof: RawProof,
+    pub action_proof: MerkleProof,
     pub action_puzzle_reveal: P,
     #[clvm(rest)]
     pub action_solution: S,

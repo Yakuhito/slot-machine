@@ -129,7 +129,7 @@ impl CatalogRegistryInfo {
         };
 
         let action_puzzle_hashes = Self::action_puzzle_hashes(layers.launcher_id, &constants);
-        let merkle_root = MerkleTree::new(&action_puzzle_hashes).root;
+        let merkle_root = MerkleTree::new(&action_puzzle_hashes).root();
         if layers.inner_puzzle.merkle_root != merkle_root {
             return Ok(None);
         }
@@ -156,7 +156,7 @@ impl CatalogRegistryInfo {
                 self.launcher_id,
                 &self.constants,
             ))
-            .root,
+            .root(),
             self.state.tree_hash(),
         )
     }

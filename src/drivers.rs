@@ -1,7 +1,7 @@
 use bip39::Mnemonic;
 use chia::{
     bls::{sign, SecretKey, Signature},
-    clvm_utils::{CurriedProgram, ToTreeHash},
+    clvm_utils::ToTreeHash,
     consensus::consensus_constants::ConsensusConstants,
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
@@ -15,7 +15,7 @@ use chia::{
 };
 use chia_wallet_sdk::{
     AggSig, AggSigConstants, AggSigKind, Condition, Conditions, DriverError, Launcher, Layer,
-    Offer, RequiredSignature, Spend, SpendContext, StandardLayer,
+    Offer, RequiredBlsSignature, Spend, SpendContext, StandardLayer,
 };
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::NodePtr;
@@ -104,7 +104,7 @@ pub fn parse_one_sided_offer(
                         payments: vec![Payment {
                             puzzle_hash: security_coin_puzzle_hash,
                             amount: security_coin_amount,
-                            memos: vec![],
+                            memos: None,
                         }],
                     }],
                 };
@@ -188,7 +188,7 @@ pub fn sign_standard_transaction(
         ));
     };
 
-    let required_signature = RequiredSignature::from_condition(
+    let required_signature = RequiredBlsSignature::from_condition(
         &coin,
         AggSig::new(
             AggSigKind::Me,
@@ -198,7 +198,7 @@ pub fn sign_standard_transaction(
         &AggSigConstants::new(consensus_constants.agg_sig_me_additional_data),
     );
 
-    Ok(sign(sk, required_signature.final_message()))
+    Ok(sign(sk, required_signature.message()))
 }
 
 // Spends the eve signleton, whose only job is to create the
@@ -225,10 +225,12 @@ where
     let right_slot_puzzle_hash = Slot::<S>::puzzle_hash(&right_slot_info);
 
     let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id).into();
+    let slot_memos = ctx.hint(slot_hint)?;
+    let launcher_memos = ctx.hint(launcher_id)?;
     let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
-        .create_coin(left_slot_puzzle_hash.into(), 0, vec![slot_hint.into()])
-        .create_coin(right_slot_puzzle_hash.into(), 0, vec![slot_hint.into()])
-        .create_coin(target_inner_puzzle_hash, 1, vec![launcher_id.into()],))
+        .create_coin(left_slot_puzzle_hash.into(), 0, Some(slot_memos))
+        .create_coin(right_slot_puzzle_hash.into(), 0, Some(slot_memos))
+        .create_coin(target_inner_puzzle_hash, 1, Some(launcher_memos)))
     .to_clvm(&mut ctx.allocator)?;
 
     let eve_singleton_inner_puzzle_hash = ctx.tree_hash(eve_singleton_inner_puzzle);
@@ -249,11 +251,8 @@ where
     }
     .to_clvm(&mut ctx.allocator)?;
 
-    let eve_singleton_puzzle = CurriedProgram {
-        program: ctx.singleton_top_layer()?,
-        args: SingletonArgs::new(launcher_id, eve_singleton_inner_puzzle),
-    }
-    .to_clvm(&mut ctx.allocator)?;
+    let eve_singleton_puzzle =
+        ctx.curry(SingletonArgs::new(launcher_id, eve_singleton_inner_puzzle))?;
     let eve_singleton_spend = Spend::new(eve_singleton_puzzle, eve_coin_solution);
     ctx.spend(eve_coin, eve_singleton_spend)?;
 
@@ -454,7 +453,6 @@ pub fn launch_xchandles_registry(
 #[cfg(test)]
 mod tests {
     use chia::{
-        clvm_utils::CurriedProgram,
         protocol::SpendBundle,
         puzzles::{
             cat::GenesisByCoinIdTailArgs,
@@ -511,11 +509,10 @@ mod tests {
         let (_, price_singleton_coin) =
             price_singleton_launcher.spend(ctx, price_singleton_inner_puzzle_hash.into(), ())?;
 
-        let price_singleton_puzzle = CurriedProgram {
-            program: ctx.singleton_top_layer()?,
-            args: SingletonArgs::new(price_singleton_launcher_id, price_singleton_inner_puzzle),
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        let price_singleton_puzzle = ctx.curry(SingletonArgs::new(
+            price_singleton_launcher_id,
+            price_singleton_inner_puzzle,
+        ))?;
         let price_singleton_proof: Proof = Proof::Eve(EveProof {
             parent_parent_coin_info: price_singleton_launcher_coin.parent_coin_info,
             parent_amount: price_singleton_launcher_coin.amount,
@@ -551,7 +548,7 @@ mod tests {
                 message.into(),
                 vec![receiver_puzzle_hash.to_clvm(&mut ctx.allocator)?],
             )
-            .create_coin(price_singleton_inner_puzzle_hash.into(), 1, vec![]);
+            .create_coin(price_singleton_inner_puzzle_hash.into(), 1, None);
 
         let price_singleton_inner_solution =
             price_singleton_inner_solution.to_clvm(&mut ctx.allocator)?;
@@ -623,7 +620,7 @@ mod tests {
             Conditions::new().create_coin(
                 SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
                 offer_amount,
-                vec![],
+                None,
             ),
         )?;
 
@@ -657,7 +654,7 @@ mod tests {
             ctx,
             minter_coin.coin_id(),
             payment_cat_amount,
-            Conditions::new().create_coin(minter_puzzle_hash, payment_cat_amount, vec![]),
+            Conditions::new().create_coin(minter_puzzle_hash, payment_cat_amount, None),
         )?;
         minter_p2.spend(ctx, minter_coin, issue_cat)?;
 
@@ -688,17 +685,14 @@ mod tests {
                 catalog.info.state.registration_price
             };
             let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
-            let tail = CurriedProgram {
-                program: ctx.genesis_by_coin_id_tail_puzzle()?,
-                args: GenesisByCoinIdTailArgs::new(user_coin.coin_id()),
-            }
-            .to_clvm(&mut ctx.allocator)?; // pretty much a random TAIL - we're not actually launching it
+            // pretty much a random TAIL - we're not actually launching it
+            let tail = ctx.curry(GenesisByCoinIdTailArgs::new(user_coin.coin_id()))?;
             let tail_hash = ctx.tree_hash(tail);
 
             let eve_nft_inner_puzzle = clvm_quote!(Conditions::new().create_coin(
                 Bytes32::new([4 + i as u8; 32]),
                 1,
-                vec![]
+                None
             ))
             .to_clvm(&mut ctx.allocator)?;
             let eve_nft_inner_puzzle_hash = ctx.tree_hash(eve_nft_inner_puzzle);
@@ -728,8 +722,8 @@ mod tests {
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
                 ctx,
                 Conditions::new()
-                    .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, vec![])
-                    .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, vec![]),
+                    .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, None)
+                    .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, None),
             )?;
             Cat::spend_all(
                 ctx,
@@ -873,7 +867,7 @@ mod tests {
             Conditions::new().create_coin(
                 SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
                 offer_amount,
-                vec![],
+                None,
             ),
         )?;
 
@@ -900,7 +894,7 @@ mod tests {
             ctx,
             minter_coin.coin_id(),
             payment_cat_amount,
-            Conditions::new().create_coin(minter_puzzle_hash, payment_cat_amount, vec![]),
+            Conditions::new().create_coin(minter_puzzle_hash, payment_cat_amount, None),
         )?;
         minter_p2.spend(ctx, minter_coin, issue_cat)?;
 
@@ -979,8 +973,8 @@ mod tests {
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
                 ctx,
                 Conditions::new()
-                    .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, vec![])
-                    .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, vec![]),
+                    .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, None)
+                    .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, None),
             )?;
             Cat::spend_all(
                 ctx,
@@ -1111,12 +1105,12 @@ mod tests {
                     .create_coin(
                         SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
                         pay_for_extension,
-                        vec![],
+                        None,
                     )
                     .create_coin(
                         minter_puzzle_hash,
                         payment_cat_amount - pay_for_extension,
-                        vec![],
+                        None,
                     ),
             )?;
 

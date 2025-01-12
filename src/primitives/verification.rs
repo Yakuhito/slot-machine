@@ -6,7 +6,7 @@ use chia::{
         EveProof, LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{DriverError, Layer, Primitive, Puzzle, SingletonLayer, SpendContext};
+use chia_wallet_sdk::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{VerificationLayer, VerificationLayer2ndCurryArgs, VerificationLayerSolution};
@@ -115,13 +115,11 @@ impl Verification {
     }
 }
 
-impl Primitive for Verification {
-    fn from_parent_spend(
+impl Verification {
+    pub fn from_parent_spend(
         allocator: &mut Allocator,
         parent_coin: Coin,
         parent_puzzle: Puzzle,
-        _: NodePtr,
-        _: Coin,
     ) -> Result<Option<Self>, DriverError> {
         let Some(parent_layers) = VerificationLayers::parse_puzzle(allocator, parent_puzzle)?
         else {
@@ -178,7 +176,7 @@ mod tests {
         let did = did.update(
             ctx,
             &p2,
-            Conditions::new().create_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 0, vec![]),
+            Conditions::new().create_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 0, None),
         )?;
         let verification_launcher = Launcher::new(did.coin.parent_coin_info, 0);
         // we don't need an extra mojo for the verification coin since it's melted in the same tx
@@ -216,14 +214,9 @@ mod tests {
         let parent_puzzle = ctx.alloc(&oracle_spend.puzzle_reveal)?;
         let parent_puzzle = Puzzle::parse(&ctx.allocator, parent_puzzle);
         let parent_solution = ctx.alloc(&oracle_spend.solution)?;
-        let verification = Verification::from_parent_spend(
-            &mut ctx.allocator,
-            oracle_spend.coin,
-            parent_puzzle,
-            parent_solution,
-            oracle_spend.coin, // doesn't really matter
-        )?
-        .unwrap();
+        let verification =
+            Verification::from_parent_spend(&mut ctx.allocator, oracle_spend.coin, parent_puzzle)?
+                .unwrap();
 
         // create verification payment and spend it
         let verification_inner_puzzle_hash = Verification::inner_puzzle_hash(
