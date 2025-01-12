@@ -1,7 +1,7 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::{cat::CAT_PUZZLE_HASH, singleton::SingletonStruct},
+    puzzles::singleton::SingletonStruct,
 };
 use chia_wallet_sdk::{DriverError, Layer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
@@ -32,7 +32,7 @@ impl XchandlesRegisterAction {
 }
 
 impl Layer for XchandlesRegisterAction {
-    type Solution = XchandlesRegisterActionSolution;
+    type Solution = XchandlesRegisterActionSolution<NodePtr, u64, NodePtr, ()>;
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
@@ -49,7 +49,7 @@ impl Layer for XchandlesRegisterAction {
     fn construct_solution(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: XchandlesRegisterActionSolution,
+        solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
         solution
             .to_clvm(&mut ctx.allocator)
@@ -81,18 +81,17 @@ impl ToTreeHash for XchandlesRegisterAction {
     }
 }
 
-pub const XCHANDLES_REGISTER_PUZZLE: [u8; 1672] = hex!("ff02ffff01ff02ffff03ffff22ffff09ff82013fffff0bffff0101ff8202bf8080ffff15ff82013fff8205bf80ffff15ff820bbfff82013f8080ffff01ff02ff26ffff04ff02ffff04ff05ffff04ff0bffff04ff17ffff04ff2fffff04ff5fffff04ff820fbfffff04ff82013fffff04ffff0bffff0101ff82013f80ffff04ffff0bffff0101ff8205bf80ffff04ffff0bffff0101ff820bbf80ffff04ffff12ffff02ff32ffff04ff02ffff04ffff02ff2effff04ff02ffff04ff8202bfff80808080ff80808080ff81df80ff8080808080808080808080808080ffff01ff088080ff0180ffff04ffff01ffffffff5133ff4202ffffff02ffff03ff05ffff01ff0bff81ecffff02ff3affff04ff02ffff04ff09ffff04ffff02ff24ffff04ff02ffff04ff0dff80808080ff808080808080ffff0181cc80ff0180ff02ffff03ffff15ff05ff8080ffff0105ffff01ff088080ff0180ffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff04ff30ffff04ffff02ff22ffff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffffffff0bff81acffff02ff3affff04ff02ffff04ff05ffff04ffff02ff24ffff04ff02ffff04ff07ff80808080ff808080808080ff02ffff03ffff15ff05ffff010280ffff01ff02ffff03ffff15ff05ffff010480ffff01ff02ffff03ffff09ff05ffff010580ffff01ff0108ffff01ff02ffff03ffff15ff05ffff011f80ffff01ff0880ffff01ff010180ff018080ff0180ffff01ff02ffff03ffff09ff05ffff010380ffff01ff0140ffff01ff012080ff018080ff0180ffff01ff088080ff0180ffff0bffff0102ff05ffff0bffff0102ffff0bffff0102ff0bff1780ff2f8080ff0bff38ffff0bff38ff81ccff0580ffff0bff38ff0bff818c8080ffffff04ff5fffff04ffff04ff20ffff04ff8202bfff808080ffff04ffff02ff36ffff04ff02ffff04ff17ffff04ffff02ff2affff04ff02ffff04ff8205ffffff04ff822fbfffff04ff820bffffff04ff825fbfff80808080808080ff8080808080ffff04ffff02ff36ffff04ff02ffff04ff17ffff04ffff02ff2affff04ff02ffff04ff820bffffff04ff8205ffffff04ff82bfbfffff04ff83017fbfff80808080808080ff8080808080ffff04ffff02ff3cffff04ff02ffff04ff17ffff04ffff02ff2affff04ff02ffff04ff8202ffffff04ff8205ffffff04ff820bffffff04ffff0bffff0102ffff0bffff0101ffff10ff8202bfffff12ffff013cffff013cffff0118ffff0182016effff02ff34ffff04ff02ffff04ffff05ffff14ff8217bfff8217ff8080ff80808080808080ffff0bffff0101ff82013f8080ff80808080808080ff8080808080ffff04ffff02ff3cffff04ff02ffff04ff17ffff04ffff02ff2affff04ff02ffff04ff8205ffffff04ff822fbfffff04ff8202ffffff04ff825fbfff80808080808080ff8080808080ffff04ffff02ff3cffff04ff02ffff04ff17ffff04ffff02ff2affff04ff02ffff04ff820bffffff04ff8202ffffff04ff82bfbfffff04ff83017fbfff80808080808080ff8080808080ffff04ffff04ff28ffff04ffff0113ffff04ff2fffff04ffff02ff22ffff04ff02ffff04ff05ffff04ffff0bffff0101ff0580ffff04ff819fffff04ffff02ff22ffff04ff02ffff04ff0bffff04ff820bbfffff04ffff0bffff0102ffff0bffff0102ff8205bfff82017f80ffff0bffff0102ffff0bffff0101ff82013f80ffff0bffff0101ff8202bf808080ff808080808080ff80808080808080ffff04ff8217bfff808080808080ff808080808080808080ff04ff28ffff04ffff0112ffff04ff80ffff04ffff02ff22ffff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ffff02ffff03ff05ffff01ff02ffff03ffff02ff3effff04ff02ffff04ffff0cff05ff80ffff010180ff80808080ffff01ff10ffff0101ffff02ff2effff04ff02ffff04ffff0cff05ffff010180ff8080808080ffff01ff088080ff0180ff8080ff0180ff21ffff22ffff15ff05ffff016080ffff15ffff017bff058080ffff22ffff15ff05ffff012f80ffff15ffff013aff05808080ff018080");
+pub const XCHANDLES_REGISTER_PUZZLE: [u8; 1374] = hex!("ff02ffff01ff02ffff03ffff22ffff09ff819fffff0bffff0101ff82015f8080ffff15ff819fff8202df80ffff15ff8205dfff819f80ffff09ff4fffff02ff2effff04ff02ffff04ff822fdfff8080808080ffff09ff81afffff02ff2effff04ff02ffff04ff8213dfff808080808080ffff01ff02ff36ffff04ff02ffff04ff05ffff04ff0bffff04ff17ffff04ff2fffff04ff821fdfffff04ff819fffff04ffff0bffff0101ff819f80ffff04ffff0bffff0101ff8202df80ffff04ffff0bffff0101ff8205df80ffff04ffff02ff820bdfffff04ff82015fffff04ff8217dfff80808080ff80808080808080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff3342ff02ffff02ffff03ff05ffff01ff0bff81fcffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff2cffff04ff02ffff04ff0dff80808080ff808080808080ffff0181dc80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff04ff28ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff0bff81bcffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff2cffff04ff02ffff04ff07ff80808080ff808080808080ff0bffff0102ff05ffff0bffff0102ffff0bffff0102ff0bff1780ff2f8080ffffff0bff14ffff0bff14ff81dcff0580ffff0bff14ff0bff819c8080ff04ff2fffff04ffff04ff10ffff04ff8205dfff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff822fdfffff04ff8205ffffff04ff825fdfff80808080808080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8205ffffff04ff8202ffffff04ff82bfdfffff04ff83017fdfff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff82017fffff04ff8202ffffff04ff8205ffffff04ffff0bffff0102ffff0bffff0101ffff10ff8205dfff821bff8080ffff0bffff0101ff8202df8080ff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff822fdfffff04ff82017fffff04ff825fdfff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8205ffffff04ff82017fffff04ff82bfdfffff04ff83017fdfff80808080808080ff8080808080ffff04ffff04ff38ffff04ffff0113ffff04ff17ffff04ffff02ff819fffff04ffff02ff2affff04ff02ffff04ff05ffff04ff8217dfffff04ffff0bffff0102ffff0bffff0102ff820bdfff81bf80ffff0bffff0102ffff0bffff0101ff8202df80ffff0bffff0101ff8205df808080ff808080808080ffff04ff82015fff80808080ffff04ff8213ffff808080808080ff808080808080808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff38ffff04ffff0112ffff04ff80ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
 
 pub const XCHANDLES_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    f1bfa50fe9a079c3660ab3922502827541333f138317b006033d02c661fe0806
+    97c86c6003e8fe95cafa336beb3bda55cf3125ea5942b77aaf4e318ad03ef11d
     "
 ));
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
 pub struct XchandlesRegisterActionArgs {
-    pub cat_mod_hash: Bytes32,
     pub precommit_1st_curry_hash: Bytes32,
     pub slot_1st_curry_hash: Bytes32,
     pub payout_puzzle_hash: Bytes32,
@@ -105,7 +104,6 @@ impl XchandlesRegisterActionArgs {
         payout_puzzle_hash: Bytes32,
     ) -> Self {
         Self {
-            cat_mod_hash: CAT_PUZZLE_HASH.into(),
             precommit_1st_curry_hash: PrecommitLayer::<()>::first_curry_hash(
                 SingletonStruct::new(launcher_id).tree_hash().into(),
                 relative_block_height,
@@ -137,16 +135,19 @@ impl XchandlesRegisterActionArgs {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct XchandlesRegisterActionSolution {
+pub struct XchandlesRegisterActionSolution<PP, PS, CMP, CMS> {
     pub handle_hash: Bytes32,
     pub handle_reveal: String,
     pub left_value: Bytes32,
     pub right_value: Bytes32,
+    pub pricing_puzzle_reveal: PP,
+    pub pricing_puzzle_solution: PS,
+    pub cat_maker_reveal: CMP,
+    pub cat_maker_solution: CMS,
     pub handle_nft_launcher_id: Bytes32,
     pub start_time: u64,
     pub secret_hash: Bytes32,
     pub refund_puzzle_hash_hash: Bytes32,
-    pub precommitment_amount: u64,
     pub left_left_value_hash: Bytes32,
     pub left_data_hash: Bytes32,
     pub right_right_value_hash: Bytes32,
@@ -179,6 +180,22 @@ impl XchandlesFactorPricingPuzzleArgs {
         }
         .to_clvm(&mut ctx.allocator)
         .map_err(DriverError::ToClvm)
+    }
+
+    pub fn get_price(base_price: u64, handle: &str, num_years: u64) -> u64 {
+        base_price
+            * match handle.len() {
+                3 => 128,
+                4 => 64,
+                5 => 16,
+                _ => 2,
+            }
+            / if handle.contains(|c: char| c.is_numeric()) {
+                2
+            } else {
+                1
+            }
+            * num_years
     }
 }
 
