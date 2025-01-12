@@ -247,7 +247,10 @@ impl CatalogRegistry {
 
         // finally, spend self
         let register = CatalogRegistryAction::Register(CatalogRegisterActionSolution {
-            cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(ctx, tail_hash.tree_hash().into())?,
+            cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                precommit_coin.asset_id.tree_hash().into(),
+            )?,
             cat_maker_solution: (),
             tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,

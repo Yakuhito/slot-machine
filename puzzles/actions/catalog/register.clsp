@@ -108,7 +108,7 @@
             19 ; sender puzzle + receiver puzzle + receiver amount
             PAYOUT_PUZZLE_HASH
             (a
-              cat_maker_solution
+              cat_maker_reveal
               (list
                 (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                   refund_puzzle_hash_hash
@@ -116,11 +116,11 @@
                     (sha256 1 initial_nft_owner_ph)
                     tail_hash
                   ) ; precommit coin reveal will be (c initial_nft_owner_ph TAIL)
-                ) ; inner puzzle
+                ) ; Inner_Puzzle_Hash
                 cat_maker_solution
               )
             ) ; receiver puzzle hash
-            (r Current_State) ; receiver amount =precommit_amount = registration fee = last value held in state
+            (r Current_State) ; receiver amount = precommit_amount = registration fee = last value held in state
           ) 
         )
       ) ; conditions

@@ -592,6 +592,7 @@ mod tests {
 
     #[test]
     fn test_catalog() -> anyhow::Result<()> {
+        println!("1"); // todo: debug
         let ctx = &mut SpendContext::new();
         let mut sim = Simulator::new();
 
@@ -666,7 +667,9 @@ mod tests {
 
         payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
+        println!("2"); // todo: debug
         sim.spend_coins(ctx.take(), &[minter_sk.clone()])?;
+        println!("3"); // todo: debug
 
         // Launch catalog
         let (_, security_sk, mut catalog, slots) = launch_catalog_registry(
@@ -678,13 +681,17 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
+        println!("4"); // todo: debug
         sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
+        println!("5"); // todo: debug
 
         // Register CAT
 
+        println!("6"); // todo: debug
         let mut slots: Vec<Slot<CatalogSlotValue>> = slots.into();
         for i in 0..7 {
-            // create precommit coin
+            println!("7"); // todo: debug
+                           // create precommit coin
             let reg_amount = if i % 2 == 1 {
                 test_price_schedule[i / 2]
             } else {
@@ -746,7 +753,9 @@ mod tests {
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
+            println!("8"); // todo: debug
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+            println!("9"); // todo: debug
 
             // call the 'register' action on CATalog
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -809,6 +818,7 @@ mod tests {
                 None
             };
 
+            println!("yak1"); // todo: debug
             let (secure_cond, new_catalog, new_slots) = catalog.register_cat(
                 ctx,
                 tail_hash.into(),
@@ -821,6 +831,7 @@ mod tests {
                 },
                 price_update,
             )?;
+            println!("yak2"); // todo: debug
 
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
             let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
@@ -829,7 +840,9 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
+            println!("10"); // todo: debug
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("11"); // todo: debug
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
