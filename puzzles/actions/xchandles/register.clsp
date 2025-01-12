@@ -15,7 +15,7 @@
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
   PAYOUT_PUZZLE_HASH
-  Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . premium_pricing_puzzle_hash)
+  Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
   (handle_hash handle_reveal left_value right_value pricing_puzzle_reveal pricing_solution . solution) ; see the 'main' function for rest of arguments 
 )
   (include condition_codes.clib)

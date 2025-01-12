@@ -9,11 +9,19 @@
     OFFER_MOD_HASH
     PAYOUT_PUZZLE_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    Current_State ; Truth
-    (renew_amount handle neighbors_hash expiration . launcher_id_hash)
+    Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
+    (
+        handle
+        pricing_puzzle_reveal
+        pricing_solution
+        cat_maker_puzzle_reveal
+        cat_maker_solution
+        neighbors_hash
+        expiration . 
+        launcher_id_hash
+    )
 )
     (include condition_codes.clib)
-    (include xchandles_price.clib)
     (include sha256tree.clib)
     (include curry.clib)
     (include slots.clib)
@@ -31,44 +39,56 @@
         )
     )
 
-    (c
-        Current_State ; new state
-        (list
-            ; spend slot
-            (spend_slot SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash handle neighbors_hash expiration launcher_id_hash)
-            )
-
-            ; announcement
-            (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256 2 (sha256 1 renew_amount) (sha256 1 handle))))
-            
-            ; create new slot
-            (create_slot SLOT_1ST_CURRY_HASH
-                (get_slot_value_hash
-                    handle
-                    neighbors_hash
-                    (+ expiration (* 60 60 24 366 (check_years (/ renew_amount (* (r Current_State) (get_price_factor (strlen handle)))))))
-                    launcher_id_hash
-                )
-            ) 
-            
-            ; assert payment
+    (defun-inline main ((total_price . registered_time))
+        (c
+            Current_State ; new state
             (list
-                ASSERT_PUZZLE_ANNOUNCEMENT
-                (sha256
-                    (curry_hashes CAT_MOD_HASH
-                        (sha256 1 CAT_MOD_HASH)
-                        (f Current_State) ; first item = hash of payment CAT asset id
-                        OFFER_MOD_HASH
+                ; spend slot
+                (spend_slot SLOT_1ST_CURRY_HASH 
+                    (get_slot_value_hash handle neighbors_hash expiration launcher_id_hash)
+                )
+
+                ; announcement
+                (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256 2 (sha256 1 total_price) (sha256 1 handle))))
+                
+                ; create new slot
+                (create_slot SLOT_1ST_CURRY_HASH
+                    (get_slot_value_hash
+                        handle
+                        neighbors_hash
+                        (+ expiration registered_time)
+                        launcher_id_hash
                     )
-                    (sha256tree 
-                        (list
-                            (sha256tree (c handle expiration)) ; nonce
-                            (list PAYOUT_PUZZLE_HASH renew_amount) ; notarized payment
+                ) 
+                
+                ; assert payment
+                (list
+                    ASSERT_PUZZLE_ANNOUNCEMENT
+                    (sha256
+                        (a 
+                            cat_maker_puzzle_reveal
+                            (list OFFER_MOD_HASH cat_maker_solution)
+                        ) ; full CAT puzzle hash
+                        (sha256tree 
+                            (list
+                                (sha256tree (c handle expiration)) ; nonce
+                                (list PAYOUT_PUZZLE_HASH total_price) ; notarized payment
+                            )
                         )
                     )
                 )
-            )
-        ) ; conditions
+            ) ; conditions
+        )
+    )
+
+    (if (all
+        (= (f Current_State) (sha256tree (f cat_maker_solution))) ; cat maker puzzle reveal is correct
+        (= (f (r Current_State)) (sha256tree (f pricing_puzzle_reveal))) ; pricing puzzle reveal is correct
+    )
+        (main
+            (a pricing_puzzle_reveal (list handle pricing_solution))
+        )
+        ; else
+        (x)
     )
 )
