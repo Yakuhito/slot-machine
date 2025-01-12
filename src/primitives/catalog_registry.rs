@@ -1,16 +1,17 @@
 use chia::{
+    bls::Signature,
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin},
+    protocol::{Bytes32, Coin, CoinSpend, Program},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::FromClvm;
-use clvmr::{Allocator, NodePtr};
+use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
 
 use crate::{
-    ActionLayer, ActionLayerSolution, CatalogPrecommitValue, CatalogRegisterAction,
-    CatalogRegisterActionSolution, DelegatedStateAction, DelegatedStateActionSolution,
-    ANY_METADATA_UPDATER_HASH,
+    print_spend_bundle, ActionLayer, ActionLayerSolution, CatalogPrecommitValue,
+    CatalogRegisterAction, CatalogRegisterActionSolution, DelegatedStateAction,
+    DelegatedStateActionSolution, ANY_METADATA_UPDATER_HASH,
 };
 
 use super::{
@@ -272,6 +273,20 @@ impl CatalogRegistry {
                 vec![register]
             },
         )?;
+        print_spend_bundle(
+            vec![CoinSpend::new(
+                my_coin,
+                Program::from_clvm(&ctx.allocator, my_spend.puzzle)?,
+                Program::from_clvm(&ctx.allocator, my_spend.solution)?,
+            )],
+            Signature::default(),
+        );
+        let puzz =
+            DefaultCatMakerArgs::get_puzzle(ctx, precommit_coin.asset_id.tree_hash().into())?;
+        println!(
+            "puzzle: {:?}",
+            hex::encode(node_to_bytes(&ctx.allocator, puzz)?)
+        );
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
         let new_catalog = CatalogRegistry::from_parent_spend(
             &mut ctx.allocator,

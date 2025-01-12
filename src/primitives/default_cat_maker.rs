@@ -19,7 +19,7 @@ pub const DEFAULT_CAT_MAKER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
 ));
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
+#[clvm(curry)]
 pub struct DefaultCatMakerArgs {
     pub cat_mod_hash: Bytes32,
     pub tail_hash_hash: Bytes32,
