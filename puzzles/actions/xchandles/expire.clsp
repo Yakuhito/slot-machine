@@ -4,14 +4,23 @@
 ;; Remember that the slot format is (value (left_value right_value) expiration . launcher_id)
 
 (mod (
+    PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    Current_State ; Truth
+    PAYOUT_PUZZLE_HASH
+    Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
     (
-        value
-        left_value left_left_value left_rest_hash
-        right_value right_right_value right_rest_hash
-        expiration .
-        launcher_id_hash ; (sha256 1 launcher_id)
+        handle
+        cat_maker_puzzle_reveal
+        cat_maker_puzzle_solution
+        expired_handle_pricing_puzzle_reveal
+        expired_handle_pricing_puzzle_solution
+        refund_puzzle_hash_hash
+        secret_hash
+        neighbors_hash
+        current_expiration
+        buy_time
+        old_launcher_id_hash . ; (sha256 1 old_launcher_id)
+        new_launcher_id_hash ; (sha256 1 new_launcher_id)
     )
 )
     (include condition_codes.clib)
@@ -19,52 +28,94 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_slot_value_hash (value left_value right_value rest_hash)
+    (defun get_slot_value_hash (handle_hash neighbors_hash expiration launcher_id_hash)
         (sha256 2
-            (sha256 1 value)
+            handle_hash
             (sha256 2
+                neighbors_hash
                 (sha256 2
-                    (sha256 1 left_value)
-                    (sha256 1 right_value)
+                    (sha256 1 expiration)
+                    launcher_id_hash
                 )
-                rest_hash
             )
         )
     )
-        
-    (c
-        Current_State ; new state
-        (list
-            ; assert it actually expired
-            (list ASSERT_SECONDS_ABSOLUTE expiration)
+    
+    (defun-inline main (handle_hash (total_price . registered_time))
+        (c
+            Current_State ; new state
+            (list
+                (list ASSERT_SECONDS_ABSOLUTE buy_time)
 
-            ; announcement
-            (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'x' value))
+                ; assert handle actually expired
+                (list ASSERT_SECONDS_ABSOLUTE current_expiration)
 
-            ; spend main slot
-            (spend_slot SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash value left_value right_value (sha256 2  (sha256 1 expiration) launcher_id_hash))
-            )
+                ; announcement
+                (list
+                    CREATE_PUZZLE_ANNOUNCEMENT
+                    (concat 'x'
+                        (sha256 2 
+                            handle_hash
+                            (sha256 2
+                                (sha256 1 (+ registered_time buy_time))
+                                new_launcher_id_hash
+                            )
+                        ) ; (sha256tree (handle new_expiration . new_launcher_id))
+                    ) 
+                )
 
-            ; spend left slot
-            (spend_slot SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash left_value left_left_value value left_rest_hash)
+                ; spend slot
+                (spend_slot SLOT_1ST_CURRY_HASH 
+                    (get_slot_value_hash handle_hash neighbors_hash current_expiration old_launcher_id_hash)
+                )
+                
+                ; create new slot
+                (create_slot SLOT_1ST_CURRY_HASH
+                    (get_slot_value_hash handle_hash neighbors_hash (+ registered_time buy_time) new_launcher_id_hash)
+                )
+
+                ; consume precommit coin
+                (list
+                    SEND_MESSAGE
+                    19 ; sender puzzle + receiver puzzle + receiver amount
+                    PAYOUT_PUZZLE_HASH ; message
+                    (a
+                        cat_maker_puzzle_reveal
+                        (list
+                            (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                                refund_puzzle_hash_hash
+                                (sha256 2
+                                    (sha256 2 
+                                        secret_hash
+                                        handle_hash
+                                    )
+                                    (sha256 2
+                                        new_launcher_id_hash
+                                        (sha256 1 buy_time)
+                                    )
+                                ) ; data in precommit coin reveal will be (c (c secret handle) (c handle_nft_launcher_id start_time)))
+                            ) ; Inner_Puzzle_Hash
+                            cat_maker_puzzle_solution
+                        )
+                    )
+                    total_price
+                )
+            ) ; conditions
+        )
+    )
+
+    (if (all
+        (= (sha256tree cat_maker_puzzle_reveal) (f Current_State))
+        (= (sha256tree expired_handle_pricing_puzzle_reveal) (r (r Current_State)))
+    )
+        (main
+            (sha256 1 handle)
+            (a
+                expired_handle_pricing_puzzle_reveal
+                (list handle current_expiration buy_time expired_handle_pricing_puzzle_solution)
             )
-            
-            ; spend right slot
-            (spend_slot SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash right_value value right_right_value right_rest_hash)
-            )
-            
-            ; create new left slot
-            (create_slot SLOT_1ST_CURRY_HASH
-                (get_slot_value_hash left_value left_left_value right_value left_rest_hash)
-            ) 
-            
-            ; create new right slot
-            (create_slot SLOT_1ST_CURRY_HASH
-                (get_slot_value_hash right_value left_value right_right_value right_rest_hash)
-            ) 
-        ) ; conditions
+        )
+        ; else
+        (x)
     )
 )
