@@ -25,8 +25,10 @@
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
   PAYOUT_PUZZLE_HASH
-  Current_State ; Truth
+  Current_State ; Truth = (cat_maker_puzzle_hash . registration_price)
   ( 
+    cat_maker_reveal
+    cat_maker_solution
     tail_hash ; full TAIL in the reveal of the pre-commit coin
     initial_nft_owner_ph ; also included in the pre-commit coin
     refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
@@ -75,7 +77,7 @@
     ) 
   )
 
-  (if (all (> tail_hash left_tail_hash) (> right_tail_hash tail_hash))
+  (if (all (> tail_hash left_tail_hash) (> right_tail_hash tail_hash) (= (sha256tree cat_maker_reveal) (f Current_State)))
     (c
       Current_State ; new state
 
@@ -105,18 +107,20 @@
             SEND_MESSAGE
             19 ; sender puzzle + receiver puzzle + receiver amount
             PAYOUT_PUZZLE_HASH
-            (curry_hashes CAT_MOD_HASH
-              (sha256 1 CAT_MOD_HASH)
-              (f Current_State) ; first item = hash of payment CAT asset id
-              (curry_hashes PRECOMMIT_1ST_CURRY_HASH
-                refund_puzzle_hash_hash
-                (sha256 2
-                  (sha256 1 initial_nft_owner_ph)
-                  tail_hash
-                ) ; precommit coin reveal will be (c initial_nft_owner_ph TAIL)
+            (a
+              cat_maker_solution
+              (list
+                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                  refund_puzzle_hash_hash
+                  (sha256 2
+                    (sha256 1 initial_nft_owner_ph)
+                    tail_hash
+                  ) ; precommit coin reveal will be (c initial_nft_owner_ph TAIL)
+                ) ; inner puzzle
+                cat_maker_solution
               )
             ) ; receiver puzzle hash
-            (r Current_State) ; precommit_amount = registration fee = last value held in state
+            (r Current_State) ; receiver amount =precommit_amount = registration fee = last value held in state
           ) 
         )
       ) ; conditions
