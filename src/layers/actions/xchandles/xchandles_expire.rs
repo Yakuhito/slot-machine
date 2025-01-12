@@ -182,7 +182,7 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         scale_factor: u64,
     ) -> Result<Self, DriverError> {
         Ok(Self {
-            base_program: XchandlesFactorPricingPuzzleArgs::new(base_price).get_puzzle(ctx)?,
+            base_program: XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price)?,
             start_premium: 100000000 * scale_factor, // start auction at $100 million
             end_value: (372529029846191406_u128 * scale_factor as u128 / 1_000_000_000_000_000_000)
                 as u64, // 100000000 * 10 ** 18 // 2 ** 28

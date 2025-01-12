@@ -15,7 +15,8 @@ use clvmr::{Allocator, NodePtr};
 
 use crate::{
     ActionLayer, ActionLayerSolution, DelegatedStateAction, DelegatedStateActionSolution,
-    XchandlesExpireAction, XchandlesExpireActionSolution, XchandlesExtendAction,
+    XchandlesExpireAction, XchandlesExpireActionSolution,
+    XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExtendAction,
     XchandlesExtendActionSolution, XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction,
     XchandlesOracleActionSolution, XchandlesPrecommitValue, XchandlesRegisterAction,
     XchandlesRegisterActionSolution, XchandlesUpdateAction, XchandlesUpdateActionSolution,
@@ -341,65 +342,70 @@ impl XchandlesRegistry {
         self,
         ctx: &mut SpendContext,
         slot: Slot<XchandlesSlotValue>,
-        left_slot: Slot<XchandlesSlotValue>,
-        right_slot: Slot<XchandlesSlotValue>,
+        num_years: u64,
+        base_handle_price: u64,
+        precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
     ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(slot_value) = slot.info.value else {
             return Err(DriverError::Custom("Missing slot value".to_string()));
         };
-        let Some(left_slot_value) = left_slot.info.value else {
-            return Err(DriverError::Custom("Missing left slot value".to_string()));
-        };
-        let Some(right_slot_value) = right_slot.info.value else {
-            return Err(DriverError::Custom("Missing right slot value".to_string()));
-        };
 
         let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
 
         slot.spend(ctx, spender_inner_puzzle_hash)?;
-        left_slot.spend(ctx, spender_inner_puzzle_hash)?;
-        right_slot.spend(ctx, spender_inner_puzzle_hash)?;
 
         let new_slots_proof = SlotProof {
             parent_parent_info: self.coin.parent_coin_info,
             parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
         };
 
-        let new_slots = vec![
-            Slot::new(
-                new_slots_proof,
-                SlotInfo::from_value(
-                    self.info.launcher_id,
-                    left_slot_value.with_neighbors(
-                        left_slot_value.neighbors.left_value,
-                        right_slot_value.handle_hash,
-                    ),
+        let new_slots = vec![Slot::new(
+            new_slots_proof,
+            SlotInfo::from_value(
+                self.info.launcher_id,
+                XchandlesSlotValue::new(
+                    slot_value.handle_hash,
+                    slot_value.neighbors.left_value,
+                    slot_value.neighbors.right_value,
+                    precommit_coin.value.start_time + num_years * 366 * 24 * 60 * 60,
+                    precommit_coin.value.handle_nft_launcher_id,
                 ),
             ),
-            Slot::new(
-                new_slots_proof,
-                SlotInfo::from_value(
-                    self.info.launcher_id,
-                    right_slot_value.with_neighbors(
-                        left_slot_value.handle_hash,
-                        right_slot_value.neighbors.right_value,
-                    ),
-                ),
-            ),
-        ];
+        )];
 
         // finally, spend self
         let expire = XchandlesRegistryAction::Expire(XchandlesExpireActionSolution {
-            value: slot_value.handle_hash,
-            left_value: left_slot_value.handle_hash,
-            left_left_value: left_slot_value.neighbors.left_value,
-            left_rest_hash: left_slot_value.after_neigbors_data_hash().into(),
-            right_value: right_slot_value.handle_hash,
-            right_right_value: right_slot_value.neighbors.right_value,
-            right_rest_hash: right_slot_value.after_neigbors_data_hash().into(),
-            expiration: slot_value.expiration,
-            launcher_id_hash: slot_value.launcher_id.tree_hash().into(),
+            handle: precommit_coin.value.secret_and_handle.handle,
+            cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                precommit_coin.asset_id.tree_hash().into(),
+            )?,
+            cat_maker_puzzle_solution: (),
+            expired_handle_pricing_puzzle_reveal:
+                XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
+                    ctx,
+                    base_handle_price,
+                    1000,
+                )?
+                .get_puzzle(ctx)?,
+            expired_handle_pricing_puzzle_solution: num_years,
+            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            secret_hash: precommit_coin
+                .value
+                .secret_and_handle
+                .secret
+                .tree_hash()
+                .into(),
+            neighbors_hash: slot_value.neighbors.tree_hash().into(),
+            current_expiration: slot_value.expiration,
+            buy_time: precommit_coin.value.start_time,
+            old_launcher_id_hash: slot_value.launcher_id.tree_hash().into(),
+            new_launcher_id_hash: precommit_coin
+                .value
+                .handle_nft_launcher_id
+                .tree_hash()
+                .into(),
         });
 
         let my_coin = self.coin;
@@ -436,7 +442,9 @@ impl XchandlesRegistry {
         ctx: &mut SpendContext,
         handle: String,
         slot: Slot<XchandlesSlotValue>,
-        renew_amount: u64,
+        payment_asset_id: Bytes32,
+        base_handle_price: u64,
+        num_years: u64,
     ) -> Result<
         (
             NotarizedPayment,
@@ -460,14 +468,7 @@ impl XchandlesRegistry {
             parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
         };
 
-        let new_expiration = slot_value.expiration
-            + (renew_amount
-                / (XchandlesRegisterAction::get_price_factor(&handle).unwrap_or(1)
-                    * self.info.state.registration_base_price))
-                * 60
-                * 60
-                * 24
-                * 366;
+        let new_expiration = slot_value.expiration + num_years * 60 * 60 * 24 * 366;
         let new_slots = vec![Slot::new(
             new_slots_proof,
             SlotInfo::from_value(
@@ -478,12 +479,24 @@ impl XchandlesRegistry {
 
         // finally, spend self
         let extend = XchandlesRegistryAction::Extend(XchandlesExtendActionSolution {
-            renew_amount,
             handle: handle.clone(),
+            pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
+                ctx,
+                base_handle_price,
+            )?,
+            pricing_solution: num_years,
+            cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                payment_asset_id.tree_hash().into(),
+            )?,
+            cat_maker_solution: (),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             expiration: slot_value.expiration,
             launcher_id_hash: slot_value.launcher_id.tree_hash().into(),
         });
+
+        let renew_amount =
+            XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, num_years);
 
         let notarized_payment = NotarizedPayment {
             nonce: clvm_tuple!(handle.clone(), slot_value.expiration)
