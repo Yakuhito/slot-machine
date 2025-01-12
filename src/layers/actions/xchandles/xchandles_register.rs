@@ -29,17 +29,6 @@ impl XchandlesRegisterAction {
             relative_block_height,
         }
     }
-
-    pub fn get_price_factor(handle: &str) -> Option<u64> {
-        match handle.len() {
-            0..3 => None,
-            3 => Some(64),
-            4 => Some(32),
-            5 => Some(8),
-            6..31 => Some(1),
-            _ => None,
-        }
-    }
 }
 
 impl Layer for XchandlesRegisterAction {
