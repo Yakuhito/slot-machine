@@ -22,9 +22,9 @@ use clvmr::NodePtr;
 
 use crate::{
     CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
-    CatalogSlotValue, Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesRegistry,
-    XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue, SLOT32_MAX_VALUE,
-    SLOT32_MIN_VALUE,
+    CatalogSlotValue, DefaultCatMakerArgs, Slot, SlotInfo, SlotProof, XchandlesConstants,
+    XchandlesRegistry, XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue,
+    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
 };
 
 pub struct SecuredOneSidedOffer {
@@ -317,7 +317,10 @@ pub fn launch_catalog_registry(
         registry_launcher_id,
         CatalogRegistryState {
             registration_price: initial_registration_price,
-            registration_asset_id_hash: initial_registration_asset_id.tree_hash().into(),
+            cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
+                initial_registration_asset_id.tree_hash().into(),
+            )
+            .into(),
         },
         catalog_constants,
     );
@@ -786,7 +789,10 @@ mod tests {
                     price_singleton_proof,
                     price_singleton_puzzle,
                     CatalogRegistryState {
-                        registration_asset_id_hash: payment_cat.asset_id.tree_hash().into(),
+                        cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
+                            payment_cat.asset_id.tree_hash().into(),
+                        )
+                        .into(),
                         registration_price: new_price,
                     },
                     catalog.coin.puzzle_hash,

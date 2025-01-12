@@ -34,6 +34,7 @@ pub trait SpendContextExt {
     fn verification_payments_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_factor_pricing_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_exponential_premium_renew_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn default_cat_maker_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -141,6 +142,11 @@ impl SpendContextExt for SpendContext {
             &XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE,
         )
     }
+
+    /// Allocate the default CAT maker puzzle and return its pointer.
+    fn default_cat_maker_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(DEFAULT_CAT_MAKER_PUZZLE_HASH, &DEFAULT_CAT_MAKER_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -178,6 +184,7 @@ mod tests {
         assert_puzzle_hash!(VERIFICATION_PAYMENTS_PUZZLE => VERIFICATION_PAYMENTS_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_FACTOR_PRICING_PUZZLE => XCHANDLES_FACTOR_PRICING_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE => XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH);
+        assert_puzzle_hash!(DEFAULT_CAT_MAKER_PUZZLE => DEFAULT_CAT_MAKER_PUZZLE_HASH);
         Ok(())
     }
 }

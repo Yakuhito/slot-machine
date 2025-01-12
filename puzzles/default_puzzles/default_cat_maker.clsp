@@ -8,7 +8,7 @@
 (mod (
     CAT_MOD_HASH
     TAIL_HASH_HASH ; (sha256 1 TAIL_HASH)
-    inner_puzzle
+    Inner_Puzzle_Hash
     user_solution ; unused
 )
     (include curry.clib)
@@ -16,6 +16,6 @@
     (curry_hashes_inline CAT_MOD_HASH
         (sha256 1 CAT_MOD_HASH)
         TAIL_HASH_HASH
-        inner_puzzle
+        Inner_Puzzle_Hash
     )
 )

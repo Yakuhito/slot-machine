@@ -15,7 +15,7 @@ use crate::{
 
 use super::{
     CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue,
-    PrecommitCoin, Slot, SlotInfo, SlotProof, UniquenessPrelauncher,
+    DefaultCatMakerArgs, PrecommitCoin, Slot, SlotInfo, SlotProof, UniquenessPrelauncher,
 };
 
 #[derive(Debug, Clone)]
@@ -74,7 +74,7 @@ impl CatalogRegistry {
 }
 
 pub enum CatalogRegistryAction {
-    Register(CatalogRegisterActionSolution),
+    Register(CatalogRegisterActionSolution<NodePtr, ()>),
     UpdatePrice(DelegatedStateActionSolution<CatalogRegistryState>),
 }
 
@@ -247,6 +247,8 @@ impl CatalogRegistry {
 
         // finally, spend self
         let register = CatalogRegistryAction::Register(CatalogRegisterActionSolution {
+            cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(ctx, tail_hash.tree_hash().into())?,
+            cat_maker_solution: (),
             tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
