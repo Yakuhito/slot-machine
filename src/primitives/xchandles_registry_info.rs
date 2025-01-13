@@ -9,9 +9,12 @@ use clvmr::Allocator;
 
 use crate::{
     ActionLayer, ActionLayerArgs, DefaultFinalizerArgs, DelegatedStateActionArgs,
-    XchandlesExpireAction, XchandlesExtendAction, XchandlesOracleAction, XchandlesRegisterAction,
+    XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExtendAction,
+    XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction, XchandlesRegisterAction,
     XchandlesUpdateAction,
 };
+
+use super::DefaultCatMakerArgs;
 
 pub type XchandlesRegistryLayers = SingletonLayer<ActionLayer<XchandlesRegistryState>>;
 
@@ -23,6 +26,19 @@ pub struct XchandlesRegistryState {
     pub pricing_puzzle_hash: Bytes32,
     #[clvm(rest)]
     pub expired_handle_pricing_puzzle_hash: Bytes32,
+}
+
+impl XchandlesRegistryState {
+    pub fn from(payment_cat_tail_hash_hash: Bytes32, base_price: u64) -> Self {
+        Self {
+            cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(payment_cat_tail_hash_hash)
+                .into(),
+            pricing_puzzle_hash: XchandlesFactorPricingPuzzleArgs::curry_tree_hash(base_price)
+                .into(),
+            expired_handle_pricing_puzzle_hash:
+                XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(base_price, 1000).into(),
+        }
+    }
 }
 
 #[must_use]

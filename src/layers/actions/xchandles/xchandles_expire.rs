@@ -83,12 +83,12 @@ impl ToTreeHash for XchandlesExpireAction {
     }
 }
 
-pub const XCHANDLES_EXPIRE_PUZZLE: [u8; 359] =
-    hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff81bfffff04ff8205ffff8080808080ffff02ff0effff04ff02ffff04ffff02ff0affff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff05ffff14ffff12ffff0183010000ffff3dffff11ff8202ffff82017f80ff048080ff048080ffff04ffff05ffff14ff0bffff17ffff0101ffff05ffff14ffff11ff8202ffff82017f80ff048080808080ff8080808080808080ff8080808080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff01ff83015180ffff02ffff03ff0bffff01ff02ff0affff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ffff015f80ff0180ff8080808080808080ffff015f80ff0180ff02ffff03ffff15ff05ff0b80ffff01ff11ff05ff0b80ff8080ff0180ff018080");
+pub const XCHANDLES_EXPIRE_PUZZLE: [u8; 1200] =
+    hex!("ff02ffff01ff02ffff03ffff22ffff09ffff02ff2effff04ff02ffff04ff82015fff80808080ff4f80ffff09ffff02ff2effff04ff02ffff04ff8205dfff80808080ff81ef8080ffff01ff04ff2fffff04ffff04ff10ffff04ff83017fdfff808080ffff04ffff04ff10ffff04ff82bfdfff808080ffff04ffff04ff38ffff04ffff0effff0178ffff0bffff0102ffff0bffff0101ff819f80ffff0bffff0102ffff0bffff0101ffff10ffff06ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff83017fdf8080ff8303ffdf808080ff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff26ffff04ff02ffff04ffff0bffff0101ff819f80ffff04ff825fdfffff04ff82bfdfffff04ff8302ffdfff80808080808080ff8080808080ffff04ffff02ff2affff04ff02ffff04ff0bffff04ffff02ff26ffff04ff02ffff04ffff0bffff0101ff819f80ffff04ff825fdfffff04ffff10ffff06ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff83017fdf80ffff04ff8303ffdfff80808080808080ff8080808080ffff04ffff04ff14ffff04ffff0113ffff04ff17ffff04ffff02ff82015fffff04ffff02ff3affff04ff02ffff04ff05ffff04ff8217dfffff04ffff0bffff0102ffff0bffff0102ff822fdfffff0bffff0101ff819f8080ffff0bffff0102ff8303ffdfffff0bffff0101ff83017fdf808080ff808080808080ffff04ff8202dfff80808080ffff04ffff05ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff808080808080ff8080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333eff42ff02ff02ffff03ff05ffff01ff0bff72ffff02ff36ffff04ff02ffff04ff09ffff04ffff02ff3cffff04ff02ffff04ff0dff80808080ff808080808080ffff016280ff0180ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff04ff28ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ff0bff52ffff02ff36ffff04ff02ffff04ff05ffff04ffff02ff3cffff04ff02ffff04ff07ff80808080ff808080808080ffffff0bffff0102ff05ffff0bffff0102ff0bffff0bffff0102ffff0bffff0101ff1780ff2f808080ff0bff2cffff0bff2cff62ff0580ffff0bff2cff0bff428080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff14ffff04ffff0112ffff04ff80ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
 
 pub const XCHANDLES_EXPIRE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    cc83b3e95c48efc00053cdfa3c2aaa837695331a3b98016c5023bdfb5be54587
+    a405c7f3f04b57c72bfc2d7876ae40492d2e496ac90640f22b1b672e754a6177
     "
 ));
 
@@ -154,12 +154,12 @@ pub struct XchandlesExpireActionSolution<CMP, CMS, P, S> {
     pub new_launcher_id_hash: Bytes32,
 }
 
-pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 1200] =
-    hex!("ff02ffff01ff02ffff03ffff22ffff09ffff02ff2effff04ff02ffff04ff82015fff80808080ff4f80ffff09ffff02ff2effff04ff02ffff04ff8205dfff80808080ff81ef8080ffff01ff04ff2fffff04ffff04ff10ffff04ff83017fdfff808080ffff04ffff04ff10ffff04ff82bfdfff808080ffff04ffff04ff38ffff04ffff0effff0178ffff0bffff0102ffff0bffff0101ff819f80ffff0bffff0102ffff0bffff0101ffff10ffff06ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff83017fdf8080ff8303ffdf808080ff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff26ffff04ff02ffff04ffff0bffff0101ff819f80ffff04ff825fdfffff04ff82bfdfffff04ff8302ffdfff80808080808080ff8080808080ffff04ffff02ff2affff04ff02ffff04ff0bffff04ffff02ff26ffff04ff02ffff04ffff0bffff0101ff819f80ffff04ff825fdfffff04ffff10ffff06ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff83017fdf80ffff04ff8303ffdfff80808080808080ff8080808080ffff04ffff04ff14ffff04ffff0113ffff04ff17ffff04ffff02ff82015fffff04ffff02ff3affff04ff02ffff04ff05ffff04ff8217dfffff04ffff0bffff0102ffff0bffff0102ff822fdfffff0bffff0101ff819f8080ffff0bffff0102ff8303ffdfffff0bffff0101ff83017fdf808080ff808080808080ffff04ff8202dfff80808080ffff04ffff05ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff808080808080ff8080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333eff42ff02ff02ffff03ff05ffff01ff0bff72ffff02ff36ffff04ff02ffff04ff09ffff04ffff02ff3cffff04ff02ffff04ff0dff80808080ff808080808080ffff016280ff0180ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff04ff28ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ff0bff52ffff02ff36ffff04ff02ffff04ff05ffff04ffff02ff3cffff04ff02ffff04ff07ff80808080ff808080808080ffffff0bffff0102ff05ffff0bffff0102ff0bffff0bffff0102ffff0bffff0101ff1780ff2f808080ff0bff2cffff0bff2cff62ff0580ffff0bff2cff0bff428080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff14ffff04ffff0112ffff04ff80ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
+pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 369] =
+    hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff81bfffff04ff8205ffff8080808080ffff02ff0effff04ff02ffff04ffff02ff0affff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff05ffff14ffff12ffff0183010000ffff06ffff14ffff11ff8202ffff82017f80ff04808080ff048080ffff04ffff05ffff14ff0bffff17ffff0101ffff05ffff14ffff11ff8202ffff82017f80ff048080808080ff8080808080808080ffff04ff17ff808080808080ffff06ffff02ff05ffff04ff81bfffff04ff8205ffff808080808080ffff04ffff01ff83015180ffff02ffff03ff0bffff01ff02ff0affff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ffff015f80ff0180ff8080808080808080ffff015f80ff0180ff02ffff03ffff15ff05ff0b80ffff01ff11ff05ff0b80ff8080ff0180ff018080");
 
 pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    a405c7f3f04b57c72bfc2d7876ae40492d2e496ac90640f22b1b672e754a6177
+    ae02a6a2992900bbb46a4216f38b74572b3efb71915932afbdcc827bd8576361
     "
 ));
 
@@ -173,7 +173,38 @@ pub struct XchandlesExponentialPremiumRenewPuzzleArgs<P> {
     pub bits_list: Vec<u64>,
 }
 
+pub const PREMIUM_PRECISION: u64 = 1_000_000_000_000_000_000; // 10^18
+
+// https://github.com/ensdomains/ens-contracts/blob/master/contracts/ethregistrar/ExponentialPremiumPriceOracle.sol
+pub const PREMIUM_BITS_LIST: [u64; 16] = [
+    999989423469314432, // 0.5 ^ 1/65536 * (10 ** 18)
+    999978847050491904, // 0.5 ^ 2/65536 * (10 ** 18)
+    999957694548431104,
+    999915390886613504,
+    999830788931929088,
+    999661606496243712,
+    999323327502650752,
+    998647112890970240,
+    997296056085470080,
+    994599423483633152,
+    989228013193975424,
+    978572062087700096,
+    957603280698573696,
+    917004043204671232,
+    840896415253714560,
+    707106781186547584,
+];
+
 impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
+    pub fn get_start_premium(scale_factor: u64) -> u64 {
+        100000000 * scale_factor // start auction at $100 million
+    }
+
+    pub fn get_end_value(scale_factor: u64) -> u64 {
+        // 100000000 * 10 ** 18 // 2 ** 28 = 372529029846191406
+        (372529029846191406_u128 * scale_factor as u128 / 1_000_000_000_000_000_000) as u64
+    }
+
     // A scale factor is how many units of the payment token equate to $1
     // For exampe, you'd use scale_factor=1000 for wUSDC.b
     pub fn from_scale_factor(
@@ -183,30 +214,25 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
     ) -> Result<Self, DriverError> {
         Ok(Self {
             base_program: XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price)?,
-            start_premium: 100000000 * scale_factor, // start auction at $100 million
-            end_value: (372529029846191406_u128 * scale_factor as u128 / 1_000_000_000_000_000_000)
-                as u64, // 100000000 * 10 ** 18 // 2 ** 28
-            precision: 1_000_000_000_000_000_000,    // 10^18
-            // https://github.com/ensdomains/ens-contracts/blob/master/contracts/ethregistrar/ExponentialPremiumPriceOracle.sol
-            bits_list: vec![
-                999989423469314432, // 0.5 ^ 1/65536 * (10 ** 18)
-                999978847050491904, // 0.5 ^ 2/65536 * (10 ** 18)
-                999957694548431104,
-                999915390886613504,
-                999830788931929088,
-                999661606496243712,
-                999323327502650752,
-                998647112890970240,
-                997296056085470080,
-                994599423483633152,
-                989228013193975424,
-                978572062087700096,
-                957603280698573696,
-                917004043204671232,
-                840896415253714560,
-                707106781186547584,
-            ],
+            start_premium: Self::get_start_premium(scale_factor),
+            end_value: Self::get_end_value(scale_factor),
+            precision: PREMIUM_PRECISION,
+            bits_list: PREMIUM_BITS_LIST.to_vec(),
         })
+    }
+
+    pub fn curry_tree_hash(base_price: u64, scale_factor: u64) -> TreeHash {
+        CurriedProgram {
+            program: XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH,
+            args: XchandlesExponentialPremiumRenewPuzzleArgs::<TreeHash> {
+                base_program: XchandlesFactorPricingPuzzleArgs::curry_tree_hash(base_price),
+                start_premium: Self::get_start_premium(scale_factor),
+                end_value: Self::get_end_value(scale_factor),
+                precision: PREMIUM_PRECISION,
+                bits_list: PREMIUM_BITS_LIST.to_vec(),
+            },
+        }
+        .tree_hash()
     }
 
     pub fn get_puzzle(self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
@@ -237,25 +263,6 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         let output = ctx.run(puzzle, solution)?;
 
         Ok(<(u128, u64)>::from_clvm(&ctx.allocator, output)?.0)
-    }
-}
-
-impl<P> XchandlesExponentialPremiumRenewPuzzleArgs<P>
-where
-    P: ToTreeHash,
-{
-    pub fn curry_tree_hash(self) -> TreeHash {
-        CurriedProgram {
-            program: XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH,
-            args: XchandlesExponentialPremiumRenewPuzzleArgs::<TreeHash> {
-                base_program: self.base_program.tree_hash(),
-                start_premium: self.start_premium,
-                end_value: self.end_value,
-                precision: self.precision,
-                bits_list: self.bits_list,
-            },
-        }
-        .tree_hash()
     }
 }
 
@@ -300,8 +307,11 @@ mod tests {
                 }
                 .to_clvm(&mut ctx.allocator)?;
 
+                println!("1"); // todo: remove
                 let output = ctx.run(puzzle, solution)?;
+                println!("2"); // todo: remove
                 let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
+                println!("3"); // todo: remove
 
                 assert_eq!(output.registered_time, 366 * 24 * 60 * 60);
 

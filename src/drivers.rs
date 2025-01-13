@@ -402,10 +402,10 @@ pub fn launch_xchandles_registry(
     // Spend intermediary coin and create registry
     let target_xchandles_info = XchandlesRegistryInfo::new(
         registry_launcher_id,
-        XchandlesRegistryState {
-            registration_base_price: initial_base_registration_price,
-            registration_asset_id_hash: initial_registration_asset_id.tree_hash().into(),
-        },
+        XchandlesRegistryState::from(
+            initial_registration_asset_id.tree_hash().into(),
+            initial_base_registration_price,
+        ),
         xchandles_constants,
     );
     let target_xchandles_inner_puzzle_hash = target_xchandles_info.clone().inner_puzzle_hash();
@@ -474,8 +474,8 @@ mod tests {
     use crate::{
         CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
         DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
-        XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegistryAction,
-        ANY_METADATA_UPDATER_HASH,
+        XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesRegisterAction,
+        XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -934,6 +934,8 @@ mod tests {
 
         // Register 7 handles
 
+        let mut base_price = initial_registration_price;
+
         let mut slots: Vec<Slot<XchandlesSlotValue>> = slots.into();
         for i in 0..7 {
             // mint controller singleton (it's a DID, not an NFT - don't rat on me to the NFT board plz)
@@ -951,12 +953,9 @@ mod tests {
 
             // create precommit coin
             let reg_amount = if i % 2 == 1 {
-                test_price_schedule[i / 2]
-            } else {
-                registry.info.state.registration_base_price
+                base_price = test_price_schedule[i / 2];
             };
-            let reg_amount =
-                reg_amount * XchandlesRegisterAction::get_price_factor(&handle).unwrap_or(1);
+            let reg_amount = XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, 1);
 
             let handle_launcher_id = did.info.launcher_id;
             let secret = Bytes32::default();
@@ -1033,9 +1032,12 @@ mod tests {
 
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
-            let price_update = if i % 2 == 1 {
+            if i % 2 == 1 {
                 let new_price = test_price_schedule[i / 2];
-                assert_ne!(new_price, registry.info.state.registration_base_price);
+                assert_ne!(
+                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(new_price).into(),
+                    registry.info.state.pricing_puzzle_hash
+                );
 
                 let (
                     new_price_singleton_coin,
@@ -1046,10 +1048,10 @@ mod tests {
                     price_singleton_coin,
                     price_singleton_proof,
                     price_singleton_puzzle,
-                    XchandlesRegistryState {
-                        registration_asset_id_hash: payment_cat.asset_id.tree_hash().into(),
-                        registration_base_price: new_price,
-                    },
+                    XchandlesRegistryState::from(
+                        payment_cat.asset_id.tree_hash().into(),
+                        new_price,
+                    ),
                     registry.coin.puzzle_hash,
                 )?;
 
@@ -1060,8 +1062,6 @@ mod tests {
                     XchandlesRegistryAction::UpdatePrice(delegated_state_action_solution);
 
                 Some(update_action)
-            } else {
-                None
             };
 
             let (secure_cond, new_registry, new_slots) = registry.register_handle(
@@ -1069,7 +1069,8 @@ mod tests {
                 left_slot,
                 right_slot,
                 precommit_coin,
-                price_update,
+                base_price,
+                1,
             )?;
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
             let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
@@ -1103,12 +1104,17 @@ mod tests {
             // test on-chain extend mechanism for current handle
             let extension_years: u64 = i as u64 + 1;
             let extension_slot = new_slots[0];
-            let pay_for_extension: u64 = extension_years
-                * registry.info.state.registration_base_price
-                * XchandlesRegisterAction::get_price_factor(&handle).unwrap_or(1);
+            let pay_for_extension: u64 =
+                XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, extension_years);
 
-            let (notarized_payment, extend_conds, new_registry, new_slots) =
-                registry.extend(ctx, handle, extension_slot, pay_for_extension)?;
+            let (notarized_payment, extend_conds, new_registry, new_slots) = registry.extend(
+                ctx,
+                handle,
+                extension_slot,
+                payment_cat.asset_id,
+                base_price,
+                extension_years,
+            )?;
 
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
                 ctx,
@@ -1181,8 +1187,9 @@ mod tests {
         }
 
         assert_eq!(
-            registry.info.state.registration_base_price,
-            test_price_schedule[2], // 1, 3, 5 updated the price
+            registry.info.state.pricing_puzzle_hash,
+            // iterations 1, 3, 5 updated the price
+            XchandlesFactorPricingPuzzleArgs::curry_tree_hash(test_price_schedule[2]).into(),
         );
 
         // expire one of the slots
@@ -1208,9 +1215,10 @@ mod tests {
             })
             .unwrap();
 
-        let (_, _, _) = registry.expire_handle(ctx, *initial_slot, *left_slot, *right_slot)?;
+        // let (_, _, _) = registry.expire_handle(ctx, *initial_slot, *left_slot, *right_slot)?;
 
-        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        todo!("expire handle test");
 
         Ok(())
     }
