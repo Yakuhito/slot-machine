@@ -124,7 +124,7 @@
         (> handle_hash left_value)
         (> right_value handle_hash)
         (= (f Current_State) (sha256tree (f solution))) ; cat maker puzzle reveal is correct
-        (= (f (r Current_State)) (sha256tree (f pricing_puzzle_reveal))) ; pricing puzzle reveal is correct
+        (= (f (r Current_State)) (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
     )
     (main
             PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH PAYOUT_PUZZLE_HASH

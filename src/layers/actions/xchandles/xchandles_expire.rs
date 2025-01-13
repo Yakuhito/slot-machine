@@ -307,11 +307,8 @@ mod tests {
                 }
                 .to_clvm(&mut ctx.allocator)?;
 
-                println!("1"); // todo: remove
                 let output = ctx.run(puzzle, solution)?;
-                println!("2"); // todo: remove
                 let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
-                println!("3"); // todo: remove
 
                 assert_eq!(output.registered_time, 366 * 24 * 60 * 60);
 

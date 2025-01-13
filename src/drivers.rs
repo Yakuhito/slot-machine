@@ -930,7 +930,9 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
+        println!("1");
         sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
+        println!("2");
 
         // Register 7 handles
 
@@ -998,7 +1000,9 @@ mod tests {
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
+            println!("3 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+            println!("4 - {}", i);
 
             // call the 'register' action on CNS
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -1064,12 +1068,14 @@ mod tests {
                 let update_action =
                     XchandlesRegistryAction::UpdateState(delegated_state_action_solution);
 
-                let registry_constants = registry.info.constants.clone();
-                let registry_coin = registry.coin.clone();
+                let registry_constants = registry.info.constants;
+                let registry_coin = registry.coin;
                 let spend = registry.spend(ctx, vec![update_action])?;
                 ctx.spend(registry_coin, spend)?;
 
+                println!("5 - {}", i);
                 sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+                println!("6 - {}", i);
 
                 let registry_puzzle = Puzzle::parse(&ctx.allocator, spend.puzzle);
                 if let Some(new_registry) = XchandlesRegistry::from_parent_spend(
@@ -1085,6 +1091,8 @@ mod tests {
                 };
             };
 
+            println!("yak1 - {} - price: {}", i, base_price);
+            // wrong pricing puzzle in state for some reason
             let (secure_cond, new_registry, new_slots) = registry.register_handle(
                 ctx,
                 left_slot,
@@ -1093,6 +1101,7 @@ mod tests {
                 base_price,
                 1,
             )?;
+            println!("yak2 - {}", i);
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
             let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
 
@@ -1100,7 +1109,9 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
+            println!("7 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("8 - {}", i);
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
