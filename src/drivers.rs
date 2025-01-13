@@ -465,7 +465,7 @@ mod tests {
         },
     };
     use chia_wallet_sdk::{
-        test_secret_keys, Cat, CatSpend, Nft, NftMint, Simulator, SpendWithConditions,
+        test_secret_keys, Cat, CatSpend, Nft, NftMint, Puzzle, Simulator, SpendWithConditions,
         TESTNET11_CONSTANTS,
     };
     use clvm_traits::clvm_list;
@@ -474,8 +474,8 @@ mod tests {
     use crate::{
         CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
         DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
-        XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesRegisterAction,
-        XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
+        XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesRegistryAction,
+        ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -952,7 +952,7 @@ mod tests {
             let handle_hash: Bytes32 = handle.tree_hash().into();
 
             // create precommit coin
-            let reg_amount = if i % 2 == 1 {
+            if i % 2 == 1 {
                 base_price = test_price_schedule[i / 2];
             };
             let reg_amount = XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, 1);
@@ -1032,10 +1032,13 @@ mod tests {
 
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
+            // update price
             if i % 2 == 1 {
                 let new_price = test_price_schedule[i / 2];
+                let new_price_puzzle_hash: Bytes32 =
+                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(new_price).into();
                 assert_ne!(
-                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(new_price).into(),
+                    new_price_puzzle_hash,
                     registry.info.state.pricing_puzzle_hash
                 );
 
@@ -1059,9 +1062,27 @@ mod tests {
                 price_singleton_proof = new_price_singleton_proof;
 
                 let update_action =
-                    XchandlesRegistryAction::UpdatePrice(delegated_state_action_solution);
+                    XchandlesRegistryAction::UpdateState(delegated_state_action_solution);
 
-                Some(update_action)
+                let registry_constants = registry.info.constants.clone();
+                let registry_coin = registry.coin.clone();
+                let spend = registry.spend(ctx, vec![update_action])?;
+                ctx.spend(registry_coin, spend)?;
+
+                sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
+                let registry_puzzle = Puzzle::parse(&ctx.allocator, spend.puzzle);
+                if let Some(new_registry) = XchandlesRegistry::from_parent_spend(
+                    &mut ctx.allocator,
+                    registry_coin,
+                    registry_puzzle,
+                    spend.solution,
+                    registry_constants,
+                )? {
+                    registry = new_registry;
+                } else {
+                    panic!("Couldn't get registry after price was updated");
+                };
             };
 
             let (secure_cond, new_registry, new_slots) = registry.register_handle(
