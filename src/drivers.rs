@@ -472,8 +472,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
-        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
+        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
         XchandlesPrecommitValue, XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
     };
@@ -1268,11 +1268,7 @@ mod tests {
         let (_, _new_registry, _new_slots) =
             registry.expire_handle(ctx, *initial_slot, 1, base_price, precommit_coin)?;
 
-        println!("yak11");
-        let spends = ctx.take();
-        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-        sim.spend_coins(spends, &[user_sk.clone()])?;
-        println!("yak12");
+        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
         Ok(())
     }
