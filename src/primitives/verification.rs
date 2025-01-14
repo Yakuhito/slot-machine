@@ -213,7 +213,6 @@ mod tests {
 
         let parent_puzzle = ctx.alloc(&oracle_spend.puzzle_reveal)?;
         let parent_puzzle = Puzzle::parse(&ctx.allocator, parent_puzzle);
-        let parent_solution = ctx.alloc(&oracle_spend.solution)?;
         let verification =
             Verification::from_parent_spend(&mut ctx.allocator, oracle_spend.coin, parent_puzzle)?
                 .unwrap();

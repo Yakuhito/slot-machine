@@ -1245,8 +1245,8 @@ mod tests {
         let payment_cat_inner_spend = minter_p2.spend_with_conditions(
             ctx,
             Conditions::new()
-                .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, vec![])
-                .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, vec![]),
+                .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, None)
+                .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, None),
         )?;
         Cat::spend_all(
             ctx,
