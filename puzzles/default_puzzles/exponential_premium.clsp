@@ -52,7 +52,7 @@
                    PRECISION
                    BITS_LIST
                    1
-                   (/ (* 65536 (r (divmod (- buy_time expiration) DAY))) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
+                   (/ (* 65536 (% (- buy_time expiration) DAY)) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
                    (/ START_PREMIUM (lsh 1 (/ (- buy_time expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
                 ) END_VALUE) ; premium
             )

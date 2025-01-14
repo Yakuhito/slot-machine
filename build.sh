@@ -1,0 +1,1 @@
+find puzzles -name "*.clsp" -exec sh -c 'run -i include/ "$1" -d > "${1}.hex"' sh {} \;
