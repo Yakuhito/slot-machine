@@ -1261,8 +1261,20 @@ mod tests {
         sim.set_next_timestamp(buy_time)?;
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
-        let (_, _new_registry, _new_slots) =
+        let (expire_conds, _new_registry, _new_slots) =
             registry.expire_handle(ctx, *initial_slot, 1, base_price, precommit_coin)?;
+
+        // assert expire conds
+        let conds_puzzle = clvm_quote!(expire_conds).to_clvm(&mut ctx.allocator)?;
+        let conds_coin = sim.new_coin(ctx.tree_hash(conds_puzzle).into(), 1);
+
+        let conds_program = ctx.serialize(&conds_puzzle)?;
+        let conds_solution_program = ctx.serialize(&NodePtr::NIL)?;
+        ctx.insert(CoinSpend::new(
+            conds_coin,
+            conds_program,
+            conds_solution_program,
+        ));
 
         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 

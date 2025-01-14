@@ -360,6 +360,8 @@ impl XchandlesRegistry {
             parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
         };
 
+        let new_expiration = precommit_coin.value.start_time + num_years * 366 * 24 * 60 * 60;
+
         let new_slots = vec![Slot::new(
             new_slots_proof,
             SlotInfo::from_value(
@@ -368,11 +370,19 @@ impl XchandlesRegistry {
                     slot_value.handle_hash,
                     slot_value.neighbors.left_value,
                     slot_value.neighbors.right_value,
-                    precommit_coin.value.start_time + num_years * 366 * 24 * 60 * 60,
+                    new_expiration,
                     precommit_coin.value.handle_nft_launcher_id,
                 ),
             ),
         )];
+
+        // calculate part of announcement now
+        let expire_ann: Bytes32 = clvm_tuple!(
+            precommit_coin.value.secret_and_handle.handle.clone(),
+            clvm_tuple!(new_expiration, precommit_coin.value.handle_nft_launcher_id)
+        )
+        .tree_hash()
+        .into();
 
         // spend precommit coin
         precommit_coin.spend(
@@ -432,11 +442,11 @@ impl XchandlesRegistry {
 
         ctx.spend(my_coin, my_spend)?;
 
-        let mut extend_ann: Vec<u8> = slot_value.handle_hash.to_vec();
-        extend_ann.insert(0, b'x');
+        let mut expire_ann: Vec<u8> = expire_ann.to_vec();
+        expire_ann.insert(0, b'x');
         Ok((
             Conditions::new()
-                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, extend_ann)),
+                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, expire_ann)),
             new_xchandles,
             new_slots,
         ))
