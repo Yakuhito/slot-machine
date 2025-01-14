@@ -474,8 +474,8 @@ mod tests {
     use crate::{
         print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
         CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
-        XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesRegistryAction,
-        ANY_METADATA_UPDATER_HASH,
+        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
+        XchandlesPrecommitValue, XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -1110,7 +1110,6 @@ mod tests {
             StandardLayer::new(user_pk).spend(ctx, user_coin, oracle_conds)?;
 
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-            println!("yak6 - {}", i);
 
             slots.retain(|s| *s != oracle_slot);
             slots.extend(new_slots.clone());
@@ -1123,7 +1122,6 @@ mod tests {
             let pay_for_extension: u64 =
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, extension_years);
 
-            println!("yakuhito1 - {}", i);
             let (notarized_payment, extend_conds, new_registry, new_slots) = registry.extend(
                 ctx,
                 handle,
@@ -1132,7 +1130,6 @@ mod tests {
                 base_price,
                 extension_years,
             )?;
-            println!("yakuhito2 - {}", i);
 
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
                 ctx,
@@ -1176,9 +1173,7 @@ mod tests {
             payment_cat_amount -= pay_for_extension;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
-            println!("yak7 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-            println!("yak8 - {}", i);
 
             slots.retain(|s| *s != extension_slot);
             slots.extend(new_slots.clone());
@@ -1198,9 +1193,7 @@ mod tests {
 
             let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
 
-            println!("yak9 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-            println!("yak10 - {}", i);
 
             slots.retain(|s| *s != update_slot);
             slots.extend(new_slots.clone());
@@ -1215,32 +1208,69 @@ mod tests {
         );
 
         // expire one of the slots
-        // simulator doesn't have concept of time I suppose
         let handle_to_expire = "aa0".to_string();
         let handle_hash: Bytes32 = handle_to_expire.tree_hash().into();
         let initial_slot = slots
             .iter()
             .find(|s| s.info.value.unwrap().handle_hash == handle_hash)
             .unwrap();
-        let left_slot = slots
-            .iter()
-            .find(|s| {
-                s.info.value.unwrap().handle_hash
-                    == initial_slot.info.value.unwrap().neighbors.left_value
-            })
-            .unwrap();
-        let right_slot = slots
-            .iter()
-            .find(|s| {
-                s.info.value.unwrap().handle_hash
-                    == initial_slot.info.value.unwrap().neighbors.right_value
-            })
-            .unwrap();
 
-        // let (_, _, _) = registry.expire_handle(ctx, *initial_slot, *left_slot, *right_slot)?;
+        // precommit coin needed
+        let refund_puzzle = ctx.alloc(&1)?;
+        let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
+        let expiration = initial_slot.info.value.unwrap().expiration;
+        let buy_time = expiration + 27 * 24 * 60 * 60; // last day of auction; 0 < premium < 1 CAT
+        let value = XchandlesPrecommitValue::new(
+            Bytes32::default(),
+            handle_to_expire.clone(),
+            Bytes32::from([42; 32]),
+            buy_time,
+        );
 
-        // sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-        todo!("expire handle test");
+        let pricing_puzzle =
+            XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(ctx, base_price, 1000)?;
+        let reg_amount =
+            pricing_puzzle.get_price(ctx, handle_to_expire, expiration, buy_time, 1)? as u64;
+
+        let precommit_coin = PrecommitCoin::<XchandlesPrecommitValue>::new(
+            ctx,
+            payment_cat.coin.coin_id(),
+            payment_cat.child_lineage_proof(),
+            payment_cat.asset_id,
+            SingletonStruct::new(registry.info.launcher_id)
+                .tree_hash()
+                .into(),
+            xchandles_constants.relative_block_height,
+            xchandles_constants.precommit_payout_puzzle_hash,
+            refund_puzzle_hash.into(),
+            value,
+            reg_amount,
+        )?;
+        assert!(reg_amount <= payment_cat_amount);
+
+        let payment_cat_inner_spend = minter_p2.spend_with_conditions(
+            ctx,
+            Conditions::new()
+                .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, vec![])
+                .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, vec![]),
+        )?;
+        Cat::spend_all(
+            ctx,
+            &[CatSpend {
+                cat: payment_cat,
+                inner_spend: payment_cat_inner_spend,
+                extra_delta: 0,
+            }],
+        )?;
+
+        sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+
+        let (_, _new_registry, _new_slots) =
+            registry.expire_handle(ctx, *initial_slot, 1, base_price, precommit_coin)?;
+
+        println!("yak11");
+        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        println!("yak12");
 
         Ok(())
     }
