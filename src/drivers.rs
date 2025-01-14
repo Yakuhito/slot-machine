@@ -472,8 +472,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
+        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesRegistryAction,
         ANY_METADATA_UPDATER_HASH,
     };
@@ -930,9 +930,7 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
-        println!("1");
         sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
-        println!("2");
 
         // Register 7 handles
 
@@ -1000,9 +998,7 @@ mod tests {
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
-            println!("3 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-            println!("4 - {}", i);
 
             // call the 'register' action on CNS
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
@@ -1073,9 +1069,7 @@ mod tests {
                 let spend = registry.spend(ctx, vec![update_action])?;
                 ctx.spend(registry_coin, spend)?;
 
-                println!("5 - {}", i);
                 sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-                println!("6 - {}", i);
 
                 let registry_puzzle = Puzzle::parse(&ctx.allocator, spend.puzzle);
                 if let Some(new_registry) = XchandlesRegistry::from_parent_spend(
@@ -1091,17 +1085,8 @@ mod tests {
                 };
             };
 
-            println!("yak1 - {} - price: {}", i, base_price);
-            // wrong pricing puzzle in state for some reason
-            let (secure_cond, new_registry, new_slots) = registry.register_handle(
-                ctx,
-                left_slot,
-                right_slot,
-                precommit_coin,
-                base_price,
-                1,
-            )?;
-            println!("yak2 - {}", i);
+            let (secure_cond, new_registry, new_slots) =
+                registry.register_handle(ctx, left_slot, right_slot, precommit_coin, base_price)?;
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
             let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
 
@@ -1109,9 +1094,7 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
-            println!("7 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-            println!("8 - {}", i);
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
@@ -1126,7 +1109,9 @@ mod tests {
             let user_coin = sim.new_coin(user_puzzle_hash, 0);
             StandardLayer::new(user_pk).spend(ctx, user_coin, oracle_conds)?;
 
+            println!("yak5 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("yak6 - {}", i);
 
             slots.retain(|s| *s != oracle_slot);
             slots.extend(new_slots.clone());

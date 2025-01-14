@@ -216,7 +216,6 @@ impl XchandlesRegistry {
         right_slot: Slot<XchandlesSlotValue>,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
         base_handle_price: u64,
-        num_years: u64,
     ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
@@ -238,8 +237,9 @@ impl XchandlesRegistry {
 
         let start_time = precommit_coin.value.start_time;
 
-        let expiration =
-            XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, num_years);
+        let num_years = precommit_coin.coin.amount
+            / XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, 1);
+        let expiration = precommit_coin.value.start_time + num_years * 366 * 24 * 60 * 60;
 
         let handle_nft_launcher_id = precommit_coin.value.handle_nft_launcher_id;
 
