@@ -346,7 +346,7 @@ impl XchandlesRegistry {
         base_handle_price: u64,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
     ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
-        // spend slots
+        // spend slot
         let Some(slot_value) = slot.info.value else {
             return Err(DriverError::Custom("Missing slot value".to_string()));
         };
@@ -373,6 +373,13 @@ impl XchandlesRegistry {
                 ),
             ),
         )];
+
+        // spend precommit coin
+        precommit_coin.spend(
+            ctx,
+            self.info.constants.precommit_payout_puzzle_hash,
+            spender_inner_puzzle_hash,
+        )?;
 
         // finally, spend self
         let expire = XchandlesRegistryAction::Expire(XchandlesExpireActionSolution {

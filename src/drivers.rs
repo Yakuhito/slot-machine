@@ -1269,7 +1269,9 @@ mod tests {
             registry.expire_handle(ctx, *initial_slot, 1, base_price, precommit_coin)?;
 
         println!("yak11");
-        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        let spends = ctx.take();
+        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+        sim.spend_coins(spends, &[user_sk.clone()])?;
         println!("yak12");
 
         Ok(())

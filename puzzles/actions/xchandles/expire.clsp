@@ -30,7 +30,7 @@
 
     (defun get_slot_value_hash (handle_hash neighbors_hash expiration launcher_id_hash)
         (sha256 2
-            handle_hash
+            (sha256 1 handle_hash)
             (sha256 2
                 neighbors_hash
                 (sha256 2
