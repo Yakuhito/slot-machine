@@ -81,8 +81,8 @@
     )
 
     (if (all
-        (= (f Current_State) (sha256tree (f cat_maker_solution))) ; cat maker puzzle reveal is correct
-        (= (f (r Current_State)) (sha256tree (f pricing_puzzle_reveal))) ; pricing puzzle reveal is correct
+        (= (f Current_State) (sha256tree cat_maker_puzzle_reveal)) ; cat maker puzzle reveal is correct
+        (= (f (r Current_State)) (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
     )
         (main
             (a pricing_puzzle_reveal (list handle pricing_solution))

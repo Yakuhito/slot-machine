@@ -1109,7 +1109,6 @@ mod tests {
             let user_coin = sim.new_coin(user_puzzle_hash, 0);
             StandardLayer::new(user_pk).spend(ctx, user_coin, oracle_conds)?;
 
-            println!("yak5 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
             println!("yak6 - {}", i);
 
@@ -1124,6 +1123,7 @@ mod tests {
             let pay_for_extension: u64 =
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, extension_years);
 
+            println!("yakuhito1 - {}", i);
             let (notarized_payment, extend_conds, new_registry, new_slots) = registry.extend(
                 ctx,
                 handle,
@@ -1132,6 +1132,7 @@ mod tests {
                 base_price,
                 extension_years,
             )?;
+            println!("yakuhito2 - {}", i);
 
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
                 ctx,
@@ -1175,7 +1176,9 @@ mod tests {
             payment_cat_amount -= pay_for_extension;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
+            println!("yak7 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+            println!("yak8 - {}", i);
 
             slots.retain(|s| *s != extension_slot);
             slots.extend(new_slots.clone());
@@ -1195,7 +1198,9 @@ mod tests {
 
             let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
 
+            println!("yak9 - {}", i);
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("yak10 - {}", i);
 
             slots.retain(|s| *s != update_slot);
             slots.extend(new_slots.clone());
