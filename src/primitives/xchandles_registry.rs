@@ -279,8 +279,17 @@ impl XchandlesRegistry {
             ),
         ];
 
+        // calculate announcement
+        let register_announcement: Bytes32 = clvm_tuple!(
+            handle.clone(),
+            clvm_tuple!(expiration, precommit_coin.value.handle_nft_launcher_id)
+        )
+        .tree_hash()
+        .into();
+        let mut register_announcement: Vec<u8> = register_announcement.to_vec();
+        register_announcement.insert(0, b'r');
+
         // spend precommit coin
-        let precommit_coin_id = precommit_coin.coin.coin_id();
         precommit_coin.spend(
             ctx,
             self.info.constants.precommit_payout_puzzle_hash,
@@ -331,7 +340,10 @@ impl XchandlesRegistry {
         ctx.spend(my_coin, my_spend)?;
 
         Ok((
-            Conditions::new().assert_concurrent_spend(precommit_coin_id),
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                my_coin.puzzle_hash,
+                register_announcement,
+            )),
             new_xchandles,
             new_slots,
         ))

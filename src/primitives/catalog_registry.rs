@@ -3,8 +3,10 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::FromClvm;
+use chia_wallet_sdk::{
+    announcement_id, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext,
+};
+use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -215,6 +217,14 @@ impl CatalogRegistry {
             ),
         ];
 
+        // calculate announcement
+        let register_announcement: Bytes32 =
+            clvm_tuple!(tail_hash, precommit_coin.value.initial_inner_puzzle_hash)
+                .tree_hash()
+                .into();
+        let mut register_announcement: Vec<u8> = register_announcement.to_vec();
+        register_announcement.insert(0, b'r');
+
         // spend precommit coin
         let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
         precommit_coin.spend(
@@ -242,7 +252,6 @@ impl CatalogRegistry {
         )?;
 
         // spend nft launcher
-        let nft_coin_id = nft.coin.coin_id();
         nft.spend(ctx, eve_nft_inner_spend)?;
 
         // finally, spend self
@@ -287,7 +296,10 @@ impl CatalogRegistry {
         ctx.spend(my_coin, my_spend)?;
 
         Ok((
-            Conditions::new().assert_concurrent_spend(nft_coin_id),
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                my_coin.puzzle_hash,
+                register_announcement,
+            )),
             new_catalog,
             new_slots,
         ))

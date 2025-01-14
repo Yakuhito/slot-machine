@@ -87,7 +87,21 @@
             ; create new right slot
             (create_slot SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash right_value_hash value_hash right_right_value_hash right_data_hash)
-            ) 
+            )
+
+            ; announcement
+            (list
+                CREATE_PUZZLE_ANNOUNCEMENT
+                (concat 'r'
+                    (sha256 2 
+                        handle_hash
+                        (sha256 2
+                            (sha256 1 (+ registered_time start_time))
+                            (sha256 1 handle_nft_launcher_id)
+                        )
+                    ) ; (sha256tree (handle new_expiration . new_launcher_id))
+                ) 
+            )
             
             ; consume precommit coin
             (list

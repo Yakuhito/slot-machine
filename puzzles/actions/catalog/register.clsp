@@ -90,6 +90,17 @@
         (list
           (list ASSERT_MY_COIN_ID my_id)
 
+          ; announcement
+          (list
+              CREATE_PUZZLE_ANNOUNCEMENT
+              (concat 'r'
+                  (sha256 2 
+                      (sha256 1 tail_hash)
+                      (sha256 1 initial_nft_owner_ph)
+                  ) ; (sha256tree (tail_hash . initial_nft_owner_ph))
+              ) 
+          )
+
           ; spend left slot
           (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash left_tail_hash left_left_tail_hash right_tail_hash))
           ; spend right slot
