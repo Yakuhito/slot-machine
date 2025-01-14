@@ -1088,6 +1088,7 @@ mod tests {
             let solution_program = ctx.serialize(&NodePtr::NIL)?;
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
+            sim.pass_time(100); // registration start was at timestamp 100
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
@@ -1257,6 +1258,7 @@ mod tests {
             }],
         )?;
 
+        sim.set_next_timestamp(buy_time)?;
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
         let (_, _new_registry, _new_slots) =
