@@ -19,7 +19,7 @@
         neighbors_hash
         current_expiration
         buy_time
-        old_rest_hash ; (sha256sum (c old_owner_launcher_id old_resolved_launcher_id))
+        old_rest_hash . ; (sha256sum (c old_owner_launcher_id old_resolved_launcher_id))
         new_rest_hash ; (sha256sum (c new_owner_launcher_id new_resolved_launcher_id))
     )
 )
