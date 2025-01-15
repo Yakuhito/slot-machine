@@ -1,11 +1,13 @@
 ; register.clsp by yakuhito
 ;; Responsible for registering new handles into the handle registry (XCHandles)
 
-;; Unlike CATalog slot's value is (value (left_value . right_value) expiration . launcher_id) where:
+;; Unlike CATalog slot's value is (value (left_value . right_value) expiration owner_launcher_id . resolved_launcher_id) where:
 ;;  value is the slot 'key'/id and is defined as (sha256 1 handle)
 ;;  left_value/right_value are the key's of the slot's neighbors
 ;;  expiration is a timestamp that says when the handle will expire
-;;  launcher_id is a 32-byte value that specifies the handle NFT's launcher id
+;;  owner_launcher_id is a 32-byte value that specifies the owner of the record, who can
+;;       update the owner_launcher_id (i.e., transfer the handle) and launcher_id
+;;  resolved_launcher_id is a 32-byte value that specifies the handle NFT's launcher id
 ;;       in the future, launcher_id might point to a namespace/sub-registry, for example
 
 ;; Also note that anyone can extend a handle registration, but only the handle NFT may update the launcher_id data
@@ -39,7 +41,7 @@
         ; start 'also included in the pre-commit coin'
         cat_maker_puzzle_reveal
         cat_maker_solution
-        handle_nft_launcher_id
+        rest_data_hash ; (sha256tree (c owner_launcher_id resolved_launcher_id)
         start_time
         secret_hash
         refund_puzzle_hash_hash ; needed to compute precommit coin puzzle hash
@@ -75,7 +77,7 @@
                     right_value_hash
                     (sha256 2 
                         (sha256 1 (+ start_time registered_time))
-                        (sha256 1 handle_nft_launcher_id)
+                        rest_data_hash
                     ) ; sha256tree data
                 )
             )
@@ -97,9 +99,9 @@
                         handle_hash
                         (sha256 2
                             (sha256 1 (+ registered_time start_time))
-                            (sha256 1 handle_nft_launcher_id)
+                            rest_data_hash
                         )
-                    ) ; (sha256tree (handle new_expiration . new_launcher_id))
+                    ) ; (sha256tree (handle new_expiration new_owner_launcher_id new_resolved_launcher_id))
                 ) 
             )
             
@@ -119,10 +121,10 @@
                                     handle_hash
                                 )
                                 (sha256 2
-                                    (sha256 1 handle_nft_launcher_id)
                                     (sha256 1 start_time)
+                                    rest_data_hash
                                 )
-                            ) ; data in precommit coin reveal will be (c (c secret handle) (c handle_nft_launcher_id start_time)))
+                            ) ; data in precommit coin reveal will be (c (c secret handle) (c start_time (c new_owner_launcher_id new_resolved_launcher_id)))))
                         ) ; Inner_Puzzle_Hash
                         cat_maker_solution
                     )

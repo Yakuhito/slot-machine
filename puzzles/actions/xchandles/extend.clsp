@@ -17,7 +17,7 @@
         cat_maker_solution
         neighbors_hash
         expiration . 
-        launcher_id_hash
+        rest_hash
     )
 )
     (include condition_codes.clib)
@@ -25,14 +25,14 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_slot_value_hash (handle neighbors_hash expiration launcher_id_hash)
+    (defun get_slot_value_hash (handle neighbors_hash expiration rest_hash)
         (sha256 2
             (sha256 1 (sha256 1 handle))
             (sha256 2
                 neighbors_hash
                 (sha256 2
                     (sha256 1 expiration)
-                    launcher_id_hash
+                    rest_hash
                 )
             )
         )
@@ -44,7 +44,7 @@
             (list
                 ; spend slot
                 (spend_slot SLOT_1ST_CURRY_HASH 
-                    (get_slot_value_hash handle neighbors_hash expiration launcher_id_hash)
+                    (get_slot_value_hash handle neighbors_hash expiration rest_hash)
                 )
 
                 ; announcement
@@ -56,7 +56,7 @@
                         handle
                         neighbors_hash
                         (+ expiration registered_time)
-                        launcher_id_hash
+                        rest_hash
                     )
                 ) 
                 

@@ -12,8 +12,10 @@
         value_hash
         neighbors_hash ; (sha256tree (left_value . right_value))
         expiration
-        current_launcher_id
-        new_launcher_id .
+        current_owner_launcher_id
+        current_resolved_launcher_id
+        new_owner_launcher_id
+        new_resolved_launcher_id .
         announcer_inner_puzzle_hash
     )
 )
@@ -21,14 +23,17 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_slot_data_hash (value_hash neighbors_hash expiration launcher_id)
+    (defun get_slot_data_hash (value_hash neighbors_hash expiration owner_launcher_id resolved_launcher_id)
         (sha256 2
             value_hash
             (sha256 2
                 neighbors_hash
                 (sha256 2
                     (sha256 1 expiration)
-                    (sha256 1 launcher_id)
+                    (sha256 2
+                        (sha256 1 owner_launcher_id)
+                        (sha256 1 resolved_launcher_id)
+                    )
                 )
             )
         )
@@ -39,12 +44,24 @@
         (list
             ; spend slot
             (spend_slot SLOT_1ST_CURRY_HASH 
-                (get_slot_data_hash value_hash neighbors_hash expiration current_launcher_id)
+                (get_slot_data_hash
+                    value_hash
+                    neighbors_hash
+                    expiration
+                    current_owner_launcher_id
+                    current_resolved_launcher_id
+                )
             )
 
             ; create new slot
             (create_slot SLOT_1ST_CURRY_HASH
-                (get_slot_data_hash value_hash neighbors_hash expiration new_launcher_id)
+                (get_slot_data_hash
+                    value_hash
+                    neighbors_hash
+                    expiration
+                    new_owner_launcher_id
+                    new_resolved_launcher_id
+                )
             )
 
             ; assert message from current owner
@@ -53,13 +70,16 @@
                 18 ; puzzle-puzzle
                 (sha256 2
                     value_hash
-                    (sha256 1 new_launcher_id)
+                    (sha256 2
+                        (sha256 1 new_owner_launcher_id)
+                        (sha256 1 new_resolved_launcher_id)
+                    )
                 )
                 (curry_hashes SINGLETON_MOD_HASH
                     (sha256 2
                         (sha256 1 SINGLETON_MOD_HASH)
                         (sha256 2
-                            (sha256 1 current_launcher_id)
+                            (sha256 1 current_owner_launcher_id)
                             SINGLETON_LAUNCHER_PUZZLE_HASH_HASH
                         )
                     ) ; sha256tree of announcer SINGLETON_MOD
