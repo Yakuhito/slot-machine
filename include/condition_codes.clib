@@ -42,4 +42,5 @@
     (defconstant ASSERT_CONCURRENT_SPEND 64)
     (defconstant SEND_MESSAGE 66)
     (defconstant RECEIVE_MESSAGE 67)
+    (defconstant ASSERT_BEFORE_SECONDS_ABSOLUTE 85)
 )

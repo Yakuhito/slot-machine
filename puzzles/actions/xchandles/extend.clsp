@@ -50,6 +50,9 @@
                 ; announcement
                 (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256 2 (sha256 1 total_price) (sha256 1 handle))))
                 
+                ; can't extend if expired
+                (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
+
                 ; create new slot
                 (create_slot SLOT_1ST_CURRY_HASH
                     (get_slot_value_hash
