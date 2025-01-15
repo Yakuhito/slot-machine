@@ -4,7 +4,7 @@ use chia::{
     clvm_utils::{ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use clvm_traits::{FromClvm, ToClvm};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use hex_literal::hex;
 use num_bigint::BigInt;
 
@@ -101,8 +101,9 @@ pub struct XchandlesSlotValue {
     pub handle_hash: Bytes32,
     pub neighbors: SlotNeigborsInfo,
     pub expiration: u64,
+    pub owner_launcher_id: Bytes32,
     #[clvm(rest)]
-    pub launcher_id: Bytes32,
+    pub resolved_launcher_id: Bytes32,
 }
 
 impl XchandlesSlotValue {
@@ -111,7 +112,8 @@ impl XchandlesSlotValue {
         left_handle_hash: Bytes32,
         right_handle_hash: Bytes32,
         expiration: u64,
-        launcher_id: Bytes32,
+        owner_launcher_id: Bytes32,
+        resolved_launcher_id: Bytes32,
     ) -> Self {
         Self {
             handle_hash,
@@ -120,7 +122,8 @@ impl XchandlesSlotValue {
                 right_value: right_handle_hash,
             },
             expiration,
-            launcher_id,
+            owner_launcher_id,
+            resolved_launcher_id,
         }
     }
 
@@ -136,7 +139,8 @@ impl XchandlesSlotValue {
                 right_value: right_handle_hash,
             },
             expiration: 0,
-            launcher_id: Bytes32::default(),
+            owner_launcher_id: Bytes32::default(),
+            resolved_launcher_id: Bytes32::default(),
         }
     }
 
@@ -148,16 +152,22 @@ impl XchandlesSlotValue {
                 right_value: right_handle_hash,
             },
             expiration: self.expiration,
-            launcher_id: self.launcher_id,
+            owner_launcher_id: self.owner_launcher_id,
+            resolved_launcher_id: self.resolved_launcher_id,
         }
     }
 
     pub fn after_neigbors_data_hash(&self) -> TreeHash {
         XchandlesSlotValueWithoutNameAndNeighbors {
             expiration: self.expiration,
-            launcher_id: self.launcher_id,
+            owner_launcher_id: self.owner_launcher_id,
+            resolved_launcher_id: self.resolved_launcher_id,
         }
         .tree_hash()
+    }
+
+    pub fn launcher_ids_data_hash(&self) -> TreeHash {
+        clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id).tree_hash()
     }
 
     pub fn with_expiration(self, expiration: u64) -> Self {
@@ -165,16 +175,22 @@ impl XchandlesSlotValue {
             handle_hash: self.handle_hash,
             neighbors: self.neighbors,
             expiration,
-            launcher_id: self.launcher_id,
+            owner_launcher_id: self.owner_launcher_id,
+            resolved_launcher_id: self.resolved_launcher_id,
         }
     }
 
-    pub fn with_launcher_id(self, launcher_id: Bytes32) -> Self {
+    pub fn with_launcher_ids(
+        self,
+        owner_launcher_id: Bytes32,
+        resolved_launcher_id: Bytes32,
+    ) -> Self {
         Self {
             handle_hash: self.handle_hash,
             neighbors: self.neighbors,
             expiration: self.expiration,
-            launcher_id,
+            owner_launcher_id,
+            resolved_launcher_id,
         }
     }
 }
@@ -198,6 +214,7 @@ impl PartialOrd for XchandlesSlotValue {
 #[clvm(list)]
 pub struct XchandlesSlotValueWithoutNameAndNeighbors {
     pub expiration: u64,
+    pub owner_launcher_id: Bytes32,
     #[clvm(rest)]
-    pub launcher_id: Bytes32,
+    pub resolved_launcher_id: Bytes32,
 }

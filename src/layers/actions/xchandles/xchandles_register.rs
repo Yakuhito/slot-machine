@@ -144,7 +144,7 @@ pub struct XchandlesRegisterActionSolution<PP, PS, CMP, CMS> {
     pub pricing_puzzle_solution: PS,
     pub cat_maker_reveal: CMP,
     pub cat_maker_solution: CMS,
-    pub handle_nft_launcher_id: Bytes32,
+    pub rest_data_hash: Bytes32,
     pub start_time: u64,
     pub secret_hash: Bytes32,
     pub refund_puzzle_hash_hash: Bytes32,

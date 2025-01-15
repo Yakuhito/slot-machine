@@ -114,5 +114,5 @@ pub struct XchandlesExtendActionSolution<PP, PS, CMP, CMS> {
     pub neighbors_hash: Bytes32,
     pub expiration: u64,
     #[clvm(rest)]
-    pub launcher_id_hash: Bytes32,
+    pub rest_hash: Bytes32,
 }

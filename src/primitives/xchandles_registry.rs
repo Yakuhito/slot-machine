@@ -241,8 +241,6 @@ impl XchandlesRegistry {
             / XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, 1);
         let expiration = precommit_coin.value.start_time + num_years * 366 * 24 * 60 * 60;
 
-        let handle_nft_launcher_id = precommit_coin.value.handle_nft_launcher_id;
-
         let new_slots_proof = SlotProof {
             parent_parent_info: self.coin.parent_coin_info,
             parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
@@ -265,7 +263,8 @@ impl XchandlesRegistry {
                         left_slot_value.handle_hash,
                         right_slot_value.handle_hash,
                         expiration,
-                        handle_nft_launcher_id,
+                        precommit_coin.value.owner_launcher_id,
+                        precommit_coin.value.resolved_launcher_id,
                     ),
                 ),
             ),
@@ -282,7 +281,13 @@ impl XchandlesRegistry {
         // calculate announcement
         let register_announcement: Bytes32 = clvm_tuple!(
             handle.clone(),
-            clvm_tuple!(expiration, precommit_coin.value.handle_nft_launcher_id)
+            clvm_tuple!(
+                expiration,
+                clvm_tuple!(
+                    precommit_coin.value.owner_launcher_id,
+                    precommit_coin.value.resolved_launcher_id
+                )
+            )
         )
         .tree_hash()
         .into();
@@ -312,7 +317,12 @@ impl XchandlesRegistry {
                 precommit_coin.asset_id.tree_hash().into(),
             )?,
             cat_maker_solution: (),
-            handle_nft_launcher_id,
+            rest_data_hash: clvm_tuple!(
+                precommit_coin.value.owner_launcher_id,
+                precommit_coin.value.resolved_launcher_id
+            )
+            .tree_hash()
+            .into(),
             start_time,
             secret_hash: secret.tree_hash().into(),
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
@@ -383,7 +393,8 @@ impl XchandlesRegistry {
                     slot_value.neighbors.left_value,
                     slot_value.neighbors.right_value,
                     new_expiration,
-                    precommit_coin.value.handle_nft_launcher_id,
+                    precommit_coin.value.owner_launcher_id,
+                    precommit_coin.value.resolved_launcher_id,
                 ),
             ),
         )];
@@ -391,7 +402,13 @@ impl XchandlesRegistry {
         // calculate part of announcement now
         let expire_ann: Bytes32 = clvm_tuple!(
             precommit_coin.value.secret_and_handle.handle.clone(),
-            clvm_tuple!(new_expiration, precommit_coin.value.handle_nft_launcher_id)
+            clvm_tuple!(
+                new_expiration,
+                clvm_tuple!(
+                    precommit_coin.value.owner_launcher_id,
+                    precommit_coin.value.resolved_launcher_id
+                )
+            )
         )
         .tree_hash()
         .into();
@@ -429,12 +446,13 @@ impl XchandlesRegistry {
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             current_expiration: slot_value.expiration,
             buy_time: precommit_coin.value.start_time,
-            old_launcher_id_hash: slot_value.launcher_id.tree_hash().into(),
-            new_launcher_id_hash: precommit_coin
-                .value
-                .handle_nft_launcher_id
-                .tree_hash()
-                .into(),
+            old_rest_hash: slot_value.launcher_ids_data_hash().into(),
+            new_rest_hash: clvm_tuple!(
+                precommit_coin.value.owner_launcher_id,
+                precommit_coin.value.resolved_launcher_id
+            )
+            .tree_hash()
+            .into(),
         });
 
         let my_coin = self.coin;
@@ -521,7 +539,7 @@ impl XchandlesRegistry {
             cat_maker_solution: (),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             expiration: slot_value.expiration,
-            launcher_id_hash: slot_value.launcher_id.tree_hash().into(),
+            rest_hash: slot_value.launcher_ids_data_hash().into(),
         });
 
         let renew_amount =
@@ -628,7 +646,8 @@ impl XchandlesRegistry {
         self,
         ctx: &mut SpendContext,
         slot: Slot<XchandlesSlotValue>,
-        new_launcher_id: Bytes32,
+        new_owner_launcher_id: Bytes32,
+        new_resolved_launcher_id: Bytes32,
         announcer_inner_puzzle_hash: Bytes32,
     ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
         // spend slots
@@ -649,7 +668,7 @@ impl XchandlesRegistry {
             new_slots_proof,
             SlotInfo::from_value(
                 self.info.launcher_id,
-                slot_value.with_launcher_id(new_launcher_id),
+                slot_value.with_launcher_ids(new_owner_launcher_id, new_resolved_launcher_id),
             ),
         )];
 
@@ -658,8 +677,10 @@ impl XchandlesRegistry {
             value_hash: slot_value.handle_hash.tree_hash().into(),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
             expiration: slot_value.expiration,
-            current_launcher_id: slot_value.launcher_id,
-            new_launcher_id,
+            current_owner_launcher_id: slot_value.owner_launcher_id,
+            current_resolved_launcher_id: slot_value.resolved_launcher_id,
+            new_owner_launcher_id,
+            new_resolved_launcher_id,
             announcer_inner_puzzle_hash,
         });
 
@@ -680,9 +701,12 @@ impl XchandlesRegistry {
 
         ctx.spend(my_coin, my_spend)?;
 
-        let msg: Bytes32 = clvm_tuple!(slot_value.handle_hash, new_launcher_id)
-            .tree_hash()
-            .into();
+        let msg: Bytes32 = clvm_tuple!(
+            slot_value.handle_hash,
+            clvm_tuple!(new_owner_launcher_id, new_resolved_launcher_id)
+        )
+        .tree_hash()
+        .into();
         Ok((
             Conditions::new().send_message(18, msg.into(), vec![ctx.alloc(&my_coin.puzzle_hash)?]),
             new_xchandles,

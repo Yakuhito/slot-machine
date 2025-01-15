@@ -196,9 +196,10 @@ pub struct XchandlesSecretAndHandle {
 #[clvm(list)]
 pub struct XchandlesPrecommitValue {
     pub secret_and_handle: XchandlesSecretAndHandle,
-    pub handle_nft_launcher_id: Bytes32,
-    #[clvm(rest)]
     pub start_time: u64,
+    pub owner_launcher_id: Bytes32,
+    #[clvm(rest)]
+    pub resolved_launcher_id: Bytes32,
 }
 
 impl XchandlesPrecommitValue {
@@ -206,13 +207,15 @@ impl XchandlesPrecommitValue {
     pub fn new(
         secret: Bytes32,
         handle: String,
-        handle_nft_launcher_id: Bytes32,
         start_time: u64,
+        owner_launcher_id: Bytes32,
+        resolved_launcher_id: Bytes32,
     ) -> Self {
         Self {
             secret_and_handle: XchandlesSecretAndHandle { secret, handle },
-            handle_nft_launcher_id,
             start_time,
+            owner_launcher_id,
+            resolved_launcher_id,
         }
     }
 }

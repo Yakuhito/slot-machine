@@ -149,9 +149,9 @@ pub struct XchandlesExpireActionSolution<CMP, CMS, P, S> {
     pub neighbors_hash: Bytes32,
     pub current_expiration: u64,
     pub buy_time: u64,
-    pub old_launcher_id_hash: Bytes32,
+    pub old_rest_hash: Bytes32,
     #[clvm(rest)]
-    pub new_launcher_id_hash: Bytes32,
+    pub new_rest_hash: Bytes32,
 }
 
 pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 365] =

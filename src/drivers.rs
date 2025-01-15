@@ -419,12 +419,14 @@ pub fn launch_xchandles_registry(
                 SLOT32_MAX_VALUE.into(),
                 u64::MAX,
                 registry_launcher_id,
+                registry_launcher_id,
             ),
             XchandlesSlotValue::new(
                 SLOT32_MAX_VALUE.into(),
                 SLOT32_MIN_VALUE.into(),
                 SLOT32_MAX_VALUE.into(),
                 u64::MAX,
+                registry_launcher_id,
                 registry_launcher_id,
             ),
         )?;
@@ -951,11 +953,17 @@ mod tests {
             };
             let reg_amount = XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, 1);
 
-            let handle_launcher_id = did.info.launcher_id;
+            let handle_owner_launcher_id = did.info.launcher_id;
+            let handle_resolved_launcher_id = Bytes32::from([u8::MAX - i as u8; 32]);
             let secret = Bytes32::default();
 
-            let value =
-                XchandlesPrecommitValue::new(secret, handle.clone(), handle_launcher_id, 100);
+            let value = XchandlesPrecommitValue::new(
+                secret,
+                handle.clone(),
+                100,
+                handle_owner_launcher_id,
+                handle_resolved_launcher_id,
+            );
 
             let refund_puzzle = ctx.alloc(&1)?;
             let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
@@ -1002,6 +1010,7 @@ mod tests {
                 Bytes32::default(),
                 Bytes32::default(),
                 0,
+                Bytes32::default(),
                 Bytes32::default(),
             );
 
@@ -1176,13 +1185,15 @@ mod tests {
             registry = new_registry;
 
             // test on-chain mechanism for handle updates
-            let new_launcher_id = Bytes32::new([4 + i as u8; 32]);
+            let new_owner_launcher_id = Bytes32::new([4 + i as u8; 32]);
+            let new_resolved_launcher_id = Bytes32::new([u8::MAX - i as u8 - 1; 32]);
             let update_slot = new_slots[0];
 
             let (update_conds, new_registry, new_slots) = registry.update(
                 ctx,
                 update_slot,
-                new_launcher_id,
+                new_owner_launcher_id,
+                new_resolved_launcher_id,
                 did.info.inner_puzzle_hash().into(),
             )?;
 
@@ -1218,8 +1229,9 @@ mod tests {
         let value = XchandlesPrecommitValue::new(
             Bytes32::default(),
             handle_to_expire.clone(),
-            Bytes32::from([42; 32]),
             buy_time,
+            Bytes32::from([42; 32]),
+            Bytes32::from([69; 32]),
         );
 
         let pricing_puzzle =
