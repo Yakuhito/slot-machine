@@ -1,7 +1,7 @@
 ; extend.clsp by yakuhito
 ;; Used to extend the registration of a handle
 
-;; Remember that the slot format is (value (left_value right_value) expiration . launcher_id)
+;; Remember that the slot format is (value (left_value right_value) expiration owner_launcher_id . resolved_launcher_id)
 ;;  but we're only interested in 'expiration' (and handle to get correct price factor based on length)
 
 (mod (

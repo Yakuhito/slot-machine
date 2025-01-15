@@ -1,5 +1,5 @@
 ; update.clsp by yakuhito
-;; Used to update the launcher_id of a record
+;; Used to update the owner_launcher_id and/or resolved_launcher_id of a record
 
 ;; Note: The update is final.
 

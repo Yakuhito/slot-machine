@@ -1,7 +1,7 @@
 ; expire.clsp by yakuhito
 ;; Used to expire (i.e., remove) a handle from the registry
 
-;; Remember that the slot format is (value (left_value right_value) expiration . launcher_id)
+;; Remember that the slot format is (value (left_value right_value) expiration owner_launcher_id . resolved_launcher_id)
 
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
@@ -20,7 +20,7 @@
         current_expiration
         buy_time
         old_rest_hash ; (sha256sum (c old_owner_launcher_id old_resolved_launcher_id))
-        new_controller_launcher_id ; (sha256 2 new_owner_launcher_id new_resolved_launcher_id)
+        new_rest_hash ; (sha256sum (c new_owner_launcher_id new_resolved_launcher_id))
     )
 )
     (include condition_codes.clib)
