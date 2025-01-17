@@ -20,6 +20,7 @@ pub trait SpendContextExt {
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn delegated_state_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn catalog_register_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn catalog_refund_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn uniqueness_prelauncher_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn precommit_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn slot_puzzle(&mut self) -> Result<NodePtr, DriverError>;
@@ -59,6 +60,11 @@ impl SpendContextExt for SpendContext {
     /// Allocate the catalog register action puzzle and return its pointer.
     fn catalog_register_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(CATALOG_REGISTER_PUZZLE_HASH, &CATALOG_REGISTER_PUZZLE)
+    }
+
+    /// Allocate the catalog refund action puzzle and return its pointer.
+    fn catalog_refund_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(CATALOG_REFUND_PUZZLE_HASH, &CATALOG_REFUND_PUZZLE)
     }
 
     /// Allocate the uniqueness prelauncher puzzle and return its pointer.
@@ -170,6 +176,7 @@ mod tests {
         assert_puzzle_hash!(ACTION_LAYER_PUZZLE => ACTION_LAYER_PUZZLE_HASH);
         assert_puzzle_hash!(DELEGATED_STATE_ACTION_PUZZLE => DELEGATED_STATE_ACTION_PUZZLE_HASH);
         assert_puzzle_hash!(CATALOG_REGISTER_PUZZLE => CATALOG_REGISTER_PUZZLE_HASH);
+        assert_puzzle_hash!(CATALOG_REFUND_PUZZLE => CATALOG_REFUND_PUZZLE_HASH);
         assert_puzzle_hash!(UNIQUENESS_PRELAUNCHER_PUZZLE => UNIQUENESS_PRELAUNCHER_PUZZLE_HASH);
         assert_puzzle_hash!(PRECOMMIT_LAYER_PUZZLE => PRECOMMIT_LAYER_PUZZLE_HASH);
         assert_puzzle_hash!(SLOT_PUZZLE => SLOT_PUZZLE_HASH);

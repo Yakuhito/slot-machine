@@ -19,7 +19,6 @@
 ;; For CATalog, a slot's value is the tail hash of a registered CAT
 
 (mod (
-  CAT_MOD_HASH
   NFT_PACK ; see 'assert_launcher_ann' to see what this contains
   UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry

@@ -1,7 +1,7 @@
-mod catalog_register;
+mod catalog;
 mod delegated_state;
 mod xchandles;
 
-pub use catalog_register::*;
+pub use catalog::*;
 pub use delegated_state::*;
 pub use xchandles::*;

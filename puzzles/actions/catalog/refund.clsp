@@ -7,9 +7,6 @@
 ;; c) the tail hash has already been registered
 
 (mod (
-  CAT_MOD_HASH
-  NFT_PACK ; see 'assert_launcher_ann' to see what this contains
-  UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
   Current_State ; Truth = (cat_maker_puzzle_hash . registration_price)
