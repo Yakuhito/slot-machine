@@ -719,7 +719,8 @@ mod tests {
                 catalog_constants.relative_block_height,
                 catalog_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),
-                Bytes32::default(), // NOT SAFE ON AN ACTUAL NETWORK
+                DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into())
+                    .into(),
                 value,
                 reg_amount,
             )?;
@@ -979,7 +980,8 @@ mod tests {
                 xchandles_constants.relative_block_height,
                 xchandles_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),
-                Bytes32::default(), // NOT SAFE ON AN ACTUAL NETWORK
+                DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into())
+                    .into(),
                 value,
                 reg_amount,
             )?;
