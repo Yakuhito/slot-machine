@@ -229,7 +229,7 @@ impl CatalogRegistry {
         let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
         precommit_coin.spend(
             ctx,
-            self.info.constants.precommit_payout_puzzle_hash,
+            1, // mode 1 = register
             spender_inner_puzzle_hash,
         )?;
 

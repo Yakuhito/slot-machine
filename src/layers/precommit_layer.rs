@@ -181,7 +181,7 @@ pub struct PrecommitLayer2ndCurryArgs<V> {
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct PrecommitLayerSolution {
-    pub target_puzzle_hash: Bytes32,
+    pub mode: u8,
     pub my_amount: u64,
     pub singleton_inner_puzzle_hash: Bytes32,
 }

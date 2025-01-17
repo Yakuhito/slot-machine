@@ -113,7 +113,7 @@ impl<V> PrecommitCoin<V> {
     pub fn construct_solution(
         &self,
         ctx: &mut SpendContext,
-        target_puzzle_hash: Bytes32,
+        mode: u8,
         singleton_inner_puzzle_hash: Bytes32,
     ) -> Result<NodePtr, DriverError>
     where
@@ -134,7 +134,7 @@ impl<V> PrecommitCoin<V> {
             ctx,
             CatSolution {
                 inner_puzzle_solution: PrecommitLayerSolution {
-                    target_puzzle_hash,
+                    mode,
                     my_amount: self.coin.amount,
                     singleton_inner_puzzle_hash,
                 },
@@ -155,15 +155,14 @@ impl<V> PrecommitCoin<V> {
     pub fn spend(
         &self,
         ctx: &mut SpendContext,
-        target_puzzle_hash: Bytes32,
+        mode: u8,
         spender_inner_puzzle_hash: Bytes32,
     ) -> Result<(), DriverError>
     where
         V: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
     {
         let puzzle = self.construct_puzzle(ctx)?;
-        let solution =
-            self.construct_solution(ctx, target_puzzle_hash, spender_inner_puzzle_hash)?;
+        let solution = self.construct_solution(ctx, mode, spender_inner_puzzle_hash)?;
 
         ctx.spend(self.coin, Spend::new(puzzle, solution))
     }

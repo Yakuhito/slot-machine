@@ -297,7 +297,7 @@ impl XchandlesRegistry {
         // spend precommit coin
         precommit_coin.spend(
             ctx,
-            self.info.constants.precommit_payout_puzzle_hash,
+            1, // mode 1 = register/expire (use value)
             spender_inner_puzzle_hash,
         )?;
 
@@ -416,7 +416,7 @@ impl XchandlesRegistry {
         // spend precommit coin
         precommit_coin.spend(
             ctx,
-            self.info.constants.precommit_payout_puzzle_hash,
+            1, // mode 1 = register/expire (use value)
             spender_inner_puzzle_hash,
         )?;
 
