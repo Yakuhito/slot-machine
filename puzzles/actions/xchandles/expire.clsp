@@ -6,7 +6,6 @@
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    PAYOUT_PUZZLE_HASH
     Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
     (
         handle
