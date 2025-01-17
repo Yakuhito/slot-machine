@@ -1,0 +1,87 @@
+; refund.clsp by yakuhito
+;; Responsible for returning invalid precommit coins.
+
+;; A precommit coin is considered invalid if:
+;; a) the CAT maker puzzle has changed
+;; b) the amount is wrong
+;; c) the tail hash has already been registered
+
+(mod (
+  CAT_MOD_HASH
+  NFT_PACK ; see 'assert_launcher_ann' to see what this contains
+  UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
+  PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
+  SLOT_1ST_CURRY_HASH ; after 1st curry
+  Current_State ; Truth = (cat_maker_puzzle_hash . registration_price)
+  ( 
+    precommited_cat_maker_reveal
+    precommited_cat_maker_puzzle_hash ; in precommit coin, this is the REFUND_INFO_HASH
+    precommited_cat_maker_solution
+    tail_hash ; full TAIL in the reveal of the pre-commit coin
+    initial_nft_owner_ph ; also included in the pre-commit coin
+    refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
+    precommit_amount . ; amount of the pre-commit coin
+    neighbors_hash ; (sha256sum (left_tail_hash . right_tail_hash))
+  ) ; solution
+)
+  (include condition_codes.clib)
+  (include secure_nft.clib)
+  (include sha256tree.clib)
+  (include slots.clib)
+
+  (defun get_slot_value_hash (value neighbors_hash)
+    (sha256 2 (sha256 1 value) neighbors_hash) 
+  )
+
+  ; REFUND_INFO_HASH = (sha256 1 precommited_cat_maker_puzzle_hash)
+  (if (= (sha256tree precommited_cat_maker_reveal) precommited_cat_maker_puzzle_hash)
+    (c
+      Current_State ; new state
+
+      ; create NFT that will hold CAT info
+      (list
+        ; announcement
+        (list
+            CREATE_PUZZLE_ANNOUNCEMENT
+            (concat '$'
+                (sha256 2 
+                    (sha256 1 tail_hash)
+                    (sha256 1 initial_nft_owner_ph)
+                ) ; (sha256tree (tail_hash . initial_nft_owner_ph))
+            ) 
+        )
+
+        ; spend slot only if (a) and (b) are not met
+        (if (all (= (r Current_State) precommit_amount) (= precommited_cat_maker_puzzle_hash (f Current_State)))
+          (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash tail_hash neighbors_hash))
+          ; else
+          (list REMARK)
+        )
+        
+        ; consume precommit coin
+        (list
+          SEND_MESSAGE
+          19 ; sender puzzle + receiver puzzle + receiver amount
+          0 ; message = 0 = refund
+          (a
+            precommited_cat_maker_reveal
+            (list
+              (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                refund_puzzle_hash_hash
+                (sha256 1 precommited_cat_maker_puzzle_hash) ; hash of REFUND_INFO_HASH
+                (sha256 2
+                  (sha256 1 initial_nft_owner_ph)
+                  tail_hash
+                ) ; precommit coin reveal will be (c initial_nft_owner_ph TAIL)
+              ) ; Inner_Puzzle_Hash
+              precommited_cat_maker_solution
+            )
+          ) ; receiver puzzle hash
+          precommit_amount
+        ) 
+      ) ; conditions
+    )
+    ; else
+    (x)
+  )
+)
