@@ -24,7 +24,6 @@
   UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
-  PAYOUT_PUZZLE_HASH
   Current_State ; Truth = (cat_maker_puzzle_hash . registration_price)
   ( 
     cat_maker_reveal
@@ -117,7 +116,7 @@
           (list
             SEND_MESSAGE
             19 ; sender puzzle + receiver puzzle + receiver amount
-            PAYOUT_PUZZLE_HASH
+            1 ; message = 1 = spend to payout puzzle hash
             (a
               cat_maker_reveal
               (list

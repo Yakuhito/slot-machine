@@ -7,10 +7,11 @@
     SINGLETON_MOD_HASH
     SINGLETON_STRUCT_HASH ; owner/controller singleton
     RELATIVE_BLOCK_HEIGHT ; how many blocks to wait before this coin is spendable
+    PAYOUT_PUZZLE_HASH ; where the funds go if message=1 (use precommit to do something)
     ; 2nd curry
-    REFUND_PUZZLE_HASH
+    REFUND_PUZZLE_HASH ; where the funds go if message=0 (refund)
     VALUE
-    target_puzzle_hash
+    spend_mode ; 0 = refund, 1 = spend to payout puzzle hash
     my_amount
     ; info about this coin's spender (singleton coin being spent)
     singleton_inner_puzzle_hash
@@ -22,11 +23,16 @@
   (list 
     (list ASSERT_HEIGHT_RELATIVE RELATIVE_BLOCK_HEIGHT)
     (list ASSERT_MY_AMOUNT my_amount)
-    (list CREATE_COIN target_puzzle_hash my_amount (list target_puzzle_hash))
+    (list
+      CREATE_COIN
+      (i spend_mode PAYOUT_PUZZLE_HASH REFUND_PUZZLE_HASH)
+      my_amount
+      (list (i spend_mode PAYOUT_PUZZLE_HASH REFUND_PUZZLE_HASH))
+    )
     (list
       RECEIVE_MESSAGE
       19 ; sender puzzle + receiver puzzle + receiver amount
-      target_puzzle_hash
+      spend_mode ; message
       (curry_hashes SINGLETON_MOD_HASH
         SINGLETON_STRUCT_HASH
         singleton_inner_puzzle_hash

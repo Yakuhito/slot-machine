@@ -78,7 +78,7 @@
                 (list
                     SEND_MESSAGE
                     19 ; sender puzzle + receiver puzzle + receiver amount
-                    PAYOUT_PUZZLE_HASH ; message
+                    1 ; message = 1 = spend to payout puzzle hash
                     (a
                         cat_maker_puzzle_reveal
                         (list
