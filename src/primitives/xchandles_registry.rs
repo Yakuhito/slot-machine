@@ -108,8 +108,8 @@ impl XchandlesRegistry {
                 XchandlesRegistryAction::Expire(solution) => {
                     let layer = XchandlesExpireAction::new(
                         self.info.launcher_id,
-                        self.info.constants.precommit_payout_puzzle_hash,
                         self.info.constants.relative_block_height,
+                        self.info.constants.precommit_payout_puzzle_hash,
                     );
 
                     let puzzle = layer.construct_puzzle(ctx)?;
@@ -139,8 +139,8 @@ impl XchandlesRegistry {
                 XchandlesRegistryAction::Register(solution) => {
                     let layer = XchandlesRegisterAction::new(
                         self.info.launcher_id,
-                        self.info.constants.precommit_payout_puzzle_hash,
                         self.info.constants.relative_block_height,
+                        self.info.constants.precommit_payout_puzzle_hash,
                     );
 
                     let puzzle = layer.construct_puzzle(ctx)?;

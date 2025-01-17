@@ -27,8 +27,8 @@ pub struct CatalogRegisterAction {
     pub launcher_id: Bytes32,
     pub royalty_puzzle_hash_hash: Bytes32,
     pub trade_price_percentage: u16,
-    pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
+    pub payout_puzzle_hash: Bytes32,
 }
 
 impl CatalogRegisterAction {
@@ -36,15 +36,15 @@ impl CatalogRegisterAction {
         launcher_id: Bytes32,
         royalty_puzzle_hash_hash: Bytes32,
         trade_price_percentage: u16,
-        precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
     ) -> Self {
         Self {
             launcher_id,
             royalty_puzzle_hash_hash,
             trade_price_percentage,
-            precommit_payout_puzzle_hash,
             relative_block_height,
+            payout_puzzle_hash,
         }
     }
 
@@ -53,8 +53,8 @@ impl CatalogRegisterAction {
             launcher_id: info.launcher_id,
             royalty_puzzle_hash_hash: info.constants.royalty_address.tree_hash().into(),
             trade_price_percentage: info.constants.royalty_ten_thousandths,
-            precommit_payout_puzzle_hash: info.constants.precommit_payout_puzzle_hash,
             relative_block_height: info.constants.relative_block_height,
+            payout_puzzle_hash: info.constants.precommit_payout_puzzle_hash,
         }
     }
 }
@@ -73,7 +73,7 @@ impl Layer for CatalogRegisterAction {
                 self.royalty_puzzle_hash_hash,
                 self.trade_price_percentage,
                 self.relative_block_height,
-                self.precommit_payout_puzzle_hash,
+                self.payout_puzzle_hash,
             ),
         }
         .to_clvm(&mut ctx.allocator)?)
@@ -111,7 +111,7 @@ impl ToTreeHash for CatalogRegisterAction {
             self.royalty_puzzle_hash_hash,
             self.trade_price_percentage,
             self.relative_block_height,
-            self.precommit_payout_puzzle_hash,
+            self.payout_puzzle_hash,
         )
     }
 }
@@ -154,11 +154,11 @@ impl NftPack {
     }
 }
 
-pub const CATALOG_REGISTER_PUZZLE: [u8; 1634] = hex!("ff02ffff01ff02ffff03ffff22ffff15ff8216ffff82beff80ffff15ff8302feffff8216ff80ffff09ffff02ff2effff04ff02ffff04ff8204ffff80808080ff82027f8080ffff01ff04ff82017fffff02ff22ffff04ff02ffff04ff0bffff04ff8307feffffff04ff822effffff04ffff02ff2affff04ff02ffff04ff17ffff04ffff0bffff0101ff8216ff80ff8080808080ffff04ffff04ffff04ff30ffff04ff8307feffff808080ffff04ffff04ff38ffff04ffff0effff0172ffff0bffff0102ffff0bffff0101ff8216ff80ffff0bffff0101ff822eff808080ff808080ffff04ffff02ff3effff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff82beffffff04ff83017effffff04ff8302feffff808080808080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff8302feffffff04ff82beffffff04ff8305feffff808080808080ff8080808080ffff04ffff02ff32ffff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff8216ffffff04ff82beffffff04ff8302feffff808080808080ff8080808080ffff04ffff02ff32ffff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff82beffffff04ff83017effffff04ff8216ffff808080808080ff8080808080ffff04ffff02ff32ffff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff8302feffffff04ff8216ffffff04ff8305feffff808080808080ff8080808080ffff04ffff04ff24ffff04ffff0113ffff04ff81bfffff04ffff02ff8204ffffff04ffff02ff2affff04ff02ffff04ff2fffff04ff825effffff04ffff0bffff0102ffff0bffff0101ff822eff80ff8216ff80ff808080808080ffff04ff820affff80808080ffff04ff82037fff808080808080ff808080808080808080ff808080808080808080ffff01ff088080ff0180ffff04ffff01ffffffff4046ff333effff4202ffff02ffff03ff05ffff01ff0bff81fcffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff2cffff04ff02ffff04ff0dff80808080ff808080808080ffff0181dc80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffffff04ffff04ff28ffff04ff2fffff01ff80808080ffff04ffff02ff36ffff04ff02ffff04ff05ffff04ff17ffff04ffff30ffff30ff0bff2fff8080ff09ffff010180ff808080808080ff5f8080ff04ff28ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff0bff81bcffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff2cffff04ff02ffff04ff07ff80808080ff808080808080ff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ffff0bffff0101ff0b80ffff0bffff0101ff17808080ffffff0bff34ffff0bff34ff81dcff0580ffff0bff34ff0bff819c8080ff04ff20ffff04ffff30ff17ffff02ff2affff04ff02ffff04ff15ffff04ffff0bffff0102ffff0bffff0101ff1580ffff0bffff0102ffff0bffff0101ff1780ffff0bffff0101ff09808080ffff04ffff02ff2affff04ff02ffff04ff2dffff04ffff0bffff0101ff2d80ffff04ff819cffff04ff5dffff04ffff02ff2affff04ff02ffff04ff81bdffff04ffff0bffff0101ff81bd80ffff04ff819cffff04ffff02ff2affff04ff02ffff04ff82017dffff04ffff0bffff0102ffff0bffff0101ff1580ffff0bffff0102ffff0bffff0101ff1780ffff0bffff0101ff09808080ffff04ff8202fdffff04ffff0bffff0101ff8205fd80ff80808080808080ffff04ff0bff8080808080808080ff8080808080808080ff808080808080ffff010180ff808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff24ffff04ffff0112ffff04ff80ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
+pub const CATALOG_REGISTER_PUZZLE: [u8; 1632] = hex!("ff02ffff01ff02ffff03ffff22ffff15ff820b7fff825f7f80ffff15ff83017f7fff820b7f80ffff09ffff02ff2effff04ff02ffff04ff82027fff80808080ff82013f8080ffff01ff04ff81bfffff02ff22ffff04ff02ffff04ff0bffff04ff8303ff7fffff04ff82177fffff04ffff02ff2affff04ff02ffff04ff17ffff04ffff0bffff0101ff820b7f80ff8080808080ffff04ffff04ffff04ff30ffff04ff8303ff7fff808080ffff04ffff04ff38ffff04ffff0effff0172ffff0bffff0102ffff0bffff0101ff820b7f80ffff0bffff0101ff82177f808080ff808080ffff04ffff02ff3effff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff825f7fffff04ff82bf7fffff04ff83017f7fff808080808080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff83017f7fffff04ff825f7fffff04ff8302ff7fff808080808080ff8080808080ffff04ffff02ff32ffff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff820b7fffff04ff825f7fffff04ff83017f7fff808080808080ff8080808080ffff04ffff02ff32ffff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff825f7fffff04ff82bf7fffff04ff820b7fff808080808080ff8080808080ffff04ffff02ff32ffff04ff02ffff04ff5fffff04ffff02ff3affff04ff02ffff04ff83017f7fffff04ff820b7fffff04ff8302ff7fff808080808080ff8080808080ffff04ffff04ff24ffff04ffff0113ffff04ffff0101ffff04ffff02ff82027fffff04ffff02ff2affff04ff02ffff04ff2fffff04ff822f7fffff04ffff0bffff0102ffff0bffff0101ff82177f80ff820b7f80ff808080808080ffff04ff82057fff80808080ffff04ff8201bfff808080808080ff808080808080808080ff808080808080808080ffff01ff088080ff0180ffff04ffff01ffffffff4046ff333effff4202ffff02ffff03ff05ffff01ff0bff81fcffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff2cffff04ff02ffff04ff0dff80808080ff808080808080ffff0181dc80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffffff04ffff04ff28ffff04ff2fffff01ff80808080ffff04ffff02ff36ffff04ff02ffff04ff05ffff04ff17ffff04ffff30ffff30ff0bff2fff8080ff09ffff010180ff808080808080ff5f8080ff04ff28ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff0bff81bcffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff2cffff04ff02ffff04ff07ff80808080ff808080808080ff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ffff0bffff0101ff0b80ffff0bffff0101ff17808080ffffff0bff34ffff0bff34ff81dcff0580ffff0bff34ff0bff819c8080ff04ff20ffff04ffff30ff17ffff02ff2affff04ff02ffff04ff15ffff04ffff0bffff0102ffff0bffff0101ff1580ffff0bffff0102ffff0bffff0101ff1780ffff0bffff0101ff09808080ffff04ffff02ff2affff04ff02ffff04ff2dffff04ffff0bffff0101ff2d80ffff04ff819cffff04ff5dffff04ffff02ff2affff04ff02ffff04ff81bdffff04ffff0bffff0101ff81bd80ffff04ff819cffff04ffff02ff2affff04ff02ffff04ff82017dffff04ffff0bffff0102ffff0bffff0101ff1580ffff0bffff0102ffff0bffff0101ff1780ffff0bffff0101ff09808080ffff04ff8202fdffff04ffff0bffff0101ff8205fd80ff80808080808080ffff04ff0bff8080808080808080ff8080808080808080ff808080808080ffff010180ff808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff24ffff04ffff0112ffff04ff80ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
 
 pub const CATALOG_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    d6e5a9b3b000cfdca9469f0a68f2f577df01ff904dee7e9a586f5c81c6a04bed
+    1be7149bfb7fe25386788fb312d99a2e438321ab0c2110605070fc8dd2ef0865
     "
 ));
 
@@ -170,7 +170,6 @@ pub struct CatalogRegisterActionArgs {
     pub uniqueness_prelauncher_1st_curry_hash: Bytes32,
     pub precommit_1st_curry_hash: Bytes32,
     pub slot_1st_curry_hash: Bytes32,
-    pub payout_puzzle_hash: Bytes32,
 }
 
 impl CatalogRegisterActionArgs {
@@ -189,10 +188,10 @@ impl CatalogRegisterActionArgs {
             precommit_1st_curry_hash: PrecommitLayer::<()>::first_curry_hash(
                 SingletonStruct::new(launcher_id).tree_hash().into(),
                 relative_block_height,
+                payout_puzzle_hash,
             )
             .into(),
             slot_1st_curry_hash: Slot::<CatalogSlotValue>::first_curry_hash(launcher_id).into(),
-            payout_puzzle_hash,
         }
     }
 }

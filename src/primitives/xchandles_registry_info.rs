@@ -102,8 +102,8 @@ impl XchandlesRegistryInfo {
         [
             XchandlesExpireAction::new(
                 launcher_id,
-                constants.precommit_payout_puzzle_hash,
                 constants.relative_block_height,
+                constants.precommit_payout_puzzle_hash,
             )
             .tree_hash()
             .into(),
@@ -113,8 +113,8 @@ impl XchandlesRegistryInfo {
             XchandlesOracleAction::new(launcher_id).tree_hash().into(),
             XchandlesRegisterAction::new(
                 launcher_id,
-                constants.precommit_payout_puzzle_hash,
                 constants.relative_block_height,
+                constants.precommit_payout_puzzle_hash,
             )
             .tree_hash()
             .into(),

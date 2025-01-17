@@ -15,6 +15,7 @@ use crate::SpendContextExt;
 pub struct PrecommitLayer<V> {
     pub controller_singleton_struct_hash: Bytes32,
     pub relative_block_height: u32,
+    pub payout_puzzle_hash: Bytes32,
     pub refund_puzzle_hash: Bytes32,
     pub value: V,
 }
@@ -23,12 +24,14 @@ impl<V> PrecommitLayer<V> {
     pub fn new(
         controller_singleton_struct_hash: Bytes32,
         relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
         value: V,
     ) -> Self {
         Self {
             controller_singleton_struct_hash,
             relative_block_height,
+            payout_puzzle_hash,
             refund_puzzle_hash,
             value,
         }
@@ -37,6 +40,7 @@ impl<V> PrecommitLayer<V> {
     pub fn first_curry_hash(
         controller_singleton_struct_hash: Bytes32,
         relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
     ) -> TreeHash {
         CurriedProgram {
             program: PRECOMMIT_LAYER_PUZZLE_HASH,
@@ -44,6 +48,7 @@ impl<V> PrecommitLayer<V> {
                 singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
                 singleton_struct_hash: controller_singleton_struct_hash,
                 relative_block_height,
+                payout_puzzle_hash,
             },
         }
         .tree_hash()
@@ -52,6 +57,7 @@ impl<V> PrecommitLayer<V> {
     pub fn puzzle_hash(
         controller_singleton_struct_hash: Bytes32,
         relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
         value_hash: TreeHash,
     ) -> TreeHash {
@@ -59,6 +65,7 @@ impl<V> PrecommitLayer<V> {
             program: Self::first_curry_hash(
                 controller_singleton_struct_hash,
                 relative_block_height,
+                payout_puzzle_hash,
             ),
             args: PrecommitLayer2ndCurryArgs {
                 refund_puzzle_hash,
@@ -101,6 +108,7 @@ where
         Ok(Some(Self {
             controller_singleton_struct_hash: args_1st_curry.singleton_struct_hash,
             relative_block_height: args_1st_curry.relative_block_height,
+            payout_puzzle_hash: args_1st_curry.payout_puzzle_hash,
             refund_puzzle_hash: args_2nd_curry.refund_puzzle_hash,
             value: args_2nd_curry.value,
         }))
@@ -120,6 +128,7 @@ where
                 singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
                 singleton_struct_hash: self.controller_singleton_struct_hash,
                 relative_block_height: self.relative_block_height,
+                payout_puzzle_hash: self.payout_puzzle_hash,
             },
         }
         .to_clvm(&mut ctx.allocator)?;
@@ -145,11 +154,11 @@ where
     }
 }
 
-pub const PRECOMMIT_LAYER_PUZZLE: [u8; 450] = hex!("ff02ffff01ff04ffff04ff10ffff04ff17ff808080ffff04ffff04ff18ffff04ff82017fff808080ffff04ffff04ff14ffff04ff81bfffff04ff82017fffff04ffff04ff81bfff8080ff8080808080ffff04ffff04ff1cffff04ffff0113ffff04ff81bfffff04ffff02ff2effff04ff02ffff04ff05ffff04ff0bffff04ff8202ffff808080808080ff8080808080ff8080808080ffff04ffff01ffffff5249ff3343ffff02ff02ffff03ff05ffff01ff0bff76ffff02ff3effff04ff02ffff04ff09ffff04ffff02ff1affff04ff02ffff04ff0dff80808080ff808080808080ffff016680ff0180ffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff0bff56ffff02ff3effff04ff02ffff04ff05ffff04ffff02ff1affff04ff02ffff04ff07ff80808080ff808080808080ff0bff12ffff0bff12ff66ff0580ffff0bff12ff0bff468080ff018080");
+pub const PRECOMMIT_LAYER_PUZZLE: [u8; 469] = hex!("ff02ffff01ff04ffff04ff10ffff04ff17ff808080ffff04ffff04ff18ffff04ff8202ffff808080ffff04ffff04ff14ffff04ffff03ff82017fff2fff5f80ffff04ff8202ffffff04ffff04ffff03ff82017fff2fff5f80ff8080ff8080808080ffff04ffff04ff1cffff04ffff0113ffff04ff82017fffff04ffff02ff2effff04ff02ffff04ff05ffff04ff0bffff04ff8205ffff808080808080ff8080808080ff8080808080ffff04ffff01ffffff5249ff3343ffff02ff02ffff03ff05ffff01ff0bff76ffff02ff3effff04ff02ffff04ff09ffff04ffff02ff1affff04ff02ffff04ff0dff80808080ff808080808080ffff016680ff0180ffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff0bff56ffff02ff3effff04ff02ffff04ff05ffff04ffff02ff1affff04ff02ffff04ff07ff80808080ff808080808080ff0bff12ffff0bff12ff66ff0580ffff0bff12ff0bff468080ff018080");
 
 pub const PRECOMMIT_LAYER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    bf7daa5e86e400003235efcd3bf46a7bdaaa39c1518bae410843447e100b7ea9
+    10efe1dab105ef4780345baa2442196a26944040b12c0167375d79aaec89e33f
     "
 ));
 
@@ -159,6 +168,7 @@ pub struct PrecommitLayer1stCurryArgs {
     pub singleton_mod_hash: Bytes32,
     pub singleton_struct_hash: Bytes32,
     pub relative_block_height: u32,
+    pub payout_puzzle_hash: Bytes32,
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]

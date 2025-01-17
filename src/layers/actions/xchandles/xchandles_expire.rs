@@ -15,20 +15,20 @@ use super::XchandlesFactorPricingPuzzleArgs;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesExpireAction {
     pub launcher_id: Bytes32,
-    pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
+    pub payout_puzzle_hash: Bytes32,
 }
 
 impl XchandlesExpireAction {
     pub fn new(
         launcher_id: Bytes32,
-        precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
     ) -> Self {
         Self {
             launcher_id,
-            precommit_payout_puzzle_hash,
             relative_block_height,
+            payout_puzzle_hash,
         }
     }
 }
@@ -42,7 +42,7 @@ impl Layer for XchandlesExpireAction {
             args: XchandlesExpireActionArgs::new(
                 self.launcher_id,
                 self.relative_block_height,
-                self.precommit_payout_puzzle_hash,
+                self.payout_puzzle_hash,
             ),
         }
         .to_clvm(&mut ctx.allocator)?)
@@ -78,17 +78,17 @@ impl ToTreeHash for XchandlesExpireAction {
         XchandlesExpireActionArgs::curry_tree_hash(
             self.launcher_id,
             self.relative_block_height,
-            self.precommit_payout_puzzle_hash,
+            self.payout_puzzle_hash,
         )
     }
 }
 
-pub const XCHANDLES_EXPIRE_PUZZLE: [u8; 1208] =
-    hex!("ff02ffff01ff02ffff03ffff22ffff09ffff02ff2effff04ff02ffff04ff82015fff80808080ff4f80ffff09ffff02ff2effff04ff02ffff04ff8205dfff80808080ff81ef8080ffff01ff04ff2fffff04ffff04ff10ffff04ff83017fdfff808080ffff04ffff04ff10ffff04ff82bfdfff808080ffff04ffff04ff38ffff04ffff0effff0178ffff0bffff0102ffff0bffff0101ff819f80ffff0bffff0102ffff0bffff0101ffff10ffff06ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff83017fdf8080ff8303ffdf808080ff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff26ffff04ff02ffff04ffff0bffff0101ff819f80ffff04ff825fdfffff04ff82bfdfffff04ff8302ffdfff80808080808080ff8080808080ffff04ffff02ff2affff04ff02ffff04ff0bffff04ffff02ff26ffff04ff02ffff04ffff0bffff0101ff819f80ffff04ff825fdfffff04ffff10ffff06ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff83017fdf80ffff04ff8303ffdfff80808080808080ff8080808080ffff04ffff04ff14ffff04ffff0113ffff04ff17ffff04ffff02ff82015fffff04ffff02ff3affff04ff02ffff04ff05ffff04ff8217dfffff04ffff0bffff0102ffff0bffff0102ff822fdfffff0bffff0101ff819f8080ffff0bffff0102ffff0bffff0101ff83017fdf80ff8303ffdf8080ff808080808080ffff04ff8202dfff80808080ffff04ffff05ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff808080808080ff8080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333eff42ff02ff02ffff03ff05ffff01ff0bff72ffff02ff36ffff04ff02ffff04ff09ffff04ffff02ff3cffff04ff02ffff04ff0dff80808080ff808080808080ffff016280ff0180ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff04ff28ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ff0bff52ffff02ff36ffff04ff02ffff04ff05ffff04ffff02ff3cffff04ff02ffff04ff07ff80808080ff808080808080ffffff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ff0bffff0bffff0102ffff0bffff0101ff1780ff2f808080ff0bff2cffff0bff2cff62ff0580ffff0bff2cff0bff428080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff14ffff04ffff0112ffff04ff80ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
+pub const XCHANDLES_EXPIRE_PUZZLE: [u8; 1210] =
+    hex!("ff02ffff01ff02ffff03ffff22ffff09ffff02ff2effff04ff02ffff04ff82015fff80808080ff4f80ffff09ffff02ff2effff04ff02ffff04ff8205dfff80808080ff81ef8080ffff01ff04ff2fffff04ffff04ff10ffff04ff83017fdfff808080ffff04ffff04ff10ffff04ff82bfdfff808080ffff04ffff04ff38ffff04ffff0effff0178ffff0bffff0102ffff0bffff0101ff819f80ffff0bffff0102ffff0bffff0101ffff10ffff06ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff83017fdf8080ff8303ffdf808080ff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff26ffff04ff02ffff04ffff0bffff0101ff819f80ffff04ff825fdfffff04ff82bfdfffff04ff8302ffdfff80808080808080ff8080808080ffff04ffff02ff2affff04ff02ffff04ff0bffff04ffff02ff26ffff04ff02ffff04ffff0bffff0101ff819f80ffff04ff825fdfffff04ffff10ffff06ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff83017fdf80ffff04ff8303ffdfff80808080808080ff8080808080ffff04ffff04ff14ffff04ffff0113ffff04ffff0101ffff04ffff02ff82015fffff04ffff02ff3affff04ff02ffff04ff05ffff04ff8217dfffff04ffff0bffff0102ffff0bffff0102ff822fdfffff0bffff0101ff819f8080ffff0bffff0102ffff0bffff0101ff83017fdf80ff8303ffdf8080ff808080808080ffff04ff8202dfff80808080ffff04ffff05ffff02ff8205dfffff04ff819fffff04ff82bfdfffff04ff83017fdfffff04ff820bdfff80808080808080ff808080808080ff8080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333eff42ff02ff02ffff03ff05ffff01ff0bff72ffff02ff36ffff04ff02ffff04ff09ffff04ffff02ff3cffff04ff02ffff04ff0dff80808080ff808080808080ffff016280ff0180ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff04ff28ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ff0bff52ffff02ff36ffff04ff02ffff04ff05ffff04ffff02ff3cffff04ff02ffff04ff07ff80808080ff808080808080ffffff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ff0bffff0bffff0102ffff0bffff0101ff1780ff2f808080ff0bff2cffff0bff2cff62ff0580ffff0bff2cff0bff428080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff14ffff04ffff0112ffff04ff80ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
 
 pub const XCHANDLES_EXPIRE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    af9bbc06ae90f37bbc6385f32fc8ed7d9190e7bd1bad1bbef60e7ff243292784
+    f73acce4cc0cc802f039b11d3c3ca0d977d27ac4b662d1c4f5777df89963ba33
     "
 ));
 
@@ -97,7 +97,6 @@ pub const XCHANDLES_EXPIRE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
 pub struct XchandlesExpireActionArgs {
     pub precommit_1st_curry_hash: Bytes32,
     pub slot_1st_curry_hash: Bytes32,
-    pub payout_puzzle_hash: Bytes32,
 }
 
 impl XchandlesExpireActionArgs {
@@ -110,10 +109,10 @@ impl XchandlesExpireActionArgs {
             precommit_1st_curry_hash: PrecommitLayer::<()>::first_curry_hash(
                 SingletonStruct::new(launcher_id).tree_hash().into(),
                 relative_block_height,
+                payout_puzzle_hash,
             )
             .into(),
             slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id).into(),
-            payout_puzzle_hash,
         }
     }
 }

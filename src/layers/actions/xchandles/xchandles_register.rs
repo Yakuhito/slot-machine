@@ -13,20 +13,20 @@ use crate::{PrecommitLayer, Slot, SpendContextExt};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesRegisterAction {
     pub launcher_id: Bytes32,
-    pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
+    pub payout_puzzle_hash: Bytes32,
 }
 
 impl XchandlesRegisterAction {
     pub fn new(
         launcher_id: Bytes32,
-        precommit_payout_puzzle_hash: Bytes32,
         relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
     ) -> Self {
         Self {
             launcher_id,
-            precommit_payout_puzzle_hash,
             relative_block_height,
+            payout_puzzle_hash,
         }
     }
 }
@@ -40,7 +40,7 @@ impl Layer for XchandlesRegisterAction {
             args: XchandlesRegisterActionArgs::new(
                 self.launcher_id,
                 self.relative_block_height,
-                self.precommit_payout_puzzle_hash,
+                self.payout_puzzle_hash,
             ),
         }
         .to_clvm(&mut ctx.allocator)?)
@@ -76,16 +76,16 @@ impl ToTreeHash for XchandlesRegisterAction {
         XchandlesRegisterActionArgs::curry_tree_hash(
             self.launcher_id,
             self.relative_block_height,
-            self.precommit_payout_puzzle_hash,
+            self.payout_puzzle_hash,
         )
     }
 }
 
-pub const XCHANDLES_REGISTER_PUZZLE: [u8; 1427] = hex!("ff02ffff01ff02ffff03ffff22ffff09ff819fffff0bffff0101ff82015f8080ffff15ff819fff8202df80ffff15ff8205dfff819f80ffff09ff4fffff02ff2effff04ff02ffff04ff822fdfff8080808080ffff09ff81afffff02ff2effff04ff02ffff04ff820bdfff808080808080ffff01ff02ff36ffff04ff02ffff04ff05ffff04ff0bffff04ff17ffff04ff2fffff04ff821fdfffff04ff819fffff04ffff0bffff0101ff819f80ffff04ffff0bffff0101ff8202df80ffff04ffff0bffff0101ff8205df80ffff04ffff02ff820bdfffff04ff82015fffff04ff8217dfff80808080ff80808080808080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333effff4202ffff02ffff03ff05ffff01ff0bff81fcffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff2cffff04ff02ffff04ff0dff80808080ff808080808080ffff0181dc80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff04ff28ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff0bff81bcffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff2cffff04ff02ffff04ff07ff80808080ff808080808080ff0bffff0102ff05ffff0bffff0102ffff0bffff0102ff0bff1780ff2f8080ffffff0bff34ffff0bff34ff81dcff0580ffff0bff34ff0bff819c8080ff04ff2fffff04ffff04ff10ffff04ff8205dfff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff822fdfffff04ff8205ffffff04ff825fdfff80808080808080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8205ffffff04ff8202ffffff04ff82bfdfffff04ff83017fdfff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff82017fffff04ff8202ffffff04ff8205ffffff04ffff0bffff0102ffff0bffff0101ffff10ff8205dfff821bff8080ff8202df80ff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff822fdfffff04ff82017fffff04ff825fdfff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8205ffffff04ff82017fffff04ff82bfdfffff04ff83017fdfff80808080808080ff8080808080ffff04ffff04ff38ffff04ffff0effff0172ffff0bffff0102ff81bfffff0bffff0102ffff0bffff0101ffff10ff821bffff8205df8080ff8202df808080ff808080ffff04ffff04ff24ffff04ffff0113ffff04ff17ffff04ffff02ff819fffff04ffff02ff2affff04ff02ffff04ff05ffff04ff8217dfffff04ffff0bffff0102ffff0bffff0102ff820bdfff81bf80ffff0bffff0102ffff0bffff0101ff8205df80ff8202df8080ff808080808080ffff04ff82015fff80808080ffff04ff8213ffff808080808080ff80808080808080808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff24ffff04ffff0112ffff04ff80ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
+pub const XCHANDLES_REGISTER_PUZZLE: [u8; 1406] = hex!("ff02ffff01ff02ffff03ffff22ffff09ff4fffff0bffff0101ff81af8080ffff15ff4fff82016f80ffff15ff8202efff4f80ffff09ff27ffff02ff2effff04ff02ffff04ff8217efff8080808080ffff09ff57ffff02ff2effff04ff02ffff04ff8205efff808080808080ffff01ff02ff36ffff04ff02ffff04ff05ffff04ff0bffff04ff17ffff04ff820fefffff04ff4fffff04ffff0bffff0101ff4f80ffff04ffff0bffff0101ff82016f80ffff04ffff0bffff0101ff8202ef80ffff04ffff02ff8205efffff04ff81afffff04ff820befff80808080ff808080808080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333effff4202ffff02ffff03ff05ffff01ff0bff81fcffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff2cffff04ff02ffff04ff0dff80808080ff808080808080ffff0181dc80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff04ff28ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff0bff81bcffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff2cffff04ff02ffff04ff07ff80808080ff808080808080ff0bffff0102ff05ffff0bffff0102ffff0bffff0102ff0bff1780ff2f8080ffffff0bff34ffff0bff34ff81dcff0580ffff0bff34ff0bff819c8080ff04ff17ffff04ffff04ff10ffff04ff8202efff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff82017fffff04ff8217efffff04ff8202ffffff04ff822fefff80808080808080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff82017fffff04ff825fefffff04ff82bfefff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff81bfffff04ff82017fffff04ff8202ffffff04ffff0bffff0102ffff0bffff0101ffff10ff8202efff820dff8080ff82016f80ff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff82017fffff04ff8217efffff04ff81bfffff04ff822fefff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff81bfffff04ff825fefffff04ff82bfefff80808080808080ff8080808080ffff04ffff04ff38ffff04ffff0effff0172ffff0bffff0102ff5fffff0bffff0102ffff0bffff0101ffff10ff820dffff8202ef8080ff82016f808080ff808080ffff04ffff04ff24ffff04ffff0113ffff04ffff0101ffff04ffff02ff4fffff04ffff02ff2affff04ff02ffff04ff05ffff04ff820befffff04ffff0bffff0102ffff0bffff0102ff8205efff5f80ffff0bffff0102ffff0bffff0101ff8202ef80ff82016f8080ff808080808080ffff04ff81afff80808080ffff04ff8209ffff808080808080ff80808080808080808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff24ffff04ffff0112ffff04ff80ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
 
 pub const XCHANDLES_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    38c71e1359fc5d22fb8bc7b470944af5175c269825f6523c4ead823eb28cf63a
+    f29bb6909b3679d26999dd45a545d933be2c963e18c092b45778301d1b0bd927
     "
 ));
 
@@ -94,7 +94,6 @@ pub const XCHANDLES_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
 pub struct XchandlesRegisterActionArgs {
     pub precommit_1st_curry_hash: Bytes32,
     pub slot_1st_curry_hash: Bytes32,
-    pub payout_puzzle_hash: Bytes32,
 }
 
 impl XchandlesRegisterActionArgs {
@@ -107,10 +106,10 @@ impl XchandlesRegisterActionArgs {
             precommit_1st_curry_hash: PrecommitLayer::<()>::first_curry_hash(
                 SingletonStruct::new(launcher_id).tree_hash().into(),
                 relative_block_height,
+                payout_puzzle_hash,
             )
             .into(),
             slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id).into(),
-            payout_puzzle_hash,
         }
     }
 }

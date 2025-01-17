@@ -22,7 +22,7 @@ pub struct PrecommitCoin<V> {
 
     pub controller_singleton_struct_hash: Bytes32,
     pub relative_block_height: u32,
-    pub precommit_payout_puzzle_hash: Bytes32,
+    pub payout_puzzle_hash: Bytes32,
     pub refund_puzzle_hash: Bytes32,
     pub value: V,
 }
@@ -36,7 +36,7 @@ impl<V> PrecommitCoin<V> {
         asset_id: Bytes32,
         controller_singleton_struct_hash: Bytes32,
         relative_block_height: u32,
-        precommit_payout_puzzle_hash: Bytes32,
+        payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
         value: V,
         precommit_amount: u64,
@@ -50,6 +50,7 @@ impl<V> PrecommitCoin<V> {
         let inner_puzzle_hash = PrecommitLayer::<V>::puzzle_hash(
             controller_singleton_struct_hash,
             relative_block_height,
+            payout_puzzle_hash,
             refund_puzzle_hash,
             value_hash,
         );
@@ -65,7 +66,7 @@ impl<V> PrecommitCoin<V> {
             inner_puzzle_hash: inner_puzzle_hash.into(),
             controller_singleton_struct_hash,
             relative_block_height,
-            precommit_payout_puzzle_hash,
+            payout_puzzle_hash,
             refund_puzzle_hash,
             value,
         })
@@ -75,6 +76,7 @@ impl<V> PrecommitCoin<V> {
         asset_id: Bytes32,
         controller_singleton_struct_hash: Bytes32,
         relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
         value_hash: TreeHash,
     ) -> TreeHash {
@@ -83,6 +85,7 @@ impl<V> PrecommitCoin<V> {
             PrecommitLayer::<V>::puzzle_hash(
                 controller_singleton_struct_hash,
                 relative_block_height,
+                payout_puzzle_hash,
                 refund_puzzle_hash,
                 value_hash,
             ),
@@ -98,6 +101,7 @@ impl<V> PrecommitCoin<V> {
             PrecommitLayer::<V>::new(
                 self.controller_singleton_struct_hash,
                 self.relative_block_height,
+                self.payout_puzzle_hash,
                 self.refund_puzzle_hash,
                 self.value.clone(),
             ),
@@ -120,6 +124,7 @@ impl<V> PrecommitCoin<V> {
             PrecommitLayer::<V>::new(
                 self.controller_singleton_struct_hash,
                 self.relative_block_height,
+                self.payout_puzzle_hash,
                 self.refund_puzzle_hash,
                 self.value.clone(),
             ),
