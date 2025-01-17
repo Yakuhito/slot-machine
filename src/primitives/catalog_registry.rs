@@ -10,9 +10,9 @@ use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    ActionLayer, ActionLayerSolution, CatalogPrecommitValue, CatalogRegisterAction,
-    CatalogRegisterActionSolution, DelegatedStateAction, DelegatedStateActionSolution,
-    ANY_METADATA_UPDATER_HASH,
+    ActionLayer, ActionLayerSolution, CatalogPrecommitValue, CatalogRefundAction,
+    CatalogRefundActionSolution, CatalogRegisterAction, CatalogRegisterActionSolution,
+    DelegatedStateAction, DelegatedStateActionSolution, ANY_METADATA_UPDATER_HASH,
 };
 
 use super::{
@@ -78,6 +78,7 @@ impl CatalogRegistry {
 #[allow(clippy::large_enum_variant)]
 pub enum CatalogRegistryAction {
     Register(CatalogRegisterActionSolution<NodePtr, ()>),
+    Refund(CatalogRefundActionSolution<NodePtr, ()>),
     UpdatePrice(DelegatedStateActionSolution<CatalogRegistryState>),
 }
 
@@ -96,6 +97,14 @@ impl CatalogRegistry {
             .map(|action| match action {
                 CatalogRegistryAction::Register(solution) => {
                     let layer = CatalogRegisterAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                CatalogRegistryAction::Refund(solution) => {
+                    let layer = CatalogRefundAction::from_info(&self.info);
 
                     let puzzle = layer.construct_puzzle(ctx)?;
                     let solution = layer.construct_solution(ctx, solution)?;
@@ -303,6 +312,71 @@ impl CatalogRegistry {
             )),
             new_catalog,
             new_slots,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn refund(
+        self,
+        ctx: &mut SpendContext,
+        tail_hash: Bytes32,
+        neighbors_hash: Bytes32,
+        precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
+    ) -> Result<(Conditions, CatalogRegistry), DriverError> {
+        // calculate announcement
+        let refund_announcement: Bytes32 =
+            clvm_tuple!(tail_hash, precommit_coin.value.initial_inner_puzzle_hash)
+                .tree_hash()
+                .into();
+        let mut refund_announcement: Vec<u8> = refund_announcement.to_vec();
+        refund_announcement.insert(0, b'$');
+
+        // spend precommit coin
+        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
+        let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
+        precommit_coin.spend(
+            ctx,
+            0, // mode 0 = refund
+            spender_inner_puzzle_hash,
+        )?;
+
+        // then, spend self
+        let refund = CatalogRegistryAction::Refund(CatalogRefundActionSolution {
+            precommited_cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                precommit_coin.asset_id.tree_hash().into(),
+            )?,
+            precommited_cat_maker_solution: (),
+            tail_hash,
+            initial_nft_owner_ph: initial_inner_puzzle_hash,
+            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            precommit_amount: precommit_coin.coin.amount,
+            neighbors_hash,
+        });
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, vec![refund])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let new_catalog = CatalogRegistry::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child catalog".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        Ok((
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                my_coin.puzzle_hash,
+                refund_announcement,
+            )),
+            new_catalog,
         ))
     }
 }
