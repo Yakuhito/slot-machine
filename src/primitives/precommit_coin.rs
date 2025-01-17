@@ -24,6 +24,7 @@ pub struct PrecommitCoin<V> {
     pub relative_block_height: u32,
     pub payout_puzzle_hash: Bytes32,
     pub refund_puzzle_hash: Bytes32,
+    pub refund_info_hash: Bytes32,
     pub value: V,
 }
 
@@ -38,6 +39,7 @@ impl<V> PrecommitCoin<V> {
         relative_block_height: u32,
         payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
+        refund_info_hash: Bytes32,
         value: V,
         precommit_amount: u64,
     ) -> Result<Self, DriverError>
@@ -52,6 +54,7 @@ impl<V> PrecommitCoin<V> {
             relative_block_height,
             payout_puzzle_hash,
             refund_puzzle_hash,
+            refund_info_hash,
             value_hash,
         );
 
@@ -68,6 +71,7 @@ impl<V> PrecommitCoin<V> {
             relative_block_height,
             payout_puzzle_hash,
             refund_puzzle_hash,
+            refund_info_hash,
             value,
         })
     }
@@ -78,6 +82,7 @@ impl<V> PrecommitCoin<V> {
         relative_block_height: u32,
         payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
+        refund_info_hash: Bytes32,
         value_hash: TreeHash,
     ) -> TreeHash {
         CatArgs::curry_tree_hash(
@@ -87,6 +92,7 @@ impl<V> PrecommitCoin<V> {
                 relative_block_height,
                 payout_puzzle_hash,
                 refund_puzzle_hash,
+                refund_info_hash,
                 value_hash,
             ),
         )
@@ -103,6 +109,7 @@ impl<V> PrecommitCoin<V> {
                 self.relative_block_height,
                 self.payout_puzzle_hash,
                 self.refund_puzzle_hash,
+                self.refund_info_hash,
                 self.value.clone(),
             ),
         );
@@ -126,6 +133,7 @@ impl<V> PrecommitCoin<V> {
                 self.relative_block_height,
                 self.payout_puzzle_hash,
                 self.refund_puzzle_hash,
+                self.refund_info_hash,
                 self.value.clone(),
             ),
         );

@@ -326,6 +326,7 @@ impl XchandlesRegistry {
             start_time,
             secret_hash: secret.tree_hash().into(),
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            refund_info_hash_hash: precommit_coin.refund_info_hash.tree_hash().into(),
             left_left_value_hash: left_slot_value.neighbors.left_value.tree_hash().into(),
             left_data_hash: left_slot_value.after_neigbors_data_hash().into(),
             right_right_value_hash: right_slot_value.neighbors.right_value.tree_hash().into(),
@@ -437,6 +438,7 @@ impl XchandlesRegistry {
                 .get_puzzle(ctx)?,
             expired_handle_pricing_puzzle_solution: num_years,
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            refund_info_hash_hash: precommit_coin.refund_info_hash.tree_hash().into(),
             secret_hash: precommit_coin
                 .value
                 .secret_and_handle

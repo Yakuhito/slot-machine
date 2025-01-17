@@ -75,6 +75,7 @@ impl CatalogRegistry {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum CatalogRegistryAction {
     Register(CatalogRegisterActionSolution<NodePtr, ()>),
     UpdatePrice(DelegatedStateActionSolution<CatalogRegistryState>),
@@ -264,6 +265,7 @@ impl CatalogRegistry {
             tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            refund_info_hash_hash: precommit_coin.refund_info_hash.tree_hash().into(),
             left_tail_hash: left_slot_value.asset_id,
             left_left_tail_hash: left_slot_value.neighbors.left_value,
             right_tail_hash: right_slot_value.asset_id,

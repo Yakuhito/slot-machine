@@ -31,6 +31,7 @@
     tail_hash ; full TAIL in the reveal of the pre-commit coin
     initial_nft_owner_ph ; also included in the pre-commit coin
     refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
+    refund_info_hash_hash ; needed to compute precommit coin puzzle hash
     left_tail_hash left_left_tail_hash ; left slot info
     right_tail_hash right_right_tail_hash . ; right slot info
     my_id
@@ -122,6 +123,7 @@
               (list
                 (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                   refund_puzzle_hash_hash
+                  refund_info_hash_hash
                   (sha256 2
                     (sha256 1 initial_nft_owner_ph)
                     tail_hash

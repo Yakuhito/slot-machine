@@ -10,6 +10,7 @@
     PAYOUT_PUZZLE_HASH ; where the funds go if message=1 (use precommit to do something)
     ; 2nd curry
     REFUND_PUZZLE_HASH ; where the funds go if message=0 (refund)
+    REFUND_INFO_HASH ; e.g., CAT maker hash in use when this coin was created
     VALUE
     spend_mode ; 0 = refund, 1 = spend to payout puzzle hash
     my_amount

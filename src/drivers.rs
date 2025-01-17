@@ -719,6 +719,7 @@ mod tests {
                 catalog_constants.relative_block_height,
                 catalog_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),
+                Bytes32::default(), // NOT SAFE ON AN ACTUAL NETWORK
                 value,
                 reg_amount,
             )?;
@@ -978,6 +979,7 @@ mod tests {
                 xchandles_constants.relative_block_height,
                 xchandles_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),
+                Bytes32::default(), // NOT SAFE ON AN ACTUAL NETWORK
                 value,
                 reg_amount,
             )?;
@@ -1250,6 +1252,7 @@ mod tests {
             xchandles_constants.relative_block_height,
             xchandles_constants.precommit_payout_puzzle_hash,
             refund_puzzle_hash.into(),
+            Bytes32::default(), // NOT SAFE ON AN ACTUAL NETWORK
             value,
             reg_amount,
         )?;
