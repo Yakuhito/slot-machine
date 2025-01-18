@@ -144,6 +144,7 @@ pub struct XchandlesRefundActionSolution<CMP, CMS, PP, PS> {
     pub precommited_pricing_puzzle_solution: PS,
     pub secret_hash: Bytes32,
     pub precommit_value_rest_hash: Bytes32,
+    pub refund_puzzle_hash_hash: Bytes32,
     pub precommit_amount: u64,
     #[clvm(rest)]
     pub rest_hash: Bytes32,

@@ -802,6 +802,7 @@ impl XchandlesRegistry {
                 .tree_hash()
                 .into(),
             precommit_value_rest_hash: precommit_coin.value.after_secret_and_handle_hash().into(),
+            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
             precommit_amount: precommit_coin.coin.amount,
             rest_hash: if let Some(slot) = slot {
                 slot.info

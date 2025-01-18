@@ -1615,9 +1615,7 @@ mod tests {
         let _new_payment_cat =
             payment_cat.wrapped_child(minter_puzzle_hash, payment_cat.coin.amount - amount_to_use);
 
-        println!("yak1");
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-        println!("yak2");
         let slot = slots
             .iter()
             .find(|s| s.info.value.unwrap().handle_hash == handle.tree_hash().into());
@@ -1629,6 +1627,7 @@ mod tests {
             num_years: 1,
         }
         .to_clvm(&mut ctx.allocator)?;
+        println!("yak1");
         let (secure_cond, _new_registry) = registry.refund(
             ctx,
             precommit_coin,
@@ -1636,6 +1635,7 @@ mod tests {
             precommited_pricing_puzzle_solution,
             slot.cloned(),
         )?;
+        println!("yak2");
 
         let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
         let sec_coin = sim.new_coin(ctx.tree_hash(sec_puzzle).into(), 0);
