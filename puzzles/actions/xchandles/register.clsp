@@ -18,7 +18,7 @@
   SLOT_1ST_CURRY_HASH ; after 1st curry
   Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
   ; pricing_solution's first element MUST be handle_reveal
-  (handle_hash left_value right_value pricing_puzzle_reveal pricing_solution . solution) ; see the 'main' function for rest of arguments 
+  (handle_hash left_value right_value pricing_puzzle_reveal pricing_solution . solution) ; see the 'main' function for rest of arguments
 )
   (include condition_codes.clib)
   (include sha256tree.clib)
@@ -117,7 +117,7 @@
                     (list
                         (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                             refund_puzzle_hash_hash
-                            (sha256 1 
+                            (sha256 1
                                 (sha256 2
                                     (sha256 2 (f Current_State) (sha256tree cat_maker_solution))
                                     (sha256 2 (f (r Current_State)) pricing_solution_hash)

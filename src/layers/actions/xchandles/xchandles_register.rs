@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn test_xchandles_factor_pricing_puzzle() -> Result<(), DriverError> {
+    fn test_factor_pricing_puzzle() -> Result<(), DriverError> {
         let mut ctx = SpendContext::new();
         let base_price = 1; // puzzle will only spit out factors
 

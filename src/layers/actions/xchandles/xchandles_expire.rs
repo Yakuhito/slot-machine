@@ -289,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn test_xchandles_exponential_premium_puzzle() -> Result<(), DriverError> {
+    fn test_exponential_premium_puzzle() -> Result<(), DriverError> {
         let mut ctx = SpendContext::new();
 
         let puzzle =

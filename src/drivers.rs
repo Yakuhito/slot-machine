@@ -472,11 +472,11 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
+        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
-        XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
+        XchandlesRegistryAction, XchandlesSecretAndHandle, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -1220,7 +1220,6 @@ mod tests {
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-
             // call the 'register' action on CNS
             slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
 
@@ -1307,8 +1306,11 @@ mod tests {
                 };
             };
 
+            println!("left slot: {:?}", left_slot);
+            println!("right slot: {:?}", right_slot);
             let (secure_cond, new_registry, new_slots) =
                 registry.register_handle(ctx, left_slot, right_slot, precommit_coin, base_price)?;
+
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
             let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
 
@@ -1317,7 +1319,11 @@ mod tests {
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
             sim.pass_time(100); // registration start was at timestamp 100
-            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            println!("yak102");
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            sim.spend_coins(spends, &[user_sk.clone()])?;
+            println!("yak102");
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
@@ -1396,7 +1402,9 @@ mod tests {
             payment_cat_amount -= pay_for_extension;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
+            println!("yak104");
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+            println!("yak105");
 
             slots.retain(|s| *s != extension_slot);
             slots.extend(new_slots.clone());
@@ -1512,7 +1520,7 @@ mod tests {
         sim.set_next_timestamp(buy_time)?;
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
-        let (expire_conds, _new_registry, _new_slots) =
+        let (expire_conds, new_registry, _new_slots) =
             registry.expire_handle(ctx, *initial_slot, 1, base_price, precommit_coin)?;
 
         // assert expire conds
@@ -1527,7 +1535,126 @@ mod tests {
             conds_solution_program,
         ));
 
+        println!("yak103");
         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        println!("yak104");
+        registry = new_registry;
+
+        // Test refunds
+        println!("yak100");
+        let handle_to_refund: Option<String> = Some("yakuhitooooo".to_string());
+        let used_base_price = base_price;
+        let amount_to_use = XchandlesFactorPricingPuzzleArgs::get_price(
+            used_base_price,
+            &handle_to_refund.clone().unwrap(),
+            1,
+        );
+
+        // create precommit coin
+        let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
+        // pretty much a random handle - we're not actually registering it
+        let handle: String = if let Some(h) = handle_to_refund.as_ref() {
+            h.clone()
+        } else {
+            "refundmebaby7".to_string()
+        };
+
+        let value = XchandlesPrecommitValue {
+            secret_and_handle: XchandlesSecretAndHandle {
+                secret: Bytes32::default(),
+                handle: handle.clone(),
+            },
+            start_time: 0,
+            owner_launcher_id: Bytes32::default(),
+            resolved_launcher_id: Bytes32::default(),
+        };
+
+        let refund_puzzle = ctx.alloc(&1)?;
+        let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
+        let precommit_coin = PrecommitCoin::new(
+            ctx,
+            payment_cat.coin.coin_id(),
+            payment_cat.child_lineage_proof(),
+            payment_cat.asset_id,
+            SingletonStruct::new(registry.info.launcher_id)
+                .tree_hash()
+                .into(),
+            registry.info.constants.relative_block_height,
+            registry.info.constants.precommit_payout_puzzle_hash,
+            refund_puzzle_hash.into(),
+            clvm_tuple!(
+                clvm_tuple!(
+                    DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
+                    ()
+                ),
+                clvm_tuple!(
+                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
+                    XchandlesFactorPricingSolution {
+                        handle: handle.clone(),
+                        num_years: 1
+                    }
+                )
+            )
+            .tree_hash()
+            .into(),
+            value,
+            amount_to_use,
+        )?;
+
+        let payment_cat_inner_spend = minter_p2.spend_with_conditions(
+            ctx,
+            Conditions::new()
+                .create_coin(precommit_coin.inner_puzzle_hash, amount_to_use, None)
+                .create_coin(
+                    minter_puzzle_hash,
+                    payment_cat.coin.amount - amount_to_use,
+                    None,
+                ),
+        )?;
+        Cat::spend_all(
+            ctx,
+            &[CatSpend {
+                cat: payment_cat,
+                inner_spend: payment_cat_inner_spend,
+                extra_delta: 0,
+            }],
+        )?;
+
+        let _new_payment_cat =
+            payment_cat.wrapped_child(minter_puzzle_hash, payment_cat.coin.amount - amount_to_use);
+
+        println!("yak1");
+        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        println!("yak2");
+        let slot = slots
+            .iter()
+            .find(|s| s.info.value.unwrap().handle_hash == handle.tree_hash().into());
+
+        let precommited_pricing_puzzle_reveal =
+            XchandlesFactorPricingPuzzleArgs::new(used_base_price).construct_puzzle(ctx)?;
+        let precommited_pricing_puzzle_solution = XchandlesFactorPricingSolution {
+            handle: handle_to_refund.unwrap(),
+            num_years: 1,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let (secure_cond, _new_registry) = registry.refund(
+            ctx,
+            precommit_coin,
+            precommited_pricing_puzzle_reveal,
+            precommited_pricing_puzzle_solution,
+            slot.cloned(),
+        )?;
+
+        let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
+        let sec_coin = sim.new_coin(ctx.tree_hash(sec_puzzle).into(), 0);
+
+        let sec_program = ctx.serialize(&sec_puzzle)?;
+        let solution_program = ctx.serialize(&NodePtr::NIL)?;
+        ctx.insert(CoinSpend::new(sec_coin, sec_program, solution_program));
+
+        println!("yak3");
+        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        println!("yak4");
 
         Ok(())
     }

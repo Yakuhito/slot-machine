@@ -157,12 +157,22 @@ impl XchandlesSlotValue {
         }
     }
 
+    pub fn after_handle_data_hash(&self) -> TreeHash {
+        clvm_tuple!(
+            self.neighbors,
+            clvm_tuple!(
+                self.expiration,
+                clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id),
+            )
+        )
+        .tree_hash()
+    }
+
     pub fn after_neigbors_data_hash(&self) -> TreeHash {
-        XchandlesSlotValueWithoutNameAndNeighbors {
-            expiration: self.expiration,
-            owner_launcher_id: self.owner_launcher_id,
-            resolved_launcher_id: self.resolved_launcher_id,
-        }
+        clvm_tuple!(
+            self.expiration,
+            clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id),
+        )
         .tree_hash()
     }
 
@@ -208,13 +218,4 @@ impl PartialOrd for XchandlesSlotValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
-}
-
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
-pub struct XchandlesSlotValueWithoutNameAndNeighbors {
-    pub expiration: u64,
-    pub owner_launcher_id: Bytes32,
-    #[clvm(rest)]
-    pub resolved_launcher_id: Bytes32,
 }

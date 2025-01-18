@@ -4,7 +4,7 @@ use chia::{
     puzzles::singleton::SINGLETON_TOP_LAYER_PUZZLE_HASH,
 };
 use chia_wallet_sdk::{DriverError, Layer, Puzzle, SpendContext};
-use clvm_traits::{FromClvm, ToClvm};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
@@ -235,5 +235,13 @@ impl XchandlesPrecommitValue {
             owner_launcher_id,
             resolved_launcher_id,
         }
+    }
+
+    pub fn after_secret_and_handle_hash(&self) -> TreeHash {
+        clvm_tuple!(
+            self.start_time,
+            clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id)
+        )
+        .tree_hash()
     }
 }

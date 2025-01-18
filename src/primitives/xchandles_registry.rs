@@ -19,8 +19,9 @@ use crate::{
     XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
     XchandlesExtendAction, XchandlesExtendActionSolution, XchandlesFactorPricingPuzzleArgs,
     XchandlesFactorPricingSolution, XchandlesOracleAction, XchandlesOracleActionSolution,
-    XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegisterActionSolution,
-    XchandlesUpdateAction, XchandlesUpdateActionSolution,
+    XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRefundActionSolution,
+    XchandlesRegisterAction, XchandlesRegisterActionSolution, XchandlesUpdateAction,
+    XchandlesUpdateActionSolution,
 };
 
 use super::{
@@ -98,6 +99,7 @@ pub enum XchandlesRegistryAction {
     Register(XchandlesRegisterActionSolution<NodePtr, XchandlesFactorPricingSolution, NodePtr, ()>),
     Update(XchandlesUpdateActionSolution),
     UpdateState(DelegatedStateActionSolution<XchandlesRegistryState>),
+    Refund(XchandlesRefundActionSolution<NodePtr, (), NodePtr, NodePtr>),
 }
 
 impl XchandlesRegistry {
@@ -181,6 +183,18 @@ impl XchandlesRegistry {
                     )?;
 
                     Ok(Spend::new(puzzle, solution))
+                }
+                XchandlesRegistryAction::Refund(solution) => {
+                    let layer = XchandlesRefundAction::new(
+                        self.info.launcher_id,
+                        self.info.constants.relative_block_height,
+                        self.info.constants.precommit_payout_puzzle_hash,
+                    );
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -729,6 +743,102 @@ impl XchandlesRegistry {
             Conditions::new().send_message(18, msg.into(), vec![ctx.alloc(&my_coin.puzzle_hash)?]),
             new_xchandles,
             new_slots,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn refund(
+        self,
+        ctx: &mut SpendContext,
+        precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
+        precommited_pricing_puzzle_reveal: NodePtr,
+        precommited_pricing_puzzle_solution: NodePtr,
+        slot: Option<Slot<XchandlesSlotValue>>,
+    ) -> Result<(Conditions, XchandlesRegistry), DriverError> {
+        // calculate announcement
+        let refund_announcement = precommit_coin.value.tree_hash();
+        let mut refund_announcement: Vec<u8> = refund_announcement.to_vec();
+        refund_announcement.insert(0, b'$');
+
+        // spend precommit coin
+        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
+        precommit_coin.spend(
+            ctx,
+            0, // mode 0 = refund
+            spender_inner_puzzle_hash,
+        )?;
+
+        // if there's a slot, spend it
+        if let Some(slot) = slot {
+            slot.spend(ctx, spender_inner_puzzle_hash)?;
+        }
+
+        // then, spend self
+        let refund = XchandlesRegistryAction::Refund(XchandlesRefundActionSolution {
+            handle_hash: precommit_coin
+                .value
+                .secret_and_handle
+                .handle
+                .tree_hash()
+                .into(),
+            precommited_cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                precommit_coin.asset_id.tree_hash().into(),
+            )?,
+            precommited_cat_maker_hash: DefaultCatMakerArgs::curry_tree_hash(
+                precommit_coin.asset_id.tree_hash().into(),
+            )
+            .into(),
+            precommited_cat_maker_solution: (),
+            precommited_pricing_puzzle_reveal,
+            precommited_pricing_puzzle_hash: ctx
+                .tree_hash(precommited_pricing_puzzle_reveal)
+                .into(),
+            precommited_pricing_puzzle_solution,
+            secret_hash: precommit_coin
+                .value
+                .secret_and_handle
+                .secret
+                .tree_hash()
+                .into(),
+            precommit_value_rest_hash: precommit_coin.value.after_secret_and_handle_hash().into(),
+            precommit_amount: precommit_coin.coin.amount,
+            rest_hash: if let Some(slot) = slot {
+                slot.info
+                    .value
+                    .ok_or(DriverError::Custom(
+                        "Slot does not contain value".to_string(),
+                    ))?
+                    .after_handle_data_hash()
+                    .into()
+            } else {
+                Bytes32::default()
+            },
+        });
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, vec![refund])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let new_xchandles = XchandlesRegistry::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child xchandles registry".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        Ok((
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                my_coin.puzzle_hash,
+                refund_announcement,
+            )),
+            new_xchandles,
         ))
     }
 }
