@@ -17,7 +17,8 @@
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
   Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
-  (handle_hash handle_reveal left_value right_value pricing_puzzle_reveal pricing_solution . solution) ; see the 'main' function for rest of arguments 
+  ; pricing_solution's first element MUST be handle_reveal
+  (handle_hash left_value right_value pricing_puzzle_reveal pricing_solution . solution) ; see the 'main' function for rest of arguments 
 )
   (include condition_codes.clib)
   (include sha256tree.clib)
@@ -55,6 +56,7 @@
     left_value_hash
     right_value_hash
     (total_price . registered_time)
+    pricing_solution_hash
   )
     (c
         Current_State ; new state
@@ -116,7 +118,12 @@
                     (list
                         (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                             refund_puzzle_hash_hash
-                            refund_info_hash_hash
+                            (sha256 1 
+                                (sha256 2
+                                    (sha256 2 (f Current_State) (sha256tree cat_maker_solution))
+                                    (sha256 2 (f (r Current_State)) pricing_solution_hash)
+                                ) ; REFUND_INFO_HASH where REFUND_INFO = (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution))
+                            ) ; hash of REFUND_INFO_HASH
                             (sha256 2
                                 (sha256 2 
                                     secret_hash
@@ -138,7 +145,7 @@
   )
 
   (if (all
-        (= handle_hash (sha256 1 handle_reveal))
+        (= handle_hash (sha256 1 (f pricing_solution)))
         (> handle_hash left_value)
         (> right_value handle_hash)
         (= (f Current_State) (sha256tree (f solution))) ; cat maker puzzle reveal is correct
@@ -152,13 +159,8 @@
             (sha256 1 handle_hash)
             (sha256 1 left_value) 
             (sha256 1 right_value)
-            (a
-                pricing_puzzle_reveal
-                (list 
-                    handle_reveal
-                    pricing_solution
-                )
-            )
+            (a pricing_puzzle_reveal pricing_solution)
+            (sha256tree pricing_solution)
         )
         ; else
         (x)
