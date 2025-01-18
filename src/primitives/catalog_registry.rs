@@ -342,10 +342,15 @@ impl CatalogRegistry {
 
         // then, spend self
         let refund = CatalogRegistryAction::Refund(CatalogRefundActionSolution {
+            refund_info_hash: precommit_coin.refund_info_hash,
             precommited_cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
                 precommit_coin.asset_id.tree_hash().into(),
             )?,
+            precommited_cat_maker_hash: DefaultCatMakerArgs::curry_tree_hash(
+                precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            )
+            .into(),
             precommited_cat_maker_solution: (),
             tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,

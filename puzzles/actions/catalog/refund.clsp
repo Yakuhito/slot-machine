@@ -11,8 +11,9 @@
   SLOT_1ST_CURRY_HASH ; after 1st curry
   Current_State ; Truth = (cat_maker_puzzle_hash . registration_price)
   ( 
+    refund_info_hash
     precommited_cat_maker_reveal
-    precommited_cat_maker_puzzle_hash ; in precommit coin, this is the REFUND_INFO_HASH
+    precommited_cat_maker_hash
     precommited_cat_maker_solution
     tail_hash ; full TAIL in the reveal of the pre-commit coin
     initial_nft_owner_ph ; also included in the pre-commit coin
@@ -30,8 +31,13 @@
     (sha256 2 (sha256 1 value) neighbors_hash) 
   )
 
-  ; REFUND_INFO_HASH = (sha256 1 precommited_cat_maker_puzzle_hash)
-  (if (= (sha256tree precommited_cat_maker_reveal) precommited_cat_maker_puzzle_hash)
+  (if (all
+    (= 
+      (sha256 2 precommited_cat_maker_hash (sha256tree precommited_cat_maker_solution))
+      refund_info_hash
+    )
+    (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
+  )
     (c
       Current_State ; new state
 
@@ -49,7 +55,10 @@
         )
 
         ; spend slot only if (a) and (b) are not met
-        (if (all (= (r Current_State) precommit_amount) (= precommited_cat_maker_puzzle_hash (f Current_State)))
+        (if (all
+          (= (r Current_State) precommit_amount)
+          (= precommited_cat_maker_puzzle_hash (f Current_State))
+        )
           (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash tail_hash neighbors_hash))
           ; else
           (list REMARK)
@@ -65,7 +74,7 @@
             (list
               (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                 refund_puzzle_hash_hash
-                (sha256 1 precommited_cat_maker_puzzle_hash) ; hash of REFUND_INFO_HASH
+                (sha256 1 refund_info_hash) ; hash of REFUND_INFO_HASH
                 (sha256 2
                   (sha256 1 initial_nft_owner_ph)
                   tail_hash

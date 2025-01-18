@@ -468,7 +468,7 @@ mod tests {
         test_secret_keys, Cat, CatSpend, Nft, NftMint, Puzzle, Simulator, SpendWithConditions,
         TESTNET11_CONSTANTS,
     };
-    use clvm_traits::clvm_list;
+    use clvm_traits::{clvm_list, clvm_tuple};
     use hex_literal::hex;
 
     use crate::{
@@ -873,7 +873,7 @@ mod tests {
                 .into(),
             catalog_constants.relative_block_height,
             catalog_constants.precommit_payout_puzzle_hash,
-            refund_puzzle_hash.into(),
+            clvm_tuple!(refund_puzzle_hash, ()).tree_hash().into(),
             DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()).into(),
             value,
             reg_amount,
@@ -894,8 +894,8 @@ mod tests {
             }],
         )?;
 
-        payment_cat_amount -= reg_amount;
-        payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
+        // payment_cat_amount -= reg_amount;
+        // payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
@@ -903,7 +903,7 @@ mod tests {
             .iter()
             .find(|s| s.info.value.unwrap().asset_id == tail_hash.into());
 
-        let (secure_cond, new_catalog) = catalog.refund(
+        let (secure_cond, _new_catalog) = catalog.refund(
             ctx,
             tail_hash.into(),
             if let Some(found_slot) = slot {
@@ -923,7 +923,7 @@ mod tests {
 
         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
-        catalog = new_catalog;
+        // catalog = new_catalog;
 
         Ok(())
     }

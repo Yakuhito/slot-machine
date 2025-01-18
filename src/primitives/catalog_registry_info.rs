@@ -113,8 +113,8 @@ impl CatalogRegistryInfo {
 
         [
             register_action_hash.into(),
-            update_price_action_hash.into(),
             refund_action_hash.into(),
+            update_price_action_hash.into(),
         ]
     }
 
