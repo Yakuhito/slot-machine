@@ -322,6 +322,7 @@ impl CatalogRegistry {
         tail_hash: Bytes32,
         neighbors_hash: Bytes32,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
+        slot: Option<Slot<CatalogSlotValue>>,
     ) -> Result<(Conditions, CatalogRegistry), DriverError> {
         // calculate announcement
         let refund_announcement: Bytes32 =
@@ -339,6 +340,11 @@ impl CatalogRegistry {
             0, // mode 0 = refund
             spender_inner_puzzle_hash,
         )?;
+
+        // if there's a slot, spend it
+        if let Some(slot) = slot {
+            slot.spend(ctx, spender_inner_puzzle_hash)?;
+        }
 
         // then, spend self
         let refund = CatalogRegistryAction::Refund(CatalogRefundActionSolution {

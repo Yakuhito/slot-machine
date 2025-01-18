@@ -472,8 +472,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
-        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
+        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
         XchandlesPrecommitValue, XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
     };
@@ -671,7 +671,6 @@ mod tests {
         let slot = slots
             .iter()
             .find(|s| s.info.value.unwrap().asset_id == tail_hash.into());
-        println!("slot: {:?}", slot);
 
         let (secure_cond, new_catalog) = catalog.refund(
             ctx,
@@ -682,6 +681,7 @@ mod tests {
                 Bytes32::default()
             },
             precommit_coin,
+            slot.cloned(),
         )?;
 
         let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
@@ -787,6 +787,7 @@ mod tests {
 
         // Register CAT
 
+        let mut tail: NodePtr = NodePtr::NIL; // will be used for refund as well
         let mut slots: Vec<Slot<CatalogSlotValue>> = slots.into();
         for i in 0..7 {
             // create precommit coin
@@ -797,7 +798,7 @@ mod tests {
             };
             let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
             // pretty much a random TAIL - we're not actually launching it
-            let tail = ctx.curry(GenesisByCoinIdTailArgs::new(user_coin.coin_id()))?;
+            tail = ctx.curry(GenesisByCoinIdTailArgs::new(user_coin.coin_id()))?;
             let tail_hash = ctx.tree_hash(tail);
 
             let eve_nft_inner_puzzle = clvm_quote!(Conditions::new().create_coin(
@@ -953,7 +954,6 @@ mod tests {
         // Test refunds
 
         // b - the amount is wrong (by one)
-        println!("1");
         let (catalog, payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,
@@ -969,13 +969,51 @@ mod tests {
             &[user_sk.clone(), minter_sk.clone()],
         )?;
 
-        println!("2");
-        let (catalog, payment_cat) = test_refund_for_catalog(
+        // a - the CAT maker puzzle has changed
+        // i.e., use different payment CAT
+        let alternative_payment_cat_amount = 10_000_000;
+        let (minter2_sk, minter2_pk, minter2_puzzle_hash, minter2_coin) =
+            sim.new_p2(alternative_payment_cat_amount)?;
+        let minter_p2_2 = StandardLayer::new(minter2_pk);
+
+        let (issue_cat, mut alternative_payment_cat) = Cat::single_issuance_eve(
+            ctx,
+            minter2_coin.coin_id(),
+            alternative_payment_cat_amount,
+            Conditions::new().create_coin(
+                minter2_puzzle_hash,
+                alternative_payment_cat_amount,
+                None,
+            ),
+        )?;
+        minter_p2_2.spend(ctx, minter2_coin, issue_cat)?;
+
+        alternative_payment_cat = alternative_payment_cat
+            .wrapped_child(minter2_puzzle_hash, alternative_payment_cat_amount);
+        sim.spend_coins(ctx.take(), &[minter2_sk.clone()])?;
+
+        let (catalog, _alternative_payment_cat) = test_refund_for_catalog(
+            ctx,
+            &mut sim,
+            catalog.info.state.registration_price,
+            alternative_payment_cat,
+            None,
+            catalog,
+            &catalog_constants,
+            &slots,
+            user_puzzle_hash,
+            minter_p2_2,
+            minter2_puzzle_hash,
+            &[user_sk.clone(), minter2_sk.clone()],
+        )?;
+
+        // c - the tail hash has already been registered
+        let (_catalog, _payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,
             catalog.info.state.registration_price,
             payment_cat,
-            None,
+            Some(tail),
             catalog,
             &catalog_constants,
             &slots,
