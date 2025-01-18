@@ -121,7 +121,9 @@
               (list
                 (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                   refund_puzzle_hash_hash
-                  (sha256 1 (f Current_State)) ; hash of REFUND_INFO_HASH, which is just the CAT maker puzzle hash
+                  (sha256 1
+                    (sha256 2 (f Current_State) (sha256tree cat_maker_solution))
+                  ) ; hash of REFUND_INFO_HASH
                   (sha256 2
                     (sha256 1 initial_nft_owner_ph)
                     tail_hash

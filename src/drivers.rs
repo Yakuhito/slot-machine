@@ -719,8 +719,12 @@ mod tests {
                 catalog_constants.relative_block_height,
                 catalog_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),
-                DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into())
-                    .into(),
+                clvm_tuple!(
+                    DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
+                    ()
+                )
+                .tree_hash()
+                .into(),
                 value,
                 reg_amount,
             )?;
@@ -839,6 +843,7 @@ mod tests {
             test_price_schedule[2], // 1, 3, 5 updated the price
         );
 
+        println!("testing refund!");
         // Test refund
         let reg_amount = catalog.info.state.registration_price + 1;
         // let mut payment_cat = payment_cat;
