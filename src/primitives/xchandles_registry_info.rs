@@ -10,8 +10,8 @@ use clvmr::Allocator;
 use crate::{
     ActionLayer, ActionLayerArgs, DefaultFinalizerArgs, DelegatedStateActionArgs,
     XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExtendAction,
-    XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction, XchandlesRegisterAction,
-    XchandlesUpdateAction,
+    XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction, XchandlesRefundAction,
+    XchandlesRegisterAction, XchandlesUpdateAction,
 };
 
 use super::DefaultCatMakerArgs;
@@ -98,7 +98,7 @@ impl XchandlesRegistryInfo {
     pub fn action_puzzle_hashes(
         launcher_id: Bytes32,
         constants: &XchandlesConstants,
-    ) -> [Bytes32; 6] {
+    ) -> [Bytes32; 7] {
         [
             XchandlesExpireAction::new(
                 launcher_id,
@@ -119,6 +119,13 @@ impl XchandlesRegistryInfo {
             .tree_hash()
             .into(),
             XchandlesUpdateAction::new(launcher_id).tree_hash().into(),
+            XchandlesRefundAction::new(
+                launcher_id,
+                constants.relative_block_height,
+                constants.precommit_payout_puzzle_hash,
+            )
+            .tree_hash()
+            .into(),
             DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id).into(),
         ]
     }

@@ -1509,6 +1509,9 @@ mod tests {
             }],
         )?;
 
+        payment_cat =
+            payment_cat.wrapped_child(minter_puzzle_hash, payment_cat.coin.amount - reg_amount);
+
         sim.set_next_timestamp(buy_time)?;
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
