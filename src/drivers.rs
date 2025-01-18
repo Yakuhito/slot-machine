@@ -474,8 +474,9 @@ mod tests {
     use crate::{
         CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
         DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
-        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
-        XchandlesPrecommitValue, XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
+        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
+        XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
+        XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -1179,7 +1180,23 @@ mod tests {
                 xchandles_constants.relative_block_height,
                 xchandles_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),
-                Bytes32::default(), // NOT SAFE ON AN ACTUAL NETWORK
+                clvm_tuple!(
+                    clvm_tuple!(
+                        DefaultCatMakerArgs::curry_tree_hash(
+                            payment_cat.asset_id.tree_hash().into()
+                        ),
+                        ()
+                    ),
+                    clvm_tuple!(
+                        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(base_price),
+                        XchandlesFactorPricingSolution {
+                            handle: handle.clone(),
+                            num_years: 1
+                        }
+                    ),
+                )
+                .tree_hash()
+                .into(),
                 value,
                 reg_amount,
             )?;
@@ -1439,7 +1456,8 @@ mod tests {
         let pricing_puzzle =
             XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(ctx, base_price, 1000)?;
         let reg_amount =
-            pricing_puzzle.get_price(ctx, handle_to_expire, expiration, buy_time, 1)? as u64;
+            pricing_puzzle.get_price(ctx, handle_to_expire.clone(), expiration, buy_time, 1)?
+                as u64;
 
         let precommit_coin = PrecommitCoin::<XchandlesPrecommitValue>::new(
             ctx,
@@ -1452,7 +1470,25 @@ mod tests {
             xchandles_constants.relative_block_height,
             xchandles_constants.precommit_payout_puzzle_hash,
             refund_puzzle_hash.into(),
-            Bytes32::default(), // NOT SAFE ON AN ACTUAL NETWORK
+            clvm_tuple!(
+                clvm_tuple!(
+                    DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
+                    ()
+                ),
+                clvm_tuple!(
+                    XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(base_price, 1000),
+                    XchandlesExponentialPremiumRenewPuzzleSolution {
+                        buy_time,
+                        expiration,
+                        pricing_program_solution: XchandlesFactorPricingSolution {
+                            handle: handle_to_expire,
+                            num_years: 1
+                        }
+                    },
+                ),
+            )
+            .tree_hash()
+            .into(),
             value,
             reg_amount,
         )?;

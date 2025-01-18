@@ -11,7 +11,7 @@
         cat_maker_puzzle_reveal
         cat_maker_puzzle_solution
         expired_handle_pricing_puzzle_reveal
-        ; \/ the first arguments NEED to be (handle current_expiration buy_time . rest)
+        ; \/ the first arguments NEED to be (current_expiration buy_time handle . rest)
         expired_handle_pricing_puzzle_solution
         refund_puzzle_hash_hash
         secret_hash
@@ -41,7 +41,7 @@
     (defun-inline main (
         handle_hash
         (total_price . registered_time)
-        (current_expiration buy_time handle . rest)
+        (current_expiration buy_time . rest)
         expired_handle_pricing_puzzle_solution_hash
     )
         (c
@@ -117,7 +117,7 @@
         (= (sha256tree expired_handle_pricing_puzzle_reveal) (r (r Current_State)))
     )
         (main
-            (sha256 1 handle)
+            (sha256 1 (f (r (r expired_handle_pricing_puzzle_solution))))
             (a expired_handle_pricing_puzzle_reveal expired_handle_pricing_puzzle_solution)
             expired_handle_pricing_puzzle_solution
             (sha256tree expired_handle_pricing_puzzle_solution)
