@@ -10,7 +10,7 @@
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
     (
-        handle
+        handle_hash
         pricing_puzzle_reveal
         pricing_solution
         cat_maker_puzzle_reveal
@@ -25,9 +25,9 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_slot_value_hash (handle neighbors_hash expiration rest_hash)
+    (defun get_slot_value_hash (handle_hash neighbors_hash expiration rest_hash)
         (sha256 2
-            (sha256 1 (sha256 1 handle))
+            (sha256 1 handle_hash) ; value = handle_hash; we need (sha256tree value) here
             (sha256 2
                 neighbors_hash
                 (sha256 2
@@ -44,11 +44,11 @@
             (list
                 ; spend slot
                 (spend_slot SLOT_1ST_CURRY_HASH 
-                    (get_slot_value_hash handle neighbors_hash expiration rest_hash)
+                    (get_slot_value_hash handle_hash neighbors_hash expiration rest_hash)
                 )
 
                 ; announcement
-                (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256 2 (sha256 1 total_price) (sha256 1 handle))))
+                (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256 2 (sha256 1 total_price) handle_hash)))
                 
                 ; can't extend if expired
                 (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
@@ -56,7 +56,7 @@
                 ; create new slot
                 (create_slot SLOT_1ST_CURRY_HASH
                     (get_slot_value_hash
-                        handle
+                        handle_hash
                         neighbors_hash
                         (+ expiration registered_time)
                         rest_hash
@@ -73,7 +73,7 @@
                         ) ; full CAT puzzle hash
                         (sha256tree 
                             (list
-                                (sha256tree (c handle expiration)) ; nonce
+                                (sha256 2 handle_hash (sha256 1 expiration)) ; nonce = (sha256tree (c handle expiration))
                                 (list PAYOUT_PUZZLE_HASH total_price) ; notarized payment
                             )
                         )
@@ -85,10 +85,11 @@
 
     (if (all
         (= (f Current_State) (sha256tree cat_maker_puzzle_reveal)) ; cat maker puzzle reveal is correct
-        (= (f (r Current_State)) (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
+        (= (f (r Current_State)) (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct\
+        (= handle_hash (sha256 1 (f pricing_solution)))
     )
         (main
-            (a pricing_puzzle_reveal (list handle pricing_solution))
+            (a pricing_puzzle_reveal pricing_solution)
         )
         ; else
         (x)

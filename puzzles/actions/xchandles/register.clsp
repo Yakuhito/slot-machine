@@ -46,7 +46,6 @@
         start_time
         secret_hash
         refund_puzzle_hash_hash ; needed to compute precommit coin puzzle hash
-        refund_info_hash_hash ; same as above
         ; end
         left_left_value_hash left_data_hash ; left slot info
         right_right_value_hash right_data_hash ; right slot info

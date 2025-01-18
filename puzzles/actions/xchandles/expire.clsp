@@ -14,7 +14,6 @@
         ; \/ the first arguments NEED to be (handle current_expiration buy_time . rest)
         expired_handle_pricing_puzzle_solution
         refund_puzzle_hash_hash
-        refund_info_hash_hash
         secret_hash
         neighbors_hash
         old_rest_hash . ; (sha256sum (c old_owner_launcher_id old_resolved_launcher_id))
@@ -42,7 +41,7 @@
     (defun-inline main (
         handle_hash
         (total_price . registered_time)
-        (handle current_expiration buy_time . rest)
+        (current_expiration buy_time handle . rest)
         expired_handle_pricing_puzzle_solution_hash
     )
         (c

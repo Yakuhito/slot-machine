@@ -16,10 +16,11 @@ use clvmr::{Allocator, NodePtr};
 use crate::{
     ActionLayer, ActionLayerSolution, DelegatedStateAction, DelegatedStateActionSolution,
     XchandlesExpireAction, XchandlesExpireActionSolution,
-    XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExtendAction,
-    XchandlesExtendActionSolution, XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction,
-    XchandlesOracleActionSolution, XchandlesPrecommitValue, XchandlesRegisterAction,
-    XchandlesRegisterActionSolution, XchandlesUpdateAction, XchandlesUpdateActionSolution,
+    XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
+    XchandlesExtendAction, XchandlesExtendActionSolution, XchandlesFactorPricingPuzzleArgs,
+    XchandlesFactorPricingSolution, XchandlesOracleAction, XchandlesOracleActionSolution,
+    XchandlesPrecommitValue, XchandlesRegisterAction, XchandlesRegisterActionSolution,
+    XchandlesUpdateAction, XchandlesUpdateActionSolution,
 };
 
 use super::{
@@ -84,10 +85,17 @@ impl XchandlesRegistry {
 }
 
 pub enum XchandlesRegistryAction {
-    Expire(XchandlesExpireActionSolution<NodePtr, (), NodePtr, u64>),
-    Extend(XchandlesExtendActionSolution<NodePtr, u64, NodePtr, ()>),
+    Expire(
+        XchandlesExpireActionSolution<
+            NodePtr,
+            (),
+            NodePtr,
+            XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
+        >,
+    ),
+    Extend(XchandlesExtendActionSolution<NodePtr, XchandlesFactorPricingSolution, NodePtr, ()>),
     Oracle(XchandlesOracleActionSolution),
-    Register(XchandlesRegisterActionSolution<NodePtr, u64, NodePtr, ()>),
+    Register(XchandlesRegisterActionSolution<NodePtr, XchandlesFactorPricingSolution, NodePtr, ()>),
     Update(XchandlesUpdateActionSolution),
     UpdateState(DelegatedStateActionSolution<XchandlesRegistryState>),
 }
@@ -304,14 +312,16 @@ impl XchandlesRegistry {
         // finally, spend self
         let register = XchandlesRegistryAction::Register(XchandlesRegisterActionSolution {
             handle_hash,
-            handle_reveal: handle.clone(),
             left_value: left_slot_value.handle_hash,
             right_value: right_slot_value.handle_hash,
             pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
                 ctx,
                 base_handle_price,
             )?,
-            pricing_puzzle_solution: num_years,
+            pricing_puzzle_solution: XchandlesFactorPricingSolution {
+                handle: handle.clone(),
+                num_years,
+            },
             cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
                 precommit_coin.asset_id.tree_hash().into(),
@@ -326,7 +336,6 @@ impl XchandlesRegistry {
             start_time,
             secret_hash: secret.tree_hash().into(),
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
-            refund_info_hash_hash: precommit_coin.refund_info_hash.tree_hash().into(),
             left_left_value_hash: left_slot_value.neighbors.left_value.tree_hash().into(),
             left_data_hash: left_slot_value.after_neigbors_data_hash().into(),
             right_right_value_hash: right_slot_value.neighbors.right_value.tree_hash().into(),
@@ -423,7 +432,6 @@ impl XchandlesRegistry {
 
         // finally, spend self
         let expire = XchandlesRegistryAction::Expire(XchandlesExpireActionSolution {
-            handle: precommit_coin.value.secret_and_handle.handle,
             cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
                 precommit_coin.asset_id.tree_hash().into(),
@@ -436,9 +444,16 @@ impl XchandlesRegistry {
                     1000,
                 )?
                 .get_puzzle(ctx)?,
-            expired_handle_pricing_puzzle_solution: num_years,
+            expired_handle_pricing_puzzle_solution:
+                XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
+                    expiration: slot_value.expiration,
+                    buy_time: precommit_coin.value.start_time,
+                    pricing_program_solution: XchandlesFactorPricingSolution {
+                        handle: precommit_coin.value.secret_and_handle.handle,
+                        num_years,
+                    },
+                },
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
-            refund_info_hash_hash: precommit_coin.refund_info_hash.tree_hash().into(),
             secret_hash: precommit_coin
                 .value
                 .secret_and_handle
@@ -446,8 +461,6 @@ impl XchandlesRegistry {
                 .tree_hash()
                 .into(),
             neighbors_hash: slot_value.neighbors.tree_hash().into(),
-            current_expiration: slot_value.expiration,
-            buy_time: precommit_coin.value.start_time,
             old_rest_hash: slot_value.launcher_ids_data_hash().into(),
             new_rest_hash: clvm_tuple!(
                 precommit_coin.value.owner_launcher_id,
@@ -528,12 +541,15 @@ impl XchandlesRegistry {
 
         // finally, spend self
         let extend = XchandlesRegistryAction::Extend(XchandlesExtendActionSolution {
-            handle: handle.clone(),
+            handle_hash: slot_value.handle_hash,
             pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
                 ctx,
                 base_handle_price,
             )?,
-            pricing_solution: num_years,
+            pricing_solution: XchandlesFactorPricingSolution {
+                handle: handle.clone(),
+                num_years,
+            },
             cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
                 payment_asset_id.tree_hash().into(),

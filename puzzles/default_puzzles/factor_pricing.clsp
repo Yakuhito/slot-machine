@@ -14,8 +14,8 @@
 
 (mod (
     BASE_PRICE ; base price = price per month of a 6+ character handle with at least one number
-    handle
-    num_years ; pricing_program_solution = number of years to register the handle for
+    Handle .
+    num_years ; number of years to register the handle for
 )
 
     (defconstant SECONDS_IN_A_YEAR 31622400) ; 366 days * 24 hours/day * 60 minutes/hour * 60 seconds/minute
@@ -68,7 +68,7 @@
     ; main
     (if (> num_years 0)
         (c 
-            (* num_years BASE_PRICE (get_price_factor (strlen handle) (count_numbers_plus_validate handle)))
+            (* num_years BASE_PRICE (get_price_factor (strlen Handle) (count_numbers_plus_validate Handle)))
             (* num_years SECONDS_IN_A_YEAR)
         )
         ; else
