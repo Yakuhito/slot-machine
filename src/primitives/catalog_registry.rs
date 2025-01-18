@@ -172,7 +172,6 @@ impl CatalogRegistry {
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         eve_nft_inner_spend: Spend,
-        price_update: Option<CatalogRegistryAction>,
     ) -> Result<(Conditions, CatalogRegistry, Vec<Slot<CatalogSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
@@ -283,14 +282,7 @@ impl CatalogRegistry {
 
         let my_coin = self.coin;
         let my_constants = self.info.constants;
-        let my_spend = self.spend(
-            ctx,
-            if let Some(price_update) = price_update {
-                vec![price_update, register]
-            } else {
-                vec![register]
-            },
-        )?;
+        let my_spend = self.spend(ctx, vec![register])?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
         let new_catalog = CatalogRegistry::from_parent_spend(
             &mut ctx.allocator,

@@ -884,7 +884,7 @@ mod tests {
 
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
-            let price_update = if i % 2 == 1 {
+            if i % 2 == 1 {
                 let new_price = reg_amount;
                 assert_ne!(new_price, catalog.info.state.registration_price);
 
@@ -913,9 +913,25 @@ mod tests {
                 let update_action =
                     CatalogRegistryAction::UpdatePrice(delegated_state_action_solution);
 
-                Some(update_action)
-            } else {
-                None
+                let catalog_coin = catalog.coin;
+                let spend = catalog.spend(ctx, vec![update_action])?;
+                ctx.spend(catalog_coin, spend)?;
+
+                println!("i: {}", i);
+                sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
+                let catalog_puzzle = Puzzle::parse(&ctx.allocator, spend.puzzle);
+                if let Some(new_catalog) = CatalogRegistry::from_parent_spend(
+                    &mut ctx.allocator,
+                    catalog_coin,
+                    catalog_puzzle,
+                    spend.solution,
+                    catalog_constants,
+                )? {
+                    catalog = new_catalog;
+                } else {
+                    panic!("Couldn't parse CATalog after price was updated");
+                };
             };
 
             let (secure_cond, new_catalog, new_slots) = catalog.register_cat(
@@ -928,7 +944,6 @@ mod tests {
                     puzzle: eve_nft_inner_puzzle,
                     solution: NodePtr::NIL,
                 },
-                price_update,
             )?;
 
             let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
