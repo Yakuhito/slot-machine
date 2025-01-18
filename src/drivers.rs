@@ -914,10 +914,10 @@ mod tests {
                     CatalogRegistryAction::UpdatePrice(delegated_state_action_solution);
 
                 let catalog_coin = catalog.coin;
+                let catalog_constants = catalog.info.constants;
                 let spend = catalog.spend(ctx, vec![update_action])?;
                 ctx.spend(catalog_coin, spend)?;
 
-                println!("i: {}", i);
                 sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
                 let catalog_puzzle = Puzzle::parse(&ctx.allocator, spend.puzzle);
