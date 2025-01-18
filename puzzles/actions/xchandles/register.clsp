@@ -1,12 +1,12 @@
 ; register.clsp by yakuhito
 ;; Responsible for registering new handles into the handle registry (XCHandles)
 
-;; Unlike CATalog slot's value is (value (left_value . right_value) expiration owner_launcher_id . resolved_launcher_id) where:
+;; Unlike CATalog, a slot's value is (value (left_value . right_value) expiration owner_launcher_id . resolved_launcher_id) where:
 ;;  value is the slot 'key'/id and is defined as (sha256 1 handle)
 ;;  left_value/right_value are the key's of the slot's neighbors
 ;;  expiration is a timestamp that says when the handle will expire
 ;;  owner_launcher_id is a 32-byte value that specifies the owner of the record, who can
-;;       update the owner_launcher_id (i.e., transfer the handle) and launcher_id
+;;       update the owner_launcher_id (i.e., transfer the handle) and resolved_launcher_id
 ;;  resolved_launcher_id is a 32-byte value that specifies the handle NFT's launcher id
 ;;       in the future, launcher_id might point to a namespace/sub-registry, for example
 
