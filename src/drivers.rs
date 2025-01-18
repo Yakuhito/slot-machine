@@ -878,8 +878,13 @@ mod tests {
                 .into(),
             catalog_constants.relative_block_height,
             catalog_constants.precommit_payout_puzzle_hash,
-            clvm_tuple!(refund_puzzle_hash, ()).tree_hash().into(),
-            DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()).into(),
+            refund_puzzle_hash.into(),
+            clvm_tuple!(
+                DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
+                ()
+            )
+            .tree_hash()
+            .into(),
             value,
             reg_amount,
         )?;
