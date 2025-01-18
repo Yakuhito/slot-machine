@@ -472,8 +472,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
+        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
         XchandlesPrecommitValue, XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
     };
@@ -587,6 +587,115 @@ mod tests {
                 other_singleton_inner_puzzle_hash: price_singleton_inner_puzzle_hash.into(),
             },
         ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn test_refund_for_catalog(
+        ctx: &mut SpendContext,
+        sim: &mut Simulator,
+        reg_amount: u64,
+        payment_cat: Cat,
+        tail_puzzle_to_refund: Option<NodePtr>,
+        catalog: CatalogRegistry,
+        catalog_constants: &CatalogRegistryConstants,
+        slots: &[Slot<CatalogSlotValue>],
+        user_puzzle_hash: Bytes32,
+        minter_p2: StandardLayer,
+        minter_puzzle_hash: Bytes32,
+        sks: &[SecretKey; 2],
+    ) -> anyhow::Result<(CatalogRegistry, Cat)> {
+        // create precommit coin
+        let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
+        // pretty much a random TAIL - we're not actually launching it
+        let tail = if let Some(t) = tail_puzzle_to_refund {
+            t
+        } else {
+            ctx.curry(GenesisByCoinIdTailArgs::new(user_coin.coin_id()))?
+        };
+        let tail_hash = ctx.tree_hash(tail);
+        // doesn't matter - we're getting refudned anyway
+        let eve_nft_inner_puzzle_hash = tail_hash;
+
+        let value = CatalogPrecommitValue {
+            initial_inner_puzzle_hash: eve_nft_inner_puzzle_hash.into(),
+            tail_reveal: tail,
+        };
+
+        let refund_puzzle = ctx.alloc(&1)?;
+        let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
+        let precommit_coin = PrecommitCoin::new(
+            ctx,
+            payment_cat.coin.coin_id(),
+            payment_cat.child_lineage_proof(),
+            payment_cat.asset_id,
+            SingletonStruct::new(catalog.info.launcher_id)
+                .tree_hash()
+                .into(),
+            catalog_constants.relative_block_height,
+            catalog_constants.precommit_payout_puzzle_hash,
+            refund_puzzle_hash.into(),
+            clvm_tuple!(
+                DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
+                ()
+            )
+            .tree_hash()
+            .into(),
+            value,
+            reg_amount,
+        )?;
+
+        let payment_cat_inner_spend = minter_p2.spend_with_conditions(
+            ctx,
+            Conditions::new()
+                .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, None)
+                .create_coin(
+                    minter_puzzle_hash,
+                    payment_cat.coin.amount - reg_amount,
+                    None,
+                ),
+        )?;
+        Cat::spend_all(
+            ctx,
+            &[CatSpend {
+                cat: payment_cat,
+                inner_spend: payment_cat_inner_spend,
+                extra_delta: 0,
+            }],
+        )?;
+
+        let new_payment_cat =
+            payment_cat.wrapped_child(minter_puzzle_hash, payment_cat.coin.amount - reg_amount);
+
+        sim.spend_coins(ctx.take(), sks)?;
+
+        let slot = slots
+            .iter()
+            .find(|s| s.info.value.unwrap().asset_id == tail_hash.into());
+        println!("slot: {:?}", slot);
+
+        let (secure_cond, new_catalog) = catalog.refund(
+            ctx,
+            tail_hash.into(),
+            if let Some(found_slot) = slot {
+                found_slot.info.value.unwrap().neighbors.tree_hash().into()
+            } else {
+                Bytes32::default()
+            },
+            precommit_coin,
+        )?;
+
+        let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
+        let sec_coin = sim.new_coin(ctx.tree_hash(sec_puzzle).into(), 0);
+
+        let sec_program = ctx.serialize(&sec_puzzle)?;
+        let solution_program = ctx.serialize(&NodePtr::NIL)?;
+        ctx.insert(CoinSpend::new(sec_coin, sec_program, solution_program));
+
+        let spends = ctx.take();
+        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+        sim.spend_coins(spends, sks)?;
+
+        Ok((new_catalog, new_payment_cat))
     }
 
     #[test]
@@ -843,97 +952,38 @@ mod tests {
             test_price_schedule[2], // 1, 3, 5 updated the price
         );
 
-        println!("testing refund!");
-        // Test refund
-        let reg_amount = catalog.info.state.registration_price + 1;
-        // let mut payment_cat = payment_cat;
-        let tail_puzzle: Option<NodePtr> = None;
+        // Test refunds
 
-        // create precommit coin
-        let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
-        // pretty much a random TAIL - we're not actually launching it
-        let tail = if let Some(t) = tail_puzzle {
-            t
-        } else {
-            ctx.curry(GenesisByCoinIdTailArgs::new(user_coin.coin_id()))?
-        };
-        let tail_hash = ctx.tree_hash(tail);
-        // doesn't matter - we're getting refudned anyway
-        let eve_nft_inner_puzzle_hash = tail_hash;
-
-        let value = CatalogPrecommitValue {
-            initial_inner_puzzle_hash: eve_nft_inner_puzzle_hash.into(),
-            tail_reveal: tail,
-        };
-
-        let refund_puzzle = ctx.alloc(&1)?;
-        let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
-        let precommit_coin = PrecommitCoin::new(
+        // b - the amount is wrong (by one)
+        let (catalog, payment_cat) = test_refund_for_catalog(
             ctx,
-            payment_cat.coin.coin_id(),
-            payment_cat.child_lineage_proof(),
-            payment_cat.asset_id,
-            SingletonStruct::new(catalog.info.launcher_id)
-                .tree_hash()
-                .into(),
-            catalog_constants.relative_block_height,
-            catalog_constants.precommit_payout_puzzle_hash,
-            refund_puzzle_hash.into(),
-            clvm_tuple!(
-                DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
-                ()
-            )
-            .tree_hash()
-            .into(),
-            value,
-            reg_amount,
+            &mut sim,
+            catalog.info.state.registration_price + 1,
+            payment_cat,
+            None,
+            catalog,
+            &catalog_constants,
+            &slots,
+            user_puzzle_hash,
+            minter_p2,
+            minter_puzzle_hash,
+            &[user_sk.clone(), minter_sk.clone()],
         )?;
 
-        let payment_cat_inner_spend = minter_p2.spend_with_conditions(
+        let (catalog, payment_cat) = test_refund_for_catalog(
             ctx,
-            Conditions::new()
-                .create_coin(precommit_coin.inner_puzzle_hash, reg_amount, None)
-                .create_coin(minter_puzzle_hash, payment_cat_amount - reg_amount, None),
+            &mut sim,
+            catalog.info.state.registration_price,
+            payment_cat,
+            None,
+            catalog,
+            &catalog_constants,
+            &slots,
+            user_puzzle_hash,
+            minter_p2,
+            minter_puzzle_hash,
+            &[user_sk.clone(), minter_sk.clone()],
         )?;
-        Cat::spend_all(
-            ctx,
-            &[CatSpend {
-                cat: payment_cat,
-                inner_spend: payment_cat_inner_spend,
-                extra_delta: 0,
-            }],
-        )?;
-
-        // payment_cat_amount -= reg_amount;
-        // payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
-
-        sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-
-        let slot = slots
-            .iter()
-            .find(|s| s.info.value.unwrap().asset_id == tail_hash.into());
-
-        let (secure_cond, _new_catalog) = catalog.refund(
-            ctx,
-            tail_hash.into(),
-            if let Some(found_slot) = slot {
-                found_slot.info.value.unwrap().neighbors.tree_hash().into()
-            } else {
-                Bytes32::default()
-            },
-            precommit_coin,
-        )?;
-
-        let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
-        let sec_coin = sim.new_coin(ctx.tree_hash(sec_puzzle).into(), 0);
-
-        let sec_program = ctx.serialize(&sec_puzzle)?;
-        let solution_program = ctx.serialize(&NodePtr::NIL)?;
-        ctx.insert(CoinSpend::new(sec_coin, sec_program, solution_program));
-
-        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-
-        // catalog = new_catalog;
 
         Ok(())
     }
