@@ -691,9 +691,7 @@ mod tests {
         let solution_program = ctx.serialize(&NodePtr::NIL)?;
         ctx.insert(CoinSpend::new(sec_coin, sec_program, solution_program));
 
-        let spends = ctx.take();
-        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-        sim.spend_coins(spends, sks)?;
+        sim.spend_coins(ctx.take(), sks)?;
 
         Ok((new_catalog, new_payment_cat))
     }
@@ -955,6 +953,7 @@ mod tests {
         // Test refunds
 
         // b - the amount is wrong (by one)
+        println!("1");
         let (catalog, payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,
@@ -970,6 +969,7 @@ mod tests {
             &[user_sk.clone(), minter_sk.clone()],
         )?;
 
+        println!("2");
         let (catalog, payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,

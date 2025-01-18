@@ -57,7 +57,7 @@
         ; spend slot only if (a) and (b) are not met
         (if (all
           (= (r Current_State) precommit_amount)
-          (= precommited_cat_maker_puzzle_hash (f Current_State))
+          (= precommited_cat_maker_hash (f Current_State))
         )
           (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash tail_hash neighbors_hash))
           ; else
