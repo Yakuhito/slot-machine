@@ -472,8 +472,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
-        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
+        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
         XchandlesRegistryAction, XchandlesSecretAndHandle, ANY_METADATA_UPDATER_HASH,
@@ -1306,8 +1306,6 @@ mod tests {
                 };
             };
 
-            println!("left slot: {:?}", left_slot);
-            println!("right slot: {:?}", right_slot);
             let (secure_cond, new_registry, new_slots) =
                 registry.register_handle(ctx, left_slot, right_slot, precommit_coin, base_price)?;
 
@@ -1319,11 +1317,7 @@ mod tests {
             ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
 
             sim.pass_time(100); // registration start was at timestamp 100
-            println!("yak102");
-            let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            sim.spend_coins(spends, &[user_sk.clone()])?;
-            println!("yak102");
+            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
@@ -1402,9 +1396,7 @@ mod tests {
             payment_cat_amount -= pay_for_extension;
             payment_cat = payment_cat.wrapped_child(minter_puzzle_hash, payment_cat_amount);
 
-            println!("yak104");
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-            println!("yak105");
 
             slots.retain(|s| *s != extension_slot);
             slots.extend(new_slots.clone());
@@ -1535,13 +1527,10 @@ mod tests {
             conds_solution_program,
         ));
 
-        println!("yak103");
         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-        println!("yak104");
         registry = new_registry;
 
         // Test refunds
-        println!("yak100");
         let handle_to_refund: Option<String> = Some("yakuhitooooo".to_string());
         let used_base_price = base_price;
         let amount_to_use = XchandlesFactorPricingPuzzleArgs::get_price(
@@ -1624,7 +1613,7 @@ mod tests {
             payment_cat.wrapped_child(minter_puzzle_hash, payment_cat.coin.amount - amount_to_use);
 
         println!("yak1");
-        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
         println!("yak2");
         let slot = slots
             .iter()
