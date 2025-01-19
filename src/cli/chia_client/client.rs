@@ -3,7 +3,9 @@ use reqwest::Client as ReqwestClient;
 use serde_json::Value;
 use std::error::Error;
 
-use super::{AdditionsAndRemovalsResponse, BlockchainStateResponse, MockChiaClient};
+use super::{
+    AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockResponse, MockChiaClient,
+};
 
 #[derive(Debug)]
 pub enum Client {
@@ -80,6 +82,19 @@ impl ChiaRpcClient {
     ) -> Result<AdditionsAndRemovalsResponse, Box<dyn Error>> {
         self.make_post_request(
             "get_additions_and_removals",
+            serde_json::json!({
+                "header_hash": format!("0x{}", hex::encode(header_hash.to_bytes())),
+            }),
+        )
+        .await
+    }
+
+    pub async fn get_block(
+        &self,
+        header_hash: Bytes32,
+    ) -> Result<GetBlockResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_block",
             serde_json::json!({
                 "header_hash": format!("0x{}", hex::encode(header_hash.to_bytes())),
             }),

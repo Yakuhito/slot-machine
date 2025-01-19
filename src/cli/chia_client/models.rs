@@ -1,7 +1,10 @@
-use chia::protocol::{Bytes32, Coin};
+use chia::protocol::{Bytes32, Coin, FullBlock};
 use serde::Deserialize;
 
-use super::de::{deserializable_coin, hex_string_to_bytes32, hex_string_to_bytes32_maybe};
+use super::de::{
+    deserialize_coin, deserialize_full_block_maybe, hex_string_to_bytes32,
+    hex_string_to_bytes32_maybe,
+};
 
 #[derive(Deserialize, Debug)]
 pub struct BlockchainStateResponse {
@@ -23,7 +26,7 @@ pub struct BlockchainState {
     pub mempool_size: u32,
     #[serde(with = "hex_string_to_bytes32")]
     pub node_id: Bytes32,
-    pub peak: DeserializableBlockRecord,
+    pub peak: DeserializableBlockRecord, // TODO
     pub space: u128,
     pub sub_slot_iters: u64,
     pub sync: Sync,
@@ -74,7 +77,7 @@ pub struct AdditionsAndRemovalsResponse {
 
 #[derive(Deserialize, Debug)]
 pub struct CoinRecord {
-    #[serde(with = "deserializable_coin")]
+    #[serde(with = "deserialize_coin")]
     pub coin: Coin,
     pub coinbase: bool,
     pub confirmed_block_index: u32,
@@ -84,10 +87,9 @@ pub struct CoinRecord {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct DeserializableCoin {
-    pub amount: u64,
-    #[serde(with = "hex_string_to_bytes32")]
-    pub parent_coin_info: Bytes32,
-    #[serde(with = "hex_string_to_bytes32")]
-    pub puzzle_hash: Bytes32,
+pub struct GetBlockResponse {
+    #[serde(with = "deserialize_full_block_maybe")]
+    pub block: Option<FullBlock>,
+    pub error: Option<String>,
+    pub success: bool,
 }
