@@ -1,7 +1,7 @@
-use chia::protocol::Bytes32;
+use chia::protocol::{Bytes32, Coin};
 use serde::Deserialize;
 
-use super::utils::{hex_string_to_bytes32, hex_string_to_bytes32_maybe};
+use super::de::{deserializable_coin, hex_string_to_bytes32, hex_string_to_bytes32_maybe};
 
 #[derive(Deserialize, Debug)]
 pub struct BlockchainStateResponse {
@@ -66,15 +66,16 @@ pub struct Sync {
 
 #[derive(Deserialize, Debug)]
 pub struct AdditionsAndRemovalsResponse {
-    pub additions: Option<Vec<DeserializableCoinRecord>>,
-    pub removals: Option<Vec<DeserializableCoinRecord>>,
+    pub additions: Option<Vec<CoinRecord>>,
+    pub removals: Option<Vec<CoinRecord>>,
     pub error: Option<String>,
     pub success: bool,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct DeserializableCoinRecord {
-    pub coin: DeserializableCoin,
+pub struct CoinRecord {
+    #[serde(with = "deserializable_coin")]
+    pub coin: Coin,
     pub coinbase: bool,
     pub confirmed_block_index: u32,
     pub spent: bool,

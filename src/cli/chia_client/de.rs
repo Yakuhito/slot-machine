@@ -73,3 +73,22 @@ pub mod hex_string_to_bytes32_maybe {
         Ok(None)
     }
 }
+
+pub mod deserializable_coin {
+    use chia::protocol::Coin;
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableCoin;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Coin, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let coin = DeserializableCoin::deserialize(deserializer)?;
+        Ok(Coin::new(
+            coin.parent_coin_info,
+            coin.puzzle_hash,
+            coin.amount,
+        ))
+    }
+}

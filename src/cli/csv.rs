@@ -5,7 +5,7 @@ use serde::Deserialize;
 use std::fs::File;
 use std::path::Path;
 
-use super::chia_client::utils::hex_string_to_bytes32;
+use super::chia_client::de::hex_string_to_bytes32;
 use super::utils::CliError;
 
 #[derive(Debug, Deserialize)]

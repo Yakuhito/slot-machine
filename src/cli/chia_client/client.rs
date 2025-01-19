@@ -250,14 +250,30 @@ mod tests {
         assert!(!addition.coinbase);
         assert_eq!(addition.confirmed_block_index, 5910291);
         assert!(!addition.spent);
+        assert_eq!(addition.spent_block_index, 0);
+        assert_eq!(addition.timestamp, 1725991066);
 
         // Check removals
         let removals = response.removals.unwrap();
         assert_eq!(removals.len(), 1);
         let removal = &removals[0];
-        assert_eq!(removal.coin.amount, 1);
+        assert_eq!(
+            removal.coin,
+            Coin::new(
+                Bytes32::new(hex_literal::hex!(
+                    "4dda4b8b6017c633794c2b719c3591870b4bc7682930094c11a311112c772ce6"
+                )),
+                Bytes32::new(hex_literal::hex!(
+                    "18cfd81a9a58d598197730b2f2a21ff3b72951577be1dcc6004080ad17069e84"
+                )),
+                1
+            )
+        );
+        assert!(!removal.coinbase);
+        assert_eq!(removal.confirmed_block_index, 5612341);
         assert!(removal.spent);
         assert_eq!(removal.spent_block_index, 5910291);
+        assert_eq!(removal.timestamp, 1720407964);
     }
 
     #[tokio::test]
