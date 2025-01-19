@@ -87,18 +87,6 @@
               ) 
           )
 
-          (list REMARK 
-            precommited_cat_maker_hash
-            (sha256tree precommited_cat_maker_solution)
-            precommited_pricing_puzzle_hash
-            (sha256tree precommited_pricing_puzzle_solution)
-          )
-
-          (list REMARK (sha256 2
-                          (sha256 2 precommited_cat_maker_hash (sha256tree precommited_cat_maker_solution))
-                          (sha256 2 precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_solution))
-                      ))
-          
           ; consume precommit coin
           (list
             SEND_MESSAGE

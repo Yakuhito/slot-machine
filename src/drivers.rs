@@ -472,8 +472,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
-        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
+        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
         XchandlesRegistryAction, XchandlesSecretAndHandle, ANY_METADATA_UPDATER_HASH,
@@ -1042,6 +1042,117 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn test_refund_for_xchandles(
+        ctx: &mut SpendContext,
+        sim: &mut Simulator,
+        handle_to_refund: String,
+        used_base_price: u64,
+        slot: Option<Slot<XchandlesSlotValue>>,
+        payment_cat: Cat,
+        payment_cat_amount: u64,
+        registry: XchandlesRegistry,
+        minter_p2: StandardLayer,
+        minter_puzzle_hash: Bytes32,
+        minter_sk: &SecretKey,
+        user_sk: &SecretKey,
+    ) -> anyhow::Result<(XchandlesRegistry, Cat)> {
+        let value = XchandlesPrecommitValue {
+            secret_and_handle: XchandlesSecretAndHandle {
+                secret: Bytes32::default(),
+                handle: handle_to_refund.clone(),
+            },
+            start_time: 0,
+            owner_launcher_id: Bytes32::default(),
+            resolved_launcher_id: Bytes32::default(),
+        };
+
+        let refund_puzzle = ctx.alloc(&1)?;
+        let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
+        let precommit_coin = PrecommitCoin::new(
+            ctx,
+            payment_cat.coin.coin_id(),
+            payment_cat.child_lineage_proof(),
+            payment_cat.asset_id,
+            SingletonStruct::new(registry.info.launcher_id)
+                .tree_hash()
+                .into(),
+            registry.info.constants.relative_block_height,
+            registry.info.constants.precommit_payout_puzzle_hash,
+            refund_puzzle_hash.into(),
+            clvm_tuple!(
+                clvm_tuple!(
+                    DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
+                    ()
+                ),
+                clvm_tuple!(
+                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
+                    XchandlesFactorPricingSolution {
+                        handle: handle_to_refund.clone(),
+                        num_years: 1
+                    }
+                )
+            )
+            .tree_hash()
+            .into(),
+            value,
+            payment_cat_amount,
+        )?;
+
+        let payment_cat_inner_spend = minter_p2.spend_with_conditions(
+            ctx,
+            Conditions::new()
+                .create_coin(precommit_coin.inner_puzzle_hash, payment_cat_amount, None)
+                .create_coin(
+                    minter_puzzle_hash,
+                    payment_cat.coin.amount - payment_cat_amount,
+                    None,
+                ),
+        )?;
+        Cat::spend_all(
+            ctx,
+            &[CatSpend {
+                cat: payment_cat,
+                inner_spend: payment_cat_inner_spend,
+                extra_delta: 0,
+            }],
+        )?;
+
+        let new_payment_cat = payment_cat.wrapped_child(
+            minter_puzzle_hash,
+            payment_cat.coin.amount - payment_cat_amount,
+        );
+
+        sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+
+        let precommited_pricing_puzzle_reveal =
+            XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, used_base_price)?;
+
+        let precommited_pricing_puzzle_solution = XchandlesFactorPricingSolution {
+            handle: handle_to_refund.clone(),
+            num_years: 1,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let (secure_cond, new_registry) = registry.refund(
+            ctx,
+            precommit_coin,
+            precommited_pricing_puzzle_reveal,
+            precommited_pricing_puzzle_solution,
+            slot,
+        )?;
+
+        let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
+        let sec_coin = sim.new_coin(ctx.tree_hash(sec_puzzle).into(), 0);
+
+        let sec_program = ctx.serialize(&sec_puzzle)?;
+        let solution_program = ctx.serialize(&NodePtr::NIL)?;
+        ctx.insert(CoinSpend::new(sec_coin, sec_program, solution_program));
+
+        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+
+        Ok((new_registry, new_payment_cat))
+    }
+
     #[test]
     fn test_xchandles() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
@@ -1534,166 +1645,97 @@ mod tests {
         registry = new_registry;
 
         // Test refunds
-        let handle_to_refund: Option<String> = Some("yakuhitooooo".to_string());
-        let used_base_price = base_price + 1;
-        let amount_to_use = XchandlesFactorPricingPuzzleArgs::get_price(
-            used_base_price,
-            &handle_to_refund.clone().unwrap(),
-            1,
-        );
+        let unregistered_handle = "yak7".to_string();
 
-        // pretty much a random handle - we're not actually registering it
-        let handle: String = if let Some(h) = handle_to_refund.as_ref() {
-            h.clone()
-        } else {
-            "refundmebaby7".to_string()
-        };
+        // a - the CAT maker puzzle has changed
+        let alternative_payment_cat_amount = 10_000_000;
+        let (minter2_sk, minter2_pk, minter2_puzzle_hash, minter2_coin) =
+            sim.new_p2(alternative_payment_cat_amount)?;
+        let minter_p2_2 = StandardLayer::new(minter2_pk);
 
-        let value = XchandlesPrecommitValue {
-            secret_and_handle: XchandlesSecretAndHandle {
-                secret: Bytes32::default(),
-                handle: handle.clone(),
-            },
-            start_time: 0,
-            owner_launcher_id: Bytes32::default(),
-            resolved_launcher_id: Bytes32::default(),
-        };
-
-        let refund_puzzle = ctx.alloc(&1)?;
-        let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
-        let precommit_coin = PrecommitCoin::new(
+        let (issue_cat, mut alternative_payment_cat) = Cat::single_issuance_eve(
             ctx,
-            payment_cat.coin.coin_id(),
-            payment_cat.child_lineage_proof(),
-            payment_cat.asset_id,
-            SingletonStruct::new(registry.info.launcher_id)
-                .tree_hash()
-                .into(),
-            registry.info.constants.relative_block_height,
-            registry.info.constants.precommit_payout_puzzle_hash,
-            refund_puzzle_hash.into(),
-            clvm_tuple!(
-                clvm_tuple!(
-                    DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
-                    ()
-                ),
-                clvm_tuple!(
-                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
-                    XchandlesFactorPricingSolution {
-                        handle: handle.clone(),
-                        num_years: 1
-                    }
-                )
-            )
-            .tree_hash()
-            .into(),
-            value,
-            amount_to_use,
+            minter2_coin.coin_id(),
+            alternative_payment_cat_amount,
+            Conditions::new().create_coin(
+                minter2_puzzle_hash,
+                alternative_payment_cat_amount,
+                None,
+            ),
         )?;
-        // println!(
-        //     "precommited_cat_maker_hash: {:?}",
-        //     DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into())
-        // );
-        // println!("precommited_cat_solution_hash: {:?}", ().tree_hash());
-        println!(
-            "precommited_pricing_puzzle_reveal_hash: {:?}",
-            XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
-        );
-        // println!(
-        //     "precommited_pricing_solution_reveal_hash: {:?}",
-        //     XchandlesFactorPricingSolution {
-        //         handle: handle.clone(),
-        //         num_years: 1
-        //     }
-        //     .tree_hash(),
-        // );
-        // println!(
-        //     "overall refund info hash: {:?}",
-        //     clvm_tuple!(
-        //         clvm_tuple!(
-        //             DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
-        //             ()
-        //         ),
-        //         clvm_tuple!(
-        //             XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
-        //             XchandlesFactorPricingSolution {
-        //                 handle: handle.clone(),
-        //                 num_years: 1
-        //             }
-        //         )
-        //     )
-        //     .tree_hash()
-        // );
+        minter_p2_2.spend(ctx, minter2_coin, issue_cat)?;
 
-        let payment_cat_inner_spend = minter_p2.spend_with_conditions(
+        alternative_payment_cat = alternative_payment_cat
+            .wrapped_child(minter2_puzzle_hash, alternative_payment_cat_amount);
+        sim.spend_coins(ctx.take(), &[minter2_sk.clone()])?;
+
+        let (mut registry, _alternative_payment_cat) = test_refund_for_xchandles(
             ctx,
-            Conditions::new()
-                .create_coin(precommit_coin.inner_puzzle_hash, amount_to_use, None)
-                .create_coin(
-                    minter_puzzle_hash,
-                    payment_cat.coin.amount - amount_to_use,
-                    None,
-                ),
-        )?;
-        Cat::spend_all(
-            ctx,
-            &[CatSpend {
-                cat: payment_cat,
-                inner_spend: payment_cat_inner_spend,
-                extra_delta: 0,
-            }],
+            &mut sim,
+            unregistered_handle.clone(),
+            base_price,
+            None,
+            alternative_payment_cat,
+            XchandlesFactorPricingPuzzleArgs::get_price(base_price, &unregistered_handle, 1),
+            registry,
+            minter_p2_2,
+            minter2_puzzle_hash,
+            &minter2_sk,
+            &user_sk,
         )?;
 
-        let _new_payment_cat =
-            payment_cat.wrapped_child(minter_puzzle_hash, payment_cat.coin.amount - amount_to_use);
-
-        sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-        let slot = slots
-            .iter()
-            .find(|s| s.info.value.unwrap().handle_hash == handle.tree_hash().into());
-
-        let precommited_pricing_puzzle_reveal =
-            XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, used_base_price)?;
-        println!(
-            "precommited_pricing_puzzle_reveal_hash 2: {:?}",
-            ctx.tree_hash(precommited_pricing_puzzle_reveal)
-        );
-        println!(
-            "precommited_pricing_puzzle_reveal_hash 3: {:?}",
-            XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price)
-        );
-
-        let precommited_pricing_puzzle_solution = XchandlesFactorPricingSolution {
-            handle: handle.clone(),
-            num_years: 1,
-        }
-        .to_clvm(&mut ctx.allocator)?;
-        // println!(
-        //     "precommited_pricing_puzzle_solution_hash 2: {:?}",
-        //     ctx.tree_hash(precommited_pricing_puzzle_solution)
-        // );
-        println!("yak1");
-        let (secure_cond, _new_registry) = registry.refund(
+        // b - the amount is wrong
+        (registry, payment_cat) = test_refund_for_xchandles(
             ctx,
-            precommit_coin,
-            precommited_pricing_puzzle_reveal,
-            precommited_pricing_puzzle_solution,
-            slot.cloned(),
+            &mut sim,
+            unregistered_handle.clone(),
+            base_price,
+            None,
+            payment_cat,
+            XchandlesFactorPricingPuzzleArgs::get_price(base_price, &unregistered_handle, 1) + 1,
+            registry,
+            minter_p2,
+            minter_puzzle_hash,
+            &minter_sk,
+            &user_sk,
         )?;
-        println!("yak2");
 
-        let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
-        let sec_coin = sim.new_coin(ctx.tree_hash(sec_puzzle).into(), 0);
+        // c - the pricing puzzle has changed
+        (registry, payment_cat) = test_refund_for_xchandles(
+            ctx,
+            &mut sim,
+            unregistered_handle.clone(),
+            base_price + 1,
+            None,
+            payment_cat,
+            XchandlesFactorPricingPuzzleArgs::get_price(base_price + 1, &unregistered_handle, 1),
+            registry,
+            minter_p2,
+            minter_puzzle_hash,
+            &minter_sk,
+            &user_sk,
+        )?;
 
-        let sec_program = ctx.serialize(&sec_puzzle)?;
-        let solution_program = ctx.serialize(&NodePtr::NIL)?;
-        ctx.insert(CoinSpend::new(sec_coin, sec_program, solution_program));
-
-        println!("yak3");
-        let spends = ctx.take();
-        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-        sim.spend_coins(spends, &[user_sk.clone()])?;
-        println!("yak4");
+        // d - the handle has already been registered
+        let (_registry, _payment_cat) = test_refund_for_xchandles(
+            ctx,
+            &mut sim,
+            "aa0".to_string(), // already registered handle
+            base_price,
+            Some(
+                *slots
+                    .iter()
+                    .find(|s| s.info.value.unwrap().handle_hash == "aa0".tree_hash().into())
+                    .unwrap(),
+            ),
+            payment_cat,
+            XchandlesFactorPricingPuzzleArgs::get_price(base_price, &unregistered_handle, 1),
+            registry,
+            minter_p2,
+            minter_puzzle_hash,
+            &minter_sk,
+            &user_sk,
+        )?;
 
         Ok(())
     }
