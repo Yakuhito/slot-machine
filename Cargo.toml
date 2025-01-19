@@ -27,7 +27,6 @@ sqlx = { version = "0.6", features = ["sqlite", "runtime-async-std-native-tls"] 
 bech32 = "0.9.1"
 
 chia-wallet-sdk = { git="https://github.com/xch-dev/chia-wallet-sdk.git", rev="1237cbbb7f639ddf8718e704b0ba495ec57ac1c5", features=["offers"] }
-async-trait = "0.1.85"
 
 [dev-dependencies]
 anyhow = "1.0.86"

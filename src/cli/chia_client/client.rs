@@ -1,65 +1,9 @@
 use chia::protocol::Bytes32;
 use reqwest::Client as ReqwestClient;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::error::Error;
-use std::sync::Mutex;
 
-use super::{AdditionsAndRemovalsResponse, BlockchainStateResponse};
-
-#[async_trait::async_trait]
-pub trait ChiaHttpClient: Send + Sync {
-    async fn post(&self, url: &str, json: Value) -> Result<String, Box<dyn Error>>;
-}
-
-#[derive(Debug)]
-pub struct MockChiaClient {
-    requests: Mutex<Vec<(String, Value)>>,
-    responses: HashMap<String, String>,
-}
-
-impl MockChiaClient {
-    pub fn new() -> Self {
-        Self {
-            requests: Mutex::new(Vec::new()),
-            responses: HashMap::new(),
-        }
-    }
-
-    pub fn mock_response(&mut self, url: &str, response: &str) {
-        self.responses.insert(url.to_string(), response.to_string());
-    }
-
-    pub fn get_requests(&self) -> Vec<(String, Value)> {
-        self.requests.lock().unwrap().clone()
-    }
-}
-
-impl Default for MockChiaClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[async_trait::async_trait]
-impl ChiaHttpClient for MockChiaClient {
-    async fn post(&self, url: &str, json: Value) -> Result<String, Box<dyn Error>> {
-        self.requests.lock().unwrap().push((url.to_string(), json));
-
-        match self.responses.get(url) {
-            Some(response) => Ok(response.clone()),
-            None => Err("No mock response configured for URL".into()),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl ChiaHttpClient for ReqwestClient {
-    async fn post(&self, url: &str, json: Value) -> Result<String, Box<dyn Error>> {
-        let response = self.post(url).json(&json).send().await?;
-        Ok(response.text().await?)
-    }
-}
+use super::{AdditionsAndRemovalsResponse, BlockchainStateResponse, MockChiaClient};
 
 #[derive(Debug)]
 pub enum Client {
