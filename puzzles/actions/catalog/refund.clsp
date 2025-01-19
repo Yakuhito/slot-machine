@@ -30,6 +30,20 @@
     (sha256 2 (sha256 1 value) neighbors_hash) 
   )
 
+  (defun main (SLOT_1ST_CURRY_HASH slot_puzhash slot_spend_needed base_conditions)
+    (if slot_spend_needed
+      (c 
+        (spend_slot SLOT_1ST_CURRY_HASH slot_puzhash)
+        (c 
+          (create_slot SLOT_1ST_CURRY_HASH slot_puzhash)
+          base_conditions
+        )
+      )
+      ; else
+      base_conditions
+    )
+  )
+
   (if (all
     (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
     (> precommit_amount 0) ; don't want any messages to be sent to slots
@@ -37,51 +51,49 @@
     (c
       Current_State ; new state
 
-      (list
-        ; announcement
-        (list
-            CREATE_PUZZLE_ANNOUNCEMENT
-            (concat '$'
-                (sha256 2 
-                    (sha256 1 tail_hash)
-                    (sha256 1 initial_nft_owner_ph)
-                ) ; (sha256tree (tail_hash . initial_nft_owner_ph))
-            ) 
-        )
-
-        ; spend slot only if (a) and (b) are not met
-        (if (all
+      (main 
+        PRECOMMIT_1ST_CURRY_HASH
+        (get_slot_value_hash tail_hash neighbors_hash)
+        (all
           (= (r Current_State) precommit_amount)
           (= precommited_cat_maker_hash (f Current_State))
-        )
-          (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash tail_hash neighbors_hash))
-          ; else
-          (list REMARK)
-        )
-        
-        ; consume precommit coin
+        ) ; spend slot only if (a) and (b) are not met
         (list
-          SEND_MESSAGE
-          19 ; sender puzzle + receiver puzzle + receiver amount
-          0 ; message = 0 = refund
-          (a
-            precommited_cat_maker_reveal
-            (list
-              (curry_hashes PRECOMMIT_1ST_CURRY_HASH
-                refund_puzzle_hash_hash
-                (sha256 1
-                  (sha256 2 precommited_cat_maker_hash (sha256tree precommited_cat_maker_solution))
-                ) ; hash of REFUND_INFO_HASH
-                (sha256 2
-                  (sha256 1 initial_nft_owner_ph)
-                  tail_hash
-                ) ; precommit coin reveal will be (c initial_nft_owner_ph TAIL)
-              ) ; Inner_Puzzle_Hash
-              precommited_cat_maker_solution
-            )
-          ) ; receiver puzzle hash
-          precommit_amount
-        ) 
+          ; announcement
+          (list
+              CREATE_PUZZLE_ANNOUNCEMENT
+              (concat '$'
+                  (sha256 2 
+                      (sha256 1 tail_hash)
+                      (sha256 1 initial_nft_owner_ph)
+                  ) ; (sha256tree (tail_hash . initial_nft_owner_ph))
+              ) 
+          )
+
+          ; consume precommit coin
+          (list
+            SEND_MESSAGE
+            19 ; sender puzzle + receiver puzzle + receiver amount
+            0 ; message = 0 = refund
+            (a
+              precommited_cat_maker_reveal
+              (list
+                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                  refund_puzzle_hash_hash
+                  (sha256 1
+                    (sha256 2 precommited_cat_maker_hash (sha256tree precommited_cat_maker_solution))
+                  ) ; hash of REFUND_INFO_HASH
+                  (sha256 2
+                    (sha256 1 initial_nft_owner_ph)
+                    tail_hash
+                  ) ; precommit coin reveal will be (c initial_nft_owner_ph TAIL)
+                ) ; Inner_Puzzle_Hash
+                precommited_cat_maker_solution
+              )
+            ) ; receiver puzzle hash
+            precommit_amount
+          ) 
+        ) ; base_conditions
       ) ; conditions
     )
     ; else

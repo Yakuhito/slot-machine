@@ -340,7 +340,6 @@ impl CatalogRegistry {
 
         // then, spend self
         let refund = CatalogRegistryAction::Refund(CatalogRefundActionSolution {
-            refund_info_hash: precommit_coin.refund_info_hash,
             precommited_cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
                 precommit_coin.asset_id.tree_hash().into(),
