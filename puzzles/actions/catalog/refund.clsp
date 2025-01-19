@@ -52,7 +52,7 @@
       Current_State ; new state
 
       (main 
-        PRECOMMIT_1ST_CURRY_HASH
+        SLOT_1ST_CURRY_HASH
         (get_slot_value_hash tail_hash neighbors_hash)
         (all
           (= (r Current_State) precommit_amount)
