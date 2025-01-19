@@ -1535,7 +1535,7 @@ mod tests {
 
         // Test refunds
         let handle_to_refund: Option<String> = Some("yakuhitooooo".to_string());
-        let used_base_price = base_price;
+        let used_base_price = base_price + 1;
         let amount_to_use = XchandlesFactorPricingPuzzleArgs::get_price(
             used_base_price,
             &handle_to_refund.clone().unwrap(),
