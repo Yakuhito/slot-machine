@@ -21,12 +21,13 @@ hex = "0.4.3"
 clap = { version = "4", features = ["derive"] }
 csv = "1.3.0"
 thiserror = "1.0.64"
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12.12", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.6", features = ["sqlite", "runtime-async-std-native-tls"] }
 bech32 = "0.9.1"
 
 chia-wallet-sdk = { git="https://github.com/xch-dev/chia-wallet-sdk.git", rev="1237cbbb7f639ddf8718e704b0ba495ec57ac1c5", features=["offers"] }
+async-trait = "0.1.85"
 
 [dev-dependencies]
 anyhow = "1.0.86"

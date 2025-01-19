@@ -62,3 +62,30 @@ pub struct Sync {
     pub sync_tip_height: u32,
     pub synced: bool,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct AdditionsAndRemovalsResponse {
+    pub additions: Option<Vec<DeserializableCoinRecord>>,
+    pub removals: Option<Vec<DeserializableCoinRecord>>,
+    pub error: Option<String>,
+    pub success: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct DeserializableCoinRecord {
+    pub coin: DeserializableCoin,
+    pub coinbase: bool,
+    pub confirmed_block_index: u32,
+    pub spent: bool,
+    pub spent_block_index: u32,
+    pub timestamp: u64,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct DeserializableCoin {
+    pub amount: u64,
+    #[serde(with = "hex_string_to_bytes32")]
+    pub parent_coin_info: Bytes32,
+    #[serde(with = "hex_string_to_bytes32")]
+    pub puzzle_hash: Bytes32,
+}
