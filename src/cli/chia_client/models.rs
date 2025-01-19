@@ -6,6 +6,7 @@ use super::utils::{hex_string_to_bytes32, hex_string_to_bytes32_maybe};
 #[derive(Deserialize, Debug)]
 pub struct BlockchainStateResponse {
     pub blockchain_state: Option<BlockchainState>,
+    pub error: Option<String>,
     pub success: bool,
 }
 
@@ -23,7 +24,7 @@ pub struct BlockchainState {
     #[serde(with = "hex_string_to_bytes32")]
     pub node_id: Bytes32,
     pub peak: DeserializableBlockRecord,
-    pub space: u64,
+    pub space: u128,
     pub sub_slot_iters: u64,
     pub sync: Sync,
 }
