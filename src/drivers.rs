@@ -472,8 +472,8 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
+        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
         XchandlesRegistryAction, XchandlesSecretAndHandle, ANY_METADATA_UPDATER_HASH,
@@ -1645,7 +1645,9 @@ mod tests {
         ctx.insert(CoinSpend::new(sec_coin, sec_program, solution_program));
 
         println!("yak3");
-        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        let spends = ctx.take();
+        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+        sim.spend_coins(spends, &[user_sk.clone()])?;
         println!("yak4");
 
         Ok(())

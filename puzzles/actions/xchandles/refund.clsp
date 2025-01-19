@@ -11,18 +11,20 @@
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
   Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
-  handle_hash ; (sha256 1 handle)
-  precommited_cat_maker_reveal
-  precommited_cat_maker_hash
-  precommited_cat_maker_solution
-  precommited_pricing_puzzle_reveal
-  precommited_pricing_puzzle_hash
-  precommited_pricing_puzzle_solution
-  secret_hash
-  precommit_value_rest_hash ; hash of (c start_time (c new_owner_launcher_id new_resolved_launcher_id))
-  refund_puzzle_hash_hash
-  precommit_amount . ; amount of the pre-commit coin
-  rest_hash ; sha256sum of all data in slot after 'value' (handle hash)
+  (
+    handle_hash ; (sha256 1 handle)
+    precommited_cat_maker_reveal
+    precommited_cat_maker_hash
+    precommited_cat_maker_solution
+    precommited_pricing_puzzle_reveal
+    precommited_pricing_puzzle_hash
+    precommited_pricing_puzzle_solution
+    secret_hash
+    precommit_value_rest_hash ; hash of (c start_time (c new_owner_launcher_id new_resolved_launcher_id))
+    refund_puzzle_hash_hash
+    precommit_amount . ; amount of the pre-commit coin
+    rest_hash ; sha256sum of all data in slot after 'value' (handle hash)
+  )
 )
   (include condition_codes.clib)
   (include secure_nft.clib)
@@ -47,6 +49,7 @@
     (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
     (= precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_reveal))
     (> precommit_amount 0) ; don't want any messages to be sent to slots
+    1
   )
     (c
       Current_State ; new state
@@ -59,28 +62,28 @@
           (= precommited_cat_maker_hash (f Current_State))
           ; not (b)
           (any
-            (all
-                (= precommited_pricing_puzzle_hash (f (r Current_State)))
-                (= handle_hash (sha256 1 (f precommited_pricing_puzzle_solution)))
+            (if (= precommited_pricing_puzzle_hash (f (r Current_State)))
+                (= handle_hash (sha256 1 (f precommited_pricing_puzzle_solution))) ()
             )
-            (all
-                (= precommited_pricing_puzzle_hash (r (r Current_State)))
-                (= handle_hash (sha256 1 (f (r (r precommited_pricing_puzzle_solution)))))
+            (if (= precommited_pricing_puzzle_hash (r (r Current_State)))
+                (= handle_hash (sha256 1 (f (r (r precommited_pricing_puzzle_solution))))) ()
             )
           )
           ; not (c)
-          (= precommit_amount (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution))
+          (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
         ) ; slot spend needed if (a), (b), and (c) are not met - we need (d)
         (list
           ; announcement
           (list
               CREATE_PUZZLE_ANNOUNCEMENT
               (concat '$'
-                  (sha256 2 
-                      secret_hash
-                      handle_hash
+                  (sha256 2
+                    (sha256 2 
+                        secret_hash
+                        handle_hash
+                    )
+                    precommit_value_rest_hash
                   )
-                  precommit_value_rest_hash
               ) 
           )
           
