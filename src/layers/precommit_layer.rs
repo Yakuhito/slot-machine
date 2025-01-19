@@ -8,7 +8,7 @@ use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
-use crate::SpendContextExt;
+use crate::{DefaultCatMakerArgs, SpendContextExt};
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -17,7 +17,6 @@ pub struct PrecommitLayer<V> {
     pub relative_block_height: u32,
     pub payout_puzzle_hash: Bytes32,
     pub refund_puzzle_hash: Bytes32,
-    pub refund_info_hash: Bytes32,
     pub value: V,
 }
 
@@ -27,7 +26,6 @@ impl<V> PrecommitLayer<V> {
         relative_block_height: u32,
         payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
-        refund_info_hash: Bytes32,
         value: V,
     ) -> Self {
         Self {
@@ -35,7 +33,6 @@ impl<V> PrecommitLayer<V> {
             relative_block_height,
             payout_puzzle_hash,
             refund_puzzle_hash,
-            refund_info_hash,
             value,
         }
     }
@@ -62,7 +59,6 @@ impl<V> PrecommitLayer<V> {
         relative_block_height: u32,
         payout_puzzle_hash: Bytes32,
         refund_puzzle_hash: Bytes32,
-        refund_info_hash: Bytes32,
         value_hash: TreeHash,
     ) -> TreeHash {
         CurriedProgram {
@@ -73,7 +69,6 @@ impl<V> PrecommitLayer<V> {
             ),
             args: PrecommitLayer2ndCurryArgs {
                 refund_puzzle_hash,
-                refund_info_hash,
                 value: value_hash,
             },
         }
@@ -115,7 +110,6 @@ where
             relative_block_height: args_1st_curry.relative_block_height,
             payout_puzzle_hash: args_1st_curry.payout_puzzle_hash,
             refund_puzzle_hash: args_2nd_curry.refund_puzzle_hash,
-            refund_info_hash: args_2nd_curry.refund_info_hash,
             value: args_2nd_curry.value,
         }))
     }
@@ -143,7 +137,6 @@ where
             program: prog_1st_curry,
             args: PrecommitLayer2ndCurryArgs {
                 refund_puzzle_hash: self.refund_puzzle_hash,
-                refund_info_hash: self.refund_info_hash,
                 value: self.value.clone(),
             },
         }
@@ -161,11 +154,11 @@ where
     }
 }
 
-pub const PRECOMMIT_LAYER_PUZZLE: [u8; 469] = hex!("ff02ffff01ff04ffff04ff10ffff04ff17ff808080ffff04ffff04ff18ffff04ff8205ffff808080ffff04ffff04ff14ffff04ffff03ff8202ffff2fff5f80ffff04ff8205ffffff04ffff04ffff03ff8202ffff2fff5f80ff8080ff8080808080ffff04ffff04ff1cffff04ffff0113ffff04ff8202ffffff04ffff02ff2effff04ff02ffff04ff05ffff04ff0bffff04ff820bffff808080808080ff8080808080ff8080808080ffff04ffff01ffffff5249ff3343ffff02ff02ffff03ff05ffff01ff0bff76ffff02ff3effff04ff02ffff04ff09ffff04ffff02ff1affff04ff02ffff04ff0dff80808080ff808080808080ffff016680ff0180ffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff0bff56ffff02ff3effff04ff02ffff04ff05ffff04ffff02ff1affff04ff02ffff04ff07ff80808080ff808080808080ff0bff12ffff0bff12ff66ff0580ffff0bff12ff0bff468080ff018080");
+pub const PRECOMMIT_LAYER_PUZZLE: [u8; 469] = hex!("ff02ffff01ff04ffff04ff10ffff04ff17ff808080ffff04ffff04ff18ffff04ff8202ffff808080ffff04ffff04ff14ffff04ffff03ff82017fff2fff5f80ffff04ff8202ffffff04ffff04ffff03ff82017fff2fff5f80ff8080ff8080808080ffff04ffff04ff1cffff04ffff0113ffff04ff82017fffff04ffff02ff2effff04ff02ffff04ff05ffff04ff0bffff04ff8205ffff808080808080ff8080808080ff8080808080ffff04ffff01ffffff5249ff3343ffff02ff02ffff03ff05ffff01ff0bff76ffff02ff3effff04ff02ffff04ff09ffff04ffff02ff1affff04ff02ffff04ff0dff80808080ff808080808080ffff016680ff0180ffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff0bff56ffff02ff3effff04ff02ffff04ff05ffff04ffff02ff1affff04ff02ffff04ff07ff80808080ff808080808080ff0bff12ffff0bff12ff66ff0580ffff0bff12ff0bff468080ff018080");
 
 pub const PRECOMMIT_LAYER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    93de34d706673282439e4f1ad717aab942614728f1175f2ae221cfd7c8f62a80
+    10efe1dab105ef4780345baa2442196a26944040b12c0167375d79aaec89e33f
     "
 ));
 
@@ -182,7 +175,6 @@ pub struct PrecommitLayer1stCurryArgs {
 #[clvm(curry)]
 pub struct PrecommitLayer2ndCurryArgs<V> {
     pub refund_puzzle_hash: Bytes32,
-    pub refund_info_hash: Bytes32,
     pub value: V,
 }
 
@@ -197,9 +189,29 @@ pub struct PrecommitLayerSolution {
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
 pub struct CatalogPrecommitValue<T = NodePtr> {
+    pub refund_info_hash: Bytes32,
     pub initial_inner_puzzle_hash: Bytes32,
     #[clvm(rest)]
     pub tail_reveal: T,
+}
+
+impl<T> CatalogPrecommitValue<T> {
+    pub fn with_default_cat_maker(
+        tail_hash_hash: TreeHash,
+        initial_inner_puzzle_hash: Bytes32,
+        tail_reveal: T,
+    ) -> Self {
+        Self {
+            refund_info_hash: clvm_tuple!(
+                DefaultCatMakerArgs::curry_tree_hash(tail_hash_hash.into()),
+                ()
+            )
+            .tree_hash()
+            .into(),
+            initial_inner_puzzle_hash,
+            tail_reveal,
+        }
+    }
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
@@ -213,6 +225,7 @@ pub struct XchandlesSecretAndHandle {
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
 pub struct XchandlesPrecommitValue {
+    pub refund_info_hash: Bytes32,
     pub secret_and_handle: XchandlesSecretAndHandle,
     pub start_time: u64,
     pub owner_launcher_id: Bytes32,
@@ -221,8 +234,8 @@ pub struct XchandlesPrecommitValue {
 }
 
 impl XchandlesPrecommitValue {
-    #[allow(dead_code)]
     pub fn new(
+        refund_info_hash: Bytes32,
         secret: Bytes32,
         handle: String,
         start_time: u64,
@@ -230,11 +243,51 @@ impl XchandlesPrecommitValue {
         resolved_launcher_id: Bytes32,
     ) -> Self {
         Self {
+            refund_info_hash,
             secret_and_handle: XchandlesSecretAndHandle { secret, handle },
             start_time,
             owner_launcher_id,
             resolved_launcher_id,
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn for_normal_registration(
+        payment_tail_hash_hash: TreeHash,
+        pricing_puzzle_hash: TreeHash,
+        pricing_puzzle_solution_hash: TreeHash,
+        secret: Bytes32,
+        handle: String,
+        start_time: u64,
+        owner_launcher_id: Bytes32,
+        resolved_launcher_id: Bytes32,
+    ) -> Self {
+        Self {
+            refund_info_hash: clvm_tuple!(
+                clvm_tuple!(
+                    DefaultCatMakerArgs::curry_tree_hash(payment_tail_hash_hash.into()),
+                    ()
+                ),
+                clvm_tuple!(pricing_puzzle_hash, pricing_puzzle_solution_hash)
+            )
+            .tree_hash()
+            .into(),
+            secret_and_handle: XchandlesSecretAndHandle { secret, handle },
+            start_time,
+            owner_launcher_id,
+            resolved_launcher_id,
+        }
+    }
+
+    pub fn after_refund_info_hash(&self) -> TreeHash {
+        clvm_tuple!(
+            self.secret_and_handle.clone(),
+            clvm_tuple!(
+                self.start_time,
+                clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id)
+            )
+        )
+        .tree_hash()
     }
 
     pub fn after_secret_and_handle_hash(&self) -> TreeHash {

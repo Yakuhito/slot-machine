@@ -97,19 +97,21 @@
               (list
                 (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                   refund_puzzle_hash_hash
-                  (sha256 1
-                      (sha256 2
-                          (sha256 2 precommited_cat_maker_hash (sha256tree precommited_cat_maker_solution))
-                          (sha256 2 precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_solution))
-                      )
-                  ) ; hash of refund info hash
                   (sha256 2
-                      (sha256 2 
-                          secret_hash
-                          handle_hash
-                      )
-                      precommit_value_rest_hash
-                  ) ; hash of precommit value
+                    (sha256 1
+                        (sha256 2
+                            (sha256 2 precommited_cat_maker_hash (sha256tree precommited_cat_maker_solution))
+                            (sha256 2 precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_solution))
+                        )
+                    ) ; hash of refund info hash
+                    (sha256 2
+                        (sha256 2 
+                            secret_hash
+                            handle_hash
+                        )
+                        precommit_value_rest_hash
+                    )
+                   ) ; hash of precommit value
                 ) ; Inner_Puzzle_Hash
                 precommited_cat_maker_solution
               )

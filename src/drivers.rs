@@ -468,7 +468,7 @@ mod tests {
         test_secret_keys, Cat, CatSpend, Nft, NftMint, Puzzle, Simulator, SpendWithConditions,
         TESTNET11_CONSTANTS,
     };
-    use clvm_traits::{clvm_list, clvm_tuple};
+    use clvm_traits::clvm_list;
     use hex_literal::hex;
 
     use crate::{
@@ -476,7 +476,7 @@ mod tests {
         DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
-        XchandlesRegistryAction, XchandlesSecretAndHandle, ANY_METADATA_UPDATER_HASH,
+        XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -617,10 +617,11 @@ mod tests {
         // doesn't matter - we're getting refudned anyway
         let eve_nft_inner_puzzle_hash = tail_hash;
 
-        let value = CatalogPrecommitValue {
-            initial_inner_puzzle_hash: eve_nft_inner_puzzle_hash.into(),
-            tail_reveal: tail,
-        };
+        let value = CatalogPrecommitValue::with_default_cat_maker(
+            payment_cat.asset_id.tree_hash(),
+            eve_nft_inner_puzzle_hash.into(),
+            tail,
+        );
 
         let refund_puzzle = ctx.alloc(&1)?;
         let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
@@ -635,12 +636,6 @@ mod tests {
             catalog_constants.relative_block_height,
             catalog_constants.precommit_payout_puzzle_hash,
             refund_puzzle_hash.into(),
-            clvm_tuple!(
-                DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
-                ()
-            )
-            .tree_hash()
-            .into(),
             value,
             reg_amount,
         )?;
@@ -810,10 +805,11 @@ mod tests {
             .to_clvm(&mut ctx.allocator)?;
             let eve_nft_inner_puzzle_hash = ctx.tree_hash(eve_nft_inner_puzzle);
 
-            let value = CatalogPrecommitValue {
-                initial_inner_puzzle_hash: eve_nft_inner_puzzle_hash.into(),
-                tail_reveal: tail,
-            };
+            let value = CatalogPrecommitValue::with_default_cat_maker(
+                payment_cat.asset_id.tree_hash(),
+                eve_nft_inner_puzzle_hash.into(),
+                tail,
+            );
 
             let refund_puzzle = ctx.alloc(&1)?;
             let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
@@ -828,12 +824,6 @@ mod tests {
                 catalog_constants.relative_block_height,
                 catalog_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),
-                clvm_tuple!(
-                    DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
-                    ()
-                )
-                .tree_hash()
-                .into(),
                 value,
                 reg_amount,
             )?;
@@ -1057,15 +1047,20 @@ mod tests {
         minter_sk: &SecretKey,
         user_sk: &SecretKey,
     ) -> anyhow::Result<(XchandlesRegistry, Cat)> {
-        let value = XchandlesPrecommitValue {
-            secret_and_handle: XchandlesSecretAndHandle {
-                secret: Bytes32::default(),
+        let value = XchandlesPrecommitValue::for_normal_registration(
+            payment_cat.asset_id.tree_hash(),
+            XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
+            XchandlesFactorPricingSolution {
                 handle: handle_to_refund.clone(),
-            },
-            start_time: 0,
-            owner_launcher_id: Bytes32::default(),
-            resolved_launcher_id: Bytes32::default(),
-        };
+                num_years: 1,
+            }
+            .tree_hash(),
+            Bytes32::default(),
+            handle_to_refund.clone(),
+            0,
+            Bytes32::default(),
+            Bytes32::default(),
+        );
 
         let refund_puzzle = ctx.alloc(&1)?;
         let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
@@ -1080,21 +1075,6 @@ mod tests {
             registry.info.constants.relative_block_height,
             registry.info.constants.precommit_payout_puzzle_hash,
             refund_puzzle_hash.into(),
-            clvm_tuple!(
-                clvm_tuple!(
-                    DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
-                    ()
-                ),
-                clvm_tuple!(
-                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
-                    XchandlesFactorPricingSolution {
-                        handle: handle_to_refund.clone(),
-                        num_years: 1
-                    }
-                )
-            )
-            .tree_hash()
-            .into(),
             value,
             payment_cat_amount,
         )?;
@@ -1270,7 +1250,14 @@ mod tests {
             let handle_resolved_launcher_id = Bytes32::from([u8::MAX - i as u8; 32]);
             let secret = Bytes32::default();
 
-            let value = XchandlesPrecommitValue::new(
+            let value = XchandlesPrecommitValue::for_normal_registration(
+                payment_cat.asset_id.tree_hash(),
+                XchandlesFactorPricingPuzzleArgs::curry_tree_hash(base_price),
+                XchandlesFactorPricingSolution {
+                    handle: handle.clone(),
+                    num_years: 1,
+                }
+                .tree_hash(),
                 secret,
                 handle.clone(),
                 100,
@@ -1291,23 +1278,6 @@ mod tests {
                 xchandles_constants.relative_block_height,
                 xchandles_constants.precommit_payout_puzzle_hash,
                 refund_puzzle_hash.into(),
-                clvm_tuple!(
-                    clvm_tuple!(
-                        DefaultCatMakerArgs::curry_tree_hash(
-                            payment_cat.asset_id.tree_hash().into()
-                        ),
-                        ()
-                    ),
-                    clvm_tuple!(
-                        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(base_price),
-                        XchandlesFactorPricingSolution {
-                            handle: handle.clone(),
-                            num_years: 1
-                        }
-                    ),
-                )
-                .tree_hash()
-                .into(),
                 value,
                 reg_amount,
             )?;
@@ -1556,7 +1526,18 @@ mod tests {
         let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
         let expiration = initial_slot.info.value.unwrap().expiration;
         let buy_time = expiration + 27 * 24 * 60 * 60; // last day of auction; 0 < premium < 1 CAT
-        let value = XchandlesPrecommitValue::new(
+        let value = XchandlesPrecommitValue::for_normal_registration(
+            payment_cat.asset_id.tree_hash(),
+            XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(base_price, 1000),
+            XchandlesExponentialPremiumRenewPuzzleSolution {
+                buy_time,
+                expiration,
+                pricing_program_solution: XchandlesFactorPricingSolution {
+                    handle: handle_to_expire.clone(),
+                    num_years: 1,
+                },
+            }
+            .tree_hash(),
             Bytes32::default(),
             handle_to_expire.clone(),
             buy_time,
@@ -1567,8 +1548,7 @@ mod tests {
         let pricing_puzzle =
             XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(ctx, base_price, 1000)?;
         let reg_amount =
-            pricing_puzzle.get_price(ctx, handle_to_expire.clone(), expiration, buy_time, 1)?
-                as u64;
+            pricing_puzzle.get_price(ctx, handle_to_expire, expiration, buy_time, 1)? as u64;
 
         let precommit_coin = PrecommitCoin::<XchandlesPrecommitValue>::new(
             ctx,
@@ -1581,25 +1561,6 @@ mod tests {
             xchandles_constants.relative_block_height,
             xchandles_constants.precommit_payout_puzzle_hash,
             refund_puzzle_hash.into(),
-            clvm_tuple!(
-                clvm_tuple!(
-                    DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
-                    ()
-                ),
-                clvm_tuple!(
-                    XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(base_price, 1000),
-                    XchandlesExponentialPremiumRenewPuzzleSolution {
-                        buy_time,
-                        expiration,
-                        pricing_program_solution: XchandlesFactorPricingSolution {
-                            handle: handle_to_expire,
-                            num_years: 1
-                        }
-                    },
-                ),
-            )
-            .tree_hash()
-            .into(),
             value,
             reg_amount,
         )?;
