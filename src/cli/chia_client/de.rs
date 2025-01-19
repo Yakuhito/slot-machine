@@ -860,6 +860,38 @@ pub mod deserialize_full_block_maybe {
     }
 }
 
+pub mod deserialize_full_blocks_maybe {
+    use chia::protocol::{FullBlock, Program};
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableFullBlock;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<FullBlock>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = Option::<Vec<DeserializableFullBlock>>::deserialize(deserializer)?;
+        Ok(helper.map(|h| {
+            h.into_iter()
+                .map(|h| FullBlock {
+                    finished_sub_slots: h.finished_sub_slots,
+                    reward_chain_block: h.reward_chain_block,
+                    challenge_chain_sp_proof: h.challenge_chain_sp_proof,
+                    challenge_chain_ip_proof: h.challenge_chain_ip_proof,
+                    reward_chain_sp_proof: h.reward_chain_sp_proof,
+                    reward_chain_ip_proof: h.reward_chain_ip_proof,
+                    infused_challenge_chain_ip_proof: h.infused_challenge_chain_ip_proof,
+                    foliage: h.foliage,
+                    foliage_transaction_block: h.foliage_transaction_block,
+                    transactions_info: h.transactions_info,
+                    transactions_generator: h.transactions_generator.map(Program::from),
+                    transactions_generator_ref_list: h.transactions_generator_ref_list,
+                })
+                .collect()
+        }))
+    }
+}
+
 #[derive(Deserialize)]
 pub struct DeserializableSubEpochSummary {
     #[serde(with = "hex_string_to_bytes32")]
@@ -1013,6 +1045,52 @@ pub mod deserialize_block_record_maybe {
             finished_infused_challenge_slot_hashes: h.finished_infused_challenge_slot_hashes,
             finished_reward_slot_hashes: h.finished_reward_slot_hashes,
             sub_epoch_summary_included: h.sub_epoch_summary_included,
+        }))
+    }
+}
+
+pub mod deserialize_block_records_maybe {
+    use chia::protocol::BlockRecord;
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableBlockRecord;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<BlockRecord>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = Option::<Vec<DeserializableBlockRecord>>::deserialize(deserializer)?;
+        Ok(helper.map(|h| {
+            h.into_iter()
+                .map(|h| BlockRecord {
+                    header_hash: h.header_hash,
+                    prev_hash: h.prev_hash,
+                    height: h.height,
+                    weight: h.weight,
+                    total_iters: h.total_iters,
+                    signage_point_index: h.signage_point_index,
+                    challenge_vdf_output: h.challenge_vdf_output,
+                    infused_challenge_vdf_output: h.infused_challenge_vdf_output,
+                    reward_infusion_new_challenge: h.reward_infusion_new_challenge,
+                    challenge_block_info_hash: h.challenge_block_info_hash,
+                    sub_slot_iters: h.sub_slot_iters,
+                    pool_puzzle_hash: h.pool_puzzle_hash,
+                    farmer_puzzle_hash: h.farmer_puzzle_hash,
+                    required_iters: h.required_iters,
+                    deficit: h.deficit,
+                    overflow: h.overflow,
+                    prev_transaction_block_height: h.prev_transaction_block_height,
+                    timestamp: h.timestamp,
+                    prev_transaction_block_hash: h.prev_transaction_block_hash,
+                    fees: h.fees,
+                    reward_claims_incorporated: h.reward_claims_incorporated,
+                    finished_challenge_slot_hashes: h.finished_challenge_slot_hashes,
+                    finished_infused_challenge_slot_hashes: h
+                        .finished_infused_challenge_slot_hashes,
+                    finished_reward_slot_hashes: h.finished_reward_slot_hashes,
+                    sub_epoch_summary_included: h.sub_epoch_summary_included,
+                })
+                .collect()
         }))
     }
 }

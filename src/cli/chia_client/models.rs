@@ -2,8 +2,9 @@ use chia::protocol::{BlockRecord, Bytes32, Coin, FullBlock};
 use serde::Deserialize;
 
 use super::de::{
-    deserialize_block_record, deserialize_block_record_maybe, deserialize_coin,
-    deserialize_full_block_maybe, hex_string_to_bytes32,
+    deserialize_block_record, deserialize_block_record_maybe, deserialize_block_records_maybe,
+    deserialize_coin, deserialize_full_block_maybe, deserialize_full_blocks_maybe,
+    hex_string_to_bytes32,
 };
 
 #[derive(Deserialize, Debug)]
@@ -77,6 +78,24 @@ pub struct GetBlockResponse {
 pub struct GetBlockRecordResponse {
     #[serde(with = "deserialize_block_record_maybe")]
     pub block_record: Option<BlockRecord>,
+    pub error: Option<String>,
+    pub success: bool,
+}
+
+pub type GetBlockRecordByHeightResponse = GetBlockRecordResponse;
+
+#[derive(Deserialize, Debug)]
+pub struct GetBlockRecordsResponse {
+    #[serde(with = "deserialize_block_records_maybe")]
+    pub block_records: Option<Vec<BlockRecord>>,
+    pub error: Option<String>,
+    pub success: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GetBlocksResponse {
+    #[serde(with = "deserialize_full_blocks_maybe")]
+    pub blocks: Option<Vec<FullBlock>>,
     pub error: Option<String>,
     pub success: bool,
 }

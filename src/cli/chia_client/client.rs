@@ -4,8 +4,9 @@ use serde_json::Value;
 use std::error::Error;
 
 use super::{
-    AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockRecordResponse,
-    GetBlockResponse, MockChiaClient,
+    AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockRecordByHeightResponse,
+    GetBlockRecordResponse, GetBlockRecordsResponse, GetBlockResponse, GetBlocksResponse,
+    MockChiaClient,
 };
 
 #[derive(Debug)]
@@ -111,6 +112,53 @@ impl ChiaRpcClient {
             "get_block_record",
             serde_json::json!({
                 "header_hash": format!("0x{}", hex::encode(header_hash.to_bytes())),
+            }),
+        )
+        .await
+    }
+
+    pub async fn get_block_record_by_height(
+        &self,
+        height: u32,
+    ) -> Result<GetBlockRecordByHeightResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_block_record_by_height",
+            serde_json::json!({
+                "height": height,
+            }),
+        )
+        .await
+    }
+
+    pub async fn get_block_records(
+        &self,
+        start_height: u32,
+        end_height: u32,
+    ) -> Result<GetBlockRecordsResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_block_records",
+            serde_json::json!({
+                "start_height": start_height,
+                "end_height": end_height,
+            }),
+        )
+        .await
+    }
+
+    pub async fn get_blocks(
+        &self,
+        start: u32,
+        end: u32,
+        exclude_header_hash: bool,
+        exclude_reorged: bool,
+    ) -> Result<GetBlocksResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_blocks",
+            serde_json::json!({
+                "start": start,
+                "end": end,
+                "exclude_header_hash": exclude_header_hash,
+                "exclude_reorged": exclude_reorged,
             }),
         )
         .await
