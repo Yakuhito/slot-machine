@@ -1596,22 +1596,79 @@ mod tests {
         let unregistered_handle = "yak7".to_string();
 
         for use_factor_pricing in [true, false] {
-            let pricing_puzzle = XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price)?;
-            let pricing_solution = XchandlesFactorPricingSolution {
-                handle: unregistered_handle.clone(),
-                num_years: 1,
-            }
-            .to_clvm(&mut ctx.allocator)?;
+            let pricing_puzzle = if use_factor_pricing {
+                XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price)?
+            } else {
+                XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
+                    ctx, base_price, 1000,
+                )?
+                .get_puzzle(ctx)?
+            };
+            let pricing_solution = if use_factor_pricing {
+                XchandlesFactorPricingSolution {
+                    handle: unregistered_handle.clone(),
+                    num_years: 1,
+                }
+                .to_clvm(&mut ctx.allocator)?
+            } else {
+                XchandlesExponentialPremiumRenewPuzzleSolution {
+                    buy_time: 28 * 24 * 60 * 60 + 1, // premium should be 0
+                    expiration: 0,
+                    pricing_program_solution: XchandlesFactorPricingSolution {
+                        handle: unregistered_handle.clone(),
+                        num_years: 1,
+                    },
+                }
+                .to_clvm(&mut ctx.allocator)?
+            };
+
             let expected_price =
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &unregistered_handle, 1);
-            let other_pricing_puzzle =
-                XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price + 1)?;
+            let other_pricing_puzzle = if use_factor_pricing {
+                XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price + 1)?
+            } else {
+                XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
+                    ctx,
+                    base_price + 1,
+                    1000,
+                )?
+                .get_puzzle(ctx)?
+            };
             let other_expected_price = XchandlesFactorPricingPuzzleArgs::get_price(
                 base_price + 1,
                 &unregistered_handle,
                 1,
             );
             assert_ne!(other_expected_price, expected_price);
+
+            let existing_handle = if use_factor_pricing {
+                "aaa1".to_string()
+            } else {
+                "aaaa2".to_string()
+            };
+            let existing_slot = *slots
+                .iter()
+                .find(|s| s.info.value.unwrap().handle_hash == existing_handle.tree_hash().into())
+                .unwrap();
+            let existing_handle_pricing_solution = if use_factor_pricing {
+                XchandlesFactorPricingSolution {
+                    handle: existing_handle.clone(),
+                    num_years: 1,
+                }
+                .to_clvm(&mut ctx.allocator)?
+            } else {
+                XchandlesExponentialPremiumRenewPuzzleSolution {
+                    buy_time: existing_slot.info.value.unwrap().expiration + 28 * 24 * 60 * 60 + 1, // premium should be 0
+                    expiration: existing_slot.info.value.unwrap().expiration,
+                    pricing_program_solution: XchandlesFactorPricingSolution {
+                        handle: existing_handle.clone(),
+                        num_years: 1,
+                    },
+                }
+                .to_clvm(&mut ctx.allocator)?
+            };
+            let existing_handle_expected_price =
+                XchandlesFactorPricingPuzzleArgs::get_price(base_price, &existing_handle, 1);
 
             // a - the CAT maker puzzle has changed
             let alternative_payment_cat_amount = 10_000_000;
@@ -1687,27 +1744,15 @@ mod tests {
             )?;
 
             // d - the handle has already been registered
-            let existing_handle = if use_factor_pricing {
-                "aaa1".to_string()
-            } else {
-                "aaaa2".to_string()
-            };
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
                 existing_handle.clone(), // already registered handle
                 pricing_puzzle,
-                pricing_solution,
-                Some(
-                    *slots
-                        .iter()
-                        .find(|s| {
-                            s.info.value.unwrap().handle_hash == existing_handle.tree_hash().into()
-                        })
-                        .unwrap(),
-                ),
+                existing_handle_pricing_solution,
+                Some(existing_slot),
                 payment_cat,
-                expected_price,
+                existing_handle_expected_price,
                 registry,
                 minter_p2,
                 minter_puzzle_hash,
