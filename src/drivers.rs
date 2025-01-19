@@ -1653,10 +1653,14 @@ mod tests {
             .find(|s| s.info.value.unwrap().handle_hash == handle.tree_hash().into());
 
         let precommited_pricing_puzzle_reveal =
-            XchandlesFactorPricingPuzzleArgs::new(used_base_price).construct_puzzle(ctx)?;
+            XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, used_base_price)?;
         println!(
             "precommited_pricing_puzzle_reveal_hash 2: {:?}",
             ctx.tree_hash(precommited_pricing_puzzle_reveal)
+        );
+        println!(
+            "precommited_pricing_puzzle_reveal_hash 3: {:?}",
+            XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price)
         );
 
         let precommited_pricing_puzzle_solution = XchandlesFactorPricingSolution {
