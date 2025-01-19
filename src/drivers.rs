@@ -1037,7 +1037,8 @@ mod tests {
         ctx: &mut SpendContext,
         sim: &mut Simulator,
         handle_to_refund: String,
-        used_base_price: u64,
+        pricing_puzzle: NodePtr,
+        pricing_solution: NodePtr,
         slot: Option<Slot<XchandlesSlotValue>>,
         payment_cat: Cat,
         payment_cat_amount: u64,
@@ -1047,14 +1048,13 @@ mod tests {
         minter_sk: &SecretKey,
         user_sk: &SecretKey,
     ) -> anyhow::Result<(XchandlesRegistry, Cat)> {
+        let pricing_puzzle_hash = ctx.tree_hash(pricing_puzzle);
+        let pricing_solution_hash = ctx.tree_hash(pricing_solution);
+
         let value = XchandlesPrecommitValue::for_normal_registration(
             payment_cat.asset_id.tree_hash(),
-            XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
-            XchandlesFactorPricingSolution {
-                handle: handle_to_refund.clone(),
-                num_years: 1,
-            }
-            .tree_hash(),
+            pricing_puzzle_hash,
+            pricing_solution_hash,
             Bytes32::default(),
             handle_to_refund.clone(),
             0,
@@ -1105,21 +1105,8 @@ mod tests {
 
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
-        let precommited_pricing_puzzle_reveal =
-            XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, used_base_price)?;
-
-        let precommited_pricing_puzzle_solution = XchandlesFactorPricingSolution {
-            handle: handle_to_refund.clone(),
-            num_years: 1,
-        }
-        .to_clvm(&mut ctx.allocator)?;
-        let (secure_cond, new_registry) = registry.refund(
-            ctx,
-            precommit_coin,
-            precommited_pricing_puzzle_reveal,
-            precommited_pricing_puzzle_solution,
-            slot,
-        )?;
+        let (secure_cond, new_registry) =
+            registry.refund(ctx, precommit_coin, pricing_puzzle, pricing_solution, slot)?;
 
         let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
         let sec_coin = sim.new_coin(ctx.tree_hash(sec_puzzle).into(), 0);
@@ -1608,98 +1595,126 @@ mod tests {
         // Test refunds
         let unregistered_handle = "yak7".to_string();
 
-        // a - the CAT maker puzzle has changed
-        let alternative_payment_cat_amount = 10_000_000;
-        let (minter2_sk, minter2_pk, minter2_puzzle_hash, minter2_coin) =
-            sim.new_p2(alternative_payment_cat_amount)?;
-        let minter_p2_2 = StandardLayer::new(minter2_pk);
+        for use_factor_pricing in [true, false] {
+            let pricing_puzzle = XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price)?;
+            let pricing_solution = XchandlesFactorPricingSolution {
+                handle: unregistered_handle.clone(),
+                num_years: 1,
+            }
+            .to_clvm(&mut ctx.allocator)?;
+            let expected_price =
+                XchandlesFactorPricingPuzzleArgs::get_price(base_price, &unregistered_handle, 1);
+            let other_pricing_puzzle =
+                XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price + 1)?;
+            let other_expected_price = XchandlesFactorPricingPuzzleArgs::get_price(
+                base_price + 1,
+                &unregistered_handle,
+                1,
+            );
+            assert_ne!(other_expected_price, expected_price);
 
-        let (issue_cat, mut alternative_payment_cat) = Cat::single_issuance_eve(
-            ctx,
-            minter2_coin.coin_id(),
-            alternative_payment_cat_amount,
-            Conditions::new().create_coin(
-                minter2_puzzle_hash,
+            // a - the CAT maker puzzle has changed
+            let alternative_payment_cat_amount = 10_000_000;
+            let (minter2_sk, minter2_pk, minter2_puzzle_hash, minter2_coin) =
+                sim.new_p2(alternative_payment_cat_amount)?;
+            let minter_p2_2 = StandardLayer::new(minter2_pk);
+
+            let (issue_cat, mut alternative_payment_cat) = Cat::single_issuance_eve(
+                ctx,
+                minter2_coin.coin_id(),
                 alternative_payment_cat_amount,
+                Conditions::new().create_coin(
+                    minter2_puzzle_hash,
+                    alternative_payment_cat_amount,
+                    None,
+                ),
+            )?;
+            minter_p2_2.spend(ctx, minter2_coin, issue_cat)?;
+
+            alternative_payment_cat = alternative_payment_cat
+                .wrapped_child(minter2_puzzle_hash, alternative_payment_cat_amount);
+            sim.spend_coins(ctx.take(), &[minter2_sk.clone()])?;
+
+            registry = test_refund_for_xchandles(
+                ctx,
+                &mut sim,
+                unregistered_handle.clone(),
+                pricing_puzzle,
+                pricing_solution,
                 None,
-            ),
-        )?;
-        minter_p2_2.spend(ctx, minter2_coin, issue_cat)?;
+                alternative_payment_cat,
+                expected_price,
+                registry,
+                minter_p2_2,
+                minter2_puzzle_hash,
+                &minter2_sk,
+                &user_sk,
+            )?
+            .0;
 
-        alternative_payment_cat = alternative_payment_cat
-            .wrapped_child(minter2_puzzle_hash, alternative_payment_cat_amount);
-        sim.spend_coins(ctx.take(), &[minter2_sk.clone()])?;
+            // b - the amount is wrong
+            (registry, payment_cat) = test_refund_for_xchandles(
+                ctx,
+                &mut sim,
+                unregistered_handle.clone(),
+                pricing_puzzle,
+                pricing_solution,
+                None,
+                payment_cat,
+                expected_price + 1,
+                registry,
+                minter_p2,
+                minter_puzzle_hash,
+                &minter_sk,
+                &user_sk,
+            )?;
 
-        let (mut registry, _alternative_payment_cat) = test_refund_for_xchandles(
-            ctx,
-            &mut sim,
-            unregistered_handle.clone(),
-            base_price,
-            None,
-            alternative_payment_cat,
-            XchandlesFactorPricingPuzzleArgs::get_price(base_price, &unregistered_handle, 1),
-            registry,
-            minter_p2_2,
-            minter2_puzzle_hash,
-            &minter2_sk,
-            &user_sk,
-        )?;
+            // c - the pricing puzzle has changed
+            (registry, payment_cat) = test_refund_for_xchandles(
+                ctx,
+                &mut sim,
+                unregistered_handle.clone(),
+                other_pricing_puzzle,
+                pricing_solution,
+                None,
+                payment_cat,
+                other_expected_price,
+                registry,
+                minter_p2,
+                minter_puzzle_hash,
+                &minter_sk,
+                &user_sk,
+            )?;
 
-        // b - the amount is wrong
-        (registry, payment_cat) = test_refund_for_xchandles(
-            ctx,
-            &mut sim,
-            unregistered_handle.clone(),
-            base_price,
-            None,
-            payment_cat,
-            XchandlesFactorPricingPuzzleArgs::get_price(base_price, &unregistered_handle, 1) + 1,
-            registry,
-            minter_p2,
-            minter_puzzle_hash,
-            &minter_sk,
-            &user_sk,
-        )?;
-
-        // c - the pricing puzzle has changed
-        (registry, payment_cat) = test_refund_for_xchandles(
-            ctx,
-            &mut sim,
-            unregistered_handle.clone(),
-            base_price + 1,
-            None,
-            payment_cat,
-            XchandlesFactorPricingPuzzleArgs::get_price(base_price + 1, &unregistered_handle, 1),
-            registry,
-            minter_p2,
-            minter_puzzle_hash,
-            &minter_sk,
-            &user_sk,
-        )?;
-
-        // d - the handle has already been registered
-        let existing_handle = "aaa1".to_string();
-        let (_registry, _payment_cat) = test_refund_for_xchandles(
-            ctx,
-            &mut sim,
-            existing_handle.clone(), // already registered handle
-            base_price,
-            Some(
-                *slots
-                    .iter()
-                    .find(|s| {
-                        s.info.value.unwrap().handle_hash == existing_handle.tree_hash().into()
-                    })
-                    .unwrap(),
-            ),
-            payment_cat,
-            XchandlesFactorPricingPuzzleArgs::get_price(base_price, &existing_handle, 1),
-            registry,
-            minter_p2,
-            minter_puzzle_hash,
-            &minter_sk,
-            &user_sk,
-        )?;
+            // d - the handle has already been registered
+            let existing_handle = if use_factor_pricing {
+                "aaa1".to_string()
+            } else {
+                "aaaa2".to_string()
+            };
+            (registry, payment_cat) = test_refund_for_xchandles(
+                ctx,
+                &mut sim,
+                existing_handle.clone(), // already registered handle
+                pricing_puzzle,
+                pricing_solution,
+                Some(
+                    *slots
+                        .iter()
+                        .find(|s| {
+                            s.info.value.unwrap().handle_hash == existing_handle.tree_hash().into()
+                        })
+                        .unwrap(),
+                ),
+                payment_cat,
+                expected_price,
+                registry,
+                minter_p2,
+                minter_puzzle_hash,
+                &minter_sk,
+                &user_sk,
+            )?;
+        }
 
         Ok(())
     }
