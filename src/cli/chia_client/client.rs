@@ -90,6 +90,8 @@ impl ChiaRpcClient {
 
 #[cfg(test)]
 mod tests {
+    use chia::protocol::Coin;
+
     use super::*;
 
     #[tokio::test]
@@ -181,5 +183,109 @@ mod tests {
             Some("Failed to connect to full node".to_string())
         );
         assert!(response.blockchain_state.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_additions_and_removals_success() {
+        let mut client = ChiaRpcClient::new_mock();
+
+        if let Client::Mock(mock_client) = &mut client.client {
+            mock_client.mock_response(
+                "http://api.example.com/get_additions_and_removals",
+                r#"{
+                    "additions": [{
+                        "coin": {
+                            "amount": 10019626640,
+                            "parent_coin_info": "c325057d788bee13367cb8e2d71ff3e209b5e94b31b296322ba1a143053fef5b",
+                            "puzzle_hash": "11cd056d9ec93f4612919b445e1ad9afeb7ef7739708c2d16cec4fd2d3cd5e63"
+                        },
+                        "coinbase": false,
+                        "confirmed_block_index": 5910291,
+                        "spent": false,
+                        "spent_block_index": 0,
+                        "timestamp": 1725991066
+                    }],
+                    "removals": [{
+                        "coin": {
+                            "amount": 1,
+                            "parent_coin_info": "4dda4b8b6017c633794c2b719c3591870b4bc7682930094c11a311112c772ce6",
+                            "puzzle_hash": "18cfd81a9a58d598197730b2f2a21ff3b72951577be1dcc6004080ad17069e84"
+                        },
+                        "coinbase": false,
+                        "confirmed_block_index": 5612341,
+                        "spent": true,
+                        "spent_block_index": 5910291,
+                        "timestamp": 1720407964
+                    }],
+                    "success": true
+                }"#,
+            );
+        }
+
+        let header_hash = Bytes32::from([0x88; 32]);
+        let response = client
+            .get_additions_and_removals(header_hash)
+            .await
+            .unwrap();
+
+        assert!(response.success);
+        assert!(response.error.is_none());
+
+        // Check additions
+        let additions = response.additions.unwrap();
+        assert_eq!(additions.len(), 1);
+        let addition = &additions[0];
+        assert_eq!(
+            addition.coin,
+            Coin::new(
+                Bytes32::new(hex_literal::hex!(
+                    "c325057d788bee13367cb8e2d71ff3e209b5e94b31b296322ba1a143053fef5b"
+                )),
+                Bytes32::new(hex_literal::hex!(
+                    "11cd056d9ec93f4612919b445e1ad9afeb7ef7739708c2d16cec4fd2d3cd5e63"
+                )),
+                10019626640
+            )
+        );
+        assert!(!addition.coinbase);
+        assert_eq!(addition.confirmed_block_index, 5910291);
+        assert!(!addition.spent);
+
+        // Check removals
+        let removals = response.removals.unwrap();
+        assert_eq!(removals.len(), 1);
+        let removal = &removals[0];
+        assert_eq!(removal.coin.amount, 1);
+        assert!(removal.spent);
+        assert_eq!(removal.spent_block_index, 5910291);
+    }
+
+    #[tokio::test]
+    async fn test_get_additions_and_removals_error() {
+        let mut client = ChiaRpcClient::new_mock();
+
+        if let Client::Mock(mock_client) = &mut client.client {
+            mock_client.mock_response(
+                "http://api.example.com/get_additions_and_removals",
+                r#"{
+                    "success": false,
+                    "error": "Record not found: [blah blah]"
+                }"#,
+            );
+        }
+
+        let header_hash = Bytes32::from([0x88; 32]);
+        let response = client
+            .get_additions_and_removals(header_hash)
+            .await
+            .unwrap();
+
+        assert!(!response.success);
+        assert_eq!(
+            response.error,
+            Some("Record not found: [blah blah]".to_string())
+        );
+        assert!(response.additions.is_none());
+        assert!(response.removals.is_none());
     }
 }
