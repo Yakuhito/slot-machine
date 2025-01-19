@@ -1717,19 +1717,22 @@ mod tests {
         )?;
 
         // d - the handle has already been registered
+        let existing_handle = "aaa1".to_string();
         let (_registry, _payment_cat) = test_refund_for_xchandles(
             ctx,
             &mut sim,
-            "aa0".to_string(), // already registered handle
+            existing_handle.clone(), // already registered handle
             base_price,
             Some(
                 *slots
                     .iter()
-                    .find(|s| s.info.value.unwrap().handle_hash == "aa0".tree_hash().into())
+                    .find(|s| {
+                        s.info.value.unwrap().handle_hash == existing_handle.tree_hash().into()
+                    })
                     .unwrap(),
             ),
             payment_cat,
-            XchandlesFactorPricingPuzzleArgs::get_price(base_price, &unregistered_handle, 1),
+            XchandlesFactorPricingPuzzleArgs::get_price(base_price, &existing_handle, 1),
             registry,
             minter_p2,
             minter_puzzle_hash,
