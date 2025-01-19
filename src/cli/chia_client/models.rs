@@ -1,9 +1,9 @@
-use chia::protocol::{Bytes32, Coin, FullBlock};
+use chia::protocol::{BlockRecord, Bytes32, Coin, FullBlock};
 use serde::Deserialize;
 
 use super::de::{
-    deserialize_coin, deserialize_full_block_maybe, hex_string_to_bytes32,
-    hex_string_to_bytes32_maybe,
+    deserialize_block_record, deserialize_block_record_maybe, deserialize_coin,
+    deserialize_full_block_maybe, hex_string_to_bytes32,
 };
 
 #[derive(Deserialize, Debug)]
@@ -26,7 +26,8 @@ pub struct BlockchainState {
     pub mempool_size: u32,
     #[serde(with = "hex_string_to_bytes32")]
     pub node_id: Bytes32,
-    pub peak: DeserializableBlockRecord, // TODO
+    #[serde(with = "deserialize_block_record")]
+    pub peak: BlockRecord,
     pub space: u128,
     pub sub_slot_iters: u64,
     pub sync: Sync,
@@ -35,28 +36,6 @@ pub struct BlockchainState {
 #[derive(Deserialize, Debug, Clone)]
 pub struct MempoolMinFees {
     pub cost_5000000: u64,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct DeserializableBlockRecord {
-    #[serde(with = "hex_string_to_bytes32")]
-    pub header_hash: Bytes32,
-    #[serde(with = "hex_string_to_bytes32")]
-    pub prev_hash: Bytes32,
-    pub height: u32,
-    pub weight: u128,
-    pub total_iters: u128,
-    pub signage_point_index: u8,
-    #[serde(with = "hex_string_to_bytes32")]
-    pub farmer_puzzle_hash: Bytes32,
-    pub required_iters: u64,
-    pub deficit: u8,
-    pub overflow: bool,
-    pub prev_transaction_block_height: u32,
-    pub timestamp: Option<u64>,
-    #[serde(with = "hex_string_to_bytes32_maybe")]
-    pub prev_transaction_block_hash: Option<Bytes32>,
-    pub fees: Option<u64>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -90,6 +69,14 @@ pub struct CoinRecord {
 pub struct GetBlockResponse {
     #[serde(with = "deserialize_full_block_maybe")]
     pub block: Option<FullBlock>,
+    pub error: Option<String>,
+    pub success: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GetBlockRecordResponse {
+    #[serde(with = "deserialize_block_record_maybe")]
+    pub block_record: Option<BlockRecord>,
     pub error: Option<String>,
     pub success: bool,
 }

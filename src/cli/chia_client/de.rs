@@ -4,7 +4,7 @@ use chia::{
         Bytes, Bytes100, Bytes32, ChallengeChainSubSlot, ClassgroupElement, Coin,
         EndOfSubSlotBundle, Foliage, FoliageBlockData, FoliageTransactionBlock,
         InfusedChallengeChainSubSlot, PoolTarget, ProofOfSpace, RewardChainBlock,
-        RewardChainSubSlot, SubSlotProofs, TransactionsInfo, VDFInfo, VDFProof,
+        RewardChainSubSlot, SubEpochSummary, SubSlotProofs, TransactionsInfo, VDFInfo, VDFProof,
     },
 };
 use serde::Deserialize;
@@ -100,6 +100,24 @@ pub mod hex_string_to_bytes32_maybe {
     }
 }
 
+pub mod hex_string_to_bytes32_list_maybe {
+    use chia::protocol::Bytes32;
+    use hex::FromHex;
+    use serde::{self, Deserialize, Deserializer};
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<Bytes32>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let l = Option::<Vec<String>>::deserialize(deserializer)?;
+        Ok(l.map(|l| {
+            l.into_iter()
+                .map(|s| Bytes32::new(<[u8; 32]>::from_hex(s.replace("0x", "")).unwrap()))
+                .collect()
+        }))
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct DeserializableCoin {
     pub amount: u64,
@@ -143,6 +161,25 @@ pub mod deserialize_coins {
             .into_iter()
             .map(|c| Coin::new(c.parent_coin_info, c.puzzle_hash, c.amount))
             .collect())
+    }
+}
+
+pub mod deserialize_coins_maybe {
+    use chia::protocol::Coin;
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableCoin;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<Coin>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let coins = Option::<Vec<DeserializableCoin>>::deserialize(deserializer)?;
+        Ok(coins.map(|c| {
+            c.into_iter()
+                .map(|c| Coin::new(c.parent_coin_info, c.puzzle_hash, c.amount))
+                .collect()
+        }))
     }
 }
 
@@ -210,6 +247,21 @@ pub mod deserialize_classgroup_element {
     {
         let helper = DeserializableClassgroupElement::deserialize(deserializer)?;
         Ok(ClassgroupElement::new(helper.data))
+    }
+}
+
+pub mod deserialize_classgroup_element_maybe {
+    use chia::protocol::ClassgroupElement;
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableClassgroupElement;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<ClassgroupElement>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = Option::<DeserializableClassgroupElement>::deserialize(deserializer)?;
+        Ok(helper.map(|h| ClassgroupElement::new(h.data)))
     }
 }
 
@@ -804,6 +856,163 @@ pub mod deserialize_full_block_maybe {
             transactions_info: h.transactions_info,
             transactions_generator: h.transactions_generator.map(Program::from),
             transactions_generator_ref_list: h.transactions_generator_ref_list,
+        }))
+    }
+}
+
+#[derive(Deserialize)]
+pub struct DeserializableSubEpochSummary {
+    #[serde(with = "hex_string_to_bytes32")]
+    prev_subepoch_summary_hash: Bytes32,
+    #[serde(with = "hex_string_to_bytes32")]
+    reward_chain_hash: Bytes32,
+    num_blocks_overflow: u8,
+    new_difficulty: Option<u64>,
+    new_sub_slot_iters: Option<u64>,
+}
+
+pub mod deserialize_sub_epoch_summary_maybe {
+    use chia::protocol::SubEpochSummary;
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableSubEpochSummary;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<SubEpochSummary>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = Option::<DeserializableSubEpochSummary>::deserialize(deserializer)?;
+        Ok(helper.map(|h| SubEpochSummary {
+            prev_subepoch_summary_hash: h.prev_subepoch_summary_hash,
+            reward_chain_hash: h.reward_chain_hash,
+            num_blocks_overflow: h.num_blocks_overflow,
+            new_difficulty: h.new_difficulty,
+            new_sub_slot_iters: h.new_sub_slot_iters,
+        }))
+    }
+}
+
+#[derive(Deserialize)]
+pub struct DeserializableBlockRecord {
+    #[serde(with = "hex_string_to_bytes32")]
+    header_hash: Bytes32,
+    #[serde(with = "hex_string_to_bytes32")]
+    prev_hash: Bytes32,
+    height: u32,
+    weight: u128,
+    total_iters: u128,
+    signage_point_index: u8,
+    #[serde(with = "deserialize_classgroup_element")]
+    challenge_vdf_output: ClassgroupElement,
+    #[serde(with = "deserialize_classgroup_element_maybe")]
+    infused_challenge_vdf_output: Option<ClassgroupElement>,
+    #[serde(with = "hex_string_to_bytes32")]
+    reward_infusion_new_challenge: Bytes32,
+    #[serde(with = "hex_string_to_bytes32")]
+    challenge_block_info_hash: Bytes32,
+    sub_slot_iters: u64,
+    #[serde(with = "hex_string_to_bytes32")]
+    pool_puzzle_hash: Bytes32,
+    #[serde(with = "hex_string_to_bytes32")]
+    farmer_puzzle_hash: Bytes32,
+    required_iters: u64,
+    deficit: u8,
+    overflow: bool,
+    prev_transaction_block_height: u32,
+    timestamp: Option<u64>,
+    #[serde(with = "hex_string_to_bytes32_maybe")]
+    prev_transaction_block_hash: Option<Bytes32>,
+    fees: Option<u64>,
+    #[serde(with = "deserialize_coins_maybe")]
+    reward_claims_incorporated: Option<Vec<Coin>>,
+    #[serde(with = "hex_string_to_bytes32_list_maybe")]
+    finished_challenge_slot_hashes: Option<Vec<Bytes32>>,
+    #[serde(with = "hex_string_to_bytes32_list_maybe")]
+    finished_infused_challenge_slot_hashes: Option<Vec<Bytes32>>,
+    #[serde(with = "hex_string_to_bytes32_list_maybe")]
+    finished_reward_slot_hashes: Option<Vec<Bytes32>>,
+    #[serde(with = "deserialize_sub_epoch_summary_maybe")]
+    sub_epoch_summary_included: Option<SubEpochSummary>,
+}
+
+pub mod deserialize_block_record {
+    use chia::protocol::BlockRecord;
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableBlockRecord;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<BlockRecord, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = DeserializableBlockRecord::deserialize(deserializer)?;
+        Ok(BlockRecord {
+            header_hash: helper.header_hash,
+            prev_hash: helper.prev_hash,
+            height: helper.height,
+            weight: helper.weight,
+            total_iters: helper.total_iters,
+            signage_point_index: helper.signage_point_index,
+            challenge_vdf_output: helper.challenge_vdf_output,
+            infused_challenge_vdf_output: helper.infused_challenge_vdf_output,
+            reward_infusion_new_challenge: helper.reward_infusion_new_challenge,
+            challenge_block_info_hash: helper.challenge_block_info_hash,
+            sub_slot_iters: helper.sub_slot_iters,
+            pool_puzzle_hash: helper.pool_puzzle_hash,
+            farmer_puzzle_hash: helper.farmer_puzzle_hash,
+            required_iters: helper.required_iters,
+            deficit: helper.deficit,
+            overflow: helper.overflow,
+            prev_transaction_block_height: helper.prev_transaction_block_height,
+            timestamp: helper.timestamp,
+            prev_transaction_block_hash: helper.prev_transaction_block_hash,
+            fees: helper.fees,
+            reward_claims_incorporated: helper.reward_claims_incorporated,
+            finished_challenge_slot_hashes: helper.finished_challenge_slot_hashes,
+            finished_infused_challenge_slot_hashes: helper.finished_infused_challenge_slot_hashes,
+            finished_reward_slot_hashes: helper.finished_reward_slot_hashes,
+            sub_epoch_summary_included: helper.sub_epoch_summary_included,
+        })
+    }
+}
+
+pub mod deserialize_block_record_maybe {
+    use chia::protocol::BlockRecord;
+    use serde::{Deserialize, Deserializer};
+
+    use super::DeserializableBlockRecord;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<BlockRecord>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = Option::<DeserializableBlockRecord>::deserialize(deserializer)?;
+        Ok(helper.map(|h| BlockRecord {
+            header_hash: h.header_hash,
+            prev_hash: h.prev_hash,
+            height: h.height,
+            weight: h.weight,
+            total_iters: h.total_iters,
+            signage_point_index: h.signage_point_index,
+            challenge_vdf_output: h.challenge_vdf_output,
+            infused_challenge_vdf_output: h.infused_challenge_vdf_output,
+            reward_infusion_new_challenge: h.reward_infusion_new_challenge,
+            challenge_block_info_hash: h.challenge_block_info_hash,
+            sub_slot_iters: h.sub_slot_iters,
+            pool_puzzle_hash: h.pool_puzzle_hash,
+            farmer_puzzle_hash: h.farmer_puzzle_hash,
+            required_iters: h.required_iters,
+            deficit: h.deficit,
+            overflow: h.overflow,
+            prev_transaction_block_height: h.prev_transaction_block_height,
+            timestamp: h.timestamp,
+            prev_transaction_block_hash: h.prev_transaction_block_hash,
+            fees: h.fees,
+            reward_claims_incorporated: h.reward_claims_incorporated,
+            finished_challenge_slot_hashes: h.finished_challenge_slot_hashes,
+            finished_infused_challenge_slot_hashes: h.finished_infused_challenge_slot_hashes,
+            finished_reward_slot_hashes: h.finished_reward_slot_hashes,
+            sub_epoch_summary_included: h.sub_epoch_summary_included,
         }))
     }
 }

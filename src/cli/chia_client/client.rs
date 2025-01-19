@@ -4,7 +4,8 @@ use serde_json::Value;
 use std::error::Error;
 
 use super::{
-    AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockResponse, MockChiaClient,
+    AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockRecordResponse,
+    GetBlockResponse, MockChiaClient,
 };
 
 #[derive(Debug)]
@@ -101,6 +102,19 @@ impl ChiaRpcClient {
         )
         .await
     }
+
+    pub async fn get_block_record(
+        &self,
+        header_hash: Bytes32,
+    ) -> Result<GetBlockRecordResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_block_record",
+            serde_json::json!({
+                "header_hash": format!("0x{}", hex::encode(header_hash.to_bytes())),
+            }),
+        )
+        .await
+    }
 }
 
 #[cfg(test)]
@@ -118,47 +132,7 @@ mod tests {
         if let Client::Mock(mock_client) = &mut client.client {
             mock_client.mock_response(
                 "http://api.example.com/get_blockchain_state",
-                r#"{
-                    "blockchain_state": {
-                        "average_block_time": 18,
-                        "block_max_cost": 11000000000,
-                        "difficulty": 13504,
-                        "genesis_challenge_initialized": true,
-                        "mempool_cost": 393999880,
-                        "mempool_fees": 146444089,
-                        "mempool_max_total_cost": 110000000000,
-                        "mempool_min_fees": {
-                            "cost_5000000": 0
-                        },
-                        "mempool_size": 5,
-                        "node_id": "5c8c1640aae6b0ab0f16d5ec01be46aa10ad68f8aa85446fa65f1aee9d6b0b2d",
-                        "peak": {
-                            "header_hash": "b98b88d8da393524929708bae7dcb4916b287605dee42fad6e7a72e78007f6ec",
-                            "height": 6515259,
-                            "prev_hash": "bf24a15571a4755867acd674113c9c2267981991399559c5d32f431a76ae9e16",
-                            "weight": 35984730512,
-                            "total_iters": 56498920731463,
-                            "signage_point_index": 63,
-                            "farmer_puzzle_hash": "9fbde16e03f55c85ecf94cb226083fcfe2737d4e629a981e5db3ea0eb9907af4",
-                            "required_iters": 4567879,
-                            "deficit": 16,
-                            "overflow": true,
-                            "prev_transaction_block_height": 6515255,
-                            "timestamp": null,
-                            "prev_transaction_block_hash": null,
-                            "fees": null
-                        },
-                        "space": 22091151228153044992,
-                        "sub_slot_iters": 578813952,
-                        "sync": {
-                            "sync_mode": false,
-                            "sync_progress_height": 0,
-                            "sync_tip_height": 0,
-                            "synced": true
-                        }
-                    },
-                    "success": true
-                }"#,
+                r#"{"blockchain_state": {"average_block_time": 18, "block_max_cost": 11000000000, "difficulty": 13504, "genesis_challenge_initialized": true, "mempool_cost": 88022711, "mempool_fees": 10, "mempool_max_total_cost": 110000000000, "mempool_min_fees": {"cost_5000000": 0}, "mempool_size": 2, "node_id": "5c8c1640aae6b0ab0f16d5ec01be46aa10ad68f8aa85446fa65f1aee9d6b0b2d", "peak": {"challenge_block_info_hash": "0x3b6cb1a7e32c8c1760ea90a11a369d04755b9d31123aa0890050869bde775150", "challenge_vdf_output": {"data": "0x03009a4b4ab74d6b1d71c1ae4a62252acceb02a517b6fc8acfd7f05632d40da1e4ee2ba51ed5383411ad59749d1f642f41b30224dcb92b8863f8b1ec89eb388dbc346d7a4e9dfdabe42f833e04bc00a4ac123c87261f6ad7477660d579b58364a1160100"}, "deficit": 15, "farmer_puzzle_hash": "0x9fbde16e03f55c85ecf94cb226083fcfe2737d4e629a981e5db3ea0eb9907af4", "fees": 300395698, "finished_challenge_slot_hashes": ["0xa321d872abefa6f935c7ec3a3b72da8f9631edd29d78cd01bc57a3fc9f0a9e46"], "finished_infused_challenge_slot_hashes": ["0xbdca81c482cebcabb532253ef990a618a2e8e8e72dee4038b54c723177d3976f"], "finished_reward_slot_hashes": ["0x77e354091551f4bbf2191513679fc50f72076dff3f2634bdb78882cc9cf43a74"], "header_hash": "0x2b525481f9330f7ca1be1ca6acdd5043362379245b16e18e5897e6203a4add3f", "height": 6515821, "infused_challenge_vdf_output": null, "overflow": false, "pool_puzzle_hash": "0x9fbde16e03f55c85ecf94cb226083fcfe2737d4e629a981e5db3ea0eb9907af4", "prev_hash": "0x5211ea6cbff7175c75355cfa3e10e447a9ee1fbcb14b0e04a6ac8462263590fd", "prev_transaction_block_hash": "0x85bc16981fae8ab0956d065092c537d2d568e9ce9c07011bbfb81bbe19ae66f7", "prev_transaction_block_height": 6515819, "required_iters": 4292961, "reward_claims_incorporated": [{"amount": 875000000000, "parent_coin_info": "0xccd5bb71183532bff220ba46c268991a00000000000000000000000000636c6b", "puzzle_hash": "0xe23046c4362b99b24e027207438717b6d5bd4d440e5a62367e053fa8b409339a"}], "reward_infusion_new_challenge": "0x5defce0af9f85a0fcf144a4f3b0364e81f576bb9c855e0efa58c2b8ba630672a", "signage_point_index": 4, "sub_epoch_summary_included": null, "sub_slot_iters": 578813952, "timestamp": 1737325862, "total_iters": 56509384327521, "weight": 35992319760}, "space": 21810833559006162944, "sub_slot_iters": 578813952, "sync": {"sync_mode": false, "sync_progress_height": 0, "sync_tip_height": 0, "synced": true}}, "success": true}"#,
             );
         }
 
@@ -169,19 +143,18 @@ mod tests {
         let state = response.blockchain_state.unwrap();
         assert_eq!(state.average_block_time, 18);
         assert_eq!(state.difficulty, 13504);
-        assert_eq!(state.mempool_size, 5);
+        assert_eq!(state.mempool_size, 2);
 
         let peak = state.peak;
-        assert_eq!(peak.height, 6515259);
-        assert_eq!(peak.deficit, 16);
-        assert!(peak.overflow);
+        assert_eq!(peak.height, 6515821);
+        assert_eq!(peak.deficit, 15);
+        assert!(!peak.overflow);
     }
 
     #[tokio::test]
     async fn test_get_blockchain_state_error() {
         let mut client = ChiaRpcClient::new_mock();
 
-        // Get mock client reference
         if let Client::Mock(mock_client) = &mut client.client {
             mock_client.mock_response(
                 "http://api.example.com/get_blockchain_state",
@@ -487,5 +460,98 @@ mod tests {
                 .len()
                 == 2
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_block_record_success() {
+        let mut client = ChiaRpcClient::new_mock();
+
+        if let Client::Mock(mock_client) = &mut client.client {
+            mock_client.mock_response(
+                "http://api.example.com/get_block_record",
+                r#"{
+                    "block_record": {
+                        "challenge_block_info_hash": "0xc3a285c97ef0fd5b941e2133432159ff6db2599e2f806cb3565781ccf6427689",
+                        "challenge_vdf_output": {
+                        "data": "0x010086aafeadf030ada0f9fd384c0c8802d3a157600e9d3a15dadf158d6bb1203f53173658e9439957b4b9111a945fdd1ccb8f72a3ce5cef7d03e1d370f0edef3d63b5c3ee46b7425dfd299d00a990dc7150bb046c06703a3d224aee2938153a92360100"
+                        },
+                        "deficit": 3,
+                        "farmer_puzzle_hash": "0xd86028d22a28f4d0e4ee63808492630e7829af653fd710c683980959bb7bba1d",
+                        "fees": 205449550,
+                        "finished_challenge_slot_hashes": null,
+                        "finished_infused_challenge_slot_hashes": null,
+                        "finished_reward_slot_hashes": null,
+                        "header_hash": "0x88a8e404c419e12bb11e809ff7afc8b1fcda77270fe3f157cff8a2fab4f44e8b",
+                        "height": 5910291,
+                        "infused_challenge_vdf_output": {
+                        "data": "0x000007393fe8b0f177674aca1e287bc25818222308585ead5065b6b36c61fe051ef2ae1e45dd06e05c8cbf32d43d275a40d081203c4cbc3b581af52e3dae4e5dea0b0c86fc34324b44afe996936275d405af49d62f32e593bf9e97933c77de698c170200"
+                        },
+                        "overflow": false,
+                        "pool_puzzle_hash": "0x3ac292ed271257be352c526f975a1b376752c4ed6e453ea39ed449bd7b6e3c24",
+                        "prev_hash": "0x5a98b40a82040091846e703f7bef7e6c5ce4424b9dafbac76303dbf2c3bf0718",
+                        "prev_transaction_block_hash": "0x638e164bebfe63f4c467a707730718b54870c6b874d116336ab06d6feab5580f",
+                        "prev_transaction_block_height": 5910288,
+                        "required_iters": 5752572,
+                        "reward_claims_incorporated": [
+                        {
+                            "amount": 875000000000,
+                            "parent_coin_info": "0xccd5bb71183532bff220ba46c268991a000000000000000000000000005a2f10",
+                            "puzzle_hash": "0x3a9ba81f693aac5ba77bc1e42ff55fda4cbaab478bdb1302b5fbe64398f272cd"
+                        },
+                        {
+                            "amount": 125000000000,
+                            "parent_coin_info": "0x3ff07eb358e8255a65c30a2dce0e5fbb000000000000000000000000005a2f10",
+                            "puzzle_hash": "0xf120223400081b4b58b83eafdbfa536b306c055c56ee6491824e91cc05f88845"
+                        },
+                        {
+                            "amount": 875000000000,
+                            "parent_coin_info": "0xccd5bb71183532bff220ba46c268991a000000000000000000000000005a2f0f",
+                            "puzzle_hash": "0x3a9ba81f693aac5ba77bc1e42ff55fda4cbaab478bdb1302b5fbe64398f272cd"
+                        },
+                        {
+                            "amount": 125000000000,
+                            "parent_coin_info": "0x3ff07eb358e8255a65c30a2dce0e5fbb000000000000000000000000005a2f0f",
+                            "puzzle_hash": "0xf120223400081b4b58b83eafdbfa536b306c055c56ee6491824e91cc05f88845"
+                        },
+                        {
+                            "amount": 875000000000,
+                            "parent_coin_info": "0xccd5bb71183532bff220ba46c268991a000000000000000000000000005a2f0e",
+                            "puzzle_hash": "0xcd975114b70a116841c7abf214d6c859f1ad5b11b95bb2cfa5a7dfa6883e805f"
+                        },
+                        {
+                            "amount": 125000000000,
+                            "parent_coin_info": "0x3ff07eb358e8255a65c30a2dce0e5fbb000000000000000000000000005a2f0e",
+                            "puzzle_hash": "0x480454e7d65a9cd6a71944953bcc32ad622b23184091579a1318446fa7301a2d"
+                        }
+                        ],
+                        "reward_infusion_new_challenge": "0xa61c2bfbfaade587c93f9136e899b0607a226df606a4ccc4c6d256ceb4747cd9",
+                        "signage_point_index": 28,
+                        "sub_epoch_summary_included": null,
+                        "sub_slot_iters": 583008256,
+                        "timestamp": 1725991066,
+                        "total_iters": 45503147198204,
+                        "weight": 27802025488
+                    },
+                    "success": true
+                    }"#,
+            );
+        }
+
+        let response = client
+            .get_block_record(Bytes32::from(hex!(
+                "88a8e404c419e12bb11e809ff7afc8b1fcda77270fe3f157cff8a2fab4f44e8b"
+            )))
+            .await
+            .unwrap();
+
+        assert!(response.success);
+        assert!(response.block_record.is_some());
+        assert!(response.error.is_none());
+
+        let block_record = response.block_record.unwrap();
+        assert_eq!(block_record.height, 5910291);
+        assert_eq!(block_record.weight, 27802025488);
+        assert_eq!(block_record.total_iters, 45503147198204);
+        assert_eq!(block_record.reward_claims_incorporated.unwrap().len(), 6);
     }
 }
