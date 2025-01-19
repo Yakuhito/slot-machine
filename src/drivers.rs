@@ -1542,8 +1542,6 @@ mod tests {
             1,
         );
 
-        // create precommit coin
-        let user_coin = sim.new_coin(user_puzzle_hash, reg_amount);
         // pretty much a random handle - we're not actually registering it
         let handle: String = if let Some(h) = handle_to_refund.as_ref() {
             h.clone()
@@ -1592,6 +1590,40 @@ mod tests {
             value,
             amount_to_use,
         )?;
+        // println!(
+        //     "precommited_cat_maker_hash: {:?}",
+        //     DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into())
+        // );
+        // println!("precommited_cat_solution_hash: {:?}", ().tree_hash());
+        println!(
+            "precommited_pricing_puzzle_reveal_hash: {:?}",
+            XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
+        );
+        // println!(
+        //     "precommited_pricing_solution_reveal_hash: {:?}",
+        //     XchandlesFactorPricingSolution {
+        //         handle: handle.clone(),
+        //         num_years: 1
+        //     }
+        //     .tree_hash(),
+        // );
+        // println!(
+        //     "overall refund info hash: {:?}",
+        //     clvm_tuple!(
+        //         clvm_tuple!(
+        //             DefaultCatMakerArgs::curry_tree_hash(payment_cat.asset_id.tree_hash().into()),
+        //             ()
+        //         ),
+        //         clvm_tuple!(
+        //             XchandlesFactorPricingPuzzleArgs::curry_tree_hash(used_base_price),
+        //             XchandlesFactorPricingSolution {
+        //                 handle: handle.clone(),
+        //                 num_years: 1
+        //             }
+        //         )
+        //     )
+        //     .tree_hash()
+        // );
 
         let payment_cat_inner_spend = minter_p2.spend_with_conditions(
             ctx,
@@ -1622,11 +1654,20 @@ mod tests {
 
         let precommited_pricing_puzzle_reveal =
             XchandlesFactorPricingPuzzleArgs::new(used_base_price).construct_puzzle(ctx)?;
+        println!(
+            "precommited_pricing_puzzle_reveal_hash 2: {:?}",
+            ctx.tree_hash(precommited_pricing_puzzle_reveal)
+        );
+
         let precommited_pricing_puzzle_solution = XchandlesFactorPricingSolution {
-            handle: handle_to_refund.unwrap(),
+            handle: handle.clone(),
             num_years: 1,
         }
         .to_clvm(&mut ctx.allocator)?;
+        // println!(
+        //     "precommited_pricing_puzzle_solution_hash 2: {:?}",
+        //     ctx.tree_hash(precommited_pricing_puzzle_solution)
+        // );
         println!("yak1");
         let (secure_cond, _new_registry) = registry.refund(
             ctx,
