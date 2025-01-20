@@ -6,7 +6,7 @@ use std::error::Error;
 use super::{
     AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockRecordByHeightResponse,
     GetBlockRecordResponse, GetBlockRecordsResponse, GetBlockResponse, GetBlockSpendsResponse,
-    GetBlocksResponse, MockChiaClient,
+    GetBlocksResponse, GetCoinRecordResponse, MockChiaClient,
 };
 
 #[derive(Debug)]

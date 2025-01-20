@@ -1146,3 +1146,14 @@ pub mod deserialize_coin_spends_maybe {
         }))
     }
 }
+
+#[derive(Deserialize, Debug)]
+pub struct CoinRecord {
+    #[serde(with = "deserialize_coin")]
+    pub coin: Coin,
+    pub coinbase: bool,
+    pub confirmed_block_index: u32,
+    pub spent: bool,
+    pub spent_block_index: u32,
+    pub timestamp: u64,
+}
