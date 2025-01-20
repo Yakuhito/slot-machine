@@ -208,6 +208,25 @@ impl ChiaRpcClient {
         )
         .await
     }
+
+    pub async fn get_coin_records_by_names(
+        &self,
+        names: Vec<Bytes32>,
+        start_height: Option<u32>,
+        end_height: Option<u32>,
+        include_spent_coins: Option<bool>,
+    ) -> Result<GetCoinRecordsResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_coin_records_by_names",
+            serde_json::json!({
+                "names": names.iter().map(|name| format!("0x{}", hex::encode(name.to_bytes()))).collect::<Vec<String>>(),
+                "start_height": start_height,
+                "end_height": end_height,
+                "include_spent_coins": include_spent_coins,
+            }),
+        )
+        .await
+    }
 }
 
 #[cfg(test)]
