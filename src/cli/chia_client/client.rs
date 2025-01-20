@@ -304,7 +304,7 @@ impl ChiaRpcClient {
 
 #[cfg(test)]
 mod tests {
-    use chia::protocol::Coin;
+    use chia::{protocol::Coin, traits::Streamable};
     use hex_literal::hex;
 
     use super::*;
@@ -738,5 +738,44 @@ mod tests {
         assert_eq!(block_record.weight, 27802025488);
         assert_eq!(block_record.total_iters, 45503147198204);
         assert_eq!(block_record.reward_claims_incorporated.unwrap().len(), 6);
+    }
+
+    #[tokio::test]
+    async fn test_get_puzzle_and_solution() {
+        let mut client = ChiaRpcClient::new_mock();
+
+        if let Client::Mock(mock_client) = &mut client.client {
+            mock_client.mock_response(
+                "http://api.example.com/get_puzzle_and_solution",
+                r#"{
+                    "coin_solution": {
+                        "coin": {
+                        "amount": 7100000,
+                        "parent_coin_info": "0xa7658d2add3c2fc83eb07cc2655e4fe4fe630627dd07d3e9a83f9dac03ada8b1",
+                        "puzzle_hash": "0xfbacdd2364a53e036af892c9d4e3b593eb12ae4a939776a251abb68de857b3fc"
+                        },
+                        "puzzle_reveal": "0xff04ff02ff8080",
+                        "solution": "0xff0180"
+                    },
+                    "success": true
+                    }"#,
+            );
+        }
+
+        let coin_id = Bytes32::from(hex!(
+            "bae7ca992d0062ec050158d00880577afc38a12b5c3af1874d2ce2759eb50ae1"
+        ));
+        let response = client.get_puzzle_and_solution(coin_id, None).await.unwrap();
+        assert!(response.success);
+        assert!(response.coin_solution.is_some());
+        assert!(response.error.is_none());
+
+        let coin_solution = response.coin_solution.unwrap();
+        assert_eq!(coin_solution.coin.coin_id(), coin_id);
+        assert_eq!(
+            coin_solution.puzzle_reveal.to_bytes().unwrap(),
+            hex!("ff04ff02ff8080")
+        );
+        assert_eq!(coin_solution.solution.to_bytes().unwrap(), hex!("ff0180"));
     }
 }
