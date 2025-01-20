@@ -4,8 +4,8 @@ use serde::Deserialize;
 use super::{
     de::{
         deserialize_block_record, deserialize_block_record_maybe, deserialize_block_records_maybe,
-        deserialize_coin_spends_maybe, deserialize_full_block_maybe, deserialize_full_blocks_maybe,
-        hex_string_to_bytes32,
+        deserialize_coin_spend_maybe, deserialize_coin_spends_maybe, deserialize_full_block_maybe,
+        deserialize_full_blocks_maybe, hex_string_to_bytes32,
     },
     CoinRecord,
 };
@@ -110,6 +110,14 @@ pub struct GetCoinRecordResponse {
 #[derive(Deserialize, Debug)]
 pub struct GetCoinRecordsResponse {
     pub coin_records: Option<Vec<CoinRecord>>,
+    pub error: Option<String>,
+    pub success: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GetPuzzleAndSolutionResponse {
+    #[serde(with = "deserialize_coin_spend_maybe")]
+    pub coin_solution: Option<CoinSpend>,
     pub error: Option<String>,
     pub success: bool,
 }

@@ -6,7 +6,8 @@ use std::error::Error;
 use super::{
     AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockRecordByHeightResponse,
     GetBlockRecordResponse, GetBlockRecordsResponse, GetBlockResponse, GetBlockSpendsResponse,
-    GetBlocksResponse, GetCoinRecordResponse, GetCoinRecordsResponse, MockChiaClient,
+    GetBlocksResponse, GetCoinRecordResponse, GetCoinRecordsResponse, GetPuzzleAndSolutionResponse,
+    MockChiaClient,
 };
 
 #[derive(Debug)]
@@ -261,6 +262,40 @@ impl ChiaRpcClient {
                 "start_height": start_height,
                 "end_height": end_height,
                 "include_spent_coins": include_spent_coins,
+            }),
+        )
+        .await
+    }
+
+    pub async fn get_coin_records_by_puzzle_hashes(
+        &self,
+        puzzle_hashes: Vec<Bytes32>,
+        start_height: Option<u32>,
+        end_height: Option<u32>,
+        include_spent_coins: Option<bool>,
+    ) -> Result<GetCoinRecordsResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_coin_records_by_puzzle_hashes",
+            serde_json::json!({
+                "puzzle_hashes": puzzle_hashes.iter().map(|puzzle_hash| format!("0x{}", hex::encode(puzzle_hash.to_bytes()))).collect::<Vec<String>>(),
+                "start_height": start_height,
+                "end_height": end_height,
+                "include_spent_coins": include_spent_coins,
+            }),
+        )
+        .await
+    }
+
+    pub async fn get_puzzle_and_solution(
+        &self,
+        coin_id: Bytes32,
+        height: Option<u32>,
+    ) -> Result<GetPuzzleAndSolutionResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_puzzle_and_solution",
+            serde_json::json!({
+                "coin_id": format!("0x{}", hex::encode(coin_id.to_bytes())),
+                "height": height,
             }),
         )
         .await
