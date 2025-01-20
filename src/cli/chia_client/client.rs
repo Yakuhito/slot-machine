@@ -1,4 +1,4 @@
-use chia::protocol::Bytes32;
+use chia::protocol::{Bytes32, SpendBundle};
 use reqwest::Client as ReqwestClient;
 use serde_json::Value;
 use std::error::Error;
@@ -7,7 +7,7 @@ use super::{
     AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockRecordByHeightResponse,
     GetBlockRecordResponse, GetBlockRecordsResponse, GetBlockResponse, GetBlockSpendsResponse,
     GetBlocksResponse, GetCoinRecordResponse, GetCoinRecordsResponse, GetPuzzleAndSolutionResponse,
-    MockChiaClient,
+    MockChiaClient, PushTxResponse,
 };
 
 #[derive(Debug)]
@@ -296,6 +296,32 @@ impl ChiaRpcClient {
             serde_json::json!({
                 "coin_id": format!("0x{}", hex::encode(coin_id.to_bytes())),
                 "height": height,
+            }),
+        )
+        .await
+    }
+
+    pub async fn push_tx(
+        &self,
+        spend_bundle: SpendBundle,
+    ) -> Result<PushTxResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "push_tx",
+            serde_json::json!({
+                "spend_bundle": {
+                    "coin_spends": spend_bundle.coin_spends.iter().map(|coin_spend| {
+                        serde_json::json!({
+                            "coin": {
+                                "amount": coin_spend.coin.amount,
+                                "parent_coin_info": format!("0x{}", hex::encode(coin_spend.coin.parent_coin_info.to_bytes())),
+                                "puzzle_hash": format!("0x{}", hex::encode(coin_spend.coin.puzzle_hash.to_bytes())),
+                            },
+                            "puzzle_reveal": format!("0x{}", hex::encode(coin_spend.puzzle_reveal.to_vec())),
+                            "solution": format!("0x{}", hex::encode(coin_spend.solution.to_vec())),
+                        })
+                    }).collect::<Vec<serde_json::Value>>(),
+                    "aggregated_signature": format!("0x{}", hex::encode(spend_bundle.aggregated_signature.to_bytes())),
+                }
             }),
         )
         .await
