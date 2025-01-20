@@ -106,3 +106,10 @@ pub struct GetCoinRecordResponse {
     pub error: Option<String>,
     pub success: bool,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct GetCoinRecordsResponse {
+    pub coin_records: Option<Vec<CoinRecord>>,
+    pub error: Option<String>,
+    pub success: bool,
+}
