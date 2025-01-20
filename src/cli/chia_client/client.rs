@@ -5,8 +5,8 @@ use std::error::Error;
 
 use super::{
     AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockRecordByHeightResponse,
-    GetBlockRecordResponse, GetBlockRecordsResponse, GetBlockResponse, GetBlocksResponse,
-    MockChiaClient,
+    GetBlockRecordResponse, GetBlockRecordsResponse, GetBlockResponse, GetBlockSpendsResponse,
+    GetBlocksResponse, MockChiaClient,
 };
 
 #[derive(Debug)]
@@ -159,6 +159,32 @@ impl ChiaRpcClient {
                 "end": end,
                 "exclude_header_hash": exclude_header_hash,
                 "exclude_reorged": exclude_reorged,
+            }),
+        )
+        .await
+    }
+
+    pub async fn get_block_spends(
+        &self,
+        header_hash: Bytes32,
+    ) -> Result<GetBlockSpendsResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_block_spends",
+            serde_json::json!({
+                "header_hash": format!("0x{}", hex::encode(header_hash.to_bytes())),
+            }),
+        )
+        .await
+    }
+
+    pub async fn get_coin_record_by_name(
+        &self,
+        name: Bytes32,
+    ) -> Result<GetCoinRecordResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_coin_record_by_name",
+            serde_json::json!({
+                "name": format!("0x{}", hex::encode(name.to_bytes())),
             }),
         )
         .await

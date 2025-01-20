@@ -1094,3 +1094,55 @@ pub mod deserialize_block_records_maybe {
         }))
     }
 }
+
+#[derive(Deserialize)]
+pub struct DeserializableCoinSpend {
+    #[serde(with = "deserialize_coin")]
+    coin: Coin,
+    #[serde(with = "hex_string_to_bytes")]
+    puzzle_reveal: Bytes,
+    #[serde(with = "hex_string_to_bytes")]
+    solution: Bytes,
+}
+
+pub mod deserialize_coin_spend_maybe {
+    use chia::protocol::{CoinSpend, Program};
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableCoinSpend;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<CoinSpend>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = Option::<DeserializableCoinSpend>::deserialize(deserializer)?;
+        Ok(helper.map(|h| CoinSpend {
+            coin: h.coin,
+            puzzle_reveal: Program::from(h.puzzle_reveal),
+            solution: Program::from(h.solution),
+        }))
+    }
+}
+
+pub mod deserialize_coin_spends_maybe {
+    use chia::protocol::{CoinSpend, Program};
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableCoinSpend;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<CoinSpend>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = Option::<Vec<DeserializableCoinSpend>>::deserialize(deserializer)?;
+        Ok(helper.map(|h| {
+            h.into_iter()
+                .map(|h| CoinSpend {
+                    coin: h.coin,
+                    puzzle_reveal: Program::from(h.puzzle_reveal),
+                    solution: Program::from(h.solution),
+                })
+                .collect()
+        }))
+    }
+}
