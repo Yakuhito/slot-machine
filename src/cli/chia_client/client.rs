@@ -6,8 +6,8 @@ use std::error::Error;
 use super::{
     AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockRecordByHeightResponse,
     GetBlockRecordResponse, GetBlockRecordsResponse, GetBlockResponse, GetBlockSpendsResponse,
-    GetBlocksResponse, GetCoinRecordResponse, GetCoinRecordsResponse, GetNetworkInfoResponse,
-    GetPuzzleAndSolutionResponse, MockChiaClient, PushTxResponse,
+    GetBlocksResponse, GetCoinRecordResponse, GetCoinRecordsResponse, GetMempoolItemResponse,
+    GetNetworkInfoResponse, GetPuzzleAndSolutionResponse, MockChiaClient, PushTxResponse,
 };
 
 #[derive(Debug)]
@@ -330,6 +330,19 @@ impl ChiaRpcClient {
     pub async fn get_network_info(&self) -> Result<GetNetworkInfoResponse, Box<dyn Error>> {
         self.make_post_request("get_network_info", serde_json::json!({}))
             .await
+    }
+
+    pub async fn get_mempool_item_by_tx_id(
+        &self,
+        tx_id: Bytes32,
+    ) -> Result<GetMempoolItemResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_mempool_item_by_tx_id",
+            serde_json::json!({
+                "tx_id": format!("0x{}", hex::encode(tx_id.to_bytes())),
+            }),
+        )
+        .await
     }
 }
 

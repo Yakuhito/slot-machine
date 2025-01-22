@@ -7,7 +7,7 @@ use super::{
         deserialize_coin_spend_maybe, deserialize_coin_spends_maybe, deserialize_full_block_maybe,
         deserialize_full_blocks_maybe, hex_string_to_bytes32, hex_string_to_bytes32_maybe,
     },
-    CoinRecord,
+    CoinRecord, DeserializableMempoolItem,
 };
 
 #[derive(Deserialize, Debug)]
@@ -135,6 +135,13 @@ pub struct GetNetworkInfoResponse {
     pub network_prefix: Option<String>,
     #[serde(with = "hex_string_to_bytes32_maybe")]
     pub genesis_challenge: Option<Bytes32>,
+    pub error: Option<String>,
+    pub success: bool,
+}
+
+#[derive(Deserialize)]
+pub struct GetMempoolItemResponse {
+    pub mempool_item: Option<DeserializableMempoolItem>,
     pub error: Option<String>,
     pub success: bool,
 }

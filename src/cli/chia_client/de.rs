@@ -1,10 +1,11 @@
 use chia::{
     bls::{G1Element, G2Element},
     protocol::{
-        Bytes, Bytes100, Bytes32, ChallengeChainSubSlot, ClassgroupElement, Coin,
+        Bytes, Bytes100, Bytes32, ChallengeChainSubSlot, ClassgroupElement, Coin, CoinSpend,
         EndOfSubSlotBundle, Foliage, FoliageBlockData, FoliageTransactionBlock,
         InfusedChallengeChainSubSlot, PoolTarget, ProofOfSpace, RewardChainBlock,
-        RewardChainSubSlot, SubEpochSummary, SubSlotProofs, TransactionsInfo, VDFInfo, VDFProof,
+        RewardChainSubSlot, SpendBundle, SubEpochSummary, SubSlotProofs, TransactionsInfo, VDFInfo,
+        VDFProof,
     },
 };
 use serde::Deserialize;
@@ -1147,6 +1148,28 @@ pub mod deserialize_coin_spends_maybe {
     }
 }
 
+pub mod deserialize_coin_spends {
+    use chia::protocol::{CoinSpend, Program};
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableCoinSpend;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<CoinSpend>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = Vec::<DeserializableCoinSpend>::deserialize(deserializer)?;
+        Ok(helper
+            .into_iter()
+            .map(|h| CoinSpend {
+                coin: h.coin,
+                puzzle_reveal: Program::from(h.puzzle_reveal),
+                solution: Program::from(h.solution),
+            })
+            .collect())
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct CoinRecord {
     #[serde(with = "deserialize_coin")]
@@ -1156,4 +1179,39 @@ pub struct CoinRecord {
     pub spent: bool,
     pub spent_block_index: u32,
     pub timestamp: u64,
+}
+
+#[derive(Deserialize)]
+pub struct DeserializableSpendBundle {
+    #[serde(with = "deserialize_g2element")]
+    pub aggregated_signature: G2Element,
+    #[serde(with = "deserialize_coin_spends")]
+    pub coin_spends: Vec<CoinSpend>,
+}
+
+pub mod deserialize_spend_bundle {
+    use chia::{bls::Signature, protocol::SpendBundle};
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer};
+
+    use crate::DeserializableSpendBundle;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<SpendBundle, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = DeserializableSpendBundle::deserialize(deserializer)?;
+        Ok(SpendBundle {
+            aggregated_signature: Signature::from_bytes(&helper.aggregated_signature.to_bytes())
+                .map_err(|e| D::Error::custom(e.to_string()))?,
+            coin_spends: helper.coin_spends,
+        })
+    }
+}
+
+#[derive(Deserialize)]
+pub struct DeserializableMempoolItem {
+    #[serde(with = "deserialize_spend_bundle")]
+    pub spend_bundle: SpendBundle,
+    pub fee: u64,
 }
