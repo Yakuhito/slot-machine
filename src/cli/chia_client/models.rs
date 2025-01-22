@@ -5,7 +5,7 @@ use super::{
     de::{
         deserialize_block_record, deserialize_block_record_maybe, deserialize_block_records_maybe,
         deserialize_coin_spend_maybe, deserialize_coin_spends_maybe, deserialize_full_block_maybe,
-        deserialize_full_blocks_maybe, hex_string_to_bytes32,
+        deserialize_full_blocks_maybe, hex_string_to_bytes32, hex_string_to_bytes32_maybe,
     },
     CoinRecord,
 };
@@ -125,6 +125,16 @@ pub struct GetPuzzleAndSolutionResponse {
 #[derive(Deserialize, Debug)]
 pub struct PushTxResponse {
     pub status: String,
+    pub error: Option<String>,
+    pub success: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GetNetworkInfoResponse {
+    pub network_name: Option<String>,
+    pub network_prefix: Option<String>,
+    #[serde(with = "hex_string_to_bytes32_maybe")]
+    pub genesis_challenge: Option<Bytes32>,
     pub error: Option<String>,
     pub success: bool,
 }
