@@ -145,3 +145,10 @@ pub struct GetMempoolItemResponse {
     pub error: Option<String>,
     pub success: bool,
 }
+
+#[derive(Deserialize)]
+pub struct GetMempoolItemsResponse {
+    pub mempool_items: Option<Vec<DeserializableMempoolItem>>,
+    pub error: Option<String>,
+    pub success: bool,
+}

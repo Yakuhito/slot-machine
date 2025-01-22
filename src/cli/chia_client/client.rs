@@ -7,7 +7,8 @@ use super::{
     AdditionsAndRemovalsResponse, BlockchainStateResponse, GetBlockRecordByHeightResponse,
     GetBlockRecordResponse, GetBlockRecordsResponse, GetBlockResponse, GetBlockSpendsResponse,
     GetBlocksResponse, GetCoinRecordResponse, GetCoinRecordsResponse, GetMempoolItemResponse,
-    GetNetworkInfoResponse, GetPuzzleAndSolutionResponse, MockChiaClient, PushTxResponse,
+    GetMempoolItemsResponse, GetNetworkInfoResponse, GetPuzzleAndSolutionResponse, MockChiaClient,
+    PushTxResponse,
 };
 
 #[derive(Debug)]
@@ -340,6 +341,19 @@ impl ChiaRpcClient {
             "get_mempool_item_by_tx_id",
             serde_json::json!({
                 "tx_id": format!("0x{}", hex::encode(tx_id.to_bytes())),
+            }),
+        )
+        .await
+    }
+
+    pub async fn get_mempool_items_by_coin_name(
+        &self,
+        coin_name: Bytes32,
+    ) -> Result<GetMempoolItemsResponse, Box<dyn Error>> {
+        self.make_post_request(
+            "get_mempool_items_by_coin_name",
+            serde_json::json!({
+                "coin_name": format!("0x{}", hex::encode(coin_name.to_bytes())),
             }),
         )
         .await
