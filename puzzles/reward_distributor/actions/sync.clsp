@@ -1,0 +1,38 @@
+; sync.clsp by yakuhito
+;; Syncs reward distribution for the current epoch
+
+(mod (
+    (active_shares (cumulative_payout . remaining_rewards) (last_update . epoch_end)) ; Current_State
+    (
+        update_time
+    )
+)
+    (include condition_codes.clib)
+
+    (defun calculate_new_distribution (active_shares cumulative_payout remaining_rewards cumulative_payout_delta)
+        (c
+            (+ cumulative_payout cumulative_payout_delta) ; new cumulative_payout
+            (- remaining_rewards (* cumulative_payout_delta active_shares)) ; new remaining rewards
+        )
+    )
+
+    (if (all (not (> update_time epoch_end)) (> update_time last_update))
+        (c
+            (list
+                active_shares
+                (calculate_new_distribution
+                    active_shares
+                    cumulative_payout
+                    remaining_rewards
+                    (/ (* remaining_rewards (- update_time last_update)) (* active_shares (- epoch_end last_update))) ; cumulative_payout_delta
+                )
+                (c update_time epoch_end)
+            ) ; new state    
+            (list
+                (list ASSERT_SECONDS_ABSOLUTE update_time)
+            ) ; conditions
+        )
+        ; else
+        (x)
+    )
+)
