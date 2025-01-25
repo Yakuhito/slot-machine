@@ -1,0 +1,80 @@
+; reserve_finalizer.clsp by yakuhito
+
+;; Reserve finalizer - does everything the normal finalizer does, but also
+;;   manages a reserve whose amount is the first item in the state
+
+;; Reserve output conditions can be added by any action by prepending them with
+;;   -42 (i.e., (c -42 condition) will add 'condition' to the list of output conditions)
+
+;; This puzzle handles reserve re-creation based on the new state
+
+(mod (
+    RESERVE_FULL_PUZZLE_HASH
+    RESERVE_INNER_PUZZLE_HASH
+    HINT
+    FINALIZER_SELF_HASH
+    ACTION_LAYER_MOD_HASH
+    Merkle_Root
+    Initial_State ; not used for this puzzle
+    (New_State . Conditions) ; last action output
+    (reserve_parent_id) ; my_solution
+)
+    (include condition_codes.clib)
+    (include sha256tree.clib)
+    (include curry.clib)
+
+    ; this function will extract conditions for the reserve coin which are (-42 . ACTUAL_CONDITION)
+    (defun parse_conditions ((first_thing . the_rest) conditions extracted_reserve_conditions)
+      (if first_thing
+        (if (= (f first_thing) -42)
+          (parse_conditions (c (r first_thing) the_rest) conditions (c (r first_thing) extracted_reserve_conditions))
+          ; else
+          (parse_conditions (c (r first_thing) the_rest) (c first_thing conditions) extracted_reserve_conditions)
+        )
+        ; else
+        (if the_rest
+          (parse_conditions the_rest conditions extracted_reserve_conditions)
+          ; else
+          (c conditions extracted_reserve_conditions)
+        )
+      )
+    )
+
+    (defun-inline add_message_to_reserve ((base_conditions . reserve_conditions))
+      (c
+        (list SEND_MESSAGE
+          23 ; sender puzzle hash, receiver coin id
+          (sha256tree (c ; this is the leading 'q . ' in the delegated puzzle
+            1 
+            (c
+              (list CREATE_COIN RESERVE_INNER_PUZZLE_HASH (f New_State) (list RESERVE_INNER_PUZZLE_HASH))
+              reserve_conditions
+            )
+          )) ; message = delegated puzzle hash
+          (coinid
+            reserve_parent_id
+            RESERVE_FULL_PUZZLE_HASH
+            (f Initial_State) ; total_reserves
+          )
+        )
+        base_conditions
+      )
+    )
+
+    (c
+      (list
+        CREATE_COIN
+        (curry_hashes ACTION_LAYER_MOD_HASH
+          (curry_hashes FINALIZER_SELF_HASH
+              (sha256 1 FINALIZER_SELF_HASH)
+              (sha256 1 ACTION_LAYER_MOD_HASH)
+          ) ; finalizer puzzle hash
+          (sha256 1 Merkle_Root)
+          (sha256tree New_State)
+        ) ; new inner ph
+        1
+        HINT
+      )
+      (add_message_to_reserve (parse_conditions Conditions () ()))
+    )
+)
