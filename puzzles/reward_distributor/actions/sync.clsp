@@ -31,6 +31,15 @@
             ) ; new state    
             (list
                 (list ASSERT_SECONDS_ABSOLUTE update_time)
+                (list
+                    CREATE_PUZZLE_ANNOUNCEMENT
+                    (concat 's'
+                        (sha256 2 
+                            (sha256 1 update_time)
+                            (sha256 1 epoch_end)
+                        ) ; (sha256tree (update_time . epoch_end))
+                    ) 
+                )
             ) ; conditions
         )
         ; else
