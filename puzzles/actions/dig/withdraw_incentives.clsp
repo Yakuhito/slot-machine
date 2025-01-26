@@ -1,0 +1,72 @@
+; withdraw_incentives.clsp by yakuhito
+;; Withdraw incentives from a future epoch
+
+(mod (
+    REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
+    COMMITMENT_SLOT_1ST_CURRY_HASH ; after 1st curry
+    WITHDRAWAL_SHARE ; / 10000 * committed_value will actually be sent to the recipient
+    (total_reserves active_shares reward_info current_round_info) ; Current_State
+    (
+        reward_slot_epoch_time
+        reward_slot_next_epoch_time_hash
+        reward_slot_total_rewards
+        clawback_ph .
+        committed_value
+    )
+)
+    (include condition_codes.clib)
+    (include curry.clib)
+    (include slots.clib)
+
+    (defun get_slot_data_hash (first second_hash third)
+        (sha256 2
+            (sha256 1 first)
+            (sha256 2
+                second_hash
+                (sha256 1 third)
+            )
+        ) ; e.g., (sha256tree (epoch_time next_epoch_time . total_rewards))
+    )
+    
+    (c
+        (list
+            (- total_reserves (/ (* WITHDRAWAL_SHARE committed_value) 10000))
+            active_shares
+            reward_info
+            current_round_info
+        ) ; new state  
+        (list
+            ; this also ensures that the wihdrawal doesn't affect the current round
+            (list ASSERT_BEFORE_SECONDS_ABSOLUTE reward_slot_epoch_time)
+
+            ; update epoch reward (lower total rewards)
+            (spend_slot REWARD_SLOT_1ST_CURRY_HASH
+                (get_slot_data_hash reward_slot_epoch_time reward_slot_next_epoch_time_hash reward_slot_total_rewards)
+            )
+
+            (create_slot REWARD_SLOT_1ST_CURRY_HASH
+                (get_slot_data_hash
+                    reward_slot_epoch_time
+                    reward_slot_next_epoch_time_hash
+                    (- reward_slot_total_rewards (/ (* WITHDRAWAL_SHARE committed_value) 10000))
+                )
+            )
+
+            ; spend commitment slot, which functions as a ticket
+            (spend_slot COMMITMENT_SLOT_1ST_CURRY_HASH
+                (get_slot_data_hash reward_slot_epoch_time (sha256 1 clawback_ph) committed_value)
+            )
+
+            ; make sure the clawback owner wants to go ahead
+            (list RECEIVE_MESSAGE
+                18 ; puzzle hash - puzzle hash
+                () ; message
+                clawback_ph
+            )
+
+            ; conditions with '-42' will be outputed by the reserve coin
+            (list -42 CREATE_COIN clawback_ph (/ (* WITHDRAWAL_SHARE committed_value) 10000) (list clawback_ph))
+        ) ; conditions
+    )
+        
+)

@@ -2,7 +2,7 @@
 ;; Starts a new epoch
 
 (mod (
-    EPOCH_REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
+    REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
     EPOCH_SECONDS
     (total_reserves active_shares (cumulative_payout . remaining_rewards) (last_update . epoch_end)) ; Current_State
     (
@@ -43,7 +43,7 @@
                         (sha256 1 epoch_end) ; (sha256tree epoch_end)
                     ) 
                 )
-                (slot_oracle EPOCH_REWARD_SLOT_1ST_CURRY_HASH
+                (slot_oracle REWARD_SLOT_1ST_CURRY_HASH
                     (sha256 2
                         (sha256 1 slot_epoch_time)
                         (sha256 2

@@ -2,8 +2,8 @@
 ;; Add incentives for a future epoch
 
 (mod (
-    EPOCH_REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
-    PRECOMMITMENT_SLOT_1ST_CURRY_HASH ; after 1st curry
+    REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
+    COMMITMENT_SLOT_1ST_CURRY_HASH ; after 1st curry
     EPOCH_SECONDS
     (total_reserves active_shares reward_info (last_update . epoch_end)) ; Current_State
     (
@@ -19,11 +19,11 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun create_precommitment_slot_and_announce (PRECOMMITMENT_SLOT_1ST_CURRY_HASH value_hash base_conditions)
+    (defun create_precommitment_slot_and_announce (COMMITMENT_SLOT_1ST_CURRY_HASH value_hash base_conditions)
         (c
             (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'c' value_hash))
             (c
-                (create_slot PRECOMMITMENT_SLOT_1ST_CURRY_HASH value_hash)
+                (create_slot COMMITMENT_SLOT_1ST_CURRY_HASH value_hash)
                 base_conditions
             )
         )
@@ -39,14 +39,14 @@
         ) ; (sha256tree (epoch_time next_epoch_time . total_rewards))
     )
 
-    (defun initialize_empty_slots (EPOCH_REWARD_SLOT_1ST_CURRY_HASH EPOCH_SECONDS start_epoch_time end_epoch_time)
+    (defun initialize_empty_slots (REWARD_SLOT_1ST_CURRY_HASH EPOCH_SECONDS start_epoch_time end_epoch_time)
         (if (> end_epoch_time start_epoch_time)
             (c
-                (create_slot EPOCH_REWARD_SLOT_1ST_CURRY_HASH
+                (create_slot REWARD_SLOT_1ST_CURRY_HASH
                     (get_epoch_reward_slot_data_hash start_epoch_time (+ start_epoch_time EPOCH_SECONDS) 0)
                 )
                 (initialize_empty_slots
-                    EPOCH_REWARD_SLOT_1ST_CURRY_HASH
+                    REWARD_SLOT_1ST_CURRY_HASH
                     EPOCH_SECONDS
                     (+ start_epoch_time EPOCH_SECONDS)
                     end_epoch_time
@@ -70,7 +70,7 @@
                 (c last_update epoch_end)
             ) ; new state  
             (create_precommitment_slot_and_announce
-                PRECOMMITMENT_SLOT_1ST_CURRY_HASH
+                COMMITMENT_SLOT_1ST_CURRY_HASH
                 (sha256 2
                     (sha256 1 epoch_start)
                     (sha256 2 
@@ -79,13 +79,13 @@
                     )
                 )
                 (c
-                    (spend_slot EPOCH_REWARD_SLOT_1ST_CURRY_HASH
+                    (spend_slot REWARD_SLOT_1ST_CURRY_HASH
                         (get_epoch_reward_slot_data_hash slot_epoch_time slot_next_epoch_time slot_total_rewards)
                     )
                     (if (= epoch_start slot_epoch_time)
                         ; slot already initialized - just add rewards
                         (list
-                            (create_slot EPOCH_REWARD_SLOT_1ST_CURRY_HASH
+                            (create_slot REWARD_SLOT_1ST_CURRY_HASH
                                 (get_epoch_reward_slot_data_hash
                                     slot_epoch_time slot_next_epoch_time (+ slot_total_rewards rewards_to_add)
                                 )
@@ -94,17 +94,17 @@
                         ; else - initialize slots up until slot_epoch_time
                         (if (= slot_next_epoch_time 0)
                             (c
-                                (create_slot EPOCH_REWARD_SLOT_1ST_CURRY_HASH
+                                (create_slot REWARD_SLOT_1ST_CURRY_HASH
                                     (get_epoch_reward_slot_data_hash
                                         slot_epoch_time (+ slot_epoch_time EPOCH_SECONDS) slot_total_rewards
                                     )
                                 ) ; update current latest slot's right neighbor from 0
                                 (c
-                                    (create_slot EPOCH_REWARD_SLOT_1ST_CURRY_HASH
+                                    (create_slot REWARD_SLOT_1ST_CURRY_HASH
                                         (get_epoch_reward_slot_data_hash epoch_start 0 rewards_to_add)
                                     ) ; create the new latest slot with desired amount
                                     (initialize_empty_slots
-                                        EPOCH_REWARD_SLOT_1ST_CURRY_HASH
+                                        REWARD_SLOT_1ST_CURRY_HASH
                                         EPOCH_SECONDS
                                         (+ slot_epoch_time EPOCH_SECONDS)
                                         epoch_start
