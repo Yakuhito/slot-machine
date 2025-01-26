@@ -19,7 +19,7 @@
     (c
         (list
             total_reserves
-            (+ active_shares mirror_shares)
+            (- active_shares mirror_shares)
             reward_info
             current_round_info
         ) ; new state  

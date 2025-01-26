@@ -1,0 +1,56 @@
+; initiate_payout.clsp by yakuhito
+;; Initiates a payout for a mirror.
+
+(mod (
+    SINGLETON_MOD_HASH
+    VALIDATOR_SINGLETON_STRUCT_HASH ; (sha256 SINGLETON_STRUCT) for validator singleton
+    MIRROR_SLOT_1ST_CURRY_HASH ; after 1st curry
+    (total_reserves active_shares reward_info current_round_info) ; Current_State
+    (
+        mirror_payout_puzzle_hash
+        mirror_initial_cumulative_payout .
+        mirror_shares
+    )
+)
+    (include condition_codes.clib)
+    (include curry.clib)
+    (include slots.clib)
+
+    (defun get_slot_data_hash (payout_puzzle_hash cumulative_payout shares)
+        (sha256 2
+            (sha256 1 payout_puzzle_hash)
+            (sha256 2
+                (sha256 1 cumulative_payout)
+                (sha256 1 shares)
+            )
+        ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
+    )
+
+    (c
+        (list
+            (- total_reserves
+                (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares)
+            )
+            active_shares
+            reward_info
+            current_round_info
+        ) ; new state  
+        (list
+            (spend_slot MIRROR_SLOT_1ST_CURRY_HASH
+                (get_slot_data_hash mirror_payout_puzzle_hash mirror_initial_cumulative_payout mirror_shares)
+            )
+
+            (create_slot MIRROR_SLOT_1ST_CURRY_HASH
+                (get_slot_data_hash mirror_payout_puzzle_hash (f reward_info) mirror_shares)
+            )
+
+            ; leading -42 -> condition will be returned by the reserve
+            (list -42
+                CREATE_COIN
+                mirror_payout_puzzle_hash
+                (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares)
+                (list mirror_payout_puzzle_hash)
+            )
+        ) ; conditions
+    )
+)
