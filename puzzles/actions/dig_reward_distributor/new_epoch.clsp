@@ -1,0 +1,60 @@
+; new_epoch.clsp by yakuhito
+;; Starts a new epoch
+
+(mod (
+    EPOCH_REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
+    EPOCH_SECONDS
+    (total_reserves active_shares (cumulative_payout . remaining_rewards) (last_update . epoch_end)) ; Current_State
+    (
+        slot_epoch_time
+        slot_next_epoch_time
+        slot_total_rewards
+        epoch_total_rewards
+    )
+)
+    (include condition_codes.clib)
+    (include curry.clib)
+    (include slots.clib)
+
+    (defun-inline slot_oracle (SLOT_1ST_CURRY_HASH slot_value_hash)
+        (list
+            (spend_slot SLOT_1ST_CURRY_HASH slot_value_hash)
+            (create_slot SLOT_1ST_CURRY_HASH slot_value_hash)
+        )
+    )
+
+    (if (all (= last_update epoch_end)
+        (any
+            (all (= slot_epoch_time epoch_end) (= epoch_total_rewards slot_total_rewards)) ; slot contains info about next epoch
+            (all (> epoch_end slot_epoch_time) (= slot_next_epoch_time 0) (= epoch_total_rewards 0)) ; slot is for previous epoch; next epoch is 0
+        )
+    )
+        (c
+            (list
+                total_reserves
+                active_shares
+                (c cumulative_payout (+ remaining_rewards epoch_total_rewards))
+                (c epoch_end (+ epoch_end EPOCH_SECONDS))
+            ) ; new state    
+            (c
+                (list
+                    CREATE_PUZZLE_ANNOUNCEMENT
+                    (concat 'e'
+                        (sha256 1 epoch_end) ; (sha256tree epoch_end)
+                    ) 
+                )
+                (slot_oracle EPOCH_REWARD_SLOT_1ST_CURRY_HASH
+                    (sha256 2
+                        (sha256 1 slot_epoch_time)
+                        (sha256 2
+                            (sha256 1 slot_next_epoch_time)
+                            (sha256 1 epoch_total_rewards)
+                        )
+                    ) ; (sha256tree (epoch_time next_epoch_time . total_rewards))
+                )
+            ) ; conditions
+        )
+        ; else
+        (x)
+    )
+)
