@@ -37,6 +37,9 @@
                 )
             )
 
+            ; make sure the reward info is up to date
+            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ (f current_round_info) 1))
+
             (spend_slot MIRROR_SLOT_1ST_CURRY_HASH
                 (sha256 2
                     (sha256 1 mirror_payout_puzzle_hash)
