@@ -1,0 +1,62 @@
+; commit_incentives.clsp by yakuhito
+;; Add incentives for a future epoch
+
+(mod (
+    EPOCH_REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
+    PRECOMMITMENT_SLOT_1ST_CURRY_HASH ; after 1st curry
+    EPOCH_SECONDS
+    (total_reserves active_shares reward_info (last_update . epoch_end)) ; Current_State
+    (
+        slot_epoch_time
+        slot_next_epoch_time
+        slot_total_rewards
+        epoch_start
+        clawback_ph .
+        rewards_to_add
+    )
+)
+    (include condition_codes.clib)
+    (include curry.clib)
+    (include slots.clib)
+
+    (defun create_precommitment_slot_and_announce (PRECOMMITMENT_SLOT_1ST_CURRY_HASH value_hash base_conditions)
+        (c
+            (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'c' value_hash))
+            (c
+                (create_slot PRECOMMITMENT_SLOT_1ST_CURRY_HASH value_hash)
+                base_conditions
+            )
+        )
+    )
+
+    (if (all 
+        (not (> epoch_end slot_epoch_time))
+        (> rewards_to_add 0)
+    )
+        (c
+            (list
+                (+ total_reserves rewards_to_add)
+                active_shares
+                reward_info
+                (c last_update epoch_end)
+            ) ; new state  
+            (create_precommitment_slot_and_announce
+                PRECOMMITMENT_SLOT_1ST_CURRY_HASH
+                (sha256 2
+                    (sha256 1 epoch_start)
+                    (sha256 2 
+                        (sha256 1 clawback_ph)
+                        (sha256 1 rewards_to_add)
+                    )
+                )
+                (if (= epoch_start slot_epoch_time)
+                    (list)
+                    ; else - initialize slots up until slot_epoch_time
+                    (list)
+                )
+            ) ; conditions
+        )
+        ; else
+        (x)
+    )
+)

@@ -8,7 +8,7 @@
     (
         slot_epoch_time
         slot_next_epoch_time
-        slot_total_rewards
+        slot_total_rewards .
         epoch_total_rewards
     )
 )
