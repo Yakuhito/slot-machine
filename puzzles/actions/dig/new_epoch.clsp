@@ -3,13 +3,16 @@
 
 (mod (
     REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
+    VALIDATOR_PAYOUT_PUZZLE_HASH
+    VALIDATOR_FEE ; * epoch_total_rewards / 10000 will be given to the validator - rest is distributed to mirrors
     EPOCH_SECONDS
     (total_reserves active_shares (cumulative_payout . remaining_rewards) (last_update . epoch_end)) ; Current_State
     (
         slot_epoch_time
         slot_next_epoch_time
-        slot_total_rewards .
-        epoch_total_rewards
+        slot_total_rewards
+        epoch_total_rewards .
+        validator_fee
     )
 )
     (include condition_codes.clib)
@@ -24,6 +27,7 @@
     )
 
     (if (all (= last_update epoch_end)
+        (= (/ (* epoch_total_rewards VALIDATOR_FEE) 10000) validator_fee)
         (any
             (all (= slot_epoch_time epoch_end) (= epoch_total_rewards slot_total_rewards)) ; slot contains info about next epoch
             (all (> epoch_end slot_epoch_time) (= slot_next_epoch_time 0) (= epoch_total_rewards 0)) ; slot is for previous epoch; next epoch is 0
@@ -31,9 +35,12 @@
     )
         (c
             (list
-                total_reserves
+                (- total_reserves validator_fee)
                 active_shares
-                (c cumulative_payout (+ remaining_rewards epoch_total_rewards))
+                (c
+                    cumulative_payout
+                    (+ remaining_rewards (- epoch_total_rewards validator_fee))
+                )
                 (c epoch_end (+ epoch_end EPOCH_SECONDS))
             ) ; new state    
             (c
@@ -51,6 +58,13 @@
                             (sha256 1 epoch_total_rewards)
                         )
                     ) ; (sha256tree (epoch_time next_epoch_time . total_rewards))
+                )
+                ; condition prepended with -42 -> condition will be returned by the reserve
+                (list -42
+                    CREATE_COIN
+                    VALIDATOR_PAYOUT_PUZZLE_HASH
+                    validator_fee
+                    (list VALIDATOR_PAYOUT_PUZZLE_HASH)
                 )
             ) ; conditions
         )
