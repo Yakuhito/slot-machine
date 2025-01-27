@@ -5,6 +5,7 @@
     SINGLETON_MOD_HASH
     VALIDATOR_SINGLETON_STRUCT_HASH ; (sha256 SINGLETON_STRUCT) for validator singleton
     MIRROR_SLOT_1ST_CURRY_HASH ; after 1st curry
+    PAYOUT_THRESHOLD ; to prevent spam, payout needs to be >= PAYOUT_THRESHOLD
     (total_reserves active_shares reward_info current_round_info) ; Current_State
     (
         mirror_payout_puzzle_hash
@@ -24,6 +25,14 @@
                 (sha256 1 shares)
             )
         ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
+    )
+
+    (defun higher_or_equal (value threshold)
+        (if (> value threshold)
+            value
+            ; else
+            (x)
+        )
     )
 
     (c
@@ -48,7 +57,7 @@
             (list -42
                 CREATE_COIN
                 mirror_payout_puzzle_hash
-                (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares)
+                (higher_or_equal (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares) PAYOUT_THRESHOLD)
                 (list mirror_payout_puzzle_hash)
             )
         ) ; conditions
