@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
+    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash, TreeHasher},
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::singleton::{SingletonArgs, SingletonStruct},
 };
@@ -85,8 +85,21 @@ where
         }
         .to_clvm(&mut ctx.allocator)?;
 
+        let self_program = if let Some(nonce) = self.info.nonce {
+            CurriedProgram {
+                program: ctx.nonce_wrapper_puzzle()?,
+                args: NonceWraperArgs {
+                    nonce,
+                    inner_puzzle: prog_1st_curry,
+                },
+            }
+            .to_clvm(&mut ctx.allocator)?
+        } else {
+            prog_1st_curry
+        };
+
         Ok(CurriedProgram {
-            program: prog_1st_curry,
+            program: self_program,
             args: Slot2ndCurryArgs {
                 value_hash: self.info.value_hash,
             },
@@ -140,4 +153,36 @@ pub struct SlotSolution {
     pub parent_parent_info: Bytes32,
     pub parent_inner_puzzle_hash: Bytes32,
     pub spender_inner_puzzle_hash: Bytes32,
+}
+
+// run -d '(mod (NONCE INNER_PUZZLE . inner_solution) (a INNER_PUZZLE inner_solution))'
+pub const NONCE_WRAPPER_PUZZLE: [u8; 7] = hex!("ff02ff05ff0780");
+
+pub const NONCE_WRAPPER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
+    "
+    847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657
+    "
+));
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct NonceWraperArgs<P> {
+    pub nonce: u64,
+    pub inner_puzzle: P,
+}
+
+impl<P> NonceWraperArgs<P>
+where
+    P: ToTreeHash + ToClvm<TreeHasher>,
+{
+    pub fn curry_tree_hash(nonce: u64, inner_puzzle: P) -> TreeHash {
+        CurriedProgram {
+            program: NONCE_WRAPPER_PUZZLE_HASH,
+            args: NonceWraperArgs {
+                nonce,
+                inner_puzzle,
+            },
+        }
+        .tree_hash()
+    }
 }

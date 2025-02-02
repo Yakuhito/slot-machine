@@ -274,6 +274,7 @@ impl XchandlesRegistry {
                     self.info.launcher_id,
                     left_slot_value
                         .with_neighbors(left_slot_value.neighbors.left_value, handle_hash),
+                    None,
                 ),
             ),
             Slot::new(
@@ -288,6 +289,7 @@ impl XchandlesRegistry {
                         precommit_coin.value.owner_launcher_id,
                         precommit_coin.value.resolved_launcher_id,
                     ),
+                    None,
                 ),
             ),
             Slot::new(
@@ -296,6 +298,7 @@ impl XchandlesRegistry {
                     self.info.launcher_id,
                     right_slot_value
                         .with_neighbors(handle_hash, right_slot_value.neighbors.right_value),
+                    None,
                 ),
             ),
         ];
@@ -420,6 +423,7 @@ impl XchandlesRegistry {
                     precommit_coin.value.owner_launcher_id,
                     precommit_coin.value.resolved_launcher_id,
                 ),
+                None,
             ),
         )];
 
@@ -550,6 +554,7 @@ impl XchandlesRegistry {
             SlotInfo::from_value(
                 self.info.launcher_id,
                 slot_value.with_expiration(new_expiration),
+                None,
             ),
         )];
 
@@ -639,7 +644,7 @@ impl XchandlesRegistry {
 
         let new_slots = vec![Slot::new(
             new_slots_proof,
-            SlotInfo::from_value(self.info.launcher_id, slot_value),
+            SlotInfo::from_value(self.info.launcher_id, slot_value, None),
         )];
 
         // finally, spend self
@@ -701,6 +706,7 @@ impl XchandlesRegistry {
             SlotInfo::from_value(
                 self.info.launcher_id,
                 slot_value.with_launcher_ids(new_owner_launcher_id, new_resolved_launcher_id),
+                None,
             ),
         )];
 

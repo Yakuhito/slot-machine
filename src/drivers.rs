@@ -218,10 +218,10 @@ where
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
 
-    let left_slot_info = SlotInfo::from_value(launcher_id, left_slot_value);
+    let left_slot_info = SlotInfo::from_value(launcher_id, left_slot_value, None);
     let left_slot_puzzle_hash = Slot::<S>::puzzle_hash(&left_slot_info);
 
-    let right_slot_info = SlotInfo::from_value(launcher_id, right_slot_value);
+    let right_slot_info = SlotInfo::from_value(launcher_id, right_slot_value, None);
     let right_slot_puzzle_hash = Slot::<S>::puzzle_hash(&right_slot_info);
 
     let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id).into();

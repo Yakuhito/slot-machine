@@ -37,6 +37,7 @@ pub trait SpendContextExt {
     fn xchandles_factor_pricing_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_exponential_premium_renew_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn default_cat_maker_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn nonce_wrapper_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -159,6 +160,11 @@ impl SpendContextExt for SpendContext {
     fn default_cat_maker_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(DEFAULT_CAT_MAKER_PUZZLE_HASH, &DEFAULT_CAT_MAKER_PUZZLE)
     }
+
+    /// Allocate the nonce wrapper puzzle and return its pointer.
+    fn nonce_wrapper_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(NONCE_WRAPPER_PUZZLE_HASH, &NONCE_WRAPPER_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -199,6 +205,7 @@ mod tests {
         assert_puzzle_hash!(XCHANDLES_FACTOR_PRICING_PUZZLE => XCHANDLES_FACTOR_PRICING_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE => XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH);
         assert_puzzle_hash!(DEFAULT_CAT_MAKER_PUZZLE => DEFAULT_CAT_MAKER_PUZZLE_HASH);
+        assert_puzzle_hash!(NONCE_WRAPPER_PUZZLE => NONCE_WRAPPER_PUZZLE_HASH);
         Ok(())
     }
 }

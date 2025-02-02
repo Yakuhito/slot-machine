@@ -200,6 +200,7 @@ impl CatalogRegistry {
                         left_slot_value.neighbors.left_value,
                         tail_hash,
                     ),
+                    None,
                 ),
             ),
             Slot::new(
@@ -211,6 +212,7 @@ impl CatalogRegistry {
                         left_slot_value.asset_id,
                         right_slot_value.asset_id,
                     ),
+                    None,
                 ),
             ),
             Slot::new(
@@ -222,6 +224,7 @@ impl CatalogRegistry {
                         tail_hash,
                         right_slot_value.neighbors.right_value,
                     ),
+                    None,
                 ),
             ),
         ];
