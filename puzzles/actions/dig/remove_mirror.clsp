@@ -5,6 +5,9 @@
     SINGLETON_MOD_HASH
     VALIDATOR_SINGLETON_STRUCT_HASH ; (sha256 SINGLETON_STRUCT) for validator singleton
     MIRROR_SLOT_1ST_CURRY_HASH ; after 1st curry
+    MAX_SECONDS_OFFSET ; at most this amount of seconds can pass since last update
+    ; /\ this prevents the reward distributor from 'stealing' earned rewards while not
+    ;    dropping the remove mirror tx from the mempool after each block
     (total_reserves active_shares reward_info current_round_info) ; Current_State
     (
         validator_singleton_inner_puzzle_hash
@@ -38,7 +41,7 @@
             )
 
             ; make sure the reward info is up to date
-            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ (f current_round_info) 1))
+            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ (f current_round_info) MAX_SECONDS_OFFSET))
 
             (spend_slot MIRROR_SLOT_1ST_CURRY_HASH
                 (sha256 2

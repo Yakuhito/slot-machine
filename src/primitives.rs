@@ -1,6 +1,7 @@
 mod catalog_registry;
 mod catalog_registry_info;
 mod default_cat_maker;
+mod dig_reward_distributor_info;
 mod precommit_coin;
 mod reserve;
 mod slot;
@@ -15,6 +16,7 @@ mod xchandles_registry_info;
 pub use catalog_registry::*;
 pub use catalog_registry_info::*;
 pub use default_cat_maker::*;
+pub use dig_reward_distributor_info::*;
 pub use precommit_coin::*;
 pub use reserve::*;
 pub use slot::*;

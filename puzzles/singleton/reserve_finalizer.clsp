@@ -9,11 +9,11 @@
 ;; This puzzle handles reserve re-creation based on the new state
 
 (mod (
+    ACTION_LAYER_MOD_HASH
     RESERVE_FULL_PUZZLE_HASH
     RESERVE_INNER_PUZZLE_HASH
     HINT
     FINALIZER_SELF_HASH
-    ACTION_LAYER_MOD_HASH
     Merkle_Root
     Initial_State ; not used for this puzzle
     (New_State . Conditions) ; last action output
@@ -65,9 +65,8 @@
       (list
         CREATE_COIN
         (curry_hashes ACTION_LAYER_MOD_HASH
-          (curry_hashes FINALIZER_SELF_HASH
-              (sha256 1 FINALIZER_SELF_HASH)
-              (sha256 1 ACTION_LAYER_MOD_HASH)
+          (curry_hashes FINALIZER_SELF_HASH 
+            (sha256 1 FINALIZER_SELF_HASH)
           ) ; finalizer puzzle hash
           (sha256 1 Merkle_Root)
           (sha256tree New_State)
