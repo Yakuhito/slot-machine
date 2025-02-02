@@ -10,7 +10,7 @@ use hex_literal::hex;
 
 use crate::{
     ActionLayer, ActionLayerArgs, CatalogRefundActionArgs, CatalogRegisterActionArgs,
-    DefaultFinalizer2ndCurryArgs, DelegatedStateActionArgs,
+    DefaultFinalizer2ndCurryArgs, DelegatedStateActionArgs, Finalizer,
 };
 
 pub type CatalogRegistryLayers = SingletonLayer<ActionLayer<CatalogRegistryState>>;
@@ -125,7 +125,9 @@ impl CatalogRegistryInfo {
             ActionLayer::from_action_puzzle_hashes(
                 &Self::action_puzzle_hashes(self.launcher_id, &self.constants),
                 self.state,
-                self.launcher_id,
+                Finalizer::Default {
+                    hint: self.launcher_id,
+                },
             ),
         )
     }

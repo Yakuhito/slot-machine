@@ -15,10 +15,22 @@ use hex_literal::hex;
 use crate::SpendContextExt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Finalizer {
+    Default {
+        hint: Bytes32,
+    },
+    Reserve {
+        hint: Bytes32,
+        reserve_full_puzzle_hash: Bytes32,
+        reserve_inner_puzzle_hash: Bytes32,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActionLayer<S> {
     pub merkle_root: Bytes32,
     pub state: S,
-    pub hint: Bytes32,
+    pub finalizer: Finalizer,
 }
 
 #[derive(Debug, Clone)]
@@ -28,21 +40,21 @@ pub struct ActionLayerSolution {
 }
 
 impl<S> ActionLayer<S> {
-    pub fn new(merkle_root: Bytes32, state: S, hint: Bytes32) -> Self {
+    pub fn new(merkle_root: Bytes32, state: S, finalizer: Finalizer) -> Self {
         Self {
             merkle_root,
             state,
-            hint,
+            finalizer,
         }
     }
 
-    pub fn from_action_puzzle_hashes(leaves: &[Bytes32], state: S, hint: Bytes32) -> Self {
+    pub fn from_action_puzzle_hashes(leaves: &[Bytes32], state: S, finalizer: Finalizer) -> Self {
         let merkle_root = MerkleTree::new(leaves).root();
 
         Self {
             merkle_root,
             state,
-            hint,
+            finalizer,
         }
     }
 
@@ -130,10 +142,7 @@ where
 
         let args = ActionLayerArgs::<NodePtr, S>::from_clvm(allocator, puzzle.args)?;
         let finalizer_2nd_curry =
-            CurriedProgram::<NodePtr, DefaultFinalizer2ndCurryArgs>::from_clvm(
-                allocator,
-                args.finalizer,
-            );
+            CurriedProgram::<NodePtr, NodePtr>::from_clvm(allocator, args.finalizer);
         let Ok(finalizer_2nd_curry) = finalizer_2nd_curry else {
             return Ok(None);
         };
@@ -143,22 +152,66 @@ where
             return Ok(None);
         };
 
-        let finalizer_1st_curry_args =
-            DefaultFinalizer1stCurryArgs::from_clvm(allocator, finalizer_1st_curry.args)?;
-        if finalizer_1st_curry.mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH
-            || finalizer_1st_curry_args.action_layer_mod_hash != ACTION_LAYER_PUZZLE_HASH.into()
-            || finalizer_2nd_curry.args.finalizer_self_hash
-                != DefaultFinalizer1stCurryArgs::curry_tree_hash(finalizer_1st_curry_args.hint)
-                    .into()
-        {
-            return Err(DriverError::NonStandardLayer);
-        }
+        match finalizer_1st_curry.mod_hash {
+            DEFAULT_FINALIZER_PUZZLE_HASH => {
+                let finalizer_2nd_curry_args =
+                    DefaultFinalizer2ndCurryArgs::from_clvm(allocator, finalizer_2nd_curry.args)?;
+                let finalizer_1st_curry_args =
+                    DefaultFinalizer1stCurryArgs::from_clvm(allocator, finalizer_1st_curry.args)?;
 
-        Ok(Some(Self {
-            merkle_root: args.merkle_root,
-            state: args.state,
-            hint: finalizer_1st_curry_args.hint,
-        }))
+                if finalizer_1st_curry.mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH
+                    || finalizer_1st_curry_args.action_layer_mod_hash
+                        != ACTION_LAYER_PUZZLE_HASH.into()
+                    || finalizer_2nd_curry_args.finalizer_self_hash
+                        != DefaultFinalizer1stCurryArgs::curry_tree_hash(
+                            finalizer_1st_curry_args.hint,
+                        )
+                        .into()
+                {
+                    return Err(DriverError::NonStandardLayer);
+                }
+
+                Ok(Some(Self {
+                    merkle_root: args.merkle_root,
+                    state: args.state,
+                    finalizer: Finalizer::Default {
+                        hint: finalizer_1st_curry_args.hint,
+                    },
+                }))
+            }
+            RESERVE_FINALIZER_PUZZLE_HASH => {
+                let finalizer_2nd_curry_args =
+                    ReserveFinalizer2ndCurryArgs::from_clvm(allocator, finalizer_2nd_curry.args)?;
+                let finalizer_1st_curry_args =
+                    ReserveFinalizer1stCurryArgs::from_clvm(allocator, finalizer_1st_curry.args)?;
+
+                if finalizer_1st_curry.mod_hash != RESERVE_FINALIZER_PUZZLE_HASH
+                    || finalizer_1st_curry_args.action_layer_mod_hash
+                        != ACTION_LAYER_PUZZLE_HASH.into()
+                    || finalizer_2nd_curry_args.finalizer_self_hash
+                        != ReserveFinalizer1stCurryArgs::curry_tree_hash(
+                            finalizer_1st_curry_args.reserve_full_puzzle_hash,
+                            finalizer_1st_curry_args.reserve_inner_puzzle_hash,
+                            finalizer_1st_curry_args.hint,
+                        )
+                        .into()
+                {
+                    return Err(DriverError::NonStandardLayer);
+                }
+
+                Ok(Some(Self {
+                    merkle_root: args.merkle_root,
+                    state: args.state,
+                    finalizer: Finalizer::Reserve {
+                        hint: finalizer_1st_curry_args.hint,
+                        reserve_full_puzzle_hash: finalizer_1st_curry_args.reserve_full_puzzle_hash,
+                        reserve_inner_puzzle_hash: finalizer_1st_curry_args
+                            .reserve_inner_puzzle_hash,
+                    },
+                }))
+            }
+            _ => Err(DriverError::NonStandardLayer),
+        }
     }
 
     fn parse_solution(
@@ -187,17 +240,47 @@ where
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        let finalizer_1st_curry = CurriedProgram {
-            program: ctx.default_finalizer_puzzle()?,
-            args: DefaultFinalizer1stCurryArgs::new(self.hint),
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        let finalizer_1st_curry = match self.finalizer {
+            Finalizer::Default { hint } => CurriedProgram {
+                program: ctx.default_finalizer_puzzle()?,
+                args: DefaultFinalizer1stCurryArgs::new(hint),
+            }
+            .to_clvm(&mut ctx.allocator)?,
+            Finalizer::Reserve {
+                hint,
+                reserve_full_puzzle_hash,
+                reserve_inner_puzzle_hash,
+            } => CurriedProgram {
+                program: ctx.reserve_finalizer_puzzle()?,
+                args: ReserveFinalizer1stCurryArgs::new(
+                    hint,
+                    reserve_full_puzzle_hash,
+                    reserve_inner_puzzle_hash,
+                ),
+            }
+            .to_clvm(&mut ctx.allocator)?,
+        };
 
-        let finalizer = CurriedProgram {
-            program: finalizer_1st_curry,
-            args: DefaultFinalizer2ndCurryArgs::new(self.hint),
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        let finalizer = match self.finalizer {
+            Finalizer::Default { hint } => CurriedProgram {
+                program: finalizer_1st_curry,
+                args: DefaultFinalizer2ndCurryArgs::new(hint),
+            }
+            .to_clvm(&mut ctx.allocator)?,
+            Finalizer::Reserve {
+                hint,
+                reserve_full_puzzle_hash,
+                reserve_inner_puzzle_hash,
+            } => CurriedProgram {
+                program: finalizer_1st_curry,
+                args: ReserveFinalizer2ndCurryArgs::new(
+                    reserve_full_puzzle_hash,
+                    reserve_inner_puzzle_hash,
+                    hint,
+                ),
+            }
+            .to_clvm(&mut ctx.allocator)?,
+        };
 
         Ok(CurriedProgram {
             program: ctx.action_layer_puzzle()?,
@@ -282,6 +365,96 @@ impl DefaultFinalizer2ndCurryArgs {
         CurriedProgram {
             program: self_hash,
             args: DefaultFinalizer2ndCurryArgs {
+                finalizer_self_hash: self_hash.into(),
+            },
+        }
+        .tree_hash()
+    }
+}
+
+pub const RESERVE_FINALIZER_PUZZLE: [u8; 863] = hex!("ff02ffff01ff04ffff04ff10ffff04ffff02ff1affff04ff02ffff04ff05ffff04ffff02ff1affff04ff02ffff04ff5fffff04ffff0bffff0101ff5f80ff8080808080ffff04ffff0bffff0101ff81bf80ffff04ffff02ff3effff04ff02ffff04ff8204ffff80808080ff80808080808080ffff04ffff0101ffff04ff2fff8080808080ffff04ffff04ff18ffff04ffff0117ffff04ffff02ff3effff04ff02ffff04ffff04ffff0101ffff04ffff04ff10ffff04ff17ffff04ff8208ffffff04ffff04ff17ff8080ff8080808080ffff06ffff02ff2effff04ff02ffff04ff8206ffffff01ff80ff8080808080808080ff80808080ffff04ffff30ff8209ffff0bff82027f80ff8080808080ffff05ffff02ff2effff04ff02ffff04ff8206ffffff01ff80ff8080808080808080ffff04ffff01ffffff3342ff02ff02ffff03ff05ffff01ff0bff72ffff02ff16ffff04ff02ffff04ff09ffff04ffff02ff1cffff04ff02ffff04ff0dff80808080ff808080808080ffff016280ff0180ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff0bff52ffff02ff16ffff04ff02ffff04ff05ffff04ffff02ff1cffff04ff02ffff04ff07ff80808080ff808080808080ffff0bff14ffff0bff14ff62ff0580ffff0bff14ff0bff428080ffff02ffff03ff09ffff01ff02ffff03ffff09ff11ffff0181d680ffff01ff02ff2effff04ff02ffff04ffff04ff19ff0d80ffff04ff0bffff04ffff04ff19ff1780ff808080808080ffff01ff02ff2effff04ff02ffff04ffff04ff19ff0d80ffff04ffff04ff09ff0b80ffff04ff17ff80808080808080ff0180ffff01ff02ffff03ff0dffff01ff02ff2effff04ff02ffff04ff0dffff04ff0bffff04ff17ff808080808080ffff01ff04ff0bff178080ff018080ff0180ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff3effff04ff02ffff04ff09ff80808080ffff02ff3effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080");
+pub const RESERVE_FINALIZER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
+    "
+    8eef0e544ff0885a68a126a3ac01d2feca619048855f839d2928b291f553cc8d
+    "
+));
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct ReserveFinalizer1stCurryArgs {
+    pub action_layer_mod_hash: Bytes32,
+    pub reserve_full_puzzle_hash: Bytes32,
+    pub reserve_inner_puzzle_hash: Bytes32,
+    pub hint: Bytes32,
+}
+
+impl ReserveFinalizer1stCurryArgs {
+    pub fn new(
+        hint: Bytes32,
+        reserve_full_puzzle_hash: Bytes32,
+        reserve_inner_puzzle_hash: Bytes32,
+    ) -> Self {
+        Self {
+            action_layer_mod_hash: ACTION_LAYER_PUZZLE_HASH.into(),
+            reserve_full_puzzle_hash,
+            reserve_inner_puzzle_hash,
+            hint,
+        }
+    }
+
+    pub fn curry_tree_hash(
+        reserve_full_puzzle_hash: Bytes32,
+        reserve_inner_puzzle_hash: Bytes32,
+        hint: Bytes32,
+    ) -> TreeHash {
+        CurriedProgram {
+            program: RESERVE_FINALIZER_PUZZLE_HASH,
+            args: ReserveFinalizer1stCurryArgs::new(
+                hint,
+                reserve_full_puzzle_hash,
+                reserve_inner_puzzle_hash,
+            ),
+        }
+        .tree_hash()
+    }
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct ReserveFinalizer2ndCurryArgs {
+    pub finalizer_self_hash: Bytes32,
+}
+
+impl ReserveFinalizer2ndCurryArgs {
+    pub fn new(
+        reserve_full_puzzle_hash: Bytes32,
+        reserve_inner_puzzle_hash: Bytes32,
+        hint: Bytes32,
+    ) -> Self {
+        Self {
+            finalizer_self_hash: ReserveFinalizer1stCurryArgs::curry_tree_hash(
+                reserve_full_puzzle_hash,
+                reserve_inner_puzzle_hash,
+                hint,
+            )
+            .into(),
+        }
+    }
+
+    pub fn curry_tree_hash(
+        reserve_full_puzzle_hash: Bytes32,
+        reserve_inner_puzzle_hash: Bytes32,
+        hint: Bytes32,
+    ) -> TreeHash {
+        let self_hash: TreeHash = ReserveFinalizer1stCurryArgs::curry_tree_hash(
+            reserve_full_puzzle_hash,
+            reserve_inner_puzzle_hash,
+            hint,
+        );
+
+        CurriedProgram {
+            program: self_hash,
+            args: ReserveFinalizer2ndCurryArgs {
                 finalizer_self_hash: self_hash.into(),
             },
         }

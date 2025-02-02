@@ -46,6 +46,7 @@ pub trait SpendContextExt {
     fn dig_remove_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_sync_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_withdraw_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn reserve_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -219,6 +220,11 @@ impl SpendContextExt for SpendContext {
             &DIG_WITHDRAW_INCENTIVES_PUZZLE,
         )
     }
+
+    /// Allocate the reserve finalizer puzzle and return its pointer.
+    fn reserve_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(RESERVE_FINALIZER_PUZZLE_HASH, &RESERVE_FINALIZER_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -268,6 +274,7 @@ mod tests {
         assert_puzzle_hash!(DIG_REMOVE_MIRROR_PUZZLE => DIG_REMOVE_MIRROR_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_SYNC_PUZZLE => DIG_SYNC_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_WITHDRAW_INCENTIVES_PUZZLE => DIG_WITHDRAW_INCENTIVES_PUZZLE_HASH);
+        assert_puzzle_hash!(RESERVE_FINALIZER_PUZZLE => RESERVE_FINALIZER_PUZZLE_HASH);
         Ok(())
     }
 }

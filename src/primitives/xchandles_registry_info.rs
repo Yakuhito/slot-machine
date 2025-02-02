@@ -9,9 +9,9 @@ use clvmr::Allocator;
 
 use crate::{
     ActionLayer, ActionLayerArgs, DefaultFinalizer2ndCurryArgs, DelegatedStateActionArgs,
-    XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExtendAction,
-    XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction, XchandlesRefundAction,
-    XchandlesRegisterAction, XchandlesUpdateAction,
+    Finalizer, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
+    XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction,
+    XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
 };
 
 use super::DefaultCatMakerArgs;
@@ -137,7 +137,9 @@ impl XchandlesRegistryInfo {
             ActionLayer::from_action_puzzle_hashes(
                 &Self::action_puzzle_hashes(self.launcher_id, &self.constants),
                 self.state,
-                self.launcher_id,
+                Finalizer::Default {
+                    hint: self.launcher_id,
+                },
             ),
         )
     }
