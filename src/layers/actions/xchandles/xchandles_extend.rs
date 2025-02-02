@@ -91,7 +91,7 @@ impl XchandlesExtendActionArgs {
         Self {
             offer_mod_hash: SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
             payout_puzzle_hash,
-            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id).into(),
+            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, None).into(),
         }
     }
 }

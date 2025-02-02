@@ -39,6 +39,7 @@ pub trait SpendContextExt {
     fn default_cat_maker_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn nonce_wrapper_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn dig_add_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -171,6 +172,11 @@ impl SpendContextExt for SpendContext {
     fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(DIG_ADD_INCENTIVES_PUZZLE_HASH, &DIG_ADD_INCENTIVES_PUZZLE)
     }
+
+    /// Allocate the dig add mirror action puzzle and return its pointer.
+    fn dig_add_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(DIG_ADD_MIRROR_PUZZLE_HASH, &DIG_ADD_MIRROR_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -213,6 +219,7 @@ mod tests {
         assert_puzzle_hash!(DEFAULT_CAT_MAKER_PUZZLE => DEFAULT_CAT_MAKER_PUZZLE_HASH);
         assert_puzzle_hash!(NONCE_WRAPPER_PUZZLE => NONCE_WRAPPER_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_ADD_INCENTIVES_PUZZLE => DIG_ADD_INCENTIVES_PUZZLE_HASH);
+        assert_puzzle_hash!(DIG_ADD_MIRROR_PUZZLE => DIG_ADD_MIRROR_PUZZLE_HASH);
         Ok(())
     }
 }

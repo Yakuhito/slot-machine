@@ -224,7 +224,7 @@ where
     let right_slot_info = SlotInfo::from_value(launcher_id, right_slot_value, None);
     let right_slot_puzzle_hash = Slot::<S>::puzzle_hash(&right_slot_info);
 
-    let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id).into();
+    let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id, None).into();
     let slot_memos = ctx.hint(slot_hint)?;
     let launcher_memos = ctx.hint(launcher_id)?;
     let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()

@@ -56,19 +56,25 @@ where
         }
     }
 
-    pub fn first_curry_hash(launcher_id: Bytes32) -> TreeHash {
-        CurriedProgram {
+    pub fn first_curry_hash(launcher_id: Bytes32, nonce: Option<u64>) -> TreeHash {
+        let base = CurriedProgram {
             program: SLOT_PUZZLE_HASH,
             args: Slot1stCurryArgs {
                 singleton_struct: SingletonStruct::new(launcher_id),
             },
         }
-        .tree_hash()
+        .tree_hash();
+
+        if let Some(nonce) = nonce {
+            NonceWraperArgs::curry_tree_hash(nonce, base)
+        } else {
+            base
+        }
     }
 
     pub fn puzzle_hash(info: &SlotInfo<V>) -> TreeHash {
         CurriedProgram {
-            program: Self::first_curry_hash(info.launcher_id),
+            program: Self::first_curry_hash(info.launcher_id, info.nonce),
             args: Slot2ndCurryArgs {
                 value_hash: info.value_hash,
             },

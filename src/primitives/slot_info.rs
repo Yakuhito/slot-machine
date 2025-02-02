@@ -222,3 +222,28 @@ impl PartialOrd for XchandlesSlotValue {
         Some(self.cmp(other))
     }
 }
+
+pub enum DigSlotNonce {
+    REWARDS = 1,
+    COMMITMENT = 2,
+    MIRROR = 3,
+}
+
+impl DigSlotNonce {
+    pub fn from_u64(value: u64) -> Option<Self> {
+        match value {
+            1 => Some(Self::REWARDS),
+            2 => Some(Self::COMMITMENT),
+            3 => Some(Self::MIRROR),
+            _ => None,
+        }
+    }
+
+    pub fn to_u64(self) -> u64 {
+        match self {
+            Self::REWARDS => 1,
+            Self::COMMITMENT => 2,
+            Self::MIRROR => 3,
+        }
+    }
+}

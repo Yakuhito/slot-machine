@@ -85,7 +85,7 @@ impl XchandlesUpdateActionArgs {
         Self {
             singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
             singleton_launcher_mod_hash_hash: singleton_launcher_mod_hash.tree_hash().into(),
-            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id).into(),
+            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, None).into(),
         }
     }
 }
