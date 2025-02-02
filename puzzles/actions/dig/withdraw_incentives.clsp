@@ -4,14 +4,15 @@
 (mod (
     REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
     COMMITMENT_SLOT_1ST_CURRY_HASH ; after 1st curry
-    WITHDRAWAL_SHARE ; / 10000 * committed_value will actually be sent to the recipient
+    WITHDRAWAL_SHARE_BPS ; / 10000 * committed_value will actually be sent to the recipient
     (total_reserves active_shares reward_info current_round_info) ; Current_State
     (
         reward_slot_epoch_time
         reward_slot_next_epoch_time_hash
         reward_slot_total_rewards
-        clawback_ph .
-        committed_value
+        clawback_ph
+        committed_value .
+        withdrawal_share
     )
 )
     (include condition_codes.clib)
@@ -30,7 +31,9 @@
     
     (c
         (list
-            (- total_reserves (/ (* WITHDRAWAL_SHARE committed_value) 10000))
+            (- total_reserves 
+                (if (= withdrawal_share (/ (* WITHDRAWAL_SHARE_BPS committed_value) 10000)) withdrawal_share (x))
+            )
             active_shares
             reward_info
             current_round_info
@@ -48,7 +51,7 @@
                 (get_slot_data_hash
                     reward_slot_epoch_time
                     reward_slot_next_epoch_time_hash
-                    (- reward_slot_total_rewards (/ (* WITHDRAWAL_SHARE committed_value) 10000))
+                    (- reward_slot_total_rewards withdrawal_share)
                 )
             )
 
@@ -65,7 +68,7 @@
             )
 
             ; conditions with '-42' will be outputed by the reserve coin
-            (list -42 CREATE_COIN clawback_ph (/ (* WITHDRAWAL_SHARE committed_value) 10000) (list clawback_ph))
+            (list -42 CREATE_COIN clawback_ph withdrawal_share (list clawback_ph))
         ) ; conditions
     )
         
