@@ -1,4 +1,4 @@
-; add_current_epoch_incentives.clsp by yakuhito
+; add_incentives.clsp by yakuhito
 ;; Adds incentives for the current epoch
 
 (mod (

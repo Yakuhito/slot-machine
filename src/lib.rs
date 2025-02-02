@@ -38,6 +38,7 @@ pub trait SpendContextExt {
     fn xchandles_exponential_premium_renew_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn default_cat_maker_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn nonce_wrapper_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -165,6 +166,11 @@ impl SpendContextExt for SpendContext {
     fn nonce_wrapper_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(NONCE_WRAPPER_PUZZLE_HASH, &NONCE_WRAPPER_PUZZLE)
     }
+
+    /// Allocate the dig add incentives action puzzle and return its pointer.
+    fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(DIG_ADD_INCENTIVES_PUZZLE_HASH, &DIG_ADD_INCENTIVES_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -206,6 +212,7 @@ mod tests {
         assert_puzzle_hash!(XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE => XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH);
         assert_puzzle_hash!(DEFAULT_CAT_MAKER_PUZZLE => DEFAULT_CAT_MAKER_PUZZLE_HASH);
         assert_puzzle_hash!(NONCE_WRAPPER_PUZZLE => NONCE_WRAPPER_PUZZLE_HASH);
+        assert_puzzle_hash!(DIG_ADD_INCENTIVES_PUZZLE => DIG_ADD_INCENTIVES_PUZZLE_HASH);
         Ok(())
     }
 }
