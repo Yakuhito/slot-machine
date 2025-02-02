@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::{CurriedProgram, TreeHash},
+    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
 use chia_wallet_sdk::{DriverError, Layer};
@@ -52,6 +52,16 @@ impl Layer for DigCommitIncentivesAction {
 
     fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
         unimplemented!()
+    }
+}
+
+impl DigCommitIncentivesAction {
+    pub fn curry_tree_hash(launcher_id: Bytes32, epoch_seconds: u64) -> TreeHash {
+        CurriedProgram {
+            program: DIG_COMMIT_INCENTIVES_PUZZLE_HASH,
+            args: DigCommitIncentivesActionArgs::new(launcher_id, epoch_seconds),
+        }
+        .tree_hash()
     }
 }
 

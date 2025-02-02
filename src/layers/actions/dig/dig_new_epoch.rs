@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::{CurriedProgram, TreeHash},
+    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
 use chia_wallet_sdk::{DriverError, Layer};
@@ -59,6 +59,26 @@ impl Layer for DigNewEpochAction {
 
     fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
         unimplemented!()
+    }
+}
+
+impl DigNewEpochAction {
+    pub fn curry_tree_hash(
+        launcher_id: Bytes32,
+        validator_payout_puzzle_hash: Bytes32,
+        validator_fee_bps: u64,
+        epoch_seconds: u64,
+    ) -> TreeHash {
+        CurriedProgram {
+            program: DIG_NEW_EPOCH_PUZZLE_HASH,
+            args: DigNewEpochActionArgs::new(
+                launcher_id,
+                validator_payout_puzzle_hash,
+                validator_fee_bps,
+                epoch_seconds,
+            ),
+        }
+        .tree_hash()
     }
 }
 

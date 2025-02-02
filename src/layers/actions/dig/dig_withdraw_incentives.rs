@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::{CurriedProgram, TreeHash},
+    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
 use chia_wallet_sdk::{DriverError, Layer};
@@ -52,6 +52,16 @@ impl Layer for DigWithdrawIncentivesAction {
 
     fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
         unimplemented!()
+    }
+}
+
+impl DigWithdrawIncentivesAction {
+    pub fn curry_tree_hash(launcher_id: Bytes32, withdrawal_share_bps: u64) -> TreeHash {
+        CurriedProgram {
+            program: DIG_WITHDRAW_INCENTIVES_PUZZLE_HASH,
+            args: DigWithdrawIncentivesActionArgs::new(launcher_id, withdrawal_share_bps),
+        }
+        .tree_hash()
     }
 }
 
