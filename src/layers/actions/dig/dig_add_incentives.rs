@@ -54,7 +54,7 @@ pub const DIG_ADD_INCENTIVES_PUZZLE: [u8; 166] = hex!("ff02ffff01ff02ffff03ffff2
 
 pub const DIG_ADD_INCENTIVES_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    5ad47c467cc44b48149b1187b0338d38ebc73d413ad25af4cba3c33fe1194e7c
+    54cf9beaff1aa6273c72dfb8d5d5c98b015b2a12e29365479495bd02f44d7fe4
     "
 ));
 
