@@ -41,6 +41,7 @@ pub trait SpendContextExt {
     fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_add_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_commit_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn dig_initiate_payout_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -186,6 +187,11 @@ impl SpendContextExt for SpendContext {
             &DIG_COMMIT_INCENTIVES_PUZZLE,
         )
     }
+
+    /// Allocate the dig initiate payout action puzzle and return its pointer.
+    fn dig_initiate_payout_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(DIG_INITIATE_PAYOUT_PUZZLE_HASH, &DIG_INITIATE_PAYOUT_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -230,6 +236,7 @@ mod tests {
         assert_puzzle_hash!(DIG_ADD_INCENTIVES_PUZZLE => DIG_ADD_INCENTIVES_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_ADD_MIRROR_PUZZLE => DIG_ADD_MIRROR_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_COMMIT_INCENTIVES_PUZZLE => DIG_COMMIT_INCENTIVES_PUZZLE_HASH);
+        assert_puzzle_hash!(DIG_INITIATE_PAYOUT_PUZZLE => DIG_INITIATE_PAYOUT_PUZZLE_HASH);
         Ok(())
     }
 }
