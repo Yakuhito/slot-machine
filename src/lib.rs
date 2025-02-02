@@ -40,6 +40,7 @@ pub trait SpendContextExt {
     fn nonce_wrapper_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_add_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn dig_commit_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -177,6 +178,14 @@ impl SpendContextExt for SpendContext {
     fn dig_add_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(DIG_ADD_MIRROR_PUZZLE_HASH, &DIG_ADD_MIRROR_PUZZLE)
     }
+
+    /// Allocate the dig commit incentives action puzzle and return its pointer.
+    fn dig_commit_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            DIG_COMMIT_INCENTIVES_PUZZLE_HASH,
+            &DIG_COMMIT_INCENTIVES_PUZZLE,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -220,6 +229,7 @@ mod tests {
         assert_puzzle_hash!(NONCE_WRAPPER_PUZZLE => NONCE_WRAPPER_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_ADD_INCENTIVES_PUZZLE => DIG_ADD_INCENTIVES_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_ADD_MIRROR_PUZZLE => DIG_ADD_MIRROR_PUZZLE_HASH);
+        assert_puzzle_hash!(DIG_COMMIT_INCENTIVES_PUZZLE => DIG_COMMIT_INCENTIVES_PUZZLE_HASH);
         Ok(())
     }
 }
