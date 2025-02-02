@@ -44,6 +44,7 @@ pub trait SpendContextExt {
     fn dig_initiate_payout_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_new_epoch_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_remove_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn dig_sync_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -204,6 +205,11 @@ impl SpendContextExt for SpendContext {
     fn dig_remove_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(DIG_REMOVE_MIRROR_PUZZLE_HASH, &DIG_REMOVE_MIRROR_PUZZLE)
     }
+
+    /// Allocate the dig sync action puzzle and return its pointer.
+    fn dig_sync_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(DIG_SYNC_PUZZLE_HASH, &DIG_SYNC_PUZZLE)
+    }
 }
 
 #[cfg(test)]
@@ -251,6 +257,7 @@ mod tests {
         assert_puzzle_hash!(DIG_INITIATE_PAYOUT_PUZZLE => DIG_INITIATE_PAYOUT_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_NEW_EPOCH_PUZZLE => DIG_NEW_EPOCH_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_REMOVE_MIRROR_PUZZLE => DIG_REMOVE_MIRROR_PUZZLE_HASH);
+        assert_puzzle_hash!(DIG_SYNC_PUZZLE => DIG_SYNC_PUZZLE_HASH);
         Ok(())
     }
 }
