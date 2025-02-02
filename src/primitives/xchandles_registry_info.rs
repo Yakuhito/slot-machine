@@ -8,7 +8,7 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::Allocator;
 
 use crate::{
-    ActionLayer, ActionLayerArgs, DefaultFinalizerArgs, DelegatedStateActionArgs,
+    ActionLayer, ActionLayerArgs, DefaultFinalizer2ndCurryArgs, DelegatedStateActionArgs,
     XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExtendAction,
     XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction, XchandlesRefundAction,
     XchandlesRegisterAction, XchandlesUpdateAction,
@@ -174,7 +174,7 @@ impl XchandlesRegistryInfo {
 
     pub fn inner_puzzle_hash(&self) -> TreeHash {
         ActionLayerArgs::curry_tree_hash(
-            DefaultFinalizerArgs::curry_tree_hash(self.launcher_id),
+            DefaultFinalizer2ndCurryArgs::curry_tree_hash(self.launcher_id),
             MerkleTree::new(&Self::action_puzzle_hashes(
                 self.launcher_id,
                 &self.constants,

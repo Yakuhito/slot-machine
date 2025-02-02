@@ -86,19 +86,6 @@ impl<S> ActionLayer<S> {
 
         let args = ActionLayerArgs::<NodePtr, S>::from_clvm(allocator, puzzle.args)?;
 
-        let finalizer = Puzzle::parse(allocator, args.finalizer);
-        let Some(finalizer) = finalizer.as_curried() else {
-            return Ok(None);
-        };
-
-        let finalizer_args = DefaultFinalizerArgs::from_clvm(allocator, finalizer.args)?;
-        if finalizer.mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH
-            || finalizer_args.finalizer_mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH.into()
-            || finalizer_args.action_layer_mod_hash != ACTION_LAYER_PUZZLE_HASH.into()
-        {
-            return Ok(None);
-        }
-
         Ok(Some((args.merkle_root, args.state)))
     }
 
@@ -142,15 +129,27 @@ where
         }
 
         let args = ActionLayerArgs::<NodePtr, S>::from_clvm(allocator, puzzle.args)?;
-        let finalizer = Puzzle::parse(allocator, args.finalizer);
-        let Some(finalizer) = finalizer.as_curried() else {
+        let finalizer_2nd_curry =
+            CurriedProgram::<NodePtr, DefaultFinalizer2ndCurryArgs>::from_clvm(
+                allocator,
+                args.finalizer,
+            );
+        let Ok(finalizer_2nd_curry) = finalizer_2nd_curry else {
             return Ok(None);
         };
 
-        let finalizer_args = DefaultFinalizerArgs::from_clvm(allocator, finalizer.args)?;
-        if finalizer.mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH
-            || finalizer_args.finalizer_mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH.into()
-            || finalizer_args.action_layer_mod_hash != ACTION_LAYER_PUZZLE_HASH.into()
+        let finalizer_1st_curry = Puzzle::from_clvm(allocator, finalizer_2nd_curry.program)?;
+        let Some(finalizer_1st_curry) = finalizer_1st_curry.as_curried() else {
+            return Ok(None);
+        };
+
+        let finalizer_1st_curry_args =
+            DefaultFinalizer1stCurryArgs::from_clvm(allocator, finalizer_1st_curry.args)?;
+        if finalizer_1st_curry.mod_hash != DEFAULT_FINALIZER_PUZZLE_HASH
+            || finalizer_1st_curry_args.action_layer_mod_hash != ACTION_LAYER_PUZZLE_HASH.into()
+            || finalizer_2nd_curry.args.finalizer_self_hash
+                != DefaultFinalizer1stCurryArgs::curry_tree_hash(finalizer_1st_curry_args.hint)
+                    .into()
         {
             return Err(DriverError::NonStandardLayer);
         }
@@ -158,7 +157,7 @@ where
         Ok(Some(Self {
             merkle_root: args.merkle_root,
             state: args.state,
-            hint: finalizer_args.hint,
+            hint: finalizer_1st_curry_args.hint,
         }))
     }
 
@@ -188,9 +187,15 @@ where
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        let finalizer = CurriedProgram {
+        let finalizer_1st_curry = CurriedProgram {
             program: ctx.default_finalizer_puzzle()?,
-            args: DefaultFinalizerArgs::new(self.hint),
+            args: DefaultFinalizer1stCurryArgs::new(self.hint),
+        }
+        .to_clvm(&mut ctx.allocator)?;
+
+        let finalizer = CurriedProgram {
+            program: finalizer_1st_curry,
+            args: DefaultFinalizer2ndCurryArgs::new(self.hint),
         }
         .to_clvm(&mut ctx.allocator)?;
 
@@ -227,25 +232,23 @@ where
     }
 }
 
-pub const DEFAULT_FINALIZER_PUZZLE: [u8; 639] = hex!("ff02ffff01ff04ffff04ff10ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff12ffff04ff02ffff04ff05ffff04ffff0bffff0101ff0580ffff04ffff0bffff0101ff0b80ffff04ffff0bffff0101ff1780ff80808080808080ffff04ffff0bffff0101ff2f80ffff04ffff02ff1effff04ff02ffff04ff82013fff80808080ff80808080808080ffff04ffff0101ffff04ff17ff8080808080ffff02ff1affff04ff02ffff04ff8201bfff8080808080ffff04ffff01ffffff3302ffff02ffff03ff05ffff01ff0bff7cffff02ff16ffff04ff02ffff04ff09ffff04ffff02ff14ffff04ff02ffff04ff0dff80808080ff808080808080ffff016c80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff0bff5cffff02ff16ffff04ff02ffff04ff05ffff04ffff02ff14ffff04ff02ffff04ff07ff80808080ff808080808080ff02ffff03ff09ffff01ff04ff11ffff02ff1affff04ff02ffff04ffff04ff19ff0d80ff8080808080ffff01ff02ffff03ff0dffff01ff02ff1affff04ff02ffff04ff0dff80808080ff8080ff018080ff0180ffff0bff18ffff0bff18ff6cff0580ffff0bff18ff0bff4c8080ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff1effff04ff02ffff04ff09ff80808080ffff02ff1effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080");
+pub const DEFAULT_FINALIZER_PUZZLE: [u8; 611] = hex!("ff02ffff01ff04ffff04ff10ffff04ffff02ff12ffff04ff02ffff04ff05ffff04ffff02ff12ffff04ff02ffff04ff17ffff04ffff0bffff0101ff1780ff8080808080ffff04ffff0bffff0101ff2f80ffff04ffff02ff1effff04ff02ffff04ff82013fff80808080ff80808080808080ffff04ffff0101ffff04ff0bff8080808080ffff02ff1affff04ff02ffff04ff8201bfff8080808080ffff04ffff01ffffff3302ffff02ffff03ff05ffff01ff0bff7cffff02ff16ffff04ff02ffff04ff09ffff04ffff02ff14ffff04ff02ffff04ff0dff80808080ff808080808080ffff016c80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff0bff5cffff02ff16ffff04ff02ffff04ff05ffff04ffff02ff14ffff04ff02ffff04ff07ff80808080ff808080808080ff02ffff03ff09ffff01ff04ff11ffff02ff1affff04ff02ffff04ffff04ff19ff0d80ff8080808080ffff01ff02ffff03ff0dffff01ff02ff1affff04ff02ffff04ff0dff80808080ff8080ff018080ff0180ffff0bff18ffff0bff18ff6cff0580ffff0bff18ff0bff4c8080ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff1effff04ff02ffff04ff09ff80808080ffff02ff1effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080");
 pub const DEFAULT_FINALIZER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    f5eec01bcf283ea04420b37e8e25a68993ccc0c6c8a0f3378fb8982156f3ff30
+    99b89583657e06ae651fda9154a2283ea6ea258c6d120c7042eeed0be66cd16c
     "
 ));
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
-pub struct DefaultFinalizerArgs {
-    pub finalizer_mod_hash: Bytes32,
+pub struct DefaultFinalizer1stCurryArgs {
     pub action_layer_mod_hash: Bytes32,
     pub hint: Bytes32,
 }
 
-impl DefaultFinalizerArgs {
+impl DefaultFinalizer1stCurryArgs {
     pub fn new(hint: Bytes32) -> Self {
         Self {
-            finalizer_mod_hash: DEFAULT_FINALIZER_PUZZLE_HASH.into(),
             action_layer_mod_hash: ACTION_LAYER_PUZZLE_HASH.into(),
             hint,
         }
@@ -254,7 +257,33 @@ impl DefaultFinalizerArgs {
     pub fn curry_tree_hash(hint: Bytes32) -> TreeHash {
         CurriedProgram {
             program: DEFAULT_FINALIZER_PUZZLE_HASH,
-            args: DefaultFinalizerArgs::new(hint),
+            args: DefaultFinalizer1stCurryArgs::new(hint),
+        }
+        .tree_hash()
+    }
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct DefaultFinalizer2ndCurryArgs {
+    pub finalizer_self_hash: Bytes32,
+}
+
+impl DefaultFinalizer2ndCurryArgs {
+    pub fn new(hint: Bytes32) -> Self {
+        Self {
+            finalizer_self_hash: DefaultFinalizer1stCurryArgs::curry_tree_hash(hint).into(),
+        }
+    }
+
+    pub fn curry_tree_hash(hint: Bytes32) -> TreeHash {
+        let self_hash: TreeHash = DefaultFinalizer1stCurryArgs::curry_tree_hash(hint);
+
+        CurriedProgram {
+            program: self_hash,
+            args: DefaultFinalizer2ndCurryArgs {
+                finalizer_self_hash: self_hash.into(),
+            },
         }
         .tree_hash()
     }

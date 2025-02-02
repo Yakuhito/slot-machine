@@ -10,7 +10,7 @@ use hex_literal::hex;
 
 use crate::{
     ActionLayer, ActionLayerArgs, CatalogRefundActionArgs, CatalogRegisterActionArgs,
-    DefaultFinalizerArgs, DelegatedStateActionArgs,
+    DefaultFinalizer2ndCurryArgs, DelegatedStateActionArgs,
 };
 
 pub type CatalogRegistryLayers = SingletonLayer<ActionLayer<CatalogRegistryState>>;
@@ -162,7 +162,7 @@ impl CatalogRegistryInfo {
 
     pub fn inner_puzzle_hash(&self) -> TreeHash {
         ActionLayerArgs::curry_tree_hash(
-            DefaultFinalizerArgs::curry_tree_hash(self.launcher_id),
+            DefaultFinalizer2ndCurryArgs::curry_tree_hash(self.launcher_id),
             MerkleTree::new(&Self::action_puzzle_hashes(
                 self.launcher_id,
                 &self.constants,
