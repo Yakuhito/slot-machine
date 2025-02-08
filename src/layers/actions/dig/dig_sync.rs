@@ -4,12 +4,21 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::SpendContextExt;
+use crate::{DigRewardDistributorInfo, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigSyncAction {
     pub launcher_id: Bytes32,
     pub validator_launcher_id: Bytes32,
+}
+
+impl DigSyncAction {
+    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+        Self {
+            launcher_id: info.launcher_id,
+            validator_launcher_id: info.constants.validator_launcher_id,
+        }
+    }
 }
 
 impl Layer for DigSyncAction {

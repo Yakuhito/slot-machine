@@ -1997,14 +1997,14 @@ mod tests {
         };
 
         // Create source offer
-        let [launcher_sk, user_sk]: [SecretKey; 2] = test_secret_keys(2)?.try_into().unwrap();
+        let [launcher_sk, mirror1_sk]: [SecretKey; 2] = test_secret_keys(2)?.try_into().unwrap();
 
         let launcher_pk = launcher_sk.public_key();
         let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
 
-        let user_pk = user_sk.public_key();
-        let user_puzzle = StandardLayer::new(user_pk);
-        let user_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(user_pk).into();
+        let mirror1_pk = mirror1_sk.public_key();
+        let mirror1_puzzle = StandardLayer::new(mirror1_pk);
+        let mirror1_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(mirror1_pk).into();
 
         let offer_amount = 1;
         let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
@@ -2041,8 +2041,6 @@ mod tests {
         )?;
 
         sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
-
-        todo!("todo");
 
         Ok(())
     }

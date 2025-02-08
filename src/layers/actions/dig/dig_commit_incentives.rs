@@ -7,7 +7,7 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigSlotNonce, Slot, SpendContextExt};
+use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigCommitIncentivesAction {
@@ -15,6 +15,14 @@ pub struct DigCommitIncentivesAction {
     pub epoch_seconds: u64,
 }
 
+impl DigCommitIncentivesAction {
+    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+        Self {
+            launcher_id: info.launcher_id,
+            epoch_seconds: info.constants.epoch_seconds,
+        }
+    }
+}
 impl Layer for DigCommitIncentivesAction {
     type Solution = DigCommitIncentivesActionSolution;
 

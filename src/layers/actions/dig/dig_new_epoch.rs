@@ -7,7 +7,7 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigSlotNonce, Slot, SpendContextExt};
+use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigNewEpochAction {
@@ -15,6 +15,17 @@ pub struct DigNewEpochAction {
     pub validator_payout_puzzle_hash: Bytes32,
     pub validator_fee_bps: u64,
     pub epoch_seconds: u64,
+}
+
+impl DigNewEpochAction {
+    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+        Self {
+            launcher_id: info.launcher_id,
+            validator_payout_puzzle_hash: info.constants.validator_payout_puzzle_hash,
+            validator_fee_bps: info.constants.validator_fee_bps,
+            epoch_seconds: info.constants.epoch_seconds,
+        }
+    }
 }
 
 impl Layer for DigNewEpochAction {

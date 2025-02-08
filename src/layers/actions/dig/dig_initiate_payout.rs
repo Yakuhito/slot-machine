@@ -8,13 +8,23 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigSlotNonce, Slot, SpendContextExt};
+use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigInitiatePayoutAction {
     pub launcher_id: Bytes32,
     pub validator_launcher_id: Bytes32,
     pub payout_threshold: u64,
+}
+
+impl DigInitiatePayoutAction {
+    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+        Self {
+            launcher_id: info.launcher_id,
+            validator_launcher_id: info.constants.validator_launcher_id,
+            payout_threshold: info.constants.payout_threshold,
+        }
+    }
 }
 
 impl Layer for DigInitiatePayoutAction {

@@ -1,16 +1,24 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::Coin,
+    protocol::{Bytes32, Coin},
     puzzles::{
         singleton::{SingletonSolution, SingletonStruct},
         LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{DriverError, Puzzle};
-use clvm_traits::FromClvm;
+use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
+use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
-use crate::{ActionLayer, RawActionLayerSolution, ReserveFinalizerSolution};
+use crate::{
+    ActionLayer, ActionLayerSolution, DigAddIncentivesAction, DigAddIncentivesActionSolution,
+    DigAddMirrorAction, DigAddMirrorActionSolution, DigCommitIncentivesAction,
+    DigCommitIncentivesActionSolution, DigInitiatePayoutAction, DigInitiatePayoutActionSolution,
+    DigNewEpochAction, DigNewEpochActionSolution, DigRemoveMirrorAction,
+    DigRemoveMirrorActionSolution, DigSyncAction, DigSyncActionSolution,
+    DigWithdrawIncentivesAction, DigWithdrawIncentivesActionSolution, RawActionLayerSolution,
+    ReserveFinalizerSolution,
+};
 
 use super::{
     DigRewardDistributorConstants, DigRewardDistributorInfo, DigRewardDistributorState, Reserve,
@@ -95,5 +103,134 @@ impl DigRewardDistributor {
             },
             reserve,
         )))
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+pub enum DigRewardDistributorAction {
+    AddIncentives(DigAddIncentivesActionSolution),
+    AddMirror(DigAddMirrorActionSolution),
+    CommitIncentives(DigCommitIncentivesActionSolution),
+    InitiatePayout(DigInitiatePayoutActionSolution),
+    NewEpoch(DigNewEpochActionSolution),
+    RemoveMirror(DigRemoveMirrorActionSolution),
+    Sync(DigSyncActionSolution),
+    WithdrawIncentives(DigWithdrawIncentivesActionSolution),
+}
+
+impl DigRewardDistributor {
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        reserve_parent_id: Bytes32,
+        actions: Vec<DigRewardDistributorAction>,
+    ) -> Result<Spend, DriverError> {
+        let layers = self.info.into_layers();
+
+        let puzzle = layers.construct_puzzle(ctx)?;
+
+        let action_spends: Vec<Spend> = actions
+            .into_iter()
+            .map(|action| match action {
+                DigRewardDistributorAction::AddIncentives(solution) => {
+                    let layer = DigAddIncentivesAction {};
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                DigRewardDistributorAction::AddMirror(solution) => {
+                    let layer = DigAddMirrorAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                DigRewardDistributorAction::CommitIncentives(solution) => {
+                    let layer = DigCommitIncentivesAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                DigRewardDistributorAction::InitiatePayout(solution) => {
+                    let layer = DigInitiatePayoutAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                DigRewardDistributorAction::NewEpoch(solution) => {
+                    let layer = DigNewEpochAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                DigRewardDistributorAction::RemoveMirror(solution) => {
+                    let layer = DigRemoveMirrorAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                DigRewardDistributorAction::Sync(solution) => {
+                    let layer = DigSyncAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                DigRewardDistributorAction::WithdrawIncentives(solution) => {
+                    let layer = DigWithdrawIncentivesAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let action_puzzle_hashes = action_spends
+            .iter()
+            .map(|a| ctx.tree_hash(a.puzzle).into())
+            .collect::<Vec<Bytes32>>();
+
+        let finalizer_solution =
+            ReserveFinalizerSolution { reserve_parent_id }.to_clvm(&mut ctx.allocator)?;
+
+        let solution = layers.construct_solution(
+            ctx,
+            SingletonSolution {
+                lineage_proof: self.proof,
+                amount: self.coin.amount,
+                inner_solution: ActionLayerSolution {
+                    proofs: layers
+                        .inner_puzzle
+                        .get_proofs(
+                            &DigRewardDistributorInfo::action_puzzle_hashes(
+                                self.info.launcher_id,
+                                &self.info.constants,
+                            ),
+                            &action_puzzle_hashes,
+                        )
+                        .ok_or(DriverError::Custom(
+                            "Couldn't build proofs for one or more actions".to_string(),
+                        ))?,
+                    action_spends,
+                    finalizer_solution,
+                },
+            },
+        )?;
+
+        Ok(Spend::new(puzzle, solution))
     }
 }

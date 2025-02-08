@@ -7,12 +7,21 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigSlotNonce, Slot, SpendContextExt};
+use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigWithdrawIncentivesAction {
     pub launcher_id: Bytes32,
     pub withdrawal_share_bps: u64,
+}
+
+impl DigWithdrawIncentivesAction {
+    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+        Self {
+            launcher_id: info.launcher_id,
+            withdrawal_share_bps: info.constants.withdrawal_share_bps,
+        }
+    }
 }
 
 impl Layer for DigWithdrawIncentivesAction {

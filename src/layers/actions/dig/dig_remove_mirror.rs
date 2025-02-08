@@ -8,13 +8,23 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigSlotNonce, Slot, SpendContextExt};
+use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigRemoveMirrorAction {
     pub launcher_id: Bytes32,
     pub validator_launcher_id: Bytes32,
     pub max_seconds_offset: u64,
+}
+
+impl DigRemoveMirrorAction {
+    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+        Self {
+            launcher_id: info.launcher_id,
+            validator_launcher_id: info.constants.validator_launcher_id,
+            max_seconds_offset: info.constants.epoch_seconds,
+        }
+    }
 }
 
 impl Layer for DigRemoveMirrorAction {
