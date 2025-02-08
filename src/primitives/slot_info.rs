@@ -247,3 +247,30 @@ impl DigSlotNonce {
         }
     }
 }
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(list)]
+pub struct DigRewardSlotValue {
+    pub epoch_start: u64,
+    pub next_epoch_start: u64,
+    #[clvm(rest)]
+    pub rewards: u64,
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(list)]
+pub struct DigCommitmentSlotValue {
+    pub epoch_start: u64,
+    pub clawback_ph: Bytes32,
+    #[clvm(rest)]
+    pub rewards: u64,
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(list)]
+pub struct DigMirrorSlotValue {
+    pub payout_puzzle_hash: Bytes32,
+    pub initial_cumulative_payout: u64,
+    #[clvm(rest)]
+    pub shares: u64,
+}
