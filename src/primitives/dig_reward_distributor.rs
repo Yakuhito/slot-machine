@@ -6,8 +6,8 @@ use chia::{
         LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -21,7 +21,8 @@ use crate::{
 };
 
 use super::{
-    DigRewardDistributorConstants, DigRewardDistributorInfo, DigRewardDistributorState, Reserve,
+    DigMirrorSlotValue, DigRewardDistributorConstants, DigRewardDistributorInfo,
+    DigRewardDistributorState, DigSlotNonce, Reserve, Slot, SlotInfo, SlotProof,
 };
 
 #[derive(Debug, Clone)]
@@ -232,5 +233,93 @@ impl DigRewardDistributor {
         )?;
 
         Ok(Spend::new(puzzle, solution))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_mirror(
+        self,
+        ctx: &mut SpendContext,
+        reserve: Reserve,
+        payout_puzzle_hash: Bytes32,
+        shares: u64,
+        validator_singleton_inner_puzzle_hash: Bytes32,
+    ) -> Result<
+        (
+            Conditions,
+            DigRewardDistributor,
+            Reserve,
+            Slot<DigMirrorSlotValue>,
+        ),
+        DriverError,
+    > {
+        let new_slot = Slot::new(
+            SlotProof {
+                parent_parent_info: self.coin.parent_coin_info,
+                parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+            },
+            SlotInfo::from_value(
+                self.info.launcher_id,
+                DigMirrorSlotValue {
+                    payout_puzzle_hash,
+                    initial_cumulative_payout: self.info.state.round_reward_info.cumulative_payout,
+                    shares,
+                },
+                Some(DigSlotNonce::MIRROR.to_u64()),
+            ),
+        );
+
+        // calculate message that the validator needs to send
+        let add_mirror_message: Bytes32 =
+            clvm_tuple!(payout_puzzle_hash, shares).tree_hash().into();
+        let mut add_mirror_message: Vec<u8> = add_mirror_message.to_vec();
+        add_mirror_message.insert(0, b'a');
+        let add_mirror_message = Conditions::new().send_message(
+            18,
+            add_mirror_message.into(),
+            vec![self.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+        );
+
+        // spend self
+        let add_mirror = DigRewardDistributorAction::AddMirror(DigAddMirrorActionSolution {
+            validator_singleton_inner_puzzle_hash,
+            mirror_payout_puzzle_hash: payout_puzzle_hash,
+            mirror_shares: shares,
+        });
+
+        let my_state = self.info.state;
+        let my_inner_puzzle_hash = self.info.inner_puzzle_hash();
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, reserve.coin.parent_coin_info, vec![add_mirror])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let (new_dig_reward_distributor, new_reserve) = DigRewardDistributor::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child DIG reward distributor".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        // spend reserve
+        reserve.spend_for_reserve_finalizer_controller(
+            ctx,
+            my_state,
+            new_reserve.coin.amount,
+            my_inner_puzzle_hash.into(),
+            my_spend.solution,
+        )?;
+
+        Ok((
+            add_mirror_message,
+            new_dig_reward_distributor,
+            new_reserve,
+            new_slot,
+        ))
     }
 }
