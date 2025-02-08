@@ -593,18 +593,19 @@ mod tests {
         puzzles::{
             cat::GenesisByCoinIdTailArgs,
             singleton::{SingletonSolution, SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH},
+            CoinProof,
         },
     };
     use chia_wallet_sdk::{
-        test_secret_keys, Cat, CatSpend, Nft, NftMint, Puzzle, Simulator, SpendWithConditions,
-        TESTNET11_CONSTANTS,
+        test_secret_keys, Cat, CatSpend, Nft, NftMint, Puzzle, Simulator, SingleCatSpend,
+        SpendWithConditions, TESTNET11_CONSTANTS,
     };
     use clvm_traits::clvm_list;
     use hex_literal::hex;
 
     use crate::{
         CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Slot, SpendContextExt,
+        DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
         XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
@@ -2003,7 +2004,7 @@ mod tests {
         let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
 
         let mirror1_pk = mirror1_sk.public_key();
-        let mirror1_puzzle = StandardLayer::new(mirror1_pk);
+        // let mirror1_puzzle = StandardLayer::new(mirror1_pk);
         let mirror1_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(mirror1_pk).into();
 
         let offer_amount = 1;
@@ -2040,7 +2041,66 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
-        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
+        // launch reserve
+        let reserve = Reserve::new(
+            source_cat.coin.coin_id(),
+            source_cat.child_lineage_proof(),
+            source_cat.asset_id,
+            SingletonStruct::new(registry.info.launcher_id)
+                .tree_hash()
+                .into(),
+            0,
+            0,
+        );
+
+        let new_source_cat =
+            source_cat.wrapped_child(cat_minter_puzzle_hash, source_cat.coin.amount);
+
+        let cat_minter_inner_puzzle = clvm_quote!(Conditions::new()
+            .create_coin(reserve.inner_puzzle_hash, 0, None)
+            .create_coin(
+                new_source_cat.p2_puzzle_hash,
+                new_source_cat.coin.amount,
+                None
+            ))
+        .to_clvm(&mut ctx.allocator)?;
+        let source_cat_inner_spend = cat_minter_p2.delegated_inner_spend(
+            ctx,
+            Spend {
+                puzzle: cat_minter_inner_puzzle,
+                solution: NodePtr::NIL,
+            },
+        )?;
+        source_cat.spend(
+            ctx,
+            SingleCatSpend {
+                prev_coin_id: source_cat.coin.coin_id(),
+                next_coin_proof: CoinProof {
+                    parent_coin_info: source_cat.coin.parent_coin_info,
+                    inner_puzzle_hash: cat_minter_puzzle_hash,
+                    amount: source_cat.coin.amount,
+                },
+                prev_subtotal: 0,
+                extra_delta: 0,
+                inner_spend: source_cat_inner_spend,
+            },
+        )?;
+
+        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk, cat_minter_sk])?;
+        source_cat = new_source_cat;
+
+        // add the 1st mirror before reward epoch ('first epoch') begins
+        let validator_singleton_inner_puzzle = ctx.alloc(&1)?;
+        let validator_singleton_inner_puzzle_hash = ctx.tree_hash(validator_singleton_inner_puzzle);
+        let (validator_conditions, mut registry, mut reserve, mirror1_slot) = registry.add_mirror(
+            ctx,
+            reserve,
+            mirror1_puzzle_hash,
+            1,
+            validator_singleton_inner_puzzle_hash.into(),
+        )?;
+
+        sim.spend_coins(ctx.take(), &[])?;
 
         Ok(())
     }
