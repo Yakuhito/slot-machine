@@ -156,6 +156,7 @@ impl CatalogRegistry {
                             "Couldn't build proofs for one or more actions".to_string(),
                         ))?,
                     action_spends,
+                    finalizer_solution: NodePtr::NIL,
                 },
             },
         )?;

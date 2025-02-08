@@ -51,6 +51,7 @@ pub struct DigRewardDistributorConstants {
     pub payout_threshold: u64,
     pub validator_fee_bps: u64,
     pub withdrawal_share_bps: u64,
+    pub reserve_asset_id: Bytes32,
     pub reserve_inner_puzzle_hash: Bytes32,
     pub reserve_full_puzzle_hash: Bytes32,
 }

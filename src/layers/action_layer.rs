@@ -34,9 +34,10 @@ pub struct ActionLayer<S> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ActionLayerSolution {
+pub struct ActionLayerSolution<F> {
     pub proofs: Vec<MerkleProof>,
     pub action_spends: Vec<Spend>,
+    pub finalizer_solution: F,
 }
 
 impl<S> ActionLayer<S> {
@@ -129,7 +130,7 @@ impl<S> Layer for ActionLayer<S>
 where
     S: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
 {
-    type Solution = ActionLayerSolution;
+    type Solution = ActionLayerSolution<NodePtr>;
 
     fn parse_puzzle(allocator: &Allocator, puzzle: Puzzle) -> Result<Option<Self>, DriverError> {
         let Some(puzzle) = puzzle.as_curried() else {
@@ -236,6 +237,7 @@ where
         Ok(ActionLayerSolution {
             proofs,
             action_spends,
+            finalizer_solution: solution.finalizer_solution,
         })
     }
 
@@ -309,7 +311,7 @@ where
                     action_solution: spend.solution,
                 })
                 .collect(),
-            finalizer_solution: (),
+            finalizer_solution: solution.finalizer_solution,
         }
         .to_clvm(&mut ctx.allocator)?)
     }
@@ -460,6 +462,12 @@ impl ReserveFinalizer2ndCurryArgs {
         }
         .tree_hash()
     }
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(solution)]
+pub struct ReserveFinalizerSolution {
+    pub reserve_parent_id: Bytes32,
 }
 
 pub const ACTION_LAYER_PUZZLE: [u8; 445] = hex!("ff02ffff01ff02ff05ffff04ff0bffff04ff17ffff04ffff02ff04ffff04ff02ffff04ff0bffff04ff80ffff04ffff04ff17ff8080ffff04ff2fff80808080808080ffff04ff5fff808080808080ffff04ffff01ffff02ffff03ff2fffff01ff02ffff03ffff09ff05ffff02ff0effff04ff02ffff04ffff0bffff0101ffff02ff0affff04ff02ffff04ff82014fff8080808080ffff04ff818fff808080808080ffff01ff02ff04ffff04ff02ffff04ff05ffff04ffff04ff37ff0b80ffff04ffff02ff82014fffff04ff27ffff04ff8201cfff80808080ffff04ff6fff80808080808080ffff01ff088080ff0180ffff01ff04ff27ffff04ff37ff0b808080ff0180ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff0affff04ff02ffff04ff09ff80808080ffff02ff0affff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff02ffff03ff1bffff01ff02ff0effff04ff02ffff04ffff02ffff03ffff18ffff0101ff1380ffff01ff0bffff0102ff2bff0580ffff01ff0bffff0102ff05ff2b8080ff0180ffff04ffff04ffff17ff13ffff0181ff80ff3b80ff8080808080ffff010580ff0180ff018080");

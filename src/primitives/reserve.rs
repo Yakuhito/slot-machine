@@ -34,13 +34,13 @@ impl Reserve {
         controller_singleton_struct_hash: Bytes32,
         nonce: u64,
         amount: u64,
-    ) -> Result<Self, DriverError> {
+    ) -> Self {
         let inner_puzzle_hash = P2DelegatedBySingletonLayerArgs::curry_tree_hash(
             controller_singleton_struct_hash,
             nonce,
         );
 
-        Ok(Self {
+        Self {
             coin: Coin::new(
                 parent_coin_id,
                 CatArgs::curry_tree_hash(asset_id, inner_puzzle_hash).into(),
@@ -51,7 +51,7 @@ impl Reserve {
             inner_puzzle_hash: inner_puzzle_hash.into(),
             controller_singleton_struct_hash,
             nonce,
-        })
+        }
     }
 
     pub fn puzzle_hash(
