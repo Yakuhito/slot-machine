@@ -46,6 +46,7 @@ pub trait SpendContextExt {
     fn dig_sync_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_withdraw_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn reserve_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn p2_delegated_by_singleton_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -219,6 +220,14 @@ impl SpendContextExt for SpendContext {
     fn reserve_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(RESERVE_FINALIZER_PUZZLE_HASH, &RESERVE_FINALIZER_PUZZLE)
     }
+
+    /// Allocate the P2 delegated by singleton puzzle and return its pointer.
+    fn p2_delegated_by_singleton_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            P2_DELEGATED_BY_SINGLETON_PUZZLE_HASH,
+            &P2_DELEGATED_BY_SINGLETON_PUZZLE,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -268,6 +277,7 @@ mod tests {
         assert_puzzle_hash!(DIG_SYNC_PUZZLE => DIG_SYNC_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_WITHDRAW_INCENTIVES_PUZZLE => DIG_WITHDRAW_INCENTIVES_PUZZLE_HASH);
         assert_puzzle_hash!(RESERVE_FINALIZER_PUZZLE => RESERVE_FINALIZER_PUZZLE_HASH);
+        assert_puzzle_hash!(P2_DELEGATED_BY_SINGLETON_PUZZLE => P2_DELEGATED_BY_SINGLETON_PUZZLE_HASH);
         Ok(())
     }
 }
