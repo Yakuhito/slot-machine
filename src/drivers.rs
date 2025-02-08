@@ -498,7 +498,7 @@ pub fn launch_dig_reward_distributor(
                 epoch_end: first_epoch_start,
             },
         },
-        constants,
+        constants.with_launcher_id(launcher_id),
     );
     let target_inner_puzzle_hash = target_info.clone().inner_puzzle_hash();
 
@@ -1948,6 +1948,101 @@ mod tests {
 
         assert_eq!(new_nft.info.metadata, new_metadata);
         sim.spend_coins(ctx.take(), &[sk])?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_dig_reward_distributor() -> anyhow::Result<()> {
+        let ctx = &mut SpendContext::new();
+        let mut sim = Simulator::new();
+
+        // Launch token CAT
+        let mut cat_amount = 10_000_000_000;
+        let (cat_minter_sk, cat_minter_pk, cat_minter_puzzle_hash, cat_minter_coin) =
+            sim.new_p2(cat_amount)?;
+        let cat_minter_p2 = StandardLayer::new(cat_minter_pk);
+
+        let (issue_cat, mut source_cat) = Cat::single_issuance_eve(
+            ctx,
+            cat_minter_coin.coin_id(),
+            cat_amount,
+            Conditions::new().create_coin(cat_minter_puzzle_hash, cat_amount, None),
+        )?;
+        cat_minter_p2.spend(ctx, cat_minter_coin, issue_cat)?;
+
+        source_cat = source_cat.wrapped_child(cat_minter_puzzle_hash, cat_amount);
+        sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
+
+        // Launch validator singleton
+        let (
+            validator_launcher_id,
+            mut validator_coin,
+            mut validator_singleton_proof,
+            validator_singleton_puzzle,
+        ) = launch_test_singleton(ctx, &mut sim)?;
+
+        // setup config
+        let constants = DigRewardDistributorConstants {
+            validator_launcher_id,
+            validator_payout_puzzle_hash: Bytes32::new([1; 32]),
+            epoch_seconds: 1000,
+            removal_max_seconds_offset: 30,
+            payout_threshold: 10_000,
+            validator_fee_bps: 420,     // 4.2% fee
+            withdrawal_share_bps: 9000, // 90% of the amount deposited will be returned
+            reserve_asset_id: source_cat.asset_id,
+            reserve_inner_puzzle_hash: Bytes32::default(), // will be overwritten
+            reserve_full_puzzle_hash: Bytes32::default(),  // will be overwritten
+        };
+
+        // Create source offer
+        let [launcher_sk, user_sk]: [SecretKey; 2] = test_secret_keys(2)?.try_into().unwrap();
+
+        let launcher_pk = launcher_sk.public_key();
+        let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
+
+        let user_pk = user_sk.public_key();
+        let user_puzzle = StandardLayer::new(user_pk);
+        let user_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(user_pk).into();
+
+        let offer_amount = 1;
+        let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
+        let offer_spend = StandardLayer::new(launcher_pk).spend_with_conditions(
+            ctx,
+            Conditions::new().create_coin(
+                SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+                offer_amount,
+                None,
+            ),
+        )?;
+
+        let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
+        let solution = ctx.serialize(&offer_spend.solution)?;
+        let offer = Offer::new(SpendBundle {
+            coin_spends: vec![CoinSpend::new(offer_src_coin, puzzle_reveal, solution)],
+            aggregated_signature: sign_standard_transaction(
+                ctx,
+                offer_src_coin,
+                offer_spend,
+                &launcher_sk,
+                &TESTNET11_CONSTANTS,
+            )?,
+        });
+
+        // Launch the DIG reward distributor
+        let first_epoch_start = 1234;
+        let (_, security_sk, mut registry, first_epoch_slot) = launch_dig_reward_distributor(
+            ctx,
+            offer,
+            first_epoch_start,
+            constants,
+            &TESTNET11_CONSTANTS,
+        )?;
+
+        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
+
+        todo!("todo");
 
         Ok(())
     }

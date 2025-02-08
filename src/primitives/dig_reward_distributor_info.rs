@@ -1,7 +1,7 @@
 use chia::{
     clvm_utils::{ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::SingletonArgs,
+    puzzles::{cat::CatArgs, singleton::SingletonArgs},
 };
 use chia_wallet_sdk::{DriverError, Layer, MerkleTree, Puzzle, SingletonLayer};
 use clvm_traits::{FromClvm, ToClvm};
@@ -10,7 +10,8 @@ use clvmr::Allocator;
 use crate::{
     ActionLayer, ActionLayerArgs, DigAddIncentivesAction, DigAddMirrorAction,
     DigCommitIncentivesAction, DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction,
-    DigSyncAction, DigWithdrawIncentivesAction, Finalizer, ReserveFinalizer2ndCurryArgs,
+    DigSyncAction, DigWithdrawIncentivesAction, Finalizer, P2DelegatedBySingletonLayerArgs,
+    ReserveFinalizer2ndCurryArgs,
 };
 
 pub type DigRewardDistributorLayers = SingletonLayer<ActionLayer<DigRewardDistributorState>>;
@@ -54,6 +55,18 @@ pub struct DigRewardDistributorConstants {
     pub reserve_asset_id: Bytes32,
     pub reserve_inner_puzzle_hash: Bytes32,
     pub reserve_full_puzzle_hash: Bytes32,
+}
+
+impl DigRewardDistributorConstants {
+    pub fn with_launcher_id(mut self, launcher_id: Bytes32) -> Self {
+        self.reserve_inner_puzzle_hash =
+            P2DelegatedBySingletonLayerArgs::curry_tree_hash_with_launcher_id(launcher_id, 0)
+                .into();
+        self.reserve_full_puzzle_hash =
+            CatArgs::curry_tree_hash(self.reserve_asset_id, self.reserve_inner_puzzle_hash.into())
+                .into();
+        self
+    }
 }
 
 #[must_use]
