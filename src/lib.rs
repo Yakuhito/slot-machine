@@ -26,7 +26,6 @@ pub trait SpendContextExt {
     fn slot_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn any_metadata_updater(&mut self) -> Result<NodePtr, DriverError>;
     fn verification_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn reserve_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_register_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_update_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_extend_puzzle(&mut self) -> Result<NodePtr, DriverError>;
@@ -104,11 +103,6 @@ impl SpendContextExt for SpendContext {
     /// Allocate the verification puzzle and return its pointer.
     fn verification_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(VERIFICATION_LAYER_PUZZLE_HASH, &VERIFICATION_LAYER_PUZZLE)
-    }
-
-    /// Allocate the reserve puzzle and return its pointer.
-    fn reserve_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(RESERVE_PUZZLE_HASH, &RESERVE_PUZZLE)
     }
 
     /// Allocate the XCHandles register puzzle and return its pointer.
@@ -254,7 +248,6 @@ mod tests {
         assert_puzzle_hash!(SLOT_PUZZLE => SLOT_PUZZLE_HASH);
         assert_puzzle_hash!(ANY_METADATA_UPDATER => ANY_METADATA_UPDATER_HASH);
         assert_puzzle_hash!(VERIFICATION_LAYER_PUZZLE => VERIFICATION_LAYER_PUZZLE_HASH);
-        assert_puzzle_hash!(RESERVE_PUZZLE => RESERVE_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_REGISTER_PUZZLE => XCHANDLES_REGISTER_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_UPDATE_PUZZLE => XCHANDLES_UPDATE_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_EXTEND_PUZZLE => XCHANDLES_EXTEND_PUZZLE_HASH);
