@@ -635,32 +635,34 @@ mod tests {
     fn launch_test_singleton(
         ctx: &mut SpendContext,
         sim: &mut Simulator,
-    ) -> Result<(Bytes32, Coin, Proof, NodePtr), DriverError> {
-        let price_singleton_launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
-        let price_singleton_launcher =
-            Launcher::new(price_singleton_launcher_coin.parent_coin_info, 1);
+    ) -> Result<(Bytes32, Coin, Proof, NodePtr, Bytes32, NodePtr), DriverError> {
+        let test_singleton_launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+        let test_singleton_launcher =
+            Launcher::new(test_singleton_launcher_coin.parent_coin_info, 1);
 
-        let price_singleton_launcher_id = price_singleton_launcher.coin().coin_id();
+        let test_singleton_launcher_id = test_singleton_launcher.coin().coin_id();
 
-        let price_singleton_inner_puzzle = ctx.alloc(&1)?;
-        let price_singleton_inner_puzzle_hash = ctx.tree_hash(price_singleton_inner_puzzle);
-        let (_, price_singleton_coin) =
-            price_singleton_launcher.spend(ctx, price_singleton_inner_puzzle_hash.into(), ())?;
+        let test_singleton_inner_puzzle = ctx.alloc(&1)?;
+        let test_singleton_inner_puzzle_hash = ctx.tree_hash(test_singleton_inner_puzzle);
+        let (_, test_singleton_coin) =
+            test_singleton_launcher.spend(ctx, test_singleton_inner_puzzle_hash.into(), ())?;
 
-        let price_singleton_puzzle = ctx.curry(SingletonArgs::new(
-            price_singleton_launcher_id,
-            price_singleton_inner_puzzle,
+        let test_singleton_puzzle = ctx.curry(SingletonArgs::new(
+            test_singleton_launcher_id,
+            test_singleton_inner_puzzle,
         ))?;
-        let price_singleton_proof: Proof = Proof::Eve(EveProof {
-            parent_parent_coin_info: price_singleton_launcher_coin.parent_coin_info,
-            parent_amount: price_singleton_launcher_coin.amount,
+        let test_singleton_proof: Proof = Proof::Eve(EveProof {
+            parent_parent_coin_info: test_singleton_launcher_coin.parent_coin_info,
+            parent_amount: test_singleton_launcher_coin.amount,
         });
 
         Ok((
-            price_singleton_launcher_id,
-            price_singleton_coin,
-            price_singleton_proof,
-            price_singleton_puzzle,
+            test_singleton_launcher_id,
+            test_singleton_coin,
+            test_singleton_proof,
+            test_singleton_inner_puzzle,
+            test_singleton_inner_puzzle_hash.into(),
+            test_singleton_puzzle,
         ))
     }
 
@@ -881,6 +883,8 @@ mod tests {
             price_singleton_launcher_id,
             mut price_singleton_coin,
             mut price_singleton_proof,
+            _price_singleton_inner_puzzle,
+            _price_singleton_inner_puzzle_hash,
             price_singleton_puzzle,
         ) = launch_test_singleton(ctx, &mut sim)?;
 
@@ -1325,6 +1329,8 @@ mod tests {
             price_singleton_launcher_id,
             mut price_singleton_coin,
             mut price_singleton_proof,
+            _price_singleton_inner_puzzle,
+            _price_singleton_inner_puzzle_hash,
             price_singleton_puzzle,
         ) = launch_test_singleton(ctx, &mut sim)?;
 
@@ -1953,6 +1959,45 @@ mod tests {
         Ok(())
     }
 
+    // Spends the validator singleton
+    fn spend_validator_singleton(
+        ctx: &mut SpendContext,
+        test_singleton_coin: Coin,
+        test_singleton_proof: Proof,
+        test_singleton_puzzle: NodePtr,
+        test_singleton_output_conditions: Conditions<NodePtr>,
+    ) -> Result<(Coin, Proof), DriverError> {
+        let test_singleton_inner_puzzle = ctx.alloc(&1)?;
+        let test_singleton_inner_puzzle_hash = ctx.tree_hash(test_singleton_inner_puzzle);
+
+        let test_singleton_inner_solution = test_singleton_output_conditions
+            .create_coin(test_singleton_inner_puzzle_hash.into(), 1, None)
+            .to_clvm(&mut ctx.allocator)?;
+        let test_singleton_solution = SingletonSolution {
+            lineage_proof: test_singleton_proof,
+            amount: 1,
+            inner_solution: test_singleton_inner_solution,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+
+        let test_singleton_spend = Spend::new(test_singleton_puzzle, test_singleton_solution);
+        ctx.spend(test_singleton_coin, test_singleton_spend)?;
+
+        // compute validator singleton info for next spend
+        let next_test_singleton_proof = Proof::Lineage(LineageProof {
+            parent_parent_coin_info: test_singleton_coin.parent_coin_info,
+            parent_inner_puzzle_hash: test_singleton_inner_puzzle_hash.into(),
+            parent_amount: test_singleton_coin.amount,
+        });
+        let next_test_singleton_coin = Coin::new(
+            test_singleton_coin.coin_id(),
+            test_singleton_coin.puzzle_hash,
+            1,
+        );
+
+        Ok((next_test_singleton_coin, next_test_singleton_proof))
+    }
+
     #[test]
     fn test_dig_reward_distributor() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
@@ -1980,6 +2025,8 @@ mod tests {
             validator_launcher_id,
             mut validator_coin,
             mut validator_singleton_proof,
+            validator_singleton_inner_puzzle,
+            validator_singleton_inner_puzzle_hash,
             validator_singleton_puzzle,
         ) = launch_test_singleton(ctx, &mut sim)?;
 
@@ -2090,16 +2137,21 @@ mod tests {
         source_cat = new_source_cat;
 
         // add the 1st mirror before reward epoch ('first epoch') begins
-        let validator_singleton_inner_puzzle = ctx.alloc(&1)?;
-        let validator_singleton_inner_puzzle_hash = ctx.tree_hash(validator_singleton_inner_puzzle);
         let (validator_conditions, mut registry, mut reserve, mirror1_slot) = registry.add_mirror(
             ctx,
             reserve,
             mirror1_puzzle_hash,
             1,
-            validator_singleton_inner_puzzle_hash.into(),
+            validator_singleton_inner_puzzle_hash,
         )?;
 
+        (validator_coin, validator_singleton_proof) = spend_validator_singleton(
+            ctx,
+            validator_coin,
+            validator_singleton_proof,
+            validator_singleton_puzzle,
+            validator_conditions,
+        )?;
         sim.spend_coins(ctx.take(), &[])?;
 
         Ok(())
