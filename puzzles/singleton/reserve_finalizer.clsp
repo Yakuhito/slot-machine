@@ -27,7 +27,7 @@
     (defun parse_conditions ((first_thing . the_rest) conditions extracted_reserve_conditions)
       (if first_thing
         (if (= (f (f first_thing)) -42)
-          (parse_conditions (c (r first_thing) the_rest) conditions (c (f first_thing) extracted_reserve_conditions))
+          (parse_conditions (c (r first_thing) the_rest) conditions (c (r (f first_thing)) extracted_reserve_conditions))
           ; else
           (parse_conditions (c (r first_thing) the_rest) (c (f first_thing) conditions) extracted_reserve_conditions)
         )
@@ -41,6 +41,25 @@
     )
 
     (defun-inline add_message_to_reserve ((base_conditions . reserve_conditions))
+      ; (c
+      ;   (list SEND_MESSAGE
+      ;     23 ; sender puzzle hash, receiver coin id
+      ;     (sha256tree (c ; this is the leading 'q . ' in the delegated puzzle
+      ;       1 
+      ;       (c
+      ;         (list CREATE_COIN RESERVE_INNER_PUZZLE_HASH (f New_State) (list RESERVE_INNER_PUZZLE_HASH))
+      ;         reserve_conditions
+      ;       )
+      ;     )) ; message = delegated puzzle hash
+      ;     (coinid
+      ;       reserve_parent_id
+      ;       RESERVE_FULL_PUZZLE_HASH
+      ;       (f Initial_State) ; total_reserves
+      ;     )
+      ;   )
+      ;   base_conditions
+      ; )
+
       (c
         (list SEND_MESSAGE
           23 ; sender puzzle hash, receiver coin id
@@ -57,7 +76,18 @@
             (f Initial_State) ; total_reserves
           )
         )
-        base_conditions
+        (c
+          (list REMARK 
+            (c ; this is the leading 'q . ' in the delegated puzzle
+              1 
+              (c
+                (list CREATE_COIN RESERVE_INNER_PUZZLE_HASH (f New_State) (list RESERVE_INNER_PUZZLE_HASH))
+                reserve_conditions
+              )
+            )
+          )
+          base_conditions
+        )
       )
     )
 
