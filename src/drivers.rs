@@ -2170,8 +2170,8 @@ mod tests {
             new_registry,
             new_reserve,
             registry_solution,
-            first_epoch_slot,
-            incentive_slots,
+            first_epoch_commitment_slot,
+            mut incentive_slots,
         ) = registry.commit_incentives(
             ctx,
             reserve.coin.parent_coin_info,
@@ -2220,7 +2220,82 @@ mod tests {
             cat_minter_puzzle_hash,
             source_cat.coin.amount - rewards_to_add,
         );
-        assert!(sim.coin_state(first_epoch_slot.coin.coin_id()).is_some());
+        assert!(sim
+            .coin_state(first_epoch_commitment_slot.coin.coin_id())
+            .is_some());
+        for incentive_slot in incentive_slots.iter() {
+            assert!(sim.coin_state(incentive_slot.coin.coin_id()).is_some());
+        }
+
+        // commit incentives for fifth epoch
+        let fifth_epoch_start = first_epoch_start + constants.epoch_seconds * 4;
+        let rewards_to_add = constants.epoch_seconds * 10;
+        let registry_info = registry.info;
+        let (
+            secure_conditions,
+            new_registry,
+            new_reserve,
+            registry_solution,
+            fifth_epoch_commitment_slot,
+            new_incentive_slots,
+        ) = registry.commit_incentives(
+            ctx,
+            reserve.coin.parent_coin_info,
+            *incentive_slots.last().unwrap(),
+            fifth_epoch_start,
+            cat_minter_puzzle_hash,
+            rewards_to_add,
+        )?;
+
+        let new_value_hashes = new_incentive_slots
+            .iter()
+            .map(|s| s.info.value_hash)
+            .collect::<Vec<_>>();
+        incentive_slots.retain(|s| !new_value_hashes.contains(&s.info.value_hash));
+        incentive_slots.extend(new_incentive_slots);
+
+        // spend reserve and source cat together so deltas add up
+        let reserve_delegated_puzzle = reserve.delegated_puzzle_for_finalizer_controller(
+            ctx,
+            registry_info.state,
+            reserve.coin.amount + rewards_to_add,
+            registry_solution,
+        )?;
+
+        let reserve_cat_spend = CatSpend::new(
+            reserve.to_cat(),
+            reserve.inner_spend(
+                ctx,
+                registry_info.inner_puzzle_hash().into(),
+                reserve_delegated_puzzle,
+                NodePtr::NIL,
+            )?,
+        );
+        let source_cat_spend = CatSpend::new(
+            source_cat,
+            cat_minter_p2.spend_with_conditions(
+                ctx,
+                secure_conditions.create_coin(
+                    cat_minter_puzzle_hash,
+                    source_cat.coin.amount - rewards_to_add,
+                    None,
+                ),
+            )?,
+        );
+
+        let cat_spends = [reserve_cat_spend, source_cat_spend];
+        Cat::spend_all(ctx, &cat_spends)?;
+
+        sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
+        reserve = new_reserve;
+        registry = new_registry;
+        source_cat = source_cat.wrapped_child(
+            cat_minter_puzzle_hash,
+            source_cat.coin.amount - rewards_to_add,
+        );
+        assert!(sim
+            .coin_state(fifth_epoch_commitment_slot.coin.coin_id())
+            .is_some());
         for incentive_slot in incentive_slots {
             assert!(sim.coin_state(incentive_slot.coin.coin_id()).is_some());
         }
