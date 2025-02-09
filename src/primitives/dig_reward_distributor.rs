@@ -10,7 +10,7 @@ use chia_wallet_sdk::{
     announcement_id, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext,
 };
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
-use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
+use clvmr::{Allocator, NodePtr};
 
 use crate::{
     ActionLayer, ActionLayerSolution, DigAddIncentivesAction, DigAddIncentivesActionSolution,
@@ -340,6 +340,7 @@ impl DigRewardDistributor {
             Conditions,
             DigRewardDistributor,
             Reserve,
+            NodePtr,
             Slot<DigCommitmentSlotValue>,
             Vec<Slot<DigRewardSlotValue>>,
         ),
@@ -473,6 +474,7 @@ impl DigRewardDistributor {
             )),
             new_dig_reward_distributor,
             new_reserve,
+            my_spend.solution,
             new_commitment_slot,
             new_reward_slots,
         ))
