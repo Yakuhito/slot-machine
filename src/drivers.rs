@@ -2376,16 +2376,21 @@ mod tests {
 
         // withdraw the 1st incentives for epoch 5
         let reserve_cat = reserve.to_cat();
-        let (secure_conditions, new_registry, new_reserve, withdrawn_amount, new_reward_slot) =
-            registry.withdraw_incentives(
-                ctx,
-                reserve,
-                fifth_epoch_commitment_slot,
-                *incentive_slots
-                    .iter()
-                    .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
-                    .unwrap(),
-            )?;
+        let (
+            withdraw_incentives_conditions,
+            new_registry,
+            new_reserve,
+            withdrawn_amount,
+            new_reward_slot,
+        ) = registry.withdraw_incentives(
+            ctx,
+            reserve,
+            fifth_epoch_commitment_slot,
+            *incentive_slots
+                .iter()
+                .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
+                .unwrap(),
+        )?;
         let payout_coin_id = reserve_cat
             .wrapped_child(
                 cat_minter_puzzle_hash, // fifth_epoch_commitment_slot.info.value.unwrap().clawback_ph,
@@ -2393,6 +2398,9 @@ mod tests {
             )
             .coin
             .coin_id();
+
+        let claimer_coin = sim.new_coin(cat_minter_puzzle_hash, 0);
+        cat_minter_p2.spend(ctx, claimer_coin, withdraw_incentives_conditions)?;
 
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
         assert!(sim.coin_state(payout_coin_id).is_some());

@@ -521,7 +521,7 @@ impl DigRewardDistributor {
         let withdraw_incentives_conditions = Conditions::new()
             .send_message(
                 18,
-                Bytes::default(),
+                Bytes::new(Vec::new()),
                 vec![self.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
             )
             .assert_concurrent_puzzle(commitment_slot.coin.puzzle_hash);
