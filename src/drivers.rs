@@ -604,11 +604,12 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot, SpendContextExt,
-        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
-        XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
-        XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
+        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
+        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot,
+        SpendContextExt, XchandlesExponentialPremiumRenewPuzzleArgs,
+        XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesFactorPricingPuzzleArgs,
+        XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesRegistryAction,
+        ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -2373,6 +2374,11 @@ mod tests {
         for incentive_slot in incentive_slots.iter() {
             assert!(sim.coin_state(incentive_slot.coin.coin_id()).is_some());
         }
+        assert!(sim
+            .coin_state(reserve.coin.coin_id())
+            .unwrap()
+            .spent_height
+            .is_none());
 
         // withdraw the 1st incentives for epoch 5
         let reserve_cat = reserve.to_cat();
@@ -2402,7 +2408,9 @@ mod tests {
         let claimer_coin = sim.new_coin(cat_minter_puzzle_hash, 0);
         cat_minter_p2.spend(ctx, claimer_coin, withdraw_incentives_conditions)?;
 
-        sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
+        let spends = ctx.take();
+        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+        sim.spend_coins(spends, &[cat_minter_sk.clone()])?;
         assert!(sim.coin_state(payout_coin_id).is_some());
         reserve = new_reserve;
         registry = new_registry;
