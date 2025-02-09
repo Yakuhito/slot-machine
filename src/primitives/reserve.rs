@@ -11,7 +11,7 @@ use chia_wallet_sdk::{
     run_puzzle, Cat, CatLayer, CreateCoin, DriverError, Layer, Memos, Spend, SpendContext,
 };
 use clvm_traits::{clvm_list, clvm_quote, match_tuple, FromClvm, ToClvm};
-use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
+use clvmr::{Allocator, NodePtr};
 
 use crate::{
     P2DelegatedBySingletonLayer, P2DelegatedBySingletonLayerArgs,
@@ -206,14 +206,6 @@ impl Reserve {
         reserve_conditions.insert(0, cc.to_clvm(&mut ctx.allocator)?);
 
         let delegated_puzzle = clvm_quote!(reserve_conditions).to_clvm(&mut ctx.allocator)?;
-        println!(
-            "delegated_puzzle: {:?}",
-            hex::encode(node_to_bytes(&ctx.allocator, delegated_puzzle)?)
-        );
-        println!(
-            "delegated_puzzle hash: {:?}",
-            ctx.tree_hash(delegated_puzzle)
-        );
 
         Ok(delegated_puzzle)
     }
