@@ -894,4 +894,84 @@ impl DigRewardDistributor {
             withdrawal_amount,
         ))
     }
+
+    pub fn remove_mirror(
+        self,
+        ctx: &mut SpendContext,
+        reserve: Reserve,
+        mirror_slot: Slot<DigMirrorSlotValue>,
+        validator_singleton_inner_puzzle_hash: Bytes32,
+    ) -> Result<(Conditions, DigRewardDistributor, Reserve), DriverError> {
+        let Some(mirror_slot_value) = mirror_slot.info.value else {
+            return Err(DriverError::Custom("Mirror slot value is None".to_string()));
+        };
+
+        // compute message that the validator needs to send
+        let remove_mirror_message: Bytes32 = clvm_tuple!(
+            mirror_slot_value.payout_puzzle_hash,
+            mirror_slot_value.shares
+        )
+        .tree_hash()
+        .into();
+        let mut remove_mirror_message: Vec<u8> = remove_mirror_message.to_vec();
+        remove_mirror_message.insert(0, b'r');
+
+        let remove_mirror_conditions = Conditions::new()
+            .send_message(
+                18,
+                remove_mirror_message.into(),
+                vec![self.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            )
+            .assert_concurrent_puzzle(mirror_slot.coin.puzzle_hash);
+
+        // spend mirror slot
+        mirror_slot.spend(ctx, self.info.inner_puzzle_hash().into())?;
+
+        // spend self
+        let remove_mirror_action =
+            DigRewardDistributorAction::RemoveMirror(DigRemoveMirrorActionSolution {
+                validator_singleton_inner_puzzle_hash,
+                mirror_payout_puzzle_hash: mirror_slot_value.payout_puzzle_hash,
+                mirror_shares: mirror_slot_value.shares,
+            });
+
+        let my_state = self.info.state;
+        let my_inner_puzzle_hash = self.info.inner_puzzle_hash();
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(
+            ctx,
+            reserve.coin.parent_coin_info,
+            vec![remove_mirror_action],
+        )?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let (new_dig_reward_distributor, new_reserve) = DigRewardDistributor::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child DIG reward distributor".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        // spend reserve
+        reserve.spend_for_reserve_finalizer_controller(
+            ctx,
+            my_state,
+            new_reserve.coin.amount,
+            my_inner_puzzle_hash.into(),
+            my_spend.solution,
+        )?;
+
+        Ok((
+            remove_mirror_conditions,
+            new_dig_reward_distributor,
+            new_reserve,
+        ))
+    }
 }

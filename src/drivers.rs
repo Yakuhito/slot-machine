@@ -2672,29 +2672,25 @@ mod tests {
         reserve = new_reserve;
         registry = new_registry;
 
-        // sync to 90% (so + 15%)
-        let initial_reward_info = registry.info.state.round_reward_info;
-        let (sync_conditions, new_registry, new_reserve) =
-            registry.sync(ctx, reserve, first_epoch_start + 900)?;
+        // remove mirror2
+        let (remove_mirror_validator_conditions, new_registry, _new_reserve) = registry
+            .remove_mirror(
+                ctx,
+                reserve,
+                mirror2_slot,
+                validator_singleton_inner_puzzle_hash,
+            )?;
 
-        let checker_puzzle_ptr = clvm_quote!(sync_conditions).to_clvm(&mut ctx.allocator)?;
-        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
-        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
-
+        let (_validator_coin, _validator_singleton_proof) = spend_validator_singleton(
+            ctx,
+            validator_coin,
+            validator_singleton_proof,
+            validator_singleton_puzzle,
+            remove_mirror_validator_conditions,
+        )?;
         sim.spend_coins(ctx.take(), &[])?;
-        assert!(new_registry.info.state.round_time_info.last_update == first_epoch_start + 900);
 
-        let cumulative_payout_delta = initial_reward_info.remaining_rewards * 150 / (3 * 250);
-        assert!(
-            new_registry.info.state.round_reward_info.remaining_rewards
-                == initial_reward_info.remaining_rewards - cumulative_payout_delta * 3
-        );
-        assert!(
-            new_registry.info.state.round_reward_info.cumulative_payout
-                == initial_reward_info.cumulative_payout + cumulative_payout_delta
-        );
-        reserve = new_reserve;
-        registry = new_registry;
+        assert!(new_registry.info.state.active_shares == 1);
 
         Ok(())
     }
