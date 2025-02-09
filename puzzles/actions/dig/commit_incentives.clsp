@@ -40,9 +40,10 @@
     )
 
     (defun initialize_empty_slots (REWARD_SLOT_1ST_CURRY_HASH EPOCH_SECONDS start_epoch_time end_epoch_time)
-        (if (> start_epoch_time end_epoch_time)
-            ; optimization - if this is not true, the output condition list won't be valid
-            (not (= start_epoch_time end_epoch_time))
+        (if (= start_epoch_time end_epoch_time)
+            ; optimization: if adding EPOCH_SECONDS to start_epoch_time will not get to end_epoch_time,
+            ;   this thing will run infinitely (good luck getting that into the mempool)
+            ()
             ; else
             (c
                 (create_slot REWARD_SLOT_1ST_CURRY_HASH

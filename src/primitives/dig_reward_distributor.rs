@@ -409,7 +409,7 @@ impl DigRewardDistributor {
             let mut start_epoch_time =
                 reward_slot_value.epoch_start + self.info.constants.epoch_seconds;
             let end_epoch_time = epoch_start;
-            while end_epoch_time >= start_epoch_time {
+            while end_epoch_time > start_epoch_time {
                 new_reward_slots.push(Slot::new(
                     new_slot_proof,
                     SlotInfo::from_value(
@@ -428,7 +428,7 @@ impl DigRewardDistributor {
                 "check: {:?} {:?} {:?}",
                 start_epoch_time,
                 end_epoch_time,
-                start_epoch_time == end_epoch_time
+                start_epoch_time == end_epoch_time - self.info.constants.epoch_seconds
             );
         }
 
