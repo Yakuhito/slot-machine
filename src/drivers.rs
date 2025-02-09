@@ -2134,7 +2134,14 @@ mod tests {
             },
         )?;
 
-        sim.spend_coins(ctx.take(), &[launcher_sk, security_sk, cat_minter_sk])?;
+        sim.spend_coins(
+            ctx.take(),
+            &[
+                launcher_sk.clone(),
+                security_sk.clone(),
+                cat_minter_sk.clone(),
+            ],
+        )?;
         source_cat = new_source_cat;
 
         // add the 1st mirror before reward epoch ('first epoch') begins
@@ -2206,7 +2213,7 @@ mod tests {
         let cat_spends = [reserve_cat_spend, source_cat_spend];
         Cat::spend_all(ctx, &cat_spends)?;
 
-        sim.spend_coins(ctx.take(), &[])?;
+        sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
         reserve = new_reserve;
         registry = new_registry;
         source_cat = source_cat.wrapped_child(
