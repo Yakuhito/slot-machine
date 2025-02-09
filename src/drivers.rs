@@ -2382,6 +2382,17 @@ mod tests {
 
         // withdraw the 1st incentives for epoch 5
         let reserve_cat = reserve.to_cat();
+        println!(
+            "reward slot: {:?}",
+            sim.coin_state(
+                (*incentive_slots
+                    .iter()
+                    .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
+                    .unwrap())
+                .coin
+                .coin_id()
+            )
+        );
         let (
             withdraw_incentives_conditions,
             new_registry,
@@ -2397,6 +2408,7 @@ mod tests {
                 .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
                 .unwrap(),
         )?;
+
         let payout_coin_id = reserve_cat
             .wrapped_child(
                 cat_minter_puzzle_hash, // fifth_epoch_commitment_slot.info.value.unwrap().clawback_ph,
@@ -2408,9 +2420,7 @@ mod tests {
         let claimer_coin = sim.new_coin(cat_minter_puzzle_hash, 0);
         cat_minter_p2.spend(ctx, claimer_coin, withdraw_incentives_conditions)?;
 
-        let spends = ctx.take();
-        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-        sim.spend_coins(spends, &[cat_minter_sk.clone()])?;
+        sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
         assert!(sim.coin_state(payout_coin_id).is_some());
         reserve = new_reserve;
         registry = new_registry;
