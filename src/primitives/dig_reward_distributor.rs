@@ -10,7 +10,7 @@ use chia_wallet_sdk::{
     announcement_id, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext,
 };
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
 
 use crate::{
     ActionLayer, ActionLayerSolution, DigAddIncentivesAction, DigAddIncentivesActionSolution,

@@ -115,5 +115,6 @@ pub struct DigCommitIncentivesActionSolution {
     pub slot_total_rewards: u64,
     pub epoch_start: u64,
     pub clawback_ph: Bytes32,
+    #[clvm(rest)]
     pub rewards_to_add: u64,
 }
