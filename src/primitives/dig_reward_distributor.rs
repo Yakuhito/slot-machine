@@ -839,6 +839,9 @@ impl DigRewardDistributor {
         let mut initiate_payout_announcement: Vec<u8> = initiate_payout_announcement.to_vec();
         initiate_payout_announcement.insert(0, b'p');
 
+        // spend mirror slot
+        mirror_slot.spend(ctx, self.info.inner_puzzle_hash().into())?;
+
         // spend self
         let initiate_payout_action =
             DigRewardDistributorAction::InitiatePayout(DigInitiatePayoutActionSolution {
@@ -875,7 +878,7 @@ impl DigRewardDistributor {
         reserve.spend_for_reserve_finalizer_controller(
             ctx,
             my_state,
-            new_reserve.coin.amount - withdrawal_amount,
+            new_reserve.coin.amount,
             my_inner_puzzle_hash.into(),
             my_spend.solution,
         )?;
