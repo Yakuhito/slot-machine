@@ -738,7 +738,7 @@ impl DigRewardDistributor {
     pub fn add_incentives(
         self,
         ctx: &mut SpendContext,
-        reserve: Reserve,
+        reserve: &Reserve,
         amount: u64,
     ) -> Result<(Conditions, DigRewardDistributor, Reserve, NodePtr), DriverError> {
         // calculate announcement needed to ensure everything's happening as expected

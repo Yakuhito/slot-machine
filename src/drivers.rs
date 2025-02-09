@@ -2538,6 +2538,53 @@ mod tests {
         reserve = new_reserve;
         registry = new_registry;
 
+        // add incentives
+        let initial_reward_info = registry.info.state.round_reward_info;
+        let incentives_amount = initial_reward_info.remaining_rewards;
+
+        let (add_incentives_conditions, new_registry, new_reserve, registry_solution) =
+            registry.add_incentives(ctx, &reserve, incentives_amount)?;
+
+        // spend reserve and source cat together so deltas add up
+        let reserve_delegated_puzzle = reserve.delegated_puzzle_for_finalizer_controller(
+            ctx,
+            registry_info.state,
+            reserve.coin.amount + incentives_amount,
+            registry_solution,
+        )?;
+
+        let reserve_cat_spend = CatSpend::new(
+            reserve.to_cat(),
+            reserve.inner_spend(
+                ctx,
+                registry_info.inner_puzzle_hash().into(),
+                reserve_delegated_puzzle,
+                NodePtr::NIL,
+            )?,
+        );
+        let source_cat_spend = CatSpend::new(
+            source_cat,
+            cat_minter_p2.spend_with_conditions(
+                ctx,
+                add_incentives_conditions.create_coin(
+                    cat_minter_puzzle_hash,
+                    source_cat.coin.amount - incentives_amount,
+                    None,
+                ),
+            )?,
+        );
+
+        let cat_spends = [reserve_cat_spend, source_cat_spend];
+        Cat::spend_all(ctx, &cat_spends)?;
+
+        sim.spend_coins(ctx.take(), &[])?;
+        reserve = new_reserve;
+        registry = new_registry;
+        source_cat = source_cat.wrapped_child(
+            cat_minter_puzzle_hash,
+            source_cat.coin.amount - incentives_amount,
+        );
+
         Ok(())
     }
 }
