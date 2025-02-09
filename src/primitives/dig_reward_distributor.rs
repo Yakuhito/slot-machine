@@ -6,7 +6,9 @@ use chia::{
         LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{
+    announcement_id, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext,
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
@@ -21,8 +23,9 @@ use crate::{
 };
 
 use super::{
-    DigMirrorSlotValue, DigRewardDistributorConstants, DigRewardDistributorInfo,
-    DigRewardDistributorState, DigSlotNonce, Reserve, Slot, SlotInfo, SlotProof,
+    DigCommitmentSlotValue, DigMirrorSlotValue, DigRewardDistributorConstants,
+    DigRewardDistributorInfo, DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce, Reserve,
+    Slot, SlotInfo, SlotProof,
 };
 
 #[derive(Debug, Clone)]
@@ -235,7 +238,6 @@ impl DigRewardDistributor {
         Ok(Spend::new(puzzle, solution))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn add_mirror(
         self,
         ctx: &mut SpendContext,
@@ -320,6 +322,159 @@ impl DigRewardDistributor {
             new_dig_reward_distributor,
             new_reserve,
             new_slot,
+        ))
+    }
+
+    // does NOT spend reserve
+    #[allow(clippy::type_complexity)]
+    pub fn commit_incentives(
+        self,
+        ctx: &mut SpendContext,
+        reserve_parent_id: Bytes32,
+        reward_slot: Slot<DigRewardSlotValue>,
+        epoch_start: u64,
+        clawback_ph: Bytes32,
+        rewards_to_add: u64,
+    ) -> Result<
+        (
+            Conditions,
+            DigRewardDistributor,
+            Reserve,
+            Slot<DigCommitmentSlotValue>,
+            Vec<Slot<DigRewardSlotValue>>,
+        ),
+        DriverError,
+    > {
+        let Some(reward_slot_value) = reward_slot.info.value else {
+            return Err(DriverError::Custom("Reward slot value is None".to_string()));
+        };
+
+        let new_slot_proof = SlotProof {
+            parent_parent_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+        };
+
+        let new_commitment_slot_info = SlotInfo::from_value(
+            self.info.launcher_id,
+            DigCommitmentSlotValue {
+                epoch_start,
+                clawback_ph,
+                rewards: rewards_to_add,
+            },
+            Some(DigSlotNonce::COMMITMENT.to_u64()),
+        );
+        let new_commitment_slot = Slot::new(new_slot_proof, new_commitment_slot_info);
+
+        let mut new_reward_slots: Vec<Slot<DigRewardSlotValue>> = vec![];
+        if epoch_start == reward_slot_value.epoch_start {
+            new_reward_slots.push(Slot::new(
+                new_slot_proof,
+                SlotInfo::from_value(
+                    self.info.launcher_id,
+                    DigRewardSlotValue {
+                        epoch_start,
+                        next_epoch_start: reward_slot_value.next_epoch_start,
+                        rewards: reward_slot_value.rewards + rewards_to_add,
+                    },
+                    Some(DigSlotNonce::REWARD.to_u64()),
+                ),
+            ));
+        } else {
+            new_reward_slots.push(Slot::new(
+                new_slot_proof,
+                SlotInfo::from_value(
+                    self.info.launcher_id,
+                    DigRewardSlotValue {
+                        epoch_start: reward_slot_value.epoch_start,
+                        next_epoch_start: reward_slot_value.epoch_start
+                            + self.info.constants.epoch_seconds,
+                        rewards: reward_slot_value.rewards,
+                    },
+                    Some(DigSlotNonce::REWARD.to_u64()),
+                ),
+            ));
+            new_reward_slots.push(Slot::new(
+                new_slot_proof,
+                SlotInfo::from_value(
+                    self.info.launcher_id,
+                    DigRewardSlotValue {
+                        epoch_start,
+                        next_epoch_start: 0,
+                        rewards: rewards_to_add,
+                    },
+                    Some(DigSlotNonce::REWARD.to_u64()),
+                ),
+            ));
+            let mut start_epoch_time =
+                reward_slot_value.epoch_start + self.info.constants.epoch_seconds;
+            let end_epoch_time = epoch_start;
+            while end_epoch_time >= start_epoch_time {
+                new_reward_slots.push(Slot::new(
+                    new_slot_proof,
+                    SlotInfo::from_value(
+                        self.info.launcher_id,
+                        DigRewardSlotValue {
+                            epoch_start: start_epoch_time,
+                            next_epoch_start: start_epoch_time + self.info.constants.epoch_seconds,
+                            rewards: 0,
+                        },
+                        Some(DigSlotNonce::REWARD.to_u64()),
+                    ),
+                ));
+                start_epoch_time += self.info.constants.epoch_seconds;
+            }
+            println!(
+                "check: {:?} {:?} {:?}",
+                start_epoch_time,
+                end_epoch_time,
+                start_epoch_time == end_epoch_time
+            );
+        }
+
+        // calculate announcement
+        let mut commit_reward_announcement: Vec<u8> = new_commitment_slot_info.value_hash.to_vec();
+        commit_reward_announcement.insert(0, b'c');
+
+        // spend reward slot
+        reward_slot.spend(ctx, self.info.inner_puzzle_hash().into())?;
+
+        // spend self
+        let commit_incentives =
+            DigRewardDistributorAction::CommitIncentives(DigCommitIncentivesActionSolution {
+                slot_epoch_time: reward_slot_value.epoch_start,
+                slot_next_epoch_time: reward_slot_value.next_epoch_start,
+                slot_total_rewards: reward_slot_value.rewards,
+                epoch_start,
+                clawback_ph,
+                rewards_to_add,
+            });
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, reserve_parent_id, vec![commit_incentives])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let (new_dig_reward_distributor, new_reserve) = DigRewardDistributor::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child DIG reward distributor".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        Ok((
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                my_coin.puzzle_hash,
+                commit_reward_announcement,
+            )),
+            new_dig_reward_distributor,
+            new_reserve,
+            new_commitment_slot,
+            new_reward_slots,
         ))
     }
 }

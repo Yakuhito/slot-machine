@@ -40,7 +40,10 @@
     )
 
     (defun initialize_empty_slots (REWARD_SLOT_1ST_CURRY_HASH EPOCH_SECONDS start_epoch_time end_epoch_time)
-        (if (> end_epoch_time start_epoch_time)
+        (if (> start_epoch_time end_epoch_time)
+            ; optimization - if this is not true, the output condition list won't be valid
+            (not (= start_epoch_time end_epoch_time))
+            ; else
             (c
                 (create_slot REWARD_SLOT_1ST_CURRY_HASH
                     (get_epoch_reward_slot_data_hash start_epoch_time (+ start_epoch_time EPOCH_SECONDS) 0)
@@ -52,9 +55,6 @@
                     end_epoch_time
                 )
             )
-            ; else
-            ; optimization - if this is not true, the output condition list won't be valid
-            (not (= start_epoch_time (- end_epoch_time EPOCH_SECONDS)))
         )
     )
 
