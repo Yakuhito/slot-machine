@@ -2247,11 +2247,11 @@ mod tests {
             rewards_to_add,
         )?;
 
-        let new_value_hashes = new_incentive_slots
+        let new_value_keys = new_incentive_slots
             .iter()
-            .map(|s| s.info.value_hash)
+            .map(|s| s.info.value.unwrap().epoch_start)
             .collect::<Vec<_>>();
-        incentive_slots.retain(|s| !new_value_hashes.contains(&s.info.value_hash));
+        incentive_slots.retain(|s| !new_value_keys.contains(&s.info.value.unwrap().epoch_start));
         incentive_slots.extend(new_incentive_slots);
 
         // spend reserve and source cat together so deltas add up
@@ -2322,11 +2322,11 @@ mod tests {
             rewards_to_add,
         )?;
 
-        let new_value_hashes = new_incentive_slots
+        let new_value_keys = new_incentive_slots
             .iter()
-            .map(|s| s.info.value_hash)
+            .map(|s| s.info.value.unwrap().epoch_start)
             .collect::<Vec<_>>();
-        incentive_slots.retain(|s| !new_value_hashes.contains(&s.info.value_hash));
+        incentive_slots.retain(|s| !new_value_keys.contains(&s.info.value.unwrap().epoch_start));
         incentive_slots.extend(new_incentive_slots);
 
         // spend reserve and source cat together so deltas add up
@@ -2382,17 +2382,6 @@ mod tests {
 
         // withdraw the 1st incentives for epoch 5
         let reserve_cat = reserve.to_cat();
-        println!(
-            "reward slot: {:?}",
-            sim.coin_state(
-                (*incentive_slots
-                    .iter()
-                    .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
-                    .unwrap())
-                .coin
-                .coin_id()
-            )
-        );
         let (
             withdraw_incentives_conditions,
             new_registry,
@@ -2433,8 +2422,10 @@ mod tests {
             .coin_state(new_reward_slot.coin.coin_id())
             .unwrap()
             .spent_height
-            .is_some());
-        incentive_slots.retain(|s| s.info.value_hash != new_reward_slot.info.value_hash);
+            .is_none());
+        incentive_slots.retain(|s| {
+            s.info.value.unwrap().epoch_start != new_reward_slot.info.value.unwrap().epoch_start
+        });
         incentive_slots.push(new_reward_slot);
 
         Ok(())
