@@ -477,7 +477,7 @@ impl DigRewardDistributor {
     pub fn withdraw_incentives(
         self,
         ctx: &mut SpendContext,
-        reserve_parent_id: Bytes32,
+        reserve: Reserve,
         commitment_slot: Slot<DigCommitmentSlotValue>,
         reward_slot: Slot<DigRewardSlotValue>,
     ) -> Result<
@@ -542,9 +542,16 @@ impl DigRewardDistributor {
                 withdrawal_share,
             });
 
+        let my_state = self.info.state;
+        let my_inner_puzzle_hash = self.info.inner_puzzle_hash();
+
         let my_coin = self.coin;
         let my_constants = self.info.constants;
-        let my_spend = self.spend(ctx, reserve_parent_id, vec![withdraw_incentives])?;
+        let my_spend = self.spend(
+            ctx,
+            reserve.coin.parent_coin_info,
+            vec![withdraw_incentives],
+        )?;
         let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
         let (new_dig_reward_distributor, new_reserve) = DigRewardDistributor::from_parent_spend(
             &mut ctx.allocator,
@@ -558,6 +565,15 @@ impl DigRewardDistributor {
         ))?;
 
         ctx.spend(my_coin, my_spend)?;
+
+        // spend reserve
+        reserve.spend_for_reserve_finalizer_controller(
+            ctx,
+            my_state,
+            new_reserve.coin.amount,
+            my_inner_puzzle_hash.into(),
+            my_spend.solution,
+        )?;
 
         Ok((
             withdraw_incentives_conditions,
