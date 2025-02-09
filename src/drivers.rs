@@ -2447,7 +2447,12 @@ mod tests {
             .coin
             .coin_id();
 
-        sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
+        let checker_puzzle_ptr = clvm_quote!(new_epoch_conditions).to_clvm(&mut ctx.allocator)?;
+        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
+        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+
+        sim.pass_time(100);
+        sim.spend_coins(ctx.take(), &[])?;
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert_eq!(new_registry.info.state.active_shares, 1);
         assert_eq!(new_registry.info.state.total_reserves, 4000 - validator_fee);
@@ -2483,6 +2488,55 @@ mod tests {
             s.info.value.unwrap().epoch_start != new_reward_slot.info.value.unwrap().epoch_start
         });
         incentive_slots.push(new_reward_slot);
+
+        // sync to 10%
+        let initial_reward_info = registry.info.state.round_reward_info;
+        let (sync_conditions, new_registry, new_reserve) =
+            registry.sync(ctx, reserve, first_epoch_start + 100)?;
+
+        let checker_puzzle_ptr = clvm_quote!(sync_conditions).to_clvm(&mut ctx.allocator)?;
+        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
+        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+
+        sim.pass_time(400);
+        sim.spend_coins(ctx.take(), &[])?;
+        assert!(new_registry.info.state.round_time_info.last_update == first_epoch_start + 100);
+
+        let cumulative_payout_delta = initial_reward_info.remaining_rewards / 10;
+        assert!(
+            new_registry.info.state.round_reward_info.remaining_rewards
+                == initial_reward_info.remaining_rewards - cumulative_payout_delta
+        );
+        assert!(
+            new_registry.info.state.round_reward_info.cumulative_payout
+                == initial_reward_info.cumulative_payout + cumulative_payout_delta
+        );
+        reserve = new_reserve;
+        registry = new_registry;
+
+        // sync to 50% (so + 40%)
+        let initial_reward_info = registry.info.state.round_reward_info;
+        let (sync_conditions, new_registry, new_reserve) =
+            registry.sync(ctx, reserve, first_epoch_start + 500)?;
+
+        let checker_puzzle_ptr = clvm_quote!(sync_conditions).to_clvm(&mut ctx.allocator)?;
+        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
+        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+
+        sim.spend_coins(ctx.take(), &[])?;
+        assert!(new_registry.info.state.round_time_info.last_update == first_epoch_start + 500);
+
+        let cumulative_payout_delta = initial_reward_info.remaining_rewards * 400 / 900;
+        assert!(
+            new_registry.info.state.round_reward_info.remaining_rewards
+                == initial_reward_info.remaining_rewards - cumulative_payout_delta
+        );
+        assert!(
+            new_registry.info.state.round_reward_info.cumulative_payout
+                == initial_reward_info.cumulative_payout + cumulative_payout_delta
+        );
+        reserve = new_reserve;
+        registry = new_registry;
 
         Ok(())
     }
