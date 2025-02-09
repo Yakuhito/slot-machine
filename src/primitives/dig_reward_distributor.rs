@@ -825,8 +825,14 @@ impl DigRewardDistributor {
 
         // this announcement should be asserted to ensure everything goes according to plan
         let initiate_payout_announcement: Bytes32 = clvm_tuple!(
-            mirror_slot_value.tree_hash(),
-            self.info.state.round_reward_info.cumulative_payout
+            clvm_tuple!(
+                mirror_slot_value.payout_puzzle_hash,
+                mirror_slot_value.shares
+            ),
+            clvm_tuple!(
+                mirror_slot_value.initial_cumulative_payout,
+                self.info.state.round_reward_info.cumulative_payout
+            ),
         )
         .tree_hash()
         .into();
@@ -869,7 +875,7 @@ impl DigRewardDistributor {
         reserve.spend_for_reserve_finalizer_controller(
             ctx,
             my_state,
-            new_reserve.coin.amount,
+            new_reserve.coin.amount - withdrawal_amount,
             my_inner_puzzle_hash.into(),
             my_spend.solution,
         )?;
