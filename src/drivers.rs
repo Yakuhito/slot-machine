@@ -2037,7 +2037,7 @@ mod tests {
             validator_payout_puzzle_hash: Bytes32::new([1; 32]),
             epoch_seconds: 1000,
             removal_max_seconds_offset: 30,
-            payout_threshold: 10_000,
+            payout_threshold: 42,
             validator_fee_bps: 420,     // 4.2% fee
             withdrawal_share_bps: 9000, // 90% of the amount deposited will be returned
             reserve_asset_id: source_cat.asset_id,
@@ -2617,8 +2617,57 @@ mod tests {
             validator_singleton_puzzle,
             validator_conditions,
         )?;
+        sim.pass_time(250);
         sim.spend_coins(ctx.take(), &[])?;
         assert_eq!(new_registry.info.state.active_shares, 3);
+        reserve = new_reserve;
+        registry = new_registry;
+
+        // sync to 75% (so + 25%)
+        let initial_reward_info = registry.info.state.round_reward_info;
+        let (sync_conditions, new_registry, new_reserve) =
+            registry.sync(ctx, reserve, first_epoch_start + 750)?;
+
+        let checker_puzzle_ptr = clvm_quote!(sync_conditions).to_clvm(&mut ctx.allocator)?;
+        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
+        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+
+        sim.spend_coins(ctx.take(), &[])?;
+        assert!(new_registry.info.state.round_time_info.last_update == first_epoch_start + 750);
+
+        let cumulative_payout_delta = initial_reward_info.remaining_rewards * 250 / (3 * 500);
+        assert!(
+            new_registry.info.state.round_reward_info.remaining_rewards
+                == initial_reward_info.remaining_rewards - cumulative_payout_delta * 3
+        );
+        assert!(
+            new_registry.info.state.round_reward_info.cumulative_payout
+                == initial_reward_info.cumulative_payout + cumulative_payout_delta
+        );
+        reserve = new_reserve;
+        registry = new_registry;
+
+        // initiate payout for mirror2
+        let reserve_cat = reserve.to_cat();
+        let (withdraw_conditions, new_registry, new_reserve, mirror2_slot, withdrawal_amount) =
+            registry.initiate_payout(ctx, reserve, mirror2_slot)?;
+
+        let checker_puzzle_ptr = clvm_quote!(withdraw_conditions).to_clvm(&mut ctx.allocator)?;
+        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
+        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+
+        let payout_coin_id = reserve_cat
+            .wrapped_child(mirror2_puzzle_hash, withdrawal_amount)
+            .coin
+            .coin_id();
+
+        sim.spend_coins(ctx.take(), &[])?;
+        assert!(sim.coin_state(payout_coin_id).is_some());
+        assert!(sim
+            .coin_state(mirror2_slot.coin.coin_id())
+            .unwrap()
+            .spent_height
+            .is_none());
         reserve = new_reserve;
         registry = new_registry;
 

@@ -795,6 +795,7 @@ impl DigRewardDistributor {
             DigRewardDistributor,
             Reserve,
             Slot<DigMirrorSlotValue>,
+            u64, // payout amount
         ),
         DriverError,
     > {
@@ -817,6 +818,10 @@ impl DigRewardDistributor {
                 Some(DigSlotNonce::MIRROR.to_u64()),
             ),
         );
+
+        let withdrawal_amount = mirror_slot_value.shares
+            * (self.info.state.round_reward_info.cumulative_payout
+                - mirror_slot_value.initial_cumulative_payout);
 
         // this announcement should be asserted to ensure everything goes according to plan
         let initiate_payout_announcement: Bytes32 = clvm_tuple!(
@@ -877,6 +882,7 @@ impl DigRewardDistributor {
             new_dig_reward_distributor,
             new_reserve,
             new_slot,
+            withdrawal_amount,
         ))
     }
 }
