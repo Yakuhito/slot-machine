@@ -2449,6 +2449,24 @@ mod tests {
 
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
         assert!(sim.coin_state(payout_coin_id).is_some());
+        assert_eq!(new_registry.info.state.active_shares, 1);
+        assert_eq!(new_registry.info.state.total_reserves, 4000 - validator_fee);
+        assert_eq!(
+            new_registry.info.state.round_reward_info.cumulative_payout,
+            0
+        );
+        assert_eq!(
+            new_registry.info.state.round_reward_info.remaining_rewards,
+            first_epoch_incentives_slot.info.value.unwrap().rewards - validator_fee
+        );
+        assert_eq!(
+            new_registry.info.state.round_time_info.last_update,
+            first_epoch_start
+        );
+        assert_eq!(
+            new_registry.info.state.round_time_info.epoch_end,
+            first_epoch_start + constants.epoch_seconds
+        );
         reserve = new_reserve;
         registry = new_registry;
         assert!(sim
