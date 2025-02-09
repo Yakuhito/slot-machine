@@ -40,7 +40,11 @@
     )
 
     (defun initialize_empty_slots (REWARD_SLOT_1ST_CURRY_HASH EPOCH_SECONDS start_epoch_time end_epoch_time)
-        (if (> end_epoch_time start_epoch_time)
+        (if (= start_epoch_time end_epoch_time)
+            ; optimization: if adding EPOCH_SECONDS to start_epoch_time will not get to end_epoch_time,
+            ;   this thing will run infinitely (good luck getting that into the mempool)
+            ()
+            ; else
             (c
                 (create_slot REWARD_SLOT_1ST_CURRY_HASH
                     (get_epoch_reward_slot_data_hash start_epoch_time (+ start_epoch_time EPOCH_SECONDS) 0)
@@ -52,14 +56,11 @@
                     end_epoch_time
                 )
             )
-            ; else
-            ; optimization - if this is not true, the output condition list won't be valid
-            (not (= start_epoch_time (- end_epoch_time EPOCH_SECONDS)))
         )
     )
 
     (if (all 
-        (not (> epoch_end slot_epoch_time))
+        (not (> epoch_end epoch_start)) ; we're adding incentives to a future epoch
         (> rewards_to_add 0)
     )
         (c

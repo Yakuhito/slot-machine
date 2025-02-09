@@ -27,7 +27,7 @@
     (defun parse_conditions ((first_thing . the_rest) conditions extracted_reserve_conditions)
       (if first_thing
         (if (= (f (f first_thing)) -42)
-          (parse_conditions (c (r first_thing) the_rest) conditions (c (f first_thing) extracted_reserve_conditions))
+          (parse_conditions (c (r first_thing) the_rest) conditions (c (r (f first_thing)) extracted_reserve_conditions))
           ; else
           (parse_conditions (c (r first_thing) the_rest) (c (f first_thing) conditions) extracted_reserve_conditions)
         )

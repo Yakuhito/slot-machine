@@ -50,21 +50,23 @@
                         (sha256 1 epoch_end) ; (sha256tree epoch_end)
                     ) 
                 )
-                (slot_oracle REWARD_SLOT_1ST_CURRY_HASH
-                    (sha256 2
-                        (sha256 1 slot_epoch_time)
+                (c
+                    ; condition prepended with -42 -> condition will be returned by the reserve
+                    (list -42
+                        CREATE_COIN
+                        VALIDATOR_PAYOUT_PUZZLE_HASH
+                        validator_fee
+                        (list VALIDATOR_PAYOUT_PUZZLE_HASH)
+                    )
+                    (slot_oracle REWARD_SLOT_1ST_CURRY_HASH
                         (sha256 2
-                            (sha256 1 slot_next_epoch_time)
-                            (sha256 1 epoch_total_rewards)
-                        )
-                    ) ; (sha256tree (epoch_time next_epoch_time . total_rewards))
-                )
-                ; condition prepended with -42 -> condition will be returned by the reserve
-                (list -42
-                    CREATE_COIN
-                    VALIDATOR_PAYOUT_PUZZLE_HASH
-                    validator_fee
-                    (list VALIDATOR_PAYOUT_PUZZLE_HASH)
+                            (sha256 1 slot_epoch_time)
+                            (sha256 2
+                                (sha256 1 slot_next_epoch_time)
+                                (sha256 1 epoch_total_rewards)
+                            )
+                        ) ; (sha256tree (epoch_time next_epoch_time . total_rewards))
+                    )
                 )
             ) ; conditions
         )

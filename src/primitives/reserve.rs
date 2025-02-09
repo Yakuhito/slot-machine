@@ -8,7 +8,7 @@ use chia::{
     },
 };
 use chia_wallet_sdk::{
-    run_puzzle, CatLayer, CreateCoin, DriverError, Layer, Memos, Spend, SpendContext,
+    run_puzzle, Cat, CatLayer, CreateCoin, DriverError, Layer, Memos, Spend, SpendContext,
 };
 use clvm_traits::{clvm_list, clvm_quote, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
@@ -81,6 +81,15 @@ impl Reserve {
         layers.construct_puzzle(ctx)
     }
 
+    pub fn to_cat(&self) -> Cat {
+        Cat::new(
+            self.coin,
+            Some(self.proof),
+            self.asset_id,
+            self.inner_puzzle_hash,
+        )
+    }
+
     pub fn construct_solution(
         &self,
         ctx: &mut SpendContext,
@@ -133,14 +142,31 @@ impl Reserve {
         ctx.spend(self.coin, Spend::new(puzzle, solution))
     }
 
-    pub fn spend_for_reserve_finalizer_controller<S>(
+    pub fn inner_spend(
+        &self,
+        ctx: &mut SpendContext,
+        controller_singleton_inner_puzzle_hash: Bytes32,
+        delegated_puzzle: NodePtr,
+        delegated_solution: NodePtr,
+    ) -> Result<Spend, DriverError> {
+        P2DelegatedBySingletonLayer::new(self.controller_singleton_struct_hash, self.nonce)
+            .construct_spend(
+                ctx,
+                P2DelegatedBySingletonLayerSolution {
+                    singleton_inner_puzzle_hash: controller_singleton_inner_puzzle_hash,
+                    delegated_puzzle,
+                    delegated_solution,
+                },
+            )
+    }
+
+    pub fn delegated_puzzle_for_finalizer_controller<S>(
         &self,
         ctx: &mut SpendContext,
         controlelr_initial_state: S,
         new_reserve_amount: u64,
-        controller_singleton_inner_puzzle_hash: Bytes32,
         controller_solution: NodePtr,
-    ) -> Result<(), DriverError>
+    ) -> Result<NodePtr, DriverError>
     where
         S: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
     {
@@ -180,6 +206,27 @@ impl Reserve {
         reserve_conditions.insert(0, cc.to_clvm(&mut ctx.allocator)?);
 
         let delegated_puzzle = clvm_quote!(reserve_conditions).to_clvm(&mut ctx.allocator)?;
+
+        Ok(delegated_puzzle)
+    }
+
+    pub fn spend_for_reserve_finalizer_controller<S>(
+        &self,
+        ctx: &mut SpendContext,
+        controlelr_initial_state: S,
+        new_reserve_amount: u64,
+        controller_singleton_inner_puzzle_hash: Bytes32,
+        controller_solution: NodePtr,
+    ) -> Result<(), DriverError>
+    where
+        S: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
+    {
+        let delegated_puzzle = self.delegated_puzzle_for_finalizer_controller(
+            ctx,
+            controlelr_initial_state,
+            new_reserve_amount,
+            controller_solution,
+        )?;
 
         let puzzle = self.construct_puzzle(ctx)?;
         let solution = self.construct_solution(

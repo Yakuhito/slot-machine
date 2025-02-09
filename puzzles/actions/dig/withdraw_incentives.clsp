@@ -8,7 +8,7 @@
     (total_reserves active_shares reward_info current_round_info) ; Current_State
     (
         reward_slot_epoch_time
-        reward_slot_next_epoch_time_hash
+        reward_slot_next_epoch_time
         reward_slot_total_rewards
         clawback_ph
         committed_value .
@@ -19,11 +19,11 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_slot_data_hash (first second_hash third)
+    (defun get_slot_data_hash (first second third)
         (sha256 2
             (sha256 1 first)
             (sha256 2
-                second_hash
+                (sha256 1 second)
                 (sha256 1 third)
             )
         ) ; e.g., (sha256tree (epoch_time next_epoch_time . total_rewards))
@@ -44,20 +44,20 @@
 
             ; update epoch reward (lower total rewards)
             (spend_slot REWARD_SLOT_1ST_CURRY_HASH
-                (get_slot_data_hash reward_slot_epoch_time reward_slot_next_epoch_time_hash reward_slot_total_rewards)
+                (get_slot_data_hash reward_slot_epoch_time reward_slot_next_epoch_time reward_slot_total_rewards)
             )
 
             (create_slot REWARD_SLOT_1ST_CURRY_HASH
                 (get_slot_data_hash
                     reward_slot_epoch_time
-                    reward_slot_next_epoch_time_hash
+                    reward_slot_next_epoch_time
                     (- reward_slot_total_rewards withdrawal_share)
                 )
             )
 
             ; spend commitment slot, which functions as a ticket
             (spend_slot COMMITMENT_SLOT_1ST_CURRY_HASH
-                (get_slot_data_hash reward_slot_epoch_time (sha256 1 clawback_ph) committed_value)
+                (get_slot_data_hash reward_slot_epoch_time clawback_ph committed_value)
             )
 
             ; make sure the clawback owner wants to go ahead
