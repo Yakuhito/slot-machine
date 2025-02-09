@@ -2046,14 +2046,17 @@ mod tests {
         };
 
         // Create source offer
-        let [launcher_sk, mirror1_sk]: [SecretKey; 2] = test_secret_keys(2)?.try_into().unwrap();
+        let [launcher_sk, mirror1_sk, mirror2_sk]: [SecretKey; 3] =
+            test_secret_keys(3)?.try_into().unwrap();
 
         let launcher_pk = launcher_sk.public_key();
         let launcher_puzzle_hash = StandardArgs::curry_tree_hash(launcher_pk).into();
 
         let mirror1_pk = mirror1_sk.public_key();
-        // let mirror1_puzzle = StandardLayer::new(mirror1_pk);
         let mirror1_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(mirror1_pk).into();
+
+        let mirror2_pk = mirror2_sk.public_key();
+        let mirror2_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(mirror2_pk).into();
 
         let offer_amount = 1;
         let offer_src_coin = sim.new_coin(launcher_puzzle_hash, offer_amount);
@@ -2579,12 +2582,45 @@ mod tests {
         Cat::spend_all(ctx, &cat_spends)?;
 
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
+        assert_eq!(
+            new_registry.info.state.round_time_info.last_update,
+            first_epoch_start + 500
+        );
+        assert_eq!(
+            new_registry.info.state.round_reward_info.cumulative_payout,
+            registry_info.state.round_reward_info.cumulative_payout
+        );
+        assert_eq!(
+            new_registry.info.state.round_reward_info.remaining_rewards,
+            registry_info.state.round_reward_info.remaining_rewards + incentives_amount
+        );
         reserve = new_reserve;
         registry = new_registry;
         source_cat = source_cat.wrapped_child(
             cat_minter_puzzle_hash,
             source_cat.coin.amount - incentives_amount,
         );
+
+        // add mirror2
+        let (validator_conditions, new_registry, new_reserve, mirror2_slot) = registry.add_mirror(
+            ctx,
+            reserve,
+            mirror2_puzzle_hash,
+            2,
+            validator_singleton_inner_puzzle_hash,
+        )?;
+
+        (validator_coin, validator_singleton_proof) = spend_validator_singleton(
+            ctx,
+            validator_coin,
+            validator_singleton_proof,
+            validator_singleton_puzzle,
+            validator_conditions,
+        )?;
+        sim.spend_coins(ctx.take(), &[])?;
+        assert_eq!(new_registry.info.state.active_shares, 3);
+        reserve = new_reserve;
+        registry = new_registry;
 
         Ok(())
     }
