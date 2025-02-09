@@ -1,6 +1,6 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin},
+    protocol::{Bytes, Bytes32, Coin},
     puzzles::{
         singleton::{SingletonSolution, SingletonStruct},
         LineageProof, Proof,
@@ -471,6 +471,100 @@ impl DigRewardDistributor {
             my_spend.solution,
             new_commitment_slot,
             new_reward_slots,
+        ))
+    }
+
+    pub fn withdraw_incentives(
+        self,
+        ctx: &mut SpendContext,
+        reserve_parent_id: Bytes32,
+        commitment_slot: Slot<DigCommitmentSlotValue>,
+        reward_slot: Slot<DigRewardSlotValue>,
+    ) -> Result<
+        (
+            Conditions,
+            DigRewardDistributor,
+            Reserve,
+            u64, // withdrawn amount
+            Slot<DigRewardSlotValue>,
+        ),
+        DriverError,
+    > {
+        let Some(reward_slot_value) = reward_slot.info.value else {
+            return Err(DriverError::Custom("Reward slot value is None".to_string()));
+        };
+        let Some(commitment_slot_value) = commitment_slot.info.value else {
+            return Err(DriverError::Custom(
+                "Commitment slot value is None".to_string(),
+            ));
+        };
+
+        let withdrawal_share =
+            commitment_slot_value.rewards * self.info.constants.withdrawal_share_bps / 10000;
+        let new_reward_slot = Slot::new(
+            SlotProof {
+                parent_parent_info: self.coin.parent_coin_info,
+                parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+            },
+            SlotInfo::from_value(
+                self.info.launcher_id,
+                DigRewardSlotValue {
+                    epoch_start: reward_slot_value.epoch_start,
+                    next_epoch_start: reward_slot_value.next_epoch_start,
+                    rewards: reward_slot_value.rewards - withdrawal_share,
+                },
+                Some(DigSlotNonce::REWARD.to_u64()),
+            ),
+        );
+
+        // calculate message that the validator needs to send
+        let withdraw_incentives_conditions = Conditions::new()
+            .send_message(
+                18,
+                Bytes::default(),
+                vec![self.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            )
+            .assert_concurrent_puzzle(commitment_slot.coin.puzzle_hash);
+
+        // spend slots
+        let spender_inner_puzzle_hash = self.info.inner_puzzle_hash().into();
+        reward_slot.spend(ctx, spender_inner_puzzle_hash)?;
+        commitment_slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        // spend self
+        let withdraw_incentives =
+            DigRewardDistributorAction::WithdrawIncentives(DigWithdrawIncentivesActionSolution {
+                reward_slot_epoch_time: reward_slot_value.epoch_start,
+                reward_slot_next_epoch_time: reward_slot_value.next_epoch_start,
+                reward_slot_total_rewards: reward_slot_value.rewards,
+                clawback_ph: commitment_slot_value.clawback_ph,
+                committed_value: commitment_slot_value.rewards,
+                withdrawal_share,
+            });
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(ctx, reserve_parent_id, vec![withdraw_incentives])?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let (new_dig_reward_distributor, new_reserve) = DigRewardDistributor::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child DIG reward distributor".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        Ok((
+            withdraw_incentives_conditions,
+            new_dig_reward_distributor,
+            new_reserve,
+            withdrawal_share,
+            new_reward_slot,
         ))
     }
 }

@@ -605,11 +605,10 @@ mod tests {
 
     use crate::{
         CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, P2DelegatedBySingletonLayer, PrecommitCoin, Reserve, Slot,
-        SpendContextExt, XchandlesExponentialPremiumRenewPuzzleArgs,
-        XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesFactorPricingPuzzleArgs,
-        XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesRegistryAction,
-        ANY_METADATA_UPDATER_HASH,
+        DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot, SpendContextExt,
+        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
+        XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
+        XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;

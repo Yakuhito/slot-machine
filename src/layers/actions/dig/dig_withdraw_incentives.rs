@@ -112,7 +112,7 @@ impl DigWithdrawIncentivesActionArgs {
 #[clvm(solution)]
 pub struct DigWithdrawIncentivesActionSolution {
     pub reward_slot_epoch_time: u64,
-    pub reward_slot_next_epoch_time_hash: Bytes32,
+    pub reward_slot_next_epoch_time: u64,
     pub reward_slot_total_rewards: u64,
     pub clawback_ph: Bytes32,
     pub committed_value: u64,
