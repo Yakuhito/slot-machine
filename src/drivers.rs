@@ -2409,12 +2409,50 @@ mod tests {
         let claimer_coin = sim.new_coin(cat_minter_puzzle_hash, 0);
         cat_minter_p2.spend(ctx, claimer_coin, withdraw_incentives_conditions)?;
 
+        sim.set_next_timestamp(first_epoch_start)?;
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
         assert!(sim.coin_state(payout_coin_id).is_some());
         reserve = new_reserve;
         registry = new_registry;
         assert!(sim
             .coin_state(fifth_epoch_commitment_slot.coin.coin_id())
+            .unwrap()
+            .spent_height
+            .is_some());
+        assert!(sim
+            .coin_state(new_reward_slot.coin.coin_id())
+            .unwrap()
+            .spent_height
+            .is_none());
+        incentive_slots.retain(|s| {
+            s.info.value.unwrap().epoch_start != new_reward_slot.info.value.unwrap().epoch_start
+        });
+        incentive_slots.push(new_reward_slot);
+
+        // start first epoch
+        let reserve_cat = reserve.to_cat();
+        let first_epoch_incentives_slot = *incentive_slots
+            .iter()
+            .find(|s| s.info.value.unwrap().epoch_start == first_epoch_start)
+            .unwrap();
+        let (new_epoch_conditions, new_registry, new_reserve, validator_fee, new_reward_slot) =
+            registry.new_epoch(
+                ctx,
+                reserve,
+                first_epoch_incentives_slot,
+                first_epoch_incentives_slot.info.value.unwrap().rewards,
+            )?;
+        let payout_coin_id = reserve_cat
+            .wrapped_child(constants.validator_payout_puzzle_hash, validator_fee)
+            .coin
+            .coin_id();
+
+        sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
+        assert!(sim.coin_state(payout_coin_id).is_some());
+        reserve = new_reserve;
+        registry = new_registry;
+        assert!(sim
+            .coin_state(first_epoch_incentives_slot.coin.coin_id())
             .unwrap()
             .spent_height
             .is_some());
