@@ -734,4 +734,65 @@ impl DigRewardDistributor {
             new_reserve,
         ))
     }
+
+    pub fn add_incentives(
+        self,
+        ctx: &mut SpendContext,
+        reserve: Reserve,
+        amount: u64,
+    ) -> Result<(Conditions, DigRewardDistributor, Reserve, NodePtr), DriverError> {
+        // calculate announcement needed to ensure everything's happening as expected
+        let mut add_incentives_announcement: Vec<u8> =
+            clvm_tuple!(amount, self.info.state.round_time_info.epoch_end)
+                .tree_hash()
+                .to_vec();
+        add_incentives_announcement.insert(0, b'c');
+        let add_incentives_announcement = Conditions::new().assert_puzzle_announcement(
+            announcement_id(self.coin.puzzle_hash, add_incentives_announcement),
+        );
+
+        // spend self
+        let add_incentives_action =
+            DigRewardDistributorAction::AddIncentives(DigAddIncentivesActionSolution { amount });
+
+        let my_state = self.info.state;
+        let my_inner_puzzle_hash = self.info.inner_puzzle_hash();
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(
+            ctx,
+            reserve.coin.parent_coin_info,
+            vec![add_incentives_action],
+        )?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let (new_dig_reward_distributor, new_reserve) = DigRewardDistributor::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child DIG reward distributor".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        // spend reserve
+        reserve.spend_for_reserve_finalizer_controller(
+            ctx,
+            my_state,
+            new_reserve.coin.amount,
+            my_inner_puzzle_hash.into(),
+            my_spend.solution,
+        )?;
+
+        Ok((
+            add_incentives_announcement,
+            new_dig_reward_distributor,
+            new_reserve,
+            my_spend.solution,
+        ))
+    }
 }
