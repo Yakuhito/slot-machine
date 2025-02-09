@@ -2154,6 +2154,19 @@ mod tests {
         )?;
         sim.spend_coins(ctx.take(), &[])?;
 
+        // commit incentives for first epoch
+        let (secure_conditions, mut registry, mut reserve, first_epoch_slot, mut incentive_slots) =
+            registry.commit_incentives(
+                ctx,
+                reserve.coin.parent_coin_info,
+                first_epoch_slot,
+                first_epoch_start,
+                cat_minter_puzzle_hash,
+                constants.epoch_seconds,
+            )?;
+
+        sim.spend_coins(ctx.take(), &[])?;
+
         Ok(())
     }
 }
