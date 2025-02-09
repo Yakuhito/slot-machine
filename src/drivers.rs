@@ -2661,7 +2661,6 @@ mod tests {
             .coin
             .coin_id();
 
-        sim.pass_time(150);
         sim.spend_coins(ctx.take(), &[])?;
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert!(sim
