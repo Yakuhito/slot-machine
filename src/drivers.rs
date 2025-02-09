@@ -604,12 +604,11 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction,
-        CatalogSlotValue, DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot,
-        SpendContextExt, XchandlesExponentialPremiumRenewPuzzleArgs,
-        XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesFactorPricingPuzzleArgs,
-        XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesRegistryAction,
-        ANY_METADATA_UPDATER_HASH,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
+        DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot, SpendContextExt,
+        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
+        XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
+        XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -2005,7 +2004,7 @@ mod tests {
         let mut sim = Simulator::new();
 
         // Launch token CAT
-        let mut cat_amount = 10_000_000_000;
+        let cat_amount = 10_000_000_000;
         let (cat_minter_sk, cat_minter_pk, cat_minter_puzzle_hash, cat_minter_coin) =
             sim.new_p2(cat_amount)?;
         let cat_minter_p2 = StandardLayer::new(cat_minter_pk);
@@ -2026,7 +2025,7 @@ mod tests {
             validator_launcher_id,
             mut validator_coin,
             mut validator_singleton_proof,
-            validator_singleton_inner_puzzle,
+            _validator_singleton_inner_puzzle,
             validator_singleton_inner_puzzle_hash,
             validator_singleton_puzzle,
         ) = launch_test_singleton(ctx, &mut sim)?;
@@ -2084,7 +2083,7 @@ mod tests {
 
         // Launch the DIG reward distributor
         let first_epoch_start = 1234;
-        let (_, security_sk, mut registry, first_epoch_slot) = launch_dig_reward_distributor(
+        let (_, security_sk, registry, first_epoch_slot) = launch_dig_reward_distributor(
             ctx,
             offer,
             first_epoch_start,
@@ -2148,13 +2147,14 @@ mod tests {
         source_cat = new_source_cat;
 
         // add the 1st mirror before reward epoch ('first epoch') begins
-        let (validator_conditions, mut registry, mut reserve, mirror1_slot) = registry.add_mirror(
-            ctx,
-            reserve,
-            mirror1_puzzle_hash,
-            1,
-            validator_singleton_inner_puzzle_hash,
-        )?;
+        let (validator_conditions, mut registry, mut reserve, _mirror1_slot) = registry
+            .add_mirror(
+                ctx,
+                reserve,
+                mirror1_puzzle_hash,
+                1,
+                validator_singleton_inner_puzzle_hash,
+            )?;
 
         (validator_coin, validator_singleton_proof) = spend_validator_singleton(
             ctx,
@@ -2596,7 +2596,7 @@ mod tests {
         );
         reserve = new_reserve;
         registry = new_registry;
-        source_cat = source_cat.wrapped_child(
+        let _source_cat = source_cat.wrapped_child(
             cat_minter_puzzle_hash,
             source_cat.coin.amount - incentives_amount,
         );
