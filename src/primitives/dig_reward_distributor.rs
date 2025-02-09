@@ -424,12 +424,6 @@ impl DigRewardDistributor {
                 ));
                 start_epoch_time += self.info.constants.epoch_seconds;
             }
-            println!(
-                "check: {:?} {:?} {:?}",
-                start_epoch_time,
-                end_epoch_time,
-                start_epoch_time == end_epoch_time - self.info.constants.epoch_seconds
-            );
         }
 
         // calculate announcement
