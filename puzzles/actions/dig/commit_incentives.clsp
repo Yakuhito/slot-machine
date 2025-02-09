@@ -59,7 +59,7 @@
     )
 
     (if (all 
-        (not (> epoch_end slot_epoch_time))
+        (not (> epoch_end epoch_start)) ; we're adding incentives to a future epoch
         (> rewards_to_add 0)
     )
         (c
