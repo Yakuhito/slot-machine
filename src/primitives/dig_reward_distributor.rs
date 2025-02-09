@@ -755,9 +755,6 @@ impl DigRewardDistributor {
         let add_incentives_action =
             DigRewardDistributorAction::AddIncentives(DigAddIncentivesActionSolution { amount });
 
-        let my_state = self.info.state;
-        let my_inner_puzzle_hash = self.info.inner_puzzle_hash();
-
         let my_coin = self.coin;
         let my_constants = self.info.constants;
         let my_spend = self.spend(
@@ -778,15 +775,6 @@ impl DigRewardDistributor {
         ))?;
 
         ctx.spend(my_coin, my_spend)?;
-
-        // spend reserve
-        reserve.spend_for_reserve_finalizer_controller(
-            ctx,
-            my_state,
-            new_reserve.coin.amount,
-            my_inner_puzzle_hash.into(),
-            my_spend.solution,
-        )?;
 
         Ok((
             add_incentives_announcement,

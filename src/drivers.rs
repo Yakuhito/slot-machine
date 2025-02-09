@@ -2541,6 +2541,7 @@ mod tests {
         // add incentives
         let initial_reward_info = registry.info.state.round_reward_info;
         let incentives_amount = initial_reward_info.remaining_rewards;
+        let registry_info = registry.info;
 
         let (add_incentives_conditions, new_registry, new_reserve, registry_solution) =
             registry.add_incentives(ctx, &reserve, incentives_amount)?;
@@ -2577,7 +2578,7 @@ mod tests {
         let cat_spends = [reserve_cat_spend, source_cat_spend];
         Cat::spend_all(ctx, &cat_spends)?;
 
-        sim.spend_coins(ctx.take(), &[])?;
+        sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
         reserve = new_reserve;
         registry = new_registry;
         source_cat = source_cat.wrapped_child(
