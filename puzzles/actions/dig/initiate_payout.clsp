@@ -53,6 +53,21 @@
                 (get_slot_data_hash mirror_payout_puzzle_hash (f reward_info) mirror_shares)
             )
 
+            (list CREATE_PUZZLE_ANNOUNCEMENT
+                (concat 'p'
+                    (sha256 2
+                        (sha256 2
+                            (sha256 1 mirror_payout_puzzle_hash)
+                            (sha256 1 mirror_shares)
+                        )
+                        (sha256 2
+                            (sha256 1 mirror_initial_cumulative_payout)
+                            (f reward_info)
+                        )
+                    ) ; (sha256tree ((mirror_payout_puzzle_hash . mirror_shares) . (mirror_initial_cumulative_payout new_mirror_initial_cumulative_payout)))
+                ) 
+            )
+
             ; leading -42 -> condition will be returned by the reserve
             (list -42
                 CREATE_COIN

@@ -783,4 +783,100 @@ impl DigRewardDistributor {
             my_spend.solution,
         ))
     }
+
+    pub fn initiate_payout(
+        self,
+        ctx: &mut SpendContext,
+        reserve: Reserve,
+        mirror_slot: Slot<DigMirrorSlotValue>,
+    ) -> Result<
+        (
+            Conditions,
+            DigRewardDistributor,
+            Reserve,
+            Slot<DigMirrorSlotValue>,
+        ),
+        DriverError,
+    > {
+        let Some(mirror_slot_value) = mirror_slot.info.value else {
+            return Err(DriverError::Custom("Mirror slot value is None".to_string()));
+        };
+
+        let new_slot = Slot::new(
+            SlotProof {
+                parent_parent_info: self.coin.parent_coin_info,
+                parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+            },
+            SlotInfo::from_value(
+                self.info.launcher_id,
+                DigMirrorSlotValue {
+                    payout_puzzle_hash: mirror_slot_value.payout_puzzle_hash,
+                    initial_cumulative_payout: self.info.state.round_reward_info.cumulative_payout,
+                    shares: mirror_slot_value.shares,
+                },
+                Some(DigSlotNonce::MIRROR.to_u64()),
+            ),
+        );
+
+        // this announcement should be asserted to ensure everything goes according to plan
+        let initiate_payout_announcement: Bytes32 = clvm_tuple!(
+            mirror_slot_value.tree_hash(),
+            self.info.state.round_reward_info.cumulative_payout
+        )
+        .tree_hash()
+        .into();
+        let mut initiate_payout_announcement: Vec<u8> = initiate_payout_announcement.to_vec();
+        initiate_payout_announcement.insert(0, b'p');
+
+        // spend self
+        let initiate_payout_action =
+            DigRewardDistributorAction::InitiatePayout(DigInitiatePayoutActionSolution {
+                mirror_payout_puzzle_hash: mirror_slot_value.payout_puzzle_hash,
+                mirror_initial_cumulative_payout: mirror_slot_value.initial_cumulative_payout,
+                mirror_shares: mirror_slot_value.shares,
+            });
+
+        let my_state = self.info.state;
+        let my_inner_puzzle_hash = self.info.inner_puzzle_hash();
+
+        let my_coin = self.coin;
+        let my_constants = self.info.constants;
+        let my_spend = self.spend(
+            ctx,
+            reserve.coin.parent_coin_info,
+            vec![initiate_payout_action],
+        )?;
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let (new_dig_reward_distributor, new_reserve) = DigRewardDistributor::from_parent_spend(
+            &mut ctx.allocator,
+            my_coin,
+            my_puzzle,
+            my_spend.solution,
+            my_constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Could not parse child DIG reward distributor".to_string(),
+        ))?;
+
+        ctx.spend(my_coin, my_spend)?;
+
+        // spend reserve
+        reserve.spend_for_reserve_finalizer_controller(
+            ctx,
+            my_state,
+            new_reserve.coin.amount,
+            my_inner_puzzle_hash.into(),
+            my_spend.solution,
+        )?;
+
+        Ok((
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                my_coin.puzzle_hash,
+                initiate_payout_announcement,
+            )),
+            new_dig_reward_distributor,
+            new_reserve,
+            new_slot,
+        ))
+    }
 }
