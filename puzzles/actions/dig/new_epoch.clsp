@@ -63,7 +63,7 @@
                             (sha256 1 slot_epoch_time)
                             (sha256 2
                                 (sha256 1 slot_next_epoch_time)
-                                (sha256 1 epoch_total_rewards)
+                                (sha256 1 slot_total_rewards)
                             )
                         ) ; (sha256tree (epoch_time next_epoch_time . total_rewards))
                     )
