@@ -909,7 +909,8 @@ impl DigRewardDistributor {
         reserve: Reserve,
         mirror_slot: Slot<DigMirrorSlotValue>,
         validator_singleton_inner_puzzle_hash: Bytes32,
-    ) -> Result<(Conditions, DigRewardDistributor, Reserve), DriverError> {
+    ) -> Result<(Conditions, DigRewardDistributor, Reserve, u64), DriverError> {
+        // last u64 = payout maount
         let Some(mirror_slot_value) = mirror_slot.info.value else {
             return Err(DriverError::Custom("Mirror slot value is None".to_string()));
         };
@@ -936,10 +937,15 @@ impl DigRewardDistributor {
         mirror_slot.spend(ctx, self.info.inner_puzzle_hash().into())?;
 
         // spend self
+        let mirror_payout_amount = mirror_slot_value.shares
+            * (self.info.state.round_reward_info.cumulative_payout
+                - mirror_slot_value.initial_cumulative_payout);
         let remove_mirror_action =
             DigRewardDistributorAction::RemoveMirror(DigRemoveMirrorActionSolution {
                 validator_singleton_inner_puzzle_hash,
+                mirror_payout_amount,
                 mirror_payout_puzzle_hash: mirror_slot_value.payout_puzzle_hash,
+                mirror_initial_cumulative_payout: mirror_slot_value.initial_cumulative_payout,
                 mirror_shares: mirror_slot_value.shares,
             });
 
@@ -980,6 +986,7 @@ impl DigRewardDistributor {
             remove_mirror_conditions,
             new_dig_reward_distributor,
             new_reserve,
+            mirror_payout_amount,
         ))
     }
 }

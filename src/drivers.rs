@@ -2648,33 +2648,10 @@ mod tests {
         reserve = new_reserve;
         registry = new_registry;
 
-        // initiate payout for mirror2
-        let reserve_cat = reserve.to_cat();
-        let (withdraw_conditions, new_registry, new_reserve, mirror2_slot, withdrawal_amount) =
-            registry.initiate_payout(ctx, reserve, mirror2_slot)?;
-
-        let checker_puzzle_ptr = clvm_quote!(withdraw_conditions).to_clvm(&mut ctx.allocator)?;
-        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
-        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
-
-        let payout_coin_id = reserve_cat
-            .wrapped_child(mirror2_puzzle_hash, withdrawal_amount)
-            .coin
-            .coin_id();
-
-        sim.spend_coins(ctx.take(), &[])?;
-        assert!(sim.coin_state(payout_coin_id).is_some());
-        assert!(sim
-            .coin_state(mirror2_slot.coin.coin_id())
-            .unwrap()
-            .spent_height
-            .is_none());
-        reserve = new_reserve;
-        registry = new_registry;
-
         // remove mirror2
-        let (remove_mirror_validator_conditions, new_registry, new_reserve) = registry
-            .remove_mirror(
+        let reserve_cat = reserve.to_cat();
+        let (remove_mirror_validator_conditions, new_registry, new_reserve, mirror2_payout_amount) =
+            registry.remove_mirror(
                 ctx,
                 reserve,
                 mirror2_slot,
@@ -2691,8 +2668,19 @@ mod tests {
         sim.spend_coins(ctx.take(), &[])?;
         registry = new_registry;
         reserve = new_reserve;
+        let payout_coin_id = reserve_cat
+            .wrapped_child(mirror2_puzzle_hash, mirror2_payout_amount)
+            .coin
+            .coin_id();
 
         assert!(registry.info.state.active_shares == 1);
+        assert!(sim.coin_state(payout_coin_id).is_some());
+        assert!(sim
+            .coin_state(mirror2_slot.coin.coin_id())
+            .unwrap()
+            .spent_height
+            .is_some());
+
         for epoch in 1..7 {
             let update_time = registry.info.state.round_time_info.epoch_end;
             let (sync_conditions, new_registry, new_reserve) =

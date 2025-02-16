@@ -11,7 +11,9 @@
     (total_reserves active_shares reward_info current_round_info) ; Current_State
     (
         validator_singleton_inner_puzzle_hash
-        mirror_payout_puzzle_hash .
+        mirror_payout_amount
+        mirror_payout_puzzle_hash
+        mirror_initial_cumulative_payout .
         mirror_shares
     )
 )
@@ -19,40 +21,52 @@
     (include curry.clib)
     (include slots.clib)
 
-    (c
-        (list
-            total_reserves
-            (- active_shares mirror_shares)
-            reward_info
-            current_round_info
-        ) ; new state  
-        (list
-            ; validator actually wants us to add this mirror
-            (list RECEIVE_MESSAGE
-                18 ; puzzle hash - puzzle hash
-                (concat 'r' (sha256 2
-                    (sha256 1 mirror_payout_puzzle_hash)
-                    (sha256 1 mirror_shares)
-                )) ; message = 'r' + (sha265tree (mirror_payout_puzzle_hash . mirror_shares))
-                (curry_hashes_inline SINGLETON_MOD_HASH
-                    VALIDATOR_SINGLETON_STRUCT_HASH
-                    validator_singleton_inner_puzzle_hash
-                )
-            )
-
-            ; make sure the reward info is up to date
-            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ (f current_round_info) MAX_SECONDS_OFFSET))
-
-            (spend_slot MIRROR_SLOT_1ST_CURRY_HASH
-                (sha256 2
-                    (sha256 1 mirror_payout_puzzle_hash)
-                    (sha256 2
-                        (sha256 1 (f reward_info)) ; mirror fully paid out
+    (if (= mirror_payout_amount (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares))
+        (c
+            (list
+                (- total_reserves mirror_payout_amount)
+                (- active_shares mirror_shares)
+                reward_info
+                current_round_info
+            ) ; new state
+            (list
+                ; validator actually wants us to add this mirror
+                (list RECEIVE_MESSAGE
+                    18 ; puzzle hash - puzzle hash
+                    (concat 'r' (sha256 2
+                        (sha256 1 mirror_payout_puzzle_hash)
                         (sha256 1 mirror_shares)
+                    )) ; message = 'r' + (sha265tree (mirror_payout_puzzle_hash . mirror_shares))
+                    (curry_hashes_inline SINGLETON_MOD_HASH
+                        VALIDATOR_SINGLETON_STRUCT_HASH
+                        validator_singleton_inner_puzzle_hash
                     )
-                ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
-            )
-        ) ; conditions
+                )
+
+                ; make sure the reward info is up to date
+                (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ (f current_round_info) MAX_SECONDS_OFFSET))
+
+                ; spend mirror reward slot without recreating it
+                (spend_slot MIRROR_SLOT_1ST_CURRY_HASH
+                    (sha256 2
+                        (sha256 1 mirror_payout_puzzle_hash)
+                        (sha256 2
+                            (sha256 1 mirror_initial_cumulative_payout)
+                            (sha256 1 mirror_shares)
+                        )
+                    ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
+                )
+
+                ; leading -42 -> condition will be returned by the reserve
+                (list -42
+                    CREATE_COIN
+                    mirror_payout_puzzle_hash
+                    mirror_payout_amount
+                    (list mirror_payout_puzzle_hash)
+                )
+            ) ; conditions
+        )
+        ; else
+        (x)
     )
-        
 )
