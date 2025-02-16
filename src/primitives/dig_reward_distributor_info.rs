@@ -101,7 +101,11 @@ impl DigRewardDistributorInfo {
         constants: &DigRewardDistributorConstants,
     ) -> [Bytes32; 8] {
         [
-            DigAddIncentivesAction::curry_tree_hash().into(),
+            DigAddIncentivesAction::curry_tree_hash(
+                constants.validator_payout_puzzle_hash,
+                constants.validator_fee_bps,
+            )
+            .into(),
             DigAddMirrorAction::curry_tree_hash(launcher_id, constants.validator_launcher_id)
                 .into(),
             DigCommitIncentivesAction::curry_tree_hash(launcher_id, constants.epoch_seconds).into(),

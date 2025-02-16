@@ -137,7 +137,13 @@ impl DigRewardDistributor {
             .into_iter()
             .map(|action| match action {
                 DigRewardDistributorAction::AddIncentives(solution) => {
-                    let layer = DigAddIncentivesAction {};
+                    let layer = DigAddIncentivesAction {
+                        validator_payout_puzzle_hash: self
+                            .info
+                            .constants
+                            .validator_payout_puzzle_hash,
+                        validator_fee_bps: self.info.constants.validator_fee_bps,
+                    };
 
                     let puzzle = layer.construct_puzzle(ctx)?;
                     let solution = layer.construct_solution(ctx, solution)?;
@@ -752,7 +758,10 @@ impl DigRewardDistributor {
 
         // spend self
         let add_incentives_action =
-            DigRewardDistributorAction::AddIncentives(DigAddIncentivesActionSolution { amount });
+            DigRewardDistributorAction::AddIncentives(DigAddIncentivesActionSolution {
+                amount,
+                validator_fee: amount * self.info.constants.validator_fee_bps / 10000,
+            });
 
         let my_coin = self.coin;
         let my_constants = self.info.constants;
