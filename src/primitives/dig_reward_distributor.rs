@@ -853,6 +853,7 @@ impl DigRewardDistributor {
         // spend self
         let initiate_payout_action =
             DigRewardDistributorAction::InitiatePayout(DigInitiatePayoutActionSolution {
+                mirror_payout_amount: withdrawal_amount,
                 mirror_payout_puzzle_hash: mirror_slot_value.payout_puzzle_hash,
                 mirror_initial_cumulative_payout: mirror_slot_value.initial_cumulative_payout,
                 mirror_shares: mirror_slot_value.shares,
