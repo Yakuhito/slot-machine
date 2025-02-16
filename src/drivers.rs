@@ -2552,7 +2552,8 @@ mod tests {
         let reserve_delegated_puzzle = reserve.delegated_puzzle_for_finalizer_controller(
             ctx,
             registry_info.state,
-            reserve.coin.amount + incentives_amount,
+            reserve.coin.amount
+                + (incentives_amount - incentives_amount * constants.validator_fee_bps / 10000),
             registry_solution,
         )?;
 
@@ -2591,7 +2592,8 @@ mod tests {
         );
         assert_eq!(
             new_registry.info.state.round_reward_info.remaining_rewards,
-            registry_info.state.round_reward_info.remaining_rewards + incentives_amount
+            registry_info.state.round_reward_info.remaining_rewards
+                + (incentives_amount - incentives_amount * constants.validator_fee_bps / 10000)
         );
         reserve = new_reserve;
         registry = new_registry;
@@ -2869,7 +2871,7 @@ mod tests {
             .coin_id();
 
         assert!(sim.coin_state(payout_coin_id).is_some());
-        assert_eq!(sim.coin_state(payout_coin_id).unwrap().coin.amount, 12614);
+        assert_eq!(sim.coin_state(payout_coin_id).unwrap().coin.amount, 12602);
 
         Ok(())
     }
