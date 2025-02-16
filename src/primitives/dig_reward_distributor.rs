@@ -374,7 +374,7 @@ impl DigRewardDistributor {
                     self.info.launcher_id,
                     DigRewardSlotValue {
                         epoch_start,
-                        next_epoch_start: reward_slot_value.next_epoch_start,
+                        next_epoch_initialized: reward_slot_value.next_epoch_initialized,
                         rewards: reward_slot_value.rewards + rewards_to_add,
                     },
                     Some(DigSlotNonce::REWARD.to_u64()),
@@ -387,8 +387,7 @@ impl DigRewardDistributor {
                     self.info.launcher_id,
                     DigRewardSlotValue {
                         epoch_start: reward_slot_value.epoch_start,
-                        next_epoch_start: reward_slot_value.epoch_start
-                            + self.info.constants.epoch_seconds,
+                        next_epoch_initialized: true,
                         rewards: reward_slot_value.rewards,
                     },
                     Some(DigSlotNonce::REWARD.to_u64()),
@@ -400,7 +399,7 @@ impl DigRewardDistributor {
                     self.info.launcher_id,
                     DigRewardSlotValue {
                         epoch_start,
-                        next_epoch_start: 0,
+                        next_epoch_initialized: false,
                         rewards: rewards_to_add,
                     },
                     Some(DigSlotNonce::REWARD.to_u64()),
@@ -416,7 +415,7 @@ impl DigRewardDistributor {
                         self.info.launcher_id,
                         DigRewardSlotValue {
                             epoch_start: start_epoch_time,
-                            next_epoch_start: start_epoch_time + self.info.constants.epoch_seconds,
+                            next_epoch_initialized: true,
                             rewards: 0,
                         },
                         Some(DigSlotNonce::REWARD.to_u64()),
@@ -437,7 +436,7 @@ impl DigRewardDistributor {
         let commit_incentives =
             DigRewardDistributorAction::CommitIncentives(DigCommitIncentivesActionSolution {
                 slot_epoch_time: reward_slot_value.epoch_start,
-                slot_next_epoch_time: reward_slot_value.next_epoch_start,
+                slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
                 slot_total_rewards: reward_slot_value.rewards,
                 epoch_start,
                 clawback_ph,
@@ -510,7 +509,7 @@ impl DigRewardDistributor {
                 self.info.launcher_id,
                 DigRewardSlotValue {
                     epoch_start: reward_slot_value.epoch_start,
-                    next_epoch_start: reward_slot_value.next_epoch_start,
+                    next_epoch_initialized: reward_slot_value.next_epoch_initialized,
                     rewards: reward_slot_value.rewards - withdrawal_share,
                 },
                 Some(DigSlotNonce::REWARD.to_u64()),
@@ -535,7 +534,7 @@ impl DigRewardDistributor {
         let withdraw_incentives =
             DigRewardDistributorAction::WithdrawIncentives(DigWithdrawIncentivesActionSolution {
                 reward_slot_epoch_time: reward_slot_value.epoch_start,
-                reward_slot_next_epoch_time: reward_slot_value.next_epoch_start,
+                reward_slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
                 reward_slot_total_rewards: reward_slot_value.rewards,
                 clawback_ph: commitment_slot_value.clawback_ph,
                 committed_value: commitment_slot_value.rewards,
@@ -635,7 +634,7 @@ impl DigRewardDistributor {
         // spend self
         let new_epoch = DigRewardDistributorAction::NewEpoch(DigNewEpochActionSolution {
             slot_epoch_time: reward_slot_value.epoch_start,
-            slot_next_epoch_time: reward_slot_value.next_epoch_start,
+            slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
             slot_total_rewards: reward_slot_value.rewards,
             epoch_total_rewards,
             validator_fee: valdiator_fee,

@@ -504,7 +504,7 @@ pub fn launch_dig_reward_distributor(
 
     let slot_value = DigRewardSlotValue {
         epoch_start: first_epoch_start,
-        next_epoch_start: 0,
+        next_epoch_initialized: false,
         rewards: 0,
     };
     let slot_info = SlotInfo::<DigRewardSlotValue>::from_value(

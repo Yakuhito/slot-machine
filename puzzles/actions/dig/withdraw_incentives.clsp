@@ -8,7 +8,7 @@
     (total_reserves active_shares reward_info current_round_info) ; Current_State
     (
         reward_slot_epoch_time
-        reward_slot_next_epoch_time
+        reward_slot_next_epoch_initialized
         reward_slot_total_rewards
         clawback_ph
         committed_value .
@@ -44,13 +44,13 @@
 
             ; update epoch reward (lower total rewards)
             (spend_slot REWARD_SLOT_1ST_CURRY_HASH
-                (get_slot_data_hash reward_slot_epoch_time reward_slot_next_epoch_time reward_slot_total_rewards)
+                (get_slot_data_hash reward_slot_epoch_time reward_slot_next_epoch_initialized reward_slot_total_rewards)
             )
 
             (create_slot REWARD_SLOT_1ST_CURRY_HASH
                 (get_slot_data_hash
                     reward_slot_epoch_time
-                    reward_slot_next_epoch_time
+                    reward_slot_next_epoch_initialized
                     (- reward_slot_total_rewards withdrawal_share)
                 )
             )

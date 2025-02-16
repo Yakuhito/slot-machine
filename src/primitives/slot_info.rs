@@ -252,7 +252,7 @@ impl DigSlotNonce {
 #[clvm(list)]
 pub struct DigRewardSlotValue {
     pub epoch_start: u64,
-    pub next_epoch_start: u64,
+    pub next_epoch_initialized: bool,
     #[clvm(rest)]
     pub rewards: u64,
 }
