@@ -751,7 +751,7 @@ impl DigRewardDistributor {
             clvm_tuple!(amount, self.info.state.round_time_info.epoch_end)
                 .tree_hash()
                 .to_vec();
-        add_incentives_announcement.insert(0, b'c');
+        add_incentives_announcement.insert(0, b'i');
         let add_incentives_announcement = Conditions::new().assert_puzzle_announcement(
             announcement_id(self.coin.puzzle_hash, add_incentives_announcement),
         );

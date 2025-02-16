@@ -26,7 +26,7 @@
             (list
                 (list
                     CREATE_PUZZLE_ANNOUNCEMENT
-                    (concat 'c'
+                    (concat 'i'
                         (sha256 2 
                             (sha256 1 amount)
                             (sha256 1 epoch_end)
