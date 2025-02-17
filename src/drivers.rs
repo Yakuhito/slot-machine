@@ -2035,7 +2035,7 @@ mod tests {
             validator_launcher_id,
             validator_payout_puzzle_hash: Bytes32::new([1; 32]),
             epoch_seconds: 1000,
-            removal_max_seconds_offset: 30,
+            max_seconds_offset: 300,
             payout_threshold: 42,
             validator_fee_bps: 420,     // 4.2% fee
             withdrawal_share_bps: 9000, // 90% of the amount deposited will be returned

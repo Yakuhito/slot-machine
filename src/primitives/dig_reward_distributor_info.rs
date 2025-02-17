@@ -48,7 +48,7 @@ pub struct DigRewardDistributorConstants {
     pub validator_launcher_id: Bytes32,
     pub validator_payout_puzzle_hash: Bytes32,
     pub epoch_seconds: u64,
-    pub removal_max_seconds_offset: u64,
+    pub max_seconds_offset: u64,
     pub payout_threshold: u64,
     pub validator_fee_bps: u64,
     pub withdrawal_share_bps: u64,
@@ -106,8 +106,12 @@ impl DigRewardDistributorInfo {
                 constants.validator_fee_bps,
             )
             .into(),
-            DigAddMirrorAction::curry_tree_hash(launcher_id, constants.validator_launcher_id)
-                .into(),
+            DigAddMirrorAction::curry_tree_hash(
+                launcher_id,
+                constants.validator_launcher_id,
+                constants.max_seconds_offset,
+            )
+            .into(),
             DigCommitIncentivesAction::curry_tree_hash(launcher_id, constants.epoch_seconds).into(),
             DigInitiatePayoutAction::curry_tree_hash(
                 launcher_id,
@@ -125,7 +129,7 @@ impl DigRewardDistributorInfo {
             DigRemoveMirrorAction::curry_tree_hash(
                 launcher_id,
                 constants.validator_launcher_id,
-                constants.removal_max_seconds_offset,
+                constants.max_seconds_offset,
             )
             .into(),
             DigSyncAction::curry_tree_hash().into(),

@@ -22,7 +22,7 @@ impl DigRemoveMirrorAction {
         Self {
             launcher_id: info.launcher_id,
             validator_launcher_id: info.constants.validator_launcher_id,
-            max_seconds_offset: info.constants.removal_max_seconds_offset,
+            max_seconds_offset: info.constants.max_seconds_offset,
         }
     }
 }
