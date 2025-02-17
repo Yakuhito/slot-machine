@@ -6,6 +6,7 @@ mod cli;
 mod debug;
 mod drivers;
 mod layers;
+mod name_nft_metadata;
 mod primitives;
 
 pub use cat_nft_metadata::*;
@@ -13,8 +14,8 @@ pub use cli::*;
 pub use debug::*;
 pub use drivers::*;
 pub use layers::*;
+pub use name_nft_metadata::*;
 pub use primitives::*;
-
 pub trait SpendContextExt {
     fn default_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
