@@ -1,18 +1,12 @@
-use chia::{
-    clvm_utils::{ToTreeHash, TreeHash},
-    protocol::Bytes32,
-};
+use chia::{clvm_utils::TreeHash, protocol::Bytes32};
 use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
 use clvmr::NodePtr;
 
-pub trait Action
-where
-    Self: ToTreeHash,
-{
+pub trait Action {
     type Registry;
     type RegistryState;
     type RegistryConstants;
-    type SlotType;
+    type SlotValueType;
     type Solution;
     type SpendParams;
     type SpendReturnParams;
@@ -23,11 +17,11 @@ where
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>;
 
-    fn get_created_slots(
+    fn get_created_slot_values(
         &self,
         state: &Self::RegistryState,
         params: &Self::Solution,
-    ) -> Vec<Self::SlotType>;
+    ) -> Vec<Self::SlotValueType>;
 
     fn spend(
         self,

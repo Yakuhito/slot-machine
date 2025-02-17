@@ -601,14 +601,17 @@ mod tests {
         SpendWithConditions, TESTNET11_CONSTANTS,
     };
     use clvm_traits::clvm_list;
+    use clvmr::Allocator;
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRegistryAction, CatalogSlotValue,
-        DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot, SpendContextExt,
+        Action, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
+        CatalogRefundActionSpendParams, CatalogRegisterAction, CatalogRegisterActionSolution,
+        CatalogRegisterActionSpendParams, CatalogSlotValue, DelegatedStateActionSolution,
+        DelegatedStateCatalogAction, PrecommitCoin, Reserve, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
-        XchandlesRegistryAction, ANY_METADATA_UPDATER_HASH,
+        ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -688,9 +691,9 @@ mod tests {
         price_singleton_puzzle: NodePtr,
         new_state: S,
         receiver_puzzle_hash: Bytes32,
-    ) -> Result<(Coin, Proof, DelegatedStateActionSolution<S>), DriverError>
+    ) -> Result<(Coin, Proof, DelegatedStateActionSolution<NodePtr>), DriverError>
     where
-        S: ToTreeHash,
+        S: ToTreeHash + ToClvm<Allocator>,
     {
         let price_singleton_inner_puzzle = ctx.alloc(&1)?;
         let price_singleton_inner_puzzle_hash = ctx.tree_hash(price_singleton_inner_puzzle);
@@ -732,7 +735,7 @@ mod tests {
             next_price_singleton_coin,
             next_price_singleton_proof,
             DelegatedStateActionSolution {
-                new_state,
+                new_state: new_state.to_clvm(&mut ctx.allocator)?,
                 other_singleton_inner_puzzle_hash: price_singleton_inner_puzzle_hash.into(),
             },
         ))
@@ -816,19 +819,30 @@ mod tests {
             .iter()
             .find(|s| s.info.value.unwrap().asset_id == tail_hash.into());
 
-        let (secure_cond, new_catalog) = catalog.refund(
-            ctx,
-            tail_hash.into(),
-            if let Some(found_slot) = slot {
-                found_slot.info.value.unwrap().neighbors.tree_hash().into()
-            } else {
-                Bytes32::default()
-            },
-            precommit_coin,
-            slot.cloned(),
-        )?;
+        let (Some(secure_cond), action_spend, ()) =
+            catalog.new_action::<CatalogRefundAction>().spend(
+                ctx,
+                &catalog,
+                &CatalogRefundActionSpendParams {
+                    tail_hash: tail_hash.into(),
+                    neighbors_hash: if let Some(found_slot) = slot {
+                        found_slot.info.value.unwrap().neighbors.tree_hash().into()
+                    } else {
+                        Bytes32::default()
+                    },
+                    precommit_coin,
+                    slot: slot.cloned(),
+                },
+            )?
+        else {
+            panic!("Couldn't get refund ann cond")
+        };
 
-        ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
+        let mut catalog = catalog;
+        catalog.insert(action_spend);
+        let new_catalog = catalog.spend(ctx)?;
+
+        ensure_conditions_met(ctx, sim, secure_cond, 0)?;
 
         sim.spend_coins(ctx.take(), sks)?;
 
@@ -1046,41 +1060,43 @@ mod tests {
                 price_singleton_coin = new_price_singleton_coin;
                 price_singleton_proof = new_price_singleton_proof;
 
-                let update_action =
-                    CatalogRegistryAction::UpdatePrice(delegated_state_action_solution);
+                let (_conds, action_spend, ()) = catalog
+                    .new_action::<DelegatedStateCatalogAction>()
+                    .spend(ctx, &catalog, &delegated_state_action_solution)?;
 
-                let catalog_coin = catalog.coin;
-                let catalog_constants = catalog.info.constants;
-                let spend = catalog.spend(ctx, vec![update_action])?;
-                ctx.spend(catalog_coin, spend)?;
-
+                catalog.insert(action_spend);
+                catalog = catalog.spend(ctx)?;
                 sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-
-                let catalog_puzzle = Puzzle::parse(&ctx.allocator, spend.puzzle);
-                if let Some(new_catalog) = CatalogRegistry::from_parent_spend(
-                    &mut ctx.allocator,
-                    catalog_coin,
-                    catalog_puzzle,
-                    spend.solution,
-                    catalog_constants,
-                )? {
-                    catalog = new_catalog;
-                } else {
-                    panic!("Couldn't parse CATalog after price was updated");
-                };
             };
 
-            let (secure_cond, new_catalog, new_slots) = catalog.register_cat(
-                ctx,
-                tail_hash.into(),
-                left_slot,
-                right_slot,
-                precommit_coin,
-                Spend {
-                    puzzle: eve_nft_inner_puzzle,
-                    solution: NodePtr::NIL,
-                },
+            let (secure_cond, action_spend, ()) =
+                catalog.new_action::<CatalogRegisterAction>().spend(
+                    ctx,
+                    &catalog,
+                    &CatalogRegisterActionSpendParams {
+                        tail_hash: tail_hash.into(),
+                        left_slot,
+                        right_slot,
+                        precommit_coin,
+                        eve_nft_inner_spend: Spend {
+                            puzzle: eve_nft_inner_puzzle,
+                            solution: NodePtr::NIL,
+                        },
+                    },
+                )?;
+            let secure_cond = secure_cond.unwrap();
+
+            let my_solution = CatalogRegisterActionSolution::from_clvm(
+                &mut ctx.allocator,
+                action_spend.solution,
             )?;
+            let new_slot_values = catalog
+                .new_action::<CatalogRegisterAction>()
+                .get_created_slot_values(&catalog.info.state, &my_solution);
+            let new_slots = catalog.created_slot_values_to_slots(new_slot_values);
+
+            catalog.insert(action_spend);
+            catalog = catalog.spend(ctx)?;
 
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
@@ -1088,8 +1104,6 @@ mod tests {
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
-
-            catalog = new_catalog;
         }
 
         assert_eq!(
@@ -1464,57 +1478,57 @@ mod tests {
             let (left_slot, right_slot) = (left_slot.unwrap(), right_slot.unwrap());
 
             // update price
-            if i % 2 == 1 {
-                let new_price = test_price_schedule[i / 2];
-                let new_price_puzzle_hash: Bytes32 =
-                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(new_price).into();
-                assert_ne!(
-                    new_price_puzzle_hash,
-                    registry.info.state.pricing_puzzle_hash
-                );
+            // if i % 2 == 1 {
+            //     let new_price = test_price_schedule[i / 2];
+            //     let new_price_puzzle_hash: Bytes32 =
+            //         XchandlesFactorPricingPuzzleArgs::curry_tree_hash(new_price).into();
+            //     assert_ne!(
+            //         new_price_puzzle_hash,
+            //         registry.info.state.pricing_puzzle_hash
+            //     );
 
-                let (
-                    new_price_singleton_coin,
-                    new_price_singleton_proof,
-                    delegated_state_action_solution,
-                ) = spend_price_singleton(
-                    ctx,
-                    price_singleton_coin,
-                    price_singleton_proof,
-                    price_singleton_puzzle,
-                    XchandlesRegistryState::from(
-                        payment_cat.asset_id.tree_hash().into(),
-                        new_price,
-                    ),
-                    registry.coin.puzzle_hash,
-                )?;
+            //     let (
+            //         new_price_singleton_coin,
+            //         new_price_singleton_proof,
+            //         delegated_state_action_solution,
+            //     ) = spend_price_singleton(
+            //         ctx,
+            //         price_singleton_coin,
+            //         price_singleton_proof,
+            //         price_singleton_puzzle,
+            //         XchandlesRegistryState::from(
+            //             payment_cat.asset_id.tree_hash().into(),
+            //             new_price,
+            //         ),
+            //         registry.coin.puzzle_hash,
+            //     )?;
 
-                price_singleton_coin = new_price_singleton_coin;
-                price_singleton_proof = new_price_singleton_proof;
+            //     price_singleton_coin = new_price_singleton_coin;
+            //     price_singleton_proof = new_price_singleton_proof;
 
-                let update_action =
-                    XchandlesRegistryAction::UpdateState(delegated_state_action_solution);
+            //     let update_action =
+            //         XchandlesRegistryAction::UpdateState(delegated_state_action_solution);
 
-                let registry_constants = registry.info.constants;
-                let registry_coin = registry.coin;
-                let spend = registry.spend(ctx, vec![update_action])?;
-                ctx.spend(registry_coin, spend)?;
+            //     let registry_constants = registry.info.constants;
+            //     let registry_coin = registry.coin;
+            //     let spend = registry.spend(ctx, vec![update_action])?;
+            //     ctx.spend(registry_coin, spend)?;
 
-                sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            //     sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
-                let registry_puzzle = Puzzle::parse(&ctx.allocator, spend.puzzle);
-                if let Some(new_registry) = XchandlesRegistry::from_parent_spend(
-                    &mut ctx.allocator,
-                    registry_coin,
-                    registry_puzzle,
-                    spend.solution,
-                    registry_constants,
-                )? {
-                    registry = new_registry;
-                } else {
-                    panic!("Couldn't get registry after price was updated");
-                };
-            };
+            //     let registry_puzzle = Puzzle::parse(&ctx.allocator, spend.puzzle);
+            //     if let Some(new_registry) = XchandlesRegistry::from_parent_spend(
+            //         &mut ctx.allocator,
+            //         registry_coin,
+            //         registry_puzzle,
+            //         spend.solution,
+            //         registry_constants,
+            //     )? {
+            //         registry = new_registry;
+            //     } else {
+            //         panic!("Couldn't get registry after price was updated");
+            //     };
+            // };
 
             let (secure_cond, new_registry, new_slots) =
                 registry.register_handle(ctx, left_slot, right_slot, precommit_coin, base_price)?;

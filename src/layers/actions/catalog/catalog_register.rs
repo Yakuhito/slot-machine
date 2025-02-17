@@ -11,13 +11,14 @@ use chia::{
         },
     },
 };
-use chia_wallet_sdk::{DriverError, Layer};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    CatalogRegistryInfo, CatalogSlotValue, PrecommitLayer, Slot, SpendContextExt,
+    Action, CatalogPrecommitValue, CatalogRegistry, CatalogRegistryConstants, CatalogRegistryState,
+    CatalogSlotValue, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SpendContextExt,
     UniquenessPrelauncher,
 };
 
@@ -30,41 +31,56 @@ pub struct CatalogRegisterAction {
     pub payout_puzzle_hash: Bytes32,
 }
 
-impl CatalogRegisterAction {
-    pub fn new(
-        launcher_id: Bytes32,
-        royalty_puzzle_hash_hash: Bytes32,
-        trade_price_percentage: u16,
-        relative_block_height: u32,
-        payout_puzzle_hash: Bytes32,
-    ) -> Self {
-        Self {
-            launcher_id,
-            royalty_puzzle_hash_hash,
-            trade_price_percentage,
-            relative_block_height,
-            payout_puzzle_hash,
-        }
-    }
+pub struct CatalogRegisterActionSpendParams {
+    pub tail_hash: Bytes32,
+    pub left_slot: Slot<CatalogSlotValue>,
+    pub right_slot: Slot<CatalogSlotValue>,
+    pub precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
+    pub eve_nft_inner_spend: Spend,
+}
 
-    pub fn from_info(info: &CatalogRegistryInfo) -> Self {
-        Self {
-            launcher_id: info.launcher_id,
-            royalty_puzzle_hash_hash: info.constants.royalty_address.tree_hash().into(),
-            trade_price_percentage: info.constants.royalty_ten_thousandths,
-            relative_block_height: info.constants.relative_block_height,
-            payout_puzzle_hash: info.constants.precommit_payout_puzzle_hash,
-        }
+impl ToTreeHash for CatalogRegisterAction {
+    fn tree_hash(&self) -> TreeHash {
+        CatalogRegisterActionArgs::curry_tree_hash(
+            self.launcher_id,
+            self.royalty_puzzle_hash_hash,
+            self.trade_price_percentage,
+            self.relative_block_height,
+            self.payout_puzzle_hash,
+        )
     }
 }
 
-impl Layer for CatalogRegisterAction {
+impl Action for CatalogRegisterAction {
+    type Registry = CatalogRegistry;
+    type RegistryState = CatalogRegistryState;
+    type RegistryConstants = CatalogRegistryConstants;
+    type SlotValueType = CatalogSlotValue;
     type Solution = CatalogRegisterActionSolution<NodePtr, ()>;
+    type SpendParams = CatalogRegisterActionSpendParams;
+    type SpendReturnParams = ();
 
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+    fn from_constants(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> Self {
+        Self {
+            launcher_id,
+            royalty_puzzle_hash_hash: constants.royalty_address.tree_hash().into(),
+            trade_price_percentage: constants.royalty_ten_thousandths,
+            relative_block_height: constants.relative_block_height,
+            payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
+        }
+    }
+
+    fn curry_tree_hash(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> TreeHash {
+        CatalogRegisterActionArgs::curry_tree_hash(
+            launcher_id,
+            constants.royalty_address.tree_hash().into(),
+            constants.royalty_ten_thousandths,
+            constants.relative_block_height,
+            constants.precommit_payout_puzzle_hash,
+        )
+    }
+
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.catalog_register_action_puzzle()?,
             args: CatalogRegisterActionArgs::new(
@@ -78,40 +94,117 @@ impl Layer for CatalogRegisterAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn construct_solution(
+    fn get_created_slot_values(
         &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: CatalogRegisterActionSolution<NodePtr, ()>,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        _state: &Self::RegistryState,
+        params: &Self::Solution,
+    ) -> Vec<Self::SlotValueType> {
+        vec![
+            CatalogSlotValue::new(
+                params.left_tail_hash,
+                params.left_left_tail_hash,
+                params.tail_hash,
+            ),
+            CatalogSlotValue::new(
+                params.tail_hash,
+                params.left_tail_hash,
+                params.right_tail_hash,
+            ),
+            CatalogSlotValue::new(
+                params.right_tail_hash,
+                params.tail_hash,
+                params.right_right_tail_hash,
+            ),
+        ]
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+    fn spend(
+        self,
+        ctx: &mut SpendContext,
+        registry: &Self::Registry,
+        params: &Self::SpendParams,
+    ) -> Result<(Option<Conditions>, Spend, Self::SpendReturnParams), DriverError> {
+        // spend slots
+        let Some(left_slot_value) = params.left_slot.info.value else {
+            return Err(DriverError::Custom("Missing left slot value".to_string()));
+        };
+        let Some(right_slot_value) = params.right_slot.info.value else {
+            return Err(DriverError::Custom("Missing right slot value".to_string()));
+        };
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
+        let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
-impl ToTreeHash for CatalogRegisterAction {
-    fn tree_hash(&self) -> TreeHash {
-        CatalogRegisterActionArgs::curry_tree_hash(
-            self.launcher_id,
-            self.royalty_puzzle_hash_hash,
-            self.trade_price_percentage,
-            self.relative_block_height,
-            self.payout_puzzle_hash,
+        params.left_slot.spend(ctx, spender_inner_puzzle_hash)?;
+        params.right_slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        // calculate announcement
+        let register_announcement: Bytes32 = clvm_tuple!(
+            params.tail_hash,
+            params.precommit_coin.value.initial_inner_puzzle_hash
         )
+        .tree_hash()
+        .into();
+        let mut register_announcement: Vec<u8> = register_announcement.to_vec();
+        register_announcement.insert(0, b'r');
+
+        // spend precommit coin
+        let initial_inner_puzzle_hash = params.precommit_coin.value.initial_inner_puzzle_hash;
+        params.precommit_coin.spend(
+            ctx,
+            1, // mode 1 = register
+            spender_inner_puzzle_hash,
+        )?;
+
+        // spend uniqueness prelauncher
+        let uniqueness_prelauncher = UniquenessPrelauncher::<Bytes32>::new(
+            &mut ctx.allocator,
+            registry.coin.coin_id(),
+            params.tail_hash,
+        )?;
+        let nft_launcher = uniqueness_prelauncher.spend(ctx)?;
+
+        // launch eve nft
+        let (_, nft) = nft_launcher.mint_eve_nft(
+            ctx,
+            initial_inner_puzzle_hash,
+            (),
+            ANY_METADATA_UPDATER_HASH.into(),
+            registry.info.constants.royalty_address,
+            registry.info.constants.royalty_ten_thousandths,
+        )?;
+
+        // spend nft launcher
+        nft.spend(ctx, params.eve_nft_inner_spend)?;
+
+        // finally, spend self
+        let my_solution = CatalogRegisterActionSolution {
+            cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                params.precommit_coin.asset_id.tree_hash().into(),
+            )?,
+            cat_maker_solution: (),
+            tail_hash: params.tail_hash,
+            initial_nft_owner_ph: initial_inner_puzzle_hash,
+            refund_puzzle_hash_hash: params.precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            left_tail_hash: left_slot_value.asset_id,
+            left_left_tail_hash: left_slot_value.neighbors.left_value,
+            right_tail_hash: right_slot_value.asset_id,
+            right_right_tail_hash: right_slot_value.neighbors.right_value,
+            my_id: registry.coin.coin_id(),
+        };
+        let my_solution = my_solution.to_clvm(&mut ctx.allocator)?;
+        let my_puzzle = self.construct_puzzle(ctx)?;
+
+        Ok((
+            Some(
+                Conditions::new().assert_puzzle_announcement(announcement_id(
+                    registry.coin.puzzle_hash,
+                    register_announcement,
+                )),
+            ),
+            Spend::new(my_puzzle, my_solution),
+            (),
+        ))
     }
 }
 

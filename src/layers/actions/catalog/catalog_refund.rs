@@ -21,10 +21,10 @@ pub struct CatalogRefundAction {
 }
 
 pub struct CatalogRefundActionSpendParams {
-    tail_hash: Bytes32,
-    neighbors_hash: Bytes32,
-    precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
-    slot: Option<Slot<CatalogSlotValue>>,
+    pub tail_hash: Bytes32,
+    pub neighbors_hash: Bytes32,
+    pub precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
+    pub slot: Option<Slot<CatalogSlotValue>>,
 }
 
 impl ToTreeHash for CatalogRefundAction {
@@ -41,7 +41,7 @@ impl Action for CatalogRefundAction {
     type Registry = CatalogRegistry;
     type RegistryState = CatalogRegistryState;
     type RegistryConstants = CatalogRegistryConstants;
-    type SlotType = CatalogSlotValue;
+    type SlotValueType = CatalogSlotValue;
     type Solution = CatalogRefundActionSolution<NodePtr, ()>;
     type SpendParams = CatalogRefundActionSpendParams;
     type SpendReturnParams = ();
@@ -74,11 +74,11 @@ impl Action for CatalogRefundAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn get_created_slots(
+    fn get_created_slot_values(
         &self,
         _state: &Self::RegistryState,
         _params: &Self::Solution,
-    ) -> Vec<Self::SlotType> {
+    ) -> Vec<Self::SlotValueType> {
         vec![]
     }
 

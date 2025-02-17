@@ -14,8 +14,7 @@ use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    ActionLayer, ActionLayerSolution, DelegatedStateAction, DelegatedStateActionSolution,
-    XchandlesExpireAction, XchandlesExpireActionSolution,
+    ActionLayer, ActionLayerSolution, XchandlesExpireAction, XchandlesExpireActionSolution,
     XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
     XchandlesExtendAction, XchandlesExtendActionSolution, XchandlesFactorPricingPuzzleArgs,
     XchandlesFactorPricingSolution, XchandlesOracleAction, XchandlesOracleActionSolution,
@@ -98,7 +97,7 @@ pub enum XchandlesRegistryAction {
     Oracle(XchandlesOracleActionSolution),
     Register(XchandlesRegisterActionSolution<NodePtr, XchandlesFactorPricingSolution, NodePtr, ()>),
     Update(XchandlesUpdateActionSolution),
-    UpdateState(DelegatedStateActionSolution<XchandlesRegistryState>),
+    // UpdateState(DelegatedStateActionSolution<XchandlesRegistryState>),
     Refund(XchandlesRefundActionSolution<NodePtr, (), NodePtr, NodePtr>),
 }
 
@@ -166,24 +165,24 @@ impl XchandlesRegistry {
 
                     Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
                 }
-                XchandlesRegistryAction::UpdateState(solution) => {
-                    let layer =
-                        DelegatedStateAction::new(self.info.constants.price_singleton_launcher_id);
+                // XchandlesRegistryAction::UpdateState(solution) => {
+                //     let layer =
+                //         DelegatedStateAction::new(self.info.constants.price_singleton_launcher_id);
 
-                    let puzzle = layer.construct_puzzle(ctx)?;
+                //     let puzzle = layer.construct_puzzle(ctx)?;
 
-                    let new_state_ptr = ctx.alloc(&solution.new_state)?;
-                    let solution = layer.construct_solution(
-                        ctx,
-                        DelegatedStateActionSolution::<NodePtr> {
-                            new_state: new_state_ptr,
-                            other_singleton_inner_puzzle_hash: solution
-                                .other_singleton_inner_puzzle_hash,
-                        },
-                    )?;
+                //     let new_state_ptr = ctx.alloc(&solution.new_state)?;
+                //     let solution = layer.construct_solution(
+                //         ctx,
+                //         DelegatedStateActionSolution::<NodePtr> {
+                //             new_state: new_state_ptr,
+                //             other_singleton_inner_puzzle_hash: solution
+                //                 .other_singleton_inner_puzzle_hash,
+                //         },
+                //     )?;
 
-                    Ok(Spend::new(puzzle, solution))
-                }
+                //     Ok(Spend::new(puzzle, solution))
+                // }
                 XchandlesRegistryAction::Refund(solution) => {
                     let layer = XchandlesRefundAction::new(
                         self.info.launcher_id,
