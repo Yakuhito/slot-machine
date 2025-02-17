@@ -630,6 +630,20 @@ mod tests {
         }
     }
 
+    // ensures conditions are met
+    fn ensure_conditions_met(
+        ctx: &mut SpendContext,
+        sim: &mut Simulator,
+        conditions: Conditions<NodePtr>,
+        amount_to_mint: u64,
+    ) -> Result<(), DriverError> {
+        let checker_puzzle_ptr = clvm_quote!(conditions).to_clvm(&mut ctx.allocator)?;
+        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), amount_to_mint);
+        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+
+        Ok(())
+    }
+
     // Launches a test singleton with an innter puzzle of '1'
     // JUST FOR TESTING PURPOSES PLEASE DO NOT USE THIS THING IN PRODUCTION
     fn launch_test_singleton(
@@ -814,12 +828,7 @@ mod tests {
             slot.cloned(),
         )?;
 
-        let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
-        let sec_coin = sim.new_coin(ctx.tree_hash(sec_puzzle).into(), 0);
-
-        let sec_program = ctx.serialize(&sec_puzzle)?;
-        let solution_program = ctx.serialize(&NodePtr::NIL)?;
-        ctx.insert(CoinSpend::new(sec_coin, sec_program, solution_program));
+        ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
 
         sim.spend_coins(ctx.take(), sks)?;
 
@@ -1073,12 +1082,7 @@ mod tests {
                 },
             )?;
 
-            let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
-            let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
-
-            let funds_program = ctx.serialize(&funds_puzzle)?;
-            let solution_program = ctx.serialize(&NodePtr::NIL)?;
-            ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
+            ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
@@ -1248,12 +1252,7 @@ mod tests {
         let (secure_cond, new_registry) =
             registry.refund(ctx, precommit_coin, pricing_puzzle, pricing_solution, slot)?;
 
-        let sec_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
-        let sec_coin = sim.new_coin(ctx.tree_hash(sec_puzzle).into(), 0);
-
-        let sec_program = ctx.serialize(&sec_puzzle)?;
-        let solution_program = ctx.serialize(&NodePtr::NIL)?;
-        ctx.insert(CoinSpend::new(sec_coin, sec_program, solution_program));
+        ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
 
         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
@@ -1520,12 +1519,7 @@ mod tests {
             let (secure_cond, new_registry, new_slots) =
                 registry.register_handle(ctx, left_slot, right_slot, precommit_coin, base_price)?;
 
-            let funds_puzzle = clvm_quote!(secure_cond.clone()).to_clvm(&mut ctx.allocator)?;
-            let funds_coin = sim.new_coin(ctx.tree_hash(funds_puzzle).into(), 1);
-
-            let funds_program = ctx.serialize(&funds_puzzle)?;
-            let solution_program = ctx.serialize(&NodePtr::NIL)?;
-            ctx.insert(CoinSpend::new(funds_coin, funds_program, solution_program));
+            ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
             sim.pass_time(100); // registration start was at timestamp 100
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
@@ -1721,18 +1715,8 @@ mod tests {
             registry.expire_handle(ctx, *initial_slot, 1, base_price, precommit_coin)?;
 
         // assert expire conds
-        let conds_puzzle = clvm_quote!(expire_conds).to_clvm(&mut ctx.allocator)?;
-        let conds_coin = sim.new_coin(ctx.tree_hash(conds_puzzle).into(), 1);
+        ensure_conditions_met(ctx, &mut sim, expire_conds, 1)?;
 
-        let conds_program = ctx.serialize(&conds_puzzle)?;
-        let conds_solution_program = ctx.serialize(&NodePtr::NIL)?;
-        ctx.insert(CoinSpend::new(
-            conds_coin,
-            conds_program,
-            conds_solution_program,
-        ));
-
-        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
         registry = new_registry;
 
         // Test refunds
@@ -2456,9 +2440,7 @@ mod tests {
             .coin
             .coin_id();
 
-        let checker_puzzle_ptr = clvm_quote!(new_epoch_conditions).to_clvm(&mut ctx.allocator)?;
-        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
-        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+        ensure_conditions_met(ctx, &mut sim, new_epoch_conditions, 0)?;
 
         sim.pass_time(100);
         sim.spend_coins(ctx.take(), &[])?;
@@ -2503,9 +2485,7 @@ mod tests {
         let (sync_conditions, new_registry, new_reserve) =
             registry.sync(ctx, reserve, first_epoch_start + 100)?;
 
-        let checker_puzzle_ptr = clvm_quote!(sync_conditions).to_clvm(&mut ctx.allocator)?;
-        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
-        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+        ensure_conditions_met(ctx, &mut sim, sync_conditions, 0)?;
 
         sim.pass_time(400);
         sim.spend_coins(ctx.take(), &[])?;
@@ -2528,9 +2508,7 @@ mod tests {
         let (sync_conditions, new_registry, new_reserve) =
             registry.sync(ctx, reserve, first_epoch_start + 500)?;
 
-        let checker_puzzle_ptr = clvm_quote!(sync_conditions).to_clvm(&mut ctx.allocator)?;
-        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
-        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+        ensure_conditions_met(ctx, &mut sim, sync_conditions, 0)?;
 
         sim.spend_coins(ctx.take(), &[])?;
         assert!(new_registry.info.state.round_time_info.last_update == first_epoch_start + 500);
@@ -2636,9 +2614,7 @@ mod tests {
         let (sync_conditions, new_registry, new_reserve) =
             registry.sync(ctx, reserve, first_epoch_start + 750)?;
 
-        let checker_puzzle_ptr = clvm_quote!(sync_conditions).to_clvm(&mut ctx.allocator)?;
-        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
-        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+        ensure_conditions_met(ctx, &mut sim, sync_conditions, 0)?;
 
         sim.spend_coins(ctx.take(), &[])?;
         assert!(new_registry.info.state.round_time_info.last_update == first_epoch_start + 750);
@@ -2721,10 +2697,12 @@ mod tests {
             });
             incentive_slots.push(new_reward_slot);
 
-            let checker_puzzle_ptr = clvm_quote!(sync_conditions.extend(new_epoch_conditions))
-                .to_clvm(&mut ctx.allocator)?;
-            let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
-            ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+            ensure_conditions_met(
+                ctx,
+                &mut sim,
+                sync_conditions.extend(new_epoch_conditions),
+                0,
+            )?;
 
             sim.set_next_timestamp(update_time)?;
             sim.spend_coins(ctx.take(), &[])?;
@@ -2831,10 +2809,12 @@ mod tests {
             });
             incentive_slots.push(new_reward_slot);
 
-            let checker_puzzle_ptr = clvm_quote!(sync_conditions.extend(new_epoch_conditions))
-                .to_clvm(&mut ctx.allocator)?;
-            let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
-            ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+            ensure_conditions_met(
+                ctx,
+                &mut sim,
+                sync_conditions.extend(new_epoch_conditions),
+                0,
+            )?;
 
             sim.set_next_timestamp(update_time)?;
             sim.spend_coins(ctx.take(), &[])?;
@@ -2852,10 +2832,7 @@ mod tests {
         let (payout_conditions, _new_registry, _new_reserve, _mirror1_slot, withdrawal_amount) =
             registry.initiate_payout(ctx, reserve, mirror1_slot)?;
 
-        let checker_puzzle_ptr =
-            clvm_quote!(payout_conditions.extend(sync_conditions)).to_clvm(&mut ctx.allocator)?;
-        let checker_coin = sim.new_coin(ctx.tree_hash(checker_puzzle_ptr).into(), 0);
-        ctx.spend(checker_coin, Spend::new(checker_puzzle_ptr, NodePtr::NIL))?;
+        ensure_conditions_met(ctx, &mut sim, payout_conditions.extend(sync_conditions), 0)?;
 
         sim.set_next_timestamp(update_time)?;
         sim.spend_coins(ctx.take(), &[])?;
