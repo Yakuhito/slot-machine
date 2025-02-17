@@ -37,6 +37,28 @@
             )
         )
     )
+
+    (defun spend_precommit_coin_and_announce (cat_maker_puzzle_reveal cat_maker_puzzle_solution total_price slot_inner_ph base_conditions)
+        (c
+            (list
+                SEND_MESSAGE
+                19 ; sender puzzle + receiver puzzle + receiver amount
+                1 ; message = 1 = spend to payout puzzle hash
+                (a
+                    cat_maker_puzzle_reveal
+                    (list
+                        slot_inner_ph ; Inner_Puzzle_Hash
+                        cat_maker_puzzle_solution
+                    )
+                )
+                total_price
+            )
+            (c 
+                (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'x' slot_inner_ph))
+                base_conditions
+            )
+        )
+    )
     
     (defun-inline main (
         handle_hash
@@ -46,70 +68,47 @@
     )
         (c
             Current_State ; new state
-            (list
-                (list ASSERT_SECONDS_ABSOLUTE buy_time)
-
-                ; assert handle actually expired
-                (list ASSERT_SECONDS_ABSOLUTE current_expiration)
-
-                ; announcement
-                (list
-                    CREATE_PUZZLE_ANNOUNCEMENT
-                    (concat 'x'
-                        (sha256 2 
-                            handle_hash
+            (spend_precommit_coin_and_announce
+                cat_maker_puzzle_reveal
+                cat_maker_puzzle_solution
+                total_price
+                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                    refund_puzzle_hash_hash
+                    (sha256 2
+                        (sha256 1 
                             (sha256 2
-                                (sha256 1 (+ registered_time buy_time))
+                                (sha256 2 (f Current_State) (sha256tree cat_maker_puzzle_solution))
+                                (sha256 2 (r (r Current_State)) expired_handle_pricing_puzzle_solution_hash)
+                            ) ; refund_info_hash where REFUND_INFO = (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution))
+                        ) ; hash of refund_info_hash
+                        (sha256 2
+                            (sha256 2 
+                                secret_hash
+                                handle_hash
+                            )
+                            (sha256 2
+                                (sha256 1 buy_time)
                                 new_rest_hash
                             )
-                        ) ; (sha256tree (handle new_expiration new_owner_launcher_id . new_resolved_launcher_id))
-                    ) 
-                )
-
-                ; spend slot
-                (spend_slot SLOT_1ST_CURRY_HASH 
-                    (get_slot_value_hash handle_hash neighbors_hash current_expiration old_rest_hash)
-                )
-                
-                ; create new slot
-                (create_slot SLOT_1ST_CURRY_HASH
-                    (get_slot_value_hash handle_hash neighbors_hash (+ registered_time buy_time) new_rest_hash)
-                )
-
-                ; consume precommit coin
-                (list
-                    SEND_MESSAGE
-                    19 ; sender puzzle + receiver puzzle + receiver amount
-                    1 ; message = 1 = spend to payout puzzle hash
-                    (a
-                        cat_maker_puzzle_reveal
-                        (list
-                            (curry_hashes PRECOMMIT_1ST_CURRY_HASH
-                                refund_puzzle_hash_hash
-                                (sha256 2
-                                    (sha256 1 
-                                        (sha256 2
-                                            (sha256 2 (f Current_State) (sha256tree cat_maker_puzzle_solution))
-                                            (sha256 2 (r (r Current_State)) expired_handle_pricing_puzzle_solution_hash)
-                                        ) ; refund_info_hash where REFUND_INFO = (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution))
-                                    ) ; hash of refund_info_hash
-                                    (sha256 2
-                                        (sha256 2 
-                                            secret_hash
-                                            handle_hash
-                                        )
-                                        (sha256 2
-                                            (sha256 1 buy_time)
-                                            new_rest_hash
-                                        )
-                                    )
-                                ) ; data in precommit coin reveal will be (c refund_info_hash (c (c secret handle) (c start_time (c new_owner_launcher_id new_resolved_launcher_id)))))
-                            ) ; Inner_Puzzle_Hash
-                            cat_maker_puzzle_solution
                         )
-                    )
-                    total_price
+                    ) ; data in precommit coin reveal will be (c refund_info_hash (c (c secret handle) (c start_time (c new_owner_launcher_id new_resolved_launcher_id)))))
                 )
+                (list
+                    (list ASSERT_SECONDS_ABSOLUTE buy_time)
+
+                    ; assert handle actually expired
+                    (list ASSERT_SECONDS_ABSOLUTE current_expiration)
+
+                    ; spend slot
+                    (spend_slot SLOT_1ST_CURRY_HASH 
+                        (get_slot_value_hash handle_hash neighbors_hash current_expiration old_rest_hash)
+                    )
+                    
+                    ; create new slot
+                    (create_slot SLOT_1ST_CURRY_HASH
+                        (get_slot_value_hash handle_hash neighbors_hash (+ registered_time buy_time) new_rest_hash)
+                    )
+                ) ; base conditions
             ) ; conditions
         )
     )

@@ -428,19 +428,8 @@ impl XchandlesRegistry {
             ),
         )];
 
-        // calculate part of announcement now
-        let expire_ann: Bytes32 = clvm_tuple!(
-            precommit_coin.value.secret_and_handle.handle.clone(),
-            clvm_tuple!(
-                new_expiration,
-                clvm_tuple!(
-                    precommit_coin.value.owner_launcher_id,
-                    precommit_coin.value.resolved_launcher_id
-                )
-            )
-        )
-        .tree_hash()
-        .into();
+        // announcement is simply premcommitment coin inner ph
+        let expire_ann: Bytes32 = precommit_coin.inner_puzzle_hash;
 
         // spend precommit coin
         precommit_coin.spend(
