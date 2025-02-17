@@ -10,8 +10,9 @@ use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    ActionLayer, ActionLayerSolution, CatalogPrecommitValue, CatalogRefundActionSolution,
-    CatalogRegisterActionSolution, ANY_METADATA_UPDATER_HASH,
+    ActionLayer, ActionLayerSolution, CatalogPrecommitValue, CatalogRefundAction,
+    CatalogRefundActionSolution, CatalogRegisterAction, CatalogRegisterActionSolution,
+    DelegatedStateAction, DelegatedStateActionSolution, ANY_METADATA_UPDATER_HASH,
 };
 
 use super::{
@@ -25,18 +26,11 @@ pub struct CatalogRegistry {
     pub coin: Coin,
     pub proof: Proof,
     pub info: CatalogRegistryInfo,
-
-    pub pending_actions: Vec<Spend>,
 }
 
 impl CatalogRegistry {
     pub fn new(coin: Coin, proof: Proof, info: CatalogRegistryInfo) -> Self {
-        Self {
-            coin,
-            proof,
-            info,
-            pending_actions: vec![],
-        }
+        Self { coin, proof, info }
     }
 }
 
@@ -77,19 +71,68 @@ impl CatalogRegistry {
             coin: new_coin,
             proof,
             info: new_info,
-            pending_actions: vec![],
         }))
     }
 }
 
+#[allow(clippy::large_enum_variant)]
+pub enum CatalogRegistryAction {
+    Register(CatalogRegisterActionSolution<NodePtr, ()>),
+    Refund(CatalogRefundActionSolution<NodePtr, ()>),
+    UpdatePrice(DelegatedStateActionSolution<CatalogRegistryState>),
+}
+
 impl CatalogRegistry {
-    pub fn spend(self, ctx: &mut SpendContext) -> Result<Self, DriverError> {
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        actions: Vec<CatalogRegistryAction>,
+    ) -> Result<Spend, DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
 
-        let action_puzzle_hashes = self
-            .pending_actions
+        let action_spends: Vec<Spend> = actions
+            .into_iter()
+            .map(|action| match action {
+                CatalogRegistryAction::Register(solution) => {
+                    let layer = CatalogRegisterAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                CatalogRegistryAction::Refund(solution) => {
+                    let layer = CatalogRefundAction::from_info(&self.info);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+                    let solution = layer.construct_solution(ctx, solution)?;
+
+                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
+                }
+                CatalogRegistryAction::UpdatePrice(solution) => {
+                    let layer =
+                        DelegatedStateAction::new(self.info.constants.price_singleton_launcher_id);
+
+                    let puzzle = layer.construct_puzzle(ctx)?;
+
+                    let new_state_ptr = ctx.alloc(&solution.new_state)?;
+                    let solution = layer.construct_solution(
+                        ctx,
+                        DelegatedStateActionSolution::<NodePtr> {
+                            new_state: new_state_ptr,
+                            other_singleton_inner_puzzle_hash: solution
+                                .other_singleton_inner_puzzle_hash,
+                        },
+                    )?;
+
+                    Ok(Spend::new(puzzle, solution))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let action_puzzle_hashes = action_spends
             .iter()
             .map(|a| ctx.tree_hash(a.puzzle).into())
             .collect::<Vec<Bytes32>>();
@@ -112,36 +155,13 @@ impl CatalogRegistry {
                         .ok_or(DriverError::Custom(
                             "Couldn't build proofs for one or more actions".to_string(),
                         ))?,
-                    action_spends: self.pending_actions,
+                    action_spends,
                     finalizer_solution: NodePtr::NIL,
                 },
             },
         )?;
 
-        let my_spend = Spend::new(puzzle, solution);
-        ctx.spend(self.coin, my_spend)?;
-
-        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_self = CatalogRegistry::from_parent_spend(
-            &mut ctx.allocator,
-            self.coin,
-            my_puzzle,
-            my_spend.solution,
-            self.info.constants,
-        )?
-        .ok_or(DriverError::Custom(
-            "Couldn't parse child registry".to_string(),
-        ))?;
-
-        Ok(new_self)
-    }
-
-    pub fn insert(&mut self, action_spend: Spend) {
-        self.pending_actions.push(action_spend);
-    }
-
-    pub fn insert_multiple(&mut self, action_spends: Vec<Spend>) {
-        self.pending_actions.extend(action_spends);
+        Ok(Spend::new(puzzle, solution))
     }
 
     #[allow(clippy::too_many_arguments)]
