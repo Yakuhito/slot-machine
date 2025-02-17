@@ -1,13 +1,16 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
+    protocol::{Bytes32, Coin},
 };
-use chia_wallet_sdk::{DriverError, Layer};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::SpendContextExt;
+use crate::{
+    Action, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorState,
+    SpendContextExt,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigAddIncentivesAction {
@@ -15,13 +18,26 @@ pub struct DigAddIncentivesAction {
     pub validator_fee_bps: u64,
 }
 
-impl Layer for DigAddIncentivesAction {
-    type Solution = DigAddIncentivesActionSolution;
+impl ToTreeHash for DigAddIncentivesAction {
+    fn tree_hash(&self) -> TreeHash {
+        DigAddIncentivesActionArgs::curry_tree_hash(
+            self.validator_payout_puzzle_hash,
+            self.validator_fee_bps,
+        )
+    }
+}
 
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+impl Action<DigRewardDistributor> for DigAddIncentivesAction {
+    fn from_constants(_launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
+        Self {
+            validator_payout_puzzle_hash: constants.validator_payout_puzzle_hash,
+            validator_fee_bps: constants.validator_fee_bps,
+        }
+    }
+}
+
+impl DigAddIncentivesAction {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.dig_add_incentives_action_puzzle()?,
             args: DigAddIncentivesActionArgs {
@@ -33,50 +49,37 @@ impl Layer for DigAddIncentivesAction {
         .map_err(DriverError::ToClvm)
     }
 
-    fn construct_solution(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DigAddIncentivesActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
-    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        my_coin: Coin,
+        my_state: &DigRewardDistributorState,
+        my_constants: &DigRewardDistributorConstants,
+        amount: u64,
+    ) -> Result<(Conditions, Spend), DriverError> {
+        // calculate announcement needed to ensure everything's happening as expected
+        let mut add_incentives_announcement: Vec<u8> =
+            clvm_tuple!(amount, my_state.round_time_info.epoch_end)
+                .tree_hash()
+                .to_vec();
+        add_incentives_announcement.insert(0, b'i');
+        let add_incentives_announcement = Conditions::new().assert_puzzle_announcement(
+            announcement_id(my_coin.puzzle_hash, add_incentives_announcement),
+        );
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
-
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
-
-impl ToTreeHash for DigAddIncentivesAction {
-    fn tree_hash(&self) -> TreeHash {
-        Self::curry_tree_hash(self.validator_payout_puzzle_hash, self.validator_fee_bps)
-    }
-}
-
-impl DigAddIncentivesAction {
-    pub fn curry_tree_hash(
-        validator_payout_puzzle_hash: Bytes32,
-        validator_fee_bps: u64,
-    ) -> TreeHash {
-        CurriedProgram {
-            program: DIG_ADD_INCENTIVES_PUZZLE_HASH,
-            args: DigAddIncentivesActionArgs {
-                validator_payout_puzzle_hash,
-                validator_fee_bps,
-            },
+        // spend self
+        let action_solution = DigAddIncentivesActionSolution {
+            amount,
+            validator_fee: amount * my_constants.validator_fee_bps / 10000,
         }
-        .tree_hash()
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        Ok((
+            add_incentives_announcement,
+            Spend::new(action_puzzle, action_solution),
+        ))
     }
 }
 
@@ -93,6 +96,22 @@ pub const DIG_ADD_INCENTIVES_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
 pub struct DigAddIncentivesActionArgs {
     pub validator_payout_puzzle_hash: Bytes32,
     pub validator_fee_bps: u64,
+}
+
+impl DigAddIncentivesActionArgs {
+    pub fn curry_tree_hash(
+        validator_payout_puzzle_hash: Bytes32,
+        validator_fee_bps: u64,
+    ) -> TreeHash {
+        CurriedProgram {
+            program: DIG_ADD_INCENTIVES_PUZZLE_HASH,
+            args: DigAddIncentivesActionArgs {
+                validator_payout_puzzle_hash,
+                validator_fee_bps,
+            },
+        }
+        .tree_hash()
+    }
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]

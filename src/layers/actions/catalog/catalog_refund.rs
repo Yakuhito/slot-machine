@@ -41,18 +41,6 @@ impl Action<CatalogRegistry> for CatalogRefundAction {
 }
 
 impl CatalogRefundAction {
-    pub fn curry_tree_hash(
-        launcher_id: Bytes32,
-        relative_block_height: u32,
-        payout_puzzle_hash: Bytes32,
-    ) -> TreeHash {
-        CatalogRefundActionArgs::curry_tree_hash(
-            launcher_id,
-            relative_block_height,
-            payout_puzzle_hash,
-        )
-    }
-
     pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.catalog_refund_action_puzzle()?,
@@ -65,6 +53,7 @@ impl CatalogRefundAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,

@@ -1,14 +1,17 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
+    protocol::{Bytes32, Coin},
     puzzles::singleton::{SingletonStruct, SINGLETON_TOP_LAYER_PUZZLE_HASH},
 };
-use chia_wallet_sdk::{DriverError, Layer};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
+use crate::{
+    Action, DigMirrorSlotValue, DigRewardDistributor, DigRewardDistributorConstants,
+    DigRewardDistributorState, DigSlotNonce, Slot, SpendContextExt,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigAddMirrorAction {
@@ -17,23 +20,28 @@ pub struct DigAddMirrorAction {
     pub max_second_offset: u64,
 }
 
-impl DigAddMirrorAction {
-    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+impl ToTreeHash for DigAddMirrorAction {
+    fn tree_hash(&self) -> TreeHash {
+        DigAddMirrorActionArgs::curry_tree_hash(
+            self.launcher_id,
+            self.validator_launcher_id,
+            self.max_second_offset,
+        )
+    }
+}
+
+impl Action<DigRewardDistributor> for DigAddMirrorAction {
+    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id: info.launcher_id,
-            validator_launcher_id: info.constants.validator_launcher_id,
-            max_second_offset: info.constants.max_seconds_offset,
+            launcher_id,
+            validator_launcher_id: constants.validator_launcher_id,
+            max_second_offset: constants.max_seconds_offset,
         }
     }
 }
 
-impl Layer for DigAddMirrorAction {
-    type Solution = DigAddMirrorActionSolution;
-
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+impl DigAddMirrorAction {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.dig_add_mirror_action_puzzle()?,
             args: DigAddMirrorActionArgs::new(
@@ -46,46 +54,54 @@ impl Layer for DigAddMirrorAction {
         .map_err(DriverError::ToClvm)
     }
 
-    fn construct_solution(
+    pub fn get_slot_value_from_solution(
         &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DigAddMirrorActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        ctx: &SpendContext,
+        state: &DigRewardDistributorState,
+        solution: NodePtr,
+    ) -> Result<DigMirrorSlotValue, DriverError> {
+        let solution = DigAddMirrorActionSolution::from_clvm(&ctx.allocator, solution)?;
+
+        Ok(DigMirrorSlotValue {
+            payout_puzzle_hash: solution.mirror_payout_puzzle_hash,
+            initial_cumulative_payout: state.round_reward_info.cumulative_payout,
+            shares: solution.mirror_shares,
+        })
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        my_coin: Coin,
+        payout_puzzle_hash: Bytes32,
+        shares: u64,
+        validator_singleton_inner_puzzle_hash: Bytes32,
+    ) -> Result<(Conditions, Spend), DriverError> {
+        // calculate message that the validator needs to send
+        let add_mirror_message: Bytes32 =
+            clvm_tuple!(payout_puzzle_hash, shares).tree_hash().into();
+        let mut add_mirror_message: Vec<u8> = add_mirror_message.to_vec();
+        add_mirror_message.insert(0, b'a');
+        let add_mirror_message = Conditions::new().send_message(
+            18,
+            add_mirror_message.into(),
+            vec![my_coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+        );
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
-
-impl DigAddMirrorAction {
-    pub fn curry_tree_hash(
-        launcher_id: Bytes32,
-        validator_launcher_id: Bytes32,
-        max_second_offset: u64,
-    ) -> TreeHash {
-        CurriedProgram {
-            program: DIG_ADD_MIRROR_PUZZLE_HASH,
-            args: DigAddMirrorActionArgs::new(
-                launcher_id,
-                validator_launcher_id,
-                max_second_offset,
-            ),
+        // spend self
+        let action_solution = DigAddMirrorActionSolution {
+            validator_singleton_inner_puzzle_hash,
+            mirror_payout_puzzle_hash: payout_puzzle_hash,
+            mirror_shares: shares,
         }
-        .tree_hash()
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        Ok((
+            add_mirror_message,
+            Spend::new(action_puzzle, action_solution),
+        ))
     }
 }
 
@@ -124,6 +140,24 @@ impl DigAddMirrorActionArgs {
             .into(),
             max_second_offset,
         }
+    }
+}
+
+impl DigAddMirrorActionArgs {
+    pub fn curry_tree_hash(
+        launcher_id: Bytes32,
+        validator_launcher_id: Bytes32,
+        max_second_offset: u64,
+    ) -> TreeHash {
+        CurriedProgram {
+            program: DIG_ADD_MIRROR_PUZZLE_HASH,
+            args: DigAddMirrorActionArgs::new(
+                launcher_id,
+                validator_launcher_id,
+                max_second_offset,
+            ),
+        }
+        .tree_hash()
     }
 }
 

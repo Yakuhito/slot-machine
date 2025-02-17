@@ -56,22 +56,6 @@ impl Action<CatalogRegistry> for CatalogRegisterAction {
 }
 
 impl CatalogRegisterAction {
-    pub fn curry_tree_hash(
-        launcher_id: Bytes32,
-        royalty_puzzle_hash_hash: Bytes32,
-        trade_price_percentage: u16,
-        relative_block_height: u32,
-        payout_puzzle_hash: Bytes32,
-    ) -> TreeHash {
-        CatalogRegisterActionArgs::curry_tree_hash(
-            launcher_id,
-            royalty_puzzle_hash_hash,
-            trade_price_percentage,
-            relative_block_height,
-            payout_puzzle_hash,
-        )
-    }
-
     pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.catalog_register_action_puzzle()?,

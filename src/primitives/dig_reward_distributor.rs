@@ -19,7 +19,7 @@ use crate::{
     DigNewEpochAction, DigNewEpochActionSolution, DigRemoveMirrorAction,
     DigRemoveMirrorActionSolution, DigSyncAction, DigSyncActionSolution,
     DigWithdrawIncentivesAction, DigWithdrawIncentivesActionSolution, RawActionLayerSolution,
-    ReserveFinalizerSolution,
+    Registry, ReserveFinalizerSolution,
 };
 
 use super::{
@@ -40,7 +40,14 @@ impl DigRewardDistributor {
     pub fn new(coin: Coin, proof: Proof, info: DigRewardDistributorInfo) -> Self {
         Self { coin, proof, info }
     }
+}
 
+impl Registry for DigRewardDistributor {
+    type State = DigRewardDistributorState;
+    type Constants = DigRewardDistributorConstants;
+}
+
+impl DigRewardDistributor {
     pub fn from_parent_spend(
         allocator: &mut Allocator,
         parent_coin: Coin,
@@ -737,58 +744,6 @@ impl DigRewardDistributor {
             new_epoch_conditions,
             new_dig_reward_distributor,
             new_reserve,
-        ))
-    }
-
-    pub fn add_incentives(
-        self,
-        ctx: &mut SpendContext,
-        reserve: &Reserve,
-        amount: u64,
-    ) -> Result<(Conditions, DigRewardDistributor, Reserve, NodePtr), DriverError> {
-        // calculate announcement needed to ensure everything's happening as expected
-        let mut add_incentives_announcement: Vec<u8> =
-            clvm_tuple!(amount, self.info.state.round_time_info.epoch_end)
-                .tree_hash()
-                .to_vec();
-        add_incentives_announcement.insert(0, b'i');
-        let add_incentives_announcement = Conditions::new().assert_puzzle_announcement(
-            announcement_id(self.coin.puzzle_hash, add_incentives_announcement),
-        );
-
-        // spend self
-        let add_incentives_action =
-            DigRewardDistributorAction::AddIncentives(DigAddIncentivesActionSolution {
-                amount,
-                validator_fee: amount * self.info.constants.validator_fee_bps / 10000,
-            });
-
-        let my_coin = self.coin;
-        let my_constants = self.info.constants;
-        let my_spend = self.spend(
-            ctx,
-            reserve.coin.parent_coin_info,
-            vec![add_incentives_action],
-        )?;
-        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let (new_dig_reward_distributor, new_reserve) = DigRewardDistributor::from_parent_spend(
-            &mut ctx.allocator,
-            my_coin,
-            my_puzzle,
-            my_spend.solution,
-            my_constants,
-        )?
-        .ok_or(DriverError::Custom(
-            "Could not parse child DIG reward distributor".to_string(),
-        ))?;
-
-        ctx.spend(my_coin, my_spend)?;
-
-        Ok((
-            add_incentives_announcement,
-            new_dig_reward_distributor,
-            new_reserve,
-            my_spend.solution,
         ))
     }
 
