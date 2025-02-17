@@ -6,7 +6,7 @@ use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::FromClvm;
 use clvmr::{Allocator, NodePtr};
 
-use crate::{Action, ActionLayer, ActionLayerSolution};
+use crate::{Action, ActionLayer, ActionLayerSolution, Registry};
 
 use super::{
     CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue, Slot,
@@ -76,6 +76,11 @@ impl CatalogRegistry {
     }
 }
 
+impl Registry for CatalogRegistry {
+    type State = CatalogRegistryState;
+    type Constants = CatalogRegistryConstants;
+}
+
 impl CatalogRegistry {
     pub fn spend(self, ctx: &mut SpendContext) -> Result<Self, DriverError> {
         let layers = self.info.into_layers();
@@ -140,7 +145,7 @@ impl CatalogRegistry {
 
     pub fn new_action<A>(&self) -> A
     where
-        A: Action<RegistryConstants = CatalogRegistryConstants>,
+        A: Action<Self>,
     {
         A::from_constants(self.info.launcher_id, &self.info.constants)
     }

@@ -1,49 +1,50 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
+    protocol::{Bytes32, Coin},
     puzzles::singleton::SingletonStruct,
 };
 use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::NodePtr;
+use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
 use crate::{
-    Action, CatalogRegistry, CatalogRegistryConstants, CatalogRegistryState, CatalogSlotValue,
-    SpendContextExt, XchandlesConstants, XchandlesRegistry, XchandlesRegistryState,
-    XchandlesSlotValue,
+    Action, CatalogRegistry, CatalogRegistryConstants, SpendContextExt, XchandlesConstants,
+    XchandlesRegistry,
 };
 
-pub struct DelegatedStateCatalogAction {
+pub struct DelegatedStateAction {
     pub other_launcher_id: Bytes32,
 }
 
-impl ToTreeHash for DelegatedStateCatalogAction {
+impl ToTreeHash for DelegatedStateAction {
     fn tree_hash(&self) -> TreeHash {
         DelegatedStateActionArgs::curry_tree_hash(self.other_launcher_id)
     }
 }
 
-impl Action for DelegatedStateCatalogAction {
-    type Registry = CatalogRegistry;
-    type RegistryState = CatalogRegistryState;
-    type RegistryConstants = CatalogRegistryConstants;
-    type SlotValueType = CatalogSlotValue;
-    type Solution = DelegatedStateActionSolution<NodePtr>;
-    type SpendParams = DelegatedStateActionSolution<NodePtr>;
-    type SpendReturnParams = ();
-
-    fn from_constants(_launcher_id: Bytes32, constants: &Self::RegistryConstants) -> Self {
+impl Action<CatalogRegistry> for DelegatedStateAction {
+    fn from_constants(_launcher_id: Bytes32, constants: &CatalogRegistryConstants) -> Self {
         Self {
             other_launcher_id: constants.price_singleton_launcher_id,
         }
     }
+}
 
-    fn curry_tree_hash(_launcher_id: Bytes32, constants: &Self::RegistryConstants) -> TreeHash {
-        DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id)
+impl Action<XchandlesRegistry> for DelegatedStateAction {
+    fn from_constants(_launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
+        Self {
+            other_launcher_id: constants.price_singleton_launcher_id,
+        }
+    }
+}
+
+impl DelegatedStateAction {
+    pub fn curry_tree_hash(price_singleton_launcher_id: Bytes32) -> TreeHash {
+        DelegatedStateActionArgs::curry_tree_hash(price_singleton_launcher_id)
     }
 
-    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+    pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.delegated_state_action_puzzle()?,
             args: DelegatedStateActionArgs::new(self.other_launcher_id),
@@ -51,94 +52,31 @@ impl Action for DelegatedStateCatalogAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn get_created_slot_values(
-        &self,
-        _state: &Self::RegistryState,
-        _params: &Self::Solution,
-    ) -> Vec<Self::SlotValueType> {
-        vec![]
-    }
-
-    fn spend(
+    pub fn spend<S>(
         self,
         ctx: &mut SpendContext,
-        registry: &Self::Registry,
-        params: &Self::SpendParams,
-    ) -> Result<(Option<Conditions>, Spend, Self::SpendReturnParams), DriverError> {
-        let my_solution = params.to_clvm(&mut ctx.allocator)?;
+        my_coin: Coin,
+        new_state: S,
+        other_singleton_inner_puzzle_hash: Bytes32,
+    ) -> Result<(Conditions, Spend), DriverError>
+    where
+        S: ToClvm<Allocator>,
+    {
+        let state = new_state.to_clvm(&mut ctx.allocator)?;
+        let my_solution = DelegatedStateActionSolution::<NodePtr> {
+            new_state: state,
+            other_singleton_inner_puzzle_hash,
+        }
+        .to_clvm(&mut ctx.allocator)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
-        let message: Bytes32 = ctx.tree_hash(params.new_state).into();
+        let message: Bytes32 = ctx.tree_hash(state).into();
         let conds = Conditions::new().send_message(
             18,
             message.into(),
-            vec![registry.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            vec![my_coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
         );
-        Ok((Some(conds), Spend::new(my_puzzle, my_solution), ()))
-    }
-}
-
-pub struct DelegatedStateXchandlesAction {
-    pub other_launcher_id: Bytes32,
-}
-
-impl ToTreeHash for DelegatedStateXchandlesAction {
-    fn tree_hash(&self) -> TreeHash {
-        DelegatedStateActionArgs::curry_tree_hash(self.other_launcher_id)
-    }
-}
-
-impl Action for DelegatedStateXchandlesAction {
-    type Registry = XchandlesRegistry;
-    type RegistryState = XchandlesRegistryState;
-    type RegistryConstants = XchandlesConstants;
-    type SlotValueType = XchandlesSlotValue;
-    type Solution = DelegatedStateActionSolution<NodePtr>;
-    type SpendParams = DelegatedStateActionSolution<NodePtr>;
-    type SpendReturnParams = ();
-
-    fn from_constants(_launcher_id: Bytes32, constants: &Self::RegistryConstants) -> Self {
-        Self {
-            other_launcher_id: constants.price_singleton_launcher_id,
-        }
-    }
-
-    fn curry_tree_hash(_launcher_id: Bytes32, constants: &Self::RegistryConstants) -> TreeHash {
-        DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id)
-    }
-
-    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        Ok(CurriedProgram {
-            program: ctx.delegated_state_action_puzzle()?,
-            args: DelegatedStateActionArgs::new(self.other_launcher_id),
-        }
-        .to_clvm(&mut ctx.allocator)?)
-    }
-
-    fn get_created_slot_values(
-        &self,
-        _state: &Self::RegistryState,
-        _params: &Self::Solution,
-    ) -> Vec<Self::SlotValueType> {
-        vec![]
-    }
-
-    fn spend(
-        self,
-        ctx: &mut SpendContext,
-        registry: &Self::Registry,
-        params: &Self::SpendParams,
-    ) -> Result<(Option<Conditions>, Spend, Self::SpendReturnParams), DriverError> {
-        let my_solution = params.to_clvm(&mut ctx.allocator)?;
-        let my_puzzle = self.construct_puzzle(ctx)?;
-
-        let message: Bytes32 = ctx.tree_hash(params.new_state).into();
-        let conds = Conditions::new().send_message(
-            18,
-            message.into(),
-            vec![registry.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
-        );
-        Ok((Some(conds), Spend::new(my_puzzle, my_solution), ()))
+        Ok((conds, Spend::new(my_puzzle, my_solution)))
     }
 }
 

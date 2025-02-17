@@ -14,9 +14,10 @@ use clvm_traits::{clvm_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    ActionLayer, ActionLayerSolution, XchandlesExpireAction, XchandlesExpireActionSolution,
-    XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
-    XchandlesExtendAction, XchandlesExtendActionSolution, XchandlesFactorPricingPuzzleArgs,
+    ActionLayer, ActionLayerSolution, Registry, XchandlesExpireAction,
+    XchandlesExpireActionSolution, XchandlesExponentialPremiumRenewPuzzleArgs,
+    XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesExtendAction,
+    XchandlesExtendActionSolution, XchandlesFactorPricingPuzzleArgs,
     XchandlesFactorPricingSolution, XchandlesOracleAction, XchandlesOracleActionSolution,
     XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRefundActionSolution,
     XchandlesRegisterAction, XchandlesRegisterActionSolution, XchandlesUpdateAction,
@@ -41,6 +42,11 @@ impl XchandlesRegistry {
     pub fn new(coin: Coin, proof: Proof, info: XchandlesRegistryInfo) -> Self {
         Self { coin, proof, info }
     }
+}
+
+impl Registry for XchandlesRegistry {
+    type State = XchandlesRegistryState;
+    type Constants = XchandlesConstants;
 }
 
 impl XchandlesRegistry {

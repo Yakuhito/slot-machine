@@ -597,7 +597,7 @@ mod tests {
         },
     };
     use chia_wallet_sdk::{
-        test_secret_keys, Cat, CatSpend, Nft, NftMint, Puzzle, Simulator, SingleCatSpend,
+        test_secret_keys, Cat, CatSpend, Nft, NftMint, Simulator, SingleCatSpend,
         SpendWithConditions, TESTNET11_CONSTANTS,
     };
     use clvm_traits::clvm_list;
@@ -605,10 +605,9 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        Action, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
-        CatalogRefundActionSpendParams, CatalogRegisterAction, CatalogRegisterActionSolution,
-        CatalogRegisterActionSpendParams, CatalogSlotValue, DelegatedStateActionSolution,
-        DelegatedStateCatalogAction, PrecommitCoin, Reserve, Slot, SpendContextExt,
+        CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction,
+        CatalogRegisterActionSolution, CatalogSlotValue, DelegatedStateAction,
+        DelegatedStateActionSolution, PrecommitCoin, Reserve, Slot, SpendContextExt,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
         ANY_METADATA_UPDATER_HASH,
@@ -819,24 +818,19 @@ mod tests {
             .iter()
             .find(|s| s.info.value.unwrap().asset_id == tail_hash.into());
 
-        let (Some(secure_cond), action_spend, ()) =
-            catalog.new_action::<CatalogRefundAction>().spend(
-                ctx,
-                &catalog,
-                &CatalogRefundActionSpendParams {
-                    tail_hash: tail_hash.into(),
-                    neighbors_hash: if let Some(found_slot) = slot {
-                        found_slot.info.value.unwrap().neighbors.tree_hash().into()
-                    } else {
-                        Bytes32::default()
-                    },
-                    precommit_coin,
-                    slot: slot.cloned(),
-                },
-            )?
-        else {
-            panic!("Couldn't get refund ann cond")
-        };
+        let (secure_cond, action_spend) = catalog.new_action::<CatalogRefundAction>().spend(
+            ctx,
+            catalog.coin.puzzle_hash,
+            catalog.info.inner_puzzle_hash().into(),
+            tail_hash.into(),
+            if let Some(found_slot) = slot {
+                found_slot.info.value.unwrap().neighbors.tree_hash().into()
+            } else {
+                Bytes32::default()
+            },
+            precommit_coin,
+            slot.cloned(),
+        )?;
 
         let mut catalog = catalog;
         catalog.insert(action_spend);
@@ -1038,6 +1032,14 @@ mod tests {
                 let new_price = reg_amount;
                 assert_ne!(new_price, catalog.info.state.registration_price);
 
+                let new_state = CatalogRegistryState {
+                    cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
+                        payment_cat.asset_id.tree_hash().into(),
+                    )
+                    .into(),
+                    registration_price: new_price,
+                };
+
                 let (
                     new_price_singleton_coin,
                     new_price_singleton_proof,
@@ -1047,53 +1049,44 @@ mod tests {
                     price_singleton_coin,
                     price_singleton_proof,
                     price_singleton_puzzle,
-                    CatalogRegistryState {
-                        cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
-                            payment_cat.asset_id.tree_hash().into(),
-                        )
-                        .into(),
-                        registration_price: new_price,
-                    },
+                    new_state,
                     catalog.coin.puzzle_hash,
                 )?;
 
                 price_singleton_coin = new_price_singleton_coin;
                 price_singleton_proof = new_price_singleton_proof;
 
-                let (_conds, action_spend, ()) = catalog
-                    .new_action::<DelegatedStateCatalogAction>()
-                    .spend(ctx, &catalog, &delegated_state_action_solution)?;
+                let (_conds, action_spend) = catalog.new_action::<DelegatedStateAction>().spend(
+                    ctx,
+                    catalog.coin,
+                    new_state,
+                    delegated_state_action_solution.other_singleton_inner_puzzle_hash,
+                )?;
 
                 catalog.insert(action_spend);
                 catalog = catalog.spend(ctx)?;
                 sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
             };
 
-            let (secure_cond, action_spend, ()) =
-                catalog.new_action::<CatalogRegisterAction>().spend(
-                    ctx,
-                    &catalog,
-                    &CatalogRegisterActionSpendParams {
-                        tail_hash: tail_hash.into(),
-                        left_slot,
-                        right_slot,
-                        precommit_coin,
-                        eve_nft_inner_spend: Spend {
-                            puzzle: eve_nft_inner_puzzle,
-                            solution: NodePtr::NIL,
-                        },
-                    },
-                )?;
-            let secure_cond = secure_cond.unwrap();
-
-            let my_solution = CatalogRegisterActionSolution::from_clvm(
-                &mut ctx.allocator,
-                action_spend.solution,
+            let (secure_cond, action_spend) = catalog.new_action::<CatalogRegisterAction>().spend(
+                ctx,
+                catalog.coin,
+                catalog.info.inner_puzzle_hash().into(),
+                &catalog.info.constants,
+                tail_hash.into(),
+                left_slot,
+                right_slot,
+                precommit_coin,
+                Spend {
+                    puzzle: eve_nft_inner_puzzle,
+                    solution: NodePtr::NIL,
+                },
             )?;
+
             let new_slot_values = catalog
                 .new_action::<CatalogRegisterAction>()
-                .get_created_slot_values(&catalog.info.state, &my_solution);
-            let new_slots = catalog.created_slot_values_to_slots(new_slot_values);
+                .get_slot_values_from_solution(ctx, action_spend.solution)?;
+            let new_slots = catalog.created_slot_values_to_slots(new_slot_values.to_vec());
 
             catalog.insert(action_spend);
             catalog = catalog.spend(ctx)?;

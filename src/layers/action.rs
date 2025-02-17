@@ -1,32 +1,25 @@
-use chia::{clvm_utils::TreeHash, protocol::Bytes32};
-use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
-use clvmr::NodePtr;
+use chia::protocol::Bytes32;
 
-pub trait Action {
-    type Registry;
-    type RegistryState;
-    type RegistryConstants;
-    type SlotValueType;
-    type Solution;
-    type SpendParams;
-    type SpendReturnParams;
+pub trait Registry {
+    type State;
+    type Constants;
+}
 
-    fn from_constants(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> Self;
+pub trait Action<R: Registry> {
+    fn from_constants(launcher_id: Bytes32, constants: &R::Constants) -> Self;
 
-    fn curry_tree_hash(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> TreeHash;
+    // you may also add:
 
-    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>;
+    // fn curry_tree_hash(launcher_id: Bytes32, constants: &R::Constants) -> TreeHash;
 
-    fn get_created_slot_values(
-        &self,
-        state: &Self::RegistryState,
-        params: &Self::Solution,
-    ) -> Vec<Self::SlotValueType>;
+    // fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>;
 
-    fn spend(
-        self,
-        ctx: &mut SpendContext,
-        registry: &Self::Registry,
-        params: &Self::SpendParams,
-    ) -> Result<(Option<Conditions>, Spend, Self::SpendReturnParams), DriverError>;
+    // fn spend(
+    //     self,
+    //     ctx: &mut SpendContext,
+    //     registry: &Self::Registry,
+    //     params: &Self::SpendParams,
+    // ) -> Result<(Option<Conditions>, Spend, Self::SpendReturnParams), DriverError>;
+
+    // and a function to return the slots this action creates
 }

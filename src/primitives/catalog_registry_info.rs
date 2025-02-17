@@ -9,8 +9,8 @@ use clvmr::Allocator;
 use hex_literal::hex;
 
 use crate::{
-    Action, ActionLayer, ActionLayerArgs, CatalogRefundAction, CatalogRegisterAction,
-    DefaultFinalizer2ndCurryArgs, DelegatedStateCatalogAction, Finalizer,
+    ActionLayer, ActionLayerArgs, CatalogRefundAction, CatalogRegisterAction,
+    DefaultFinalizer2ndCurryArgs, DelegatedStateAction, Finalizer,
 };
 
 pub type CatalogRegistryLayers = SingletonLayer<ActionLayer<CatalogRegistryState>>;
@@ -93,9 +93,21 @@ impl CatalogRegistryInfo {
         constants: &CatalogRegistryConstants,
     ) -> [Bytes32; 3] {
         [
-            CatalogRegisterAction::curry_tree_hash(launcher_id, constants).into(),
-            CatalogRefundAction::curry_tree_hash(launcher_id, constants).into(),
-            DelegatedStateCatalogAction::curry_tree_hash(launcher_id, constants).into(),
+            CatalogRegisterAction::curry_tree_hash(
+                launcher_id,
+                constants.royalty_address.tree_hash().into(),
+                constants.royalty_ten_thousandths,
+                constants.relative_block_height,
+                constants.precommit_payout_puzzle_hash,
+            )
+            .into(),
+            CatalogRefundAction::curry_tree_hash(
+                launcher_id,
+                constants.relative_block_height,
+                constants.precommit_payout_puzzle_hash,
+            )
+            .into(),
+            DelegatedStateAction::curry_tree_hash(constants.price_singleton_launcher_id).into(),
         ]
     }
 

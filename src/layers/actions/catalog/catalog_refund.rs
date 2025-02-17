@@ -9,8 +9,8 @@ use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    Action, CatalogPrecommitValue, CatalogRegistry, CatalogRegistryConstants, CatalogRegistryState,
-    CatalogSlotValue, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SpendContextExt,
+    Action, CatalogPrecommitValue, CatalogRegistry, CatalogRegistryConstants, CatalogSlotValue,
+    DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SpendContextExt,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,13 +18,6 @@ pub struct CatalogRefundAction {
     pub launcher_id: Bytes32,
     pub relative_block_height: u32,
     pub payout_puzzle_hash: Bytes32,
-}
-
-pub struct CatalogRefundActionSpendParams {
-    pub tail_hash: Bytes32,
-    pub neighbors_hash: Bytes32,
-    pub precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
-    pub slot: Option<Slot<CatalogSlotValue>>,
 }
 
 impl ToTreeHash for CatalogRefundAction {
@@ -37,32 +30,30 @@ impl ToTreeHash for CatalogRefundAction {
     }
 }
 
-impl Action for CatalogRefundAction {
-    type Registry = CatalogRegistry;
-    type RegistryState = CatalogRegistryState;
-    type RegistryConstants = CatalogRegistryConstants;
-    type SlotValueType = CatalogSlotValue;
-    type Solution = CatalogRefundActionSolution<NodePtr, ()>;
-    type SpendParams = CatalogRefundActionSpendParams;
-    type SpendReturnParams = ();
-
-    fn from_constants(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> Self {
+impl Action<CatalogRegistry> for CatalogRefundAction {
+    fn from_constants(launcher_id: Bytes32, constants: &CatalogRegistryConstants) -> Self {
         Self {
             launcher_id,
             relative_block_height: constants.relative_block_height,
             payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
         }
     }
+}
 
-    fn curry_tree_hash(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> TreeHash {
+impl CatalogRefundAction {
+    pub fn curry_tree_hash(
+        launcher_id: Bytes32,
+        relative_block_height: u32,
+        payout_puzzle_hash: Bytes32,
+    ) -> TreeHash {
         CatalogRefundActionArgs::curry_tree_hash(
             launcher_id,
-            constants.relative_block_height,
-            constants.precommit_payout_puzzle_hash,
+            relative_block_height,
+            payout_puzzle_hash,
         )
     }
 
-    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+    pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.catalog_refund_action_puzzle()?,
             args: CatalogRefundActionArgs::new(
@@ -74,46 +65,38 @@ impl Action for CatalogRefundAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn get_created_slot_values(
-        &self,
-        _state: &Self::RegistryState,
-        _params: &Self::Solution,
-    ) -> Vec<Self::SlotValueType> {
-        vec![]
-    }
-
-    fn spend(
+    pub fn spend(
         self,
         ctx: &mut SpendContext,
-        registry: &Self::Registry,
-        params: &Self::SpendParams,
-    ) -> Result<(Option<Conditions>, Spend, Self::SpendReturnParams), DriverError> {
+        my_puzzle_hash: Bytes32,
+        my_inner_puzzle_hash: Bytes32,
+        tail_hash: Bytes32,
+        neighbors_hash: Bytes32,
+        precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
+        slot: Option<Slot<CatalogSlotValue>>,
+    ) -> Result<(Conditions, Spend), DriverError> {
         // calculate announcement
-        let refund_announcement: Bytes32 = clvm_tuple!(
-            params.tail_hash,
-            params.precommit_coin.value.initial_inner_puzzle_hash
-        )
-        .tree_hash()
-        .into();
+        let refund_announcement: Bytes32 =
+            clvm_tuple!(tail_hash, precommit_coin.value.initial_inner_puzzle_hash)
+                .tree_hash()
+                .into();
         let mut refund_announcement: Vec<u8> = refund_announcement.to_vec();
         refund_announcement.insert(0, b'$');
 
-        let secure_conditions = Conditions::new().assert_puzzle_announcement(announcement_id(
-            registry.coin.puzzle_hash,
-            refund_announcement,
-        ));
+        let secure_conditions = Conditions::new()
+            .assert_puzzle_announcement(announcement_id(my_puzzle_hash, refund_announcement));
 
         // spend precommit coin
-        let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
-        let initial_inner_puzzle_hash = params.precommit_coin.value.initial_inner_puzzle_hash;
-        params.precommit_coin.spend(
+        let spender_inner_puzzle_hash: Bytes32 = my_inner_puzzle_hash;
+        let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
+        precommit_coin.spend(
             ctx,
             0, // mode 0 = refund
             spender_inner_puzzle_hash,
         )?;
 
         // if there's a slot, spend it
-        if let Some(slot) = params.slot {
+        if let Some(slot) = slot {
             slot.spend(ctx, spender_inner_puzzle_hash)?;
         }
 
@@ -121,26 +104,25 @@ impl Action for CatalogRefundAction {
         let action_solution = CatalogRefundActionSolution {
             precommited_cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
-                params.precommit_coin.asset_id.tree_hash().into(),
+                precommit_coin.asset_id.tree_hash().into(),
             )?,
             precommited_cat_maker_hash: DefaultCatMakerArgs::curry_tree_hash(
-                params.precommit_coin.asset_id.tree_hash().into(),
+                precommit_coin.asset_id.tree_hash().into(),
             )
             .into(),
             precommited_cat_maker_solution: (),
-            tail_hash: params.tail_hash,
+            tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,
-            refund_puzzle_hash_hash: params.precommit_coin.refund_puzzle_hash.tree_hash().into(),
-            precommit_amount: params.precommit_coin.coin.amount,
-            neighbors_hash: params.neighbors_hash,
+            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            precommit_amount: precommit_coin.coin.amount,
+            neighbors_hash,
         };
         let action_solution = action_solution.to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         Ok((
-            Some(secure_conditions),
+            secure_conditions,
             Spend::new(action_puzzle, action_solution),
-            (),
         ))
     }
 }
