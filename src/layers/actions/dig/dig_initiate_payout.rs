@@ -3,12 +3,15 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::{SingletonStruct, SINGLETON_TOP_LAYER_PUZZLE_HASH},
 };
-use chia_wallet_sdk::{DriverError, Layer};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
+use crate::{
+    Action, DigMirrorSlotValue, DigRewardDistributor, DigRewardDistributorConstants,
+    DigRewardDistributorState, DigSlotNonce, Slot, SpendContextExt,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigInitiatePayoutAction {
@@ -17,19 +20,27 @@ pub struct DigInitiatePayoutAction {
     pub payout_threshold: u64,
 }
 
-impl DigInitiatePayoutAction {
-    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+impl ToTreeHash for DigInitiatePayoutAction {
+    fn tree_hash(&self) -> TreeHash {
+        DigInitiatePayoutAction::curry_tree_hash(
+            self.launcher_id,
+            self.validator_launcher_id,
+            self.payout_threshold,
+        )
+    }
+}
+
+impl Action<DigRewardDistributor> for DigInitiatePayoutAction {
+    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id: info.launcher_id,
-            validator_launcher_id: info.constants.validator_launcher_id,
-            payout_threshold: info.constants.payout_threshold,
+            launcher_id,
+            validator_launcher_id: constants.validator_launcher_id,
+            payout_threshold: constants.payout_threshold,
         }
     }
 }
 
-impl Layer for DigInitiatePayoutAction {
-    type Solution = DigInitiatePayoutActionSolution;
-
+impl DigInitiatePayoutAction {
     fn construct_puzzle(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
@@ -46,28 +57,75 @@ impl Layer for DigInitiatePayoutAction {
         .map_err(DriverError::ToClvm)
     }
 
-    fn construct_solution(
+    pub fn get_slot_value_from_solution(
         &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DigInitiatePayoutActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        ctx: &SpendContext,
+        my_state: &DigRewardDistributorState,
+        solution: NodePtr,
+    ) -> Result<DigMirrorSlotValue, DriverError> {
+        let solution = DigInitiatePayoutActionSolution::from_clvm(&ctx.allocator, solution)?;
+
+        Ok(DigMirrorSlotValue {
+            payout_puzzle_hash: solution.mirror_payout_puzzle_hash,
+            initial_cumulative_payout: my_state.round_reward_info.cumulative_payout,
+            shares: solution.mirror_shares,
+        })
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        my_puzzle_hash: Bytes32,
+        my_state: &DigRewardDistributorState,
+        my_inner_puzzle_hash: Bytes32,
+        mirror_slot: Slot<DigMirrorSlotValue>,
+    ) -> Result<(Conditions, Spend, u64), DriverError> {
+        let Some(mirror_slot_value) = mirror_slot.info.value else {
+            return Err(DriverError::Custom("Mirror slot value is None".to_string()));
+        };
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
+        let withdrawal_amount = mirror_slot_value.shares
+            * (my_state.round_reward_info.cumulative_payout
+                - mirror_slot_value.initial_cumulative_payout);
+
+        // this announcement should be asserted to ensure everything goes according to plan
+        let initiate_payout_announcement: Bytes32 = clvm_tuple!(
+            clvm_tuple!(
+                mirror_slot_value.payout_puzzle_hash,
+                mirror_slot_value.shares
+            ),
+            clvm_tuple!(
+                mirror_slot_value.initial_cumulative_payout,
+                my_state.round_reward_info.cumulative_payout
+            ),
+        )
+        .tree_hash()
+        .into();
+        let mut initiate_payout_announcement: Vec<u8> = initiate_payout_announcement.to_vec();
+        initiate_payout_announcement.insert(0, b'p');
+
+        // spend mirror slot
+        mirror_slot.spend(ctx, my_inner_puzzle_hash)?;
+
+        // spend self
+        let action_solution = DigInitiatePayoutActionSolution {
+            mirror_payout_amount: withdrawal_amount,
+            mirror_payout_puzzle_hash: mirror_slot_value.payout_puzzle_hash,
+            mirror_initial_cumulative_payout: mirror_slot_value.initial_cumulative_payout,
+            mirror_shares: mirror_slot_value.shares,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        Ok((
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                my_puzzle_hash,
+                initiate_payout_announcement,
+            )),
+            Spend::new(action_puzzle, action_solution),
+            withdrawal_amount,
+        ))
     }
 }
 
@@ -124,6 +182,24 @@ impl DigInitiatePayoutActionArgs {
             .into(),
             payout_threshold,
         }
+    }
+}
+
+impl DigInitiatePayoutActionArgs {
+    pub fn curry_tree_hash(
+        launcher_id: Bytes32,
+        validator_launcher_id: Bytes32,
+        payout_threshold: u64,
+    ) -> TreeHash {
+        CurriedProgram {
+            program: DIG_INITIATE_PAYOUT_PUZZLE_HASH,
+            args: DigInitiatePayoutActionArgs::new(
+                launcher_id,
+                validator_launcher_id,
+                payout_threshold,
+            ),
+        }
+        .tree_hash()
     }
 }
 
