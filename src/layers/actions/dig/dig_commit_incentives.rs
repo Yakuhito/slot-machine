@@ -2,12 +2,15 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use chia_wallet_sdk::{DriverError, Layer};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
+use crate::{
+    Action, DigCommitmentSlotValue, DigRewardDistributor, DigRewardDistributorConstants,
+    DigRewardSlotValue, DigSlotNonce, Slot, SpendContextExt,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigCommitIncentivesAction {
@@ -15,17 +18,22 @@ pub struct DigCommitIncentivesAction {
     pub epoch_seconds: u64,
 }
 
-impl DigCommitIncentivesAction {
-    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+impl ToTreeHash for DigCommitIncentivesAction {
+    fn tree_hash(&self) -> TreeHash {
+        DigCommitIncentivesActionArgs::curry_tree_hash(self.launcher_id, self.epoch_seconds)
+    }
+}
+
+impl Action<DigRewardDistributor> for DigCommitIncentivesAction {
+    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id: info.launcher_id,
-            epoch_seconds: info.constants.epoch_seconds,
+            launcher_id,
+            epoch_seconds: constants.epoch_seconds,
         }
     }
 }
-impl Layer for DigCommitIncentivesAction {
-    type Solution = DigCommitIncentivesActionSolution;
 
+impl DigCommitIncentivesAction {
     fn construct_puzzle(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
@@ -38,38 +46,104 @@ impl Layer for DigCommitIncentivesAction {
         .map_err(DriverError::ToClvm)
     }
 
-    fn construct_solution(
+    pub fn get_slot_values_from_solution(
         &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DigCommitIncentivesActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
-    }
+        ctx: &SpendContext,
+        epoch_seconds: u64,
+        solution: NodePtr,
+    ) -> Result<(DigCommitmentSlotValue, Vec<DigRewardSlotValue>), DriverError> {
+        let solution = DigCommitIncentivesActionSolution::from_clvm(&ctx.allocator, solution)?;
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+        let commitment_slot_value = DigCommitmentSlotValue {
+            epoch_start: solution.epoch_start,
+            clawback_ph: solution.clawback_ph,
+            rewards: solution.rewards_to_add,
+        };
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
+        let mut reward_slot_values: Vec<DigRewardSlotValue> = vec![];
 
-impl DigCommitIncentivesAction {
-    pub fn curry_tree_hash(launcher_id: Bytes32, epoch_seconds: u64) -> TreeHash {
-        CurriedProgram {
-            program: DIG_COMMIT_INCENTIVES_PUZZLE_HASH,
-            args: DigCommitIncentivesActionArgs::new(launcher_id, epoch_seconds),
+        if solution.slot_epoch_time == solution.epoch_start {
+            reward_slot_values.push(DigRewardSlotValue {
+                epoch_start: solution.epoch_start,
+                next_epoch_initialized: solution.slot_next_epoch_initialized,
+                rewards: solution.slot_total_rewards + solution.rewards_to_add,
+            })
+        } else {
+            reward_slot_values.push(DigRewardSlotValue {
+                epoch_start: solution.slot_epoch_time,
+                next_epoch_initialized: true,
+                rewards: solution.slot_total_rewards,
+            });
+            reward_slot_values.push(DigRewardSlotValue {
+                epoch_start: solution.epoch_start,
+                next_epoch_initialized: false,
+                rewards: solution.rewards_to_add,
+            });
+
+            let mut start_epoch_time = solution.slot_epoch_time + epoch_seconds;
+            let end_epoch_time = solution.epoch_start;
+            while end_epoch_time > start_epoch_time {
+                reward_slot_values.push(DigRewardSlotValue {
+                    epoch_start: start_epoch_time,
+                    next_epoch_initialized: true,
+                    rewards: 0,
+                });
+
+                start_epoch_time += epoch_seconds;
+            }
         }
-        .tree_hash()
+
+        Ok((commitment_slot_value, reward_slot_values))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        my_puzzle_hash: Bytes32,
+        my_inner_puzzle_hash: Bytes32,
+        reward_slot: Slot<DigRewardSlotValue>,
+        epoch_start: u64,
+        clawback_ph: Bytes32,
+        rewards_to_add: u64,
+    ) -> Result<(Conditions, Spend), DriverError> {
+        let Some(reward_slot_value) = reward_slot.info.value else {
+            return Err(DriverError::Custom("Reward slot value is None".to_string()));
+        };
+
+        let new_commitment_slot_value = DigCommitmentSlotValue {
+            epoch_start,
+            clawback_ph,
+            rewards: rewards_to_add,
+        };
+
+        // calculate announcement
+        let mut commit_reward_announcement: Vec<u8> =
+            new_commitment_slot_value.tree_hash().to_vec();
+        commit_reward_announcement.insert(0, b'c');
+
+        // spend reward slot
+        reward_slot.spend(ctx, my_inner_puzzle_hash)?;
+
+        // spend self
+        let action_solution = DigCommitIncentivesActionSolution {
+            slot_epoch_time: reward_slot_value.epoch_start,
+            slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
+            slot_total_rewards: reward_slot_value.rewards,
+            epoch_start,
+            clawback_ph,
+            rewards_to_add,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        Ok((
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                my_puzzle_hash,
+                commit_reward_announcement,
+            )),
+            Spend::new(action_puzzle, action_solution),
+        ))
     }
 }
 
@@ -104,6 +178,16 @@ impl DigCommitIncentivesActionArgs {
             .into(),
             epoch_seconds,
         }
+    }
+}
+
+impl DigCommitIncentivesActionArgs {
+    pub fn curry_tree_hash(launcher_id: Bytes32, epoch_seconds: u64) -> TreeHash {
+        CurriedProgram {
+            program: DIG_COMMIT_INCENTIVES_PUZZLE_HASH,
+            args: DigCommitIncentivesActionArgs::new(launcher_id, epoch_seconds),
+        }
+        .tree_hash()
     }
 }
 
