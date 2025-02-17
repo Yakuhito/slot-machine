@@ -15,10 +15,10 @@ where
     type SlotType;
     type Solution;
     type SpendParams;
+    type SpendReturnParams;
 
     fn from_constants(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> Self;
 
-    fn tree_hash(&self) -> TreeHash;
     fn curry_tree_hash(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> TreeHash;
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>;
@@ -28,11 +28,11 @@ where
         state: &Self::RegistryState,
         params: &Self::Solution,
     ) -> Vec<Self::SlotType>;
-    fn get_secure_conditions(
-        &self,
-        state: &Self::RegistryState,
-        params: &Self::Solution,
-    ) -> Conditions;
 
-    fn spend(self, params: &Self::SpendParams) -> Result<Spend, DriverError>;
+    fn spend(
+        self,
+        ctx: &mut SpendContext,
+        registry: &Self::Registry,
+        params: &Self::SpendParams,
+    ) -> Result<(Option<Conditions>, Spend, Self::SpendReturnParams), DriverError>;
 }

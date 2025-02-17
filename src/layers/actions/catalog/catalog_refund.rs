@@ -3,12 +3,15 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{DriverError, Layer};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{CatalogRegistryInfo, CatalogSlotValue, PrecommitLayer, Slot, SpendContextExt};
+use crate::{
+    Action, CatalogPrecommitValue, CatalogRegistry, CatalogRegistryConstants, CatalogRegistryState,
+    CatalogSlotValue, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SpendContextExt,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogRefundAction {
@@ -17,35 +20,49 @@ pub struct CatalogRefundAction {
     pub payout_puzzle_hash: Bytes32,
 }
 
-impl CatalogRefundAction {
-    pub fn new(
-        launcher_id: Bytes32,
-        relative_block_height: u32,
-        payout_puzzle_hash: Bytes32,
-    ) -> Self {
-        Self {
-            launcher_id,
-            relative_block_height,
-            payout_puzzle_hash,
-        }
-    }
+pub struct CatalogRefundActionSpendParams {
+    tail_hash: Bytes32,
+    neighbors_hash: Bytes32,
+    precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
+    slot: Option<Slot<CatalogSlotValue>>,
+}
 
-    pub fn from_info(info: &CatalogRegistryInfo) -> Self {
-        Self {
-            launcher_id: info.launcher_id,
-            relative_block_height: info.constants.relative_block_height,
-            payout_puzzle_hash: info.constants.precommit_payout_puzzle_hash,
-        }
+impl ToTreeHash for CatalogRefundAction {
+    fn tree_hash(&self) -> TreeHash {
+        CatalogRefundActionArgs::curry_tree_hash(
+            self.launcher_id,
+            self.relative_block_height,
+            self.payout_puzzle_hash,
+        )
     }
 }
 
-impl Layer for CatalogRefundAction {
+impl Action for CatalogRefundAction {
+    type Registry = CatalogRegistry;
+    type RegistryState = CatalogRegistryState;
+    type RegistryConstants = CatalogRegistryConstants;
+    type SlotType = CatalogSlotValue;
     type Solution = CatalogRefundActionSolution<NodePtr, ()>;
+    type SpendParams = CatalogRefundActionSpendParams;
+    type SpendReturnParams = ();
 
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+    fn from_constants(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> Self {
+        Self {
+            launcher_id,
+            relative_block_height: constants.relative_block_height,
+            payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
+        }
+    }
+
+    fn curry_tree_hash(launcher_id: Bytes32, constants: &Self::RegistryConstants) -> TreeHash {
+        CatalogRefundActionArgs::curry_tree_hash(
+            launcher_id,
+            constants.relative_block_height,
+            constants.precommit_payout_puzzle_hash,
+        )
+    }
+
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.catalog_refund_action_puzzle()?,
             args: CatalogRefundActionArgs::new(
@@ -57,38 +74,74 @@ impl Layer for CatalogRefundAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn construct_solution(
+    fn get_created_slots(
         &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: CatalogRefundActionSolution<NodePtr, ()>,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        _state: &Self::RegistryState,
+        _params: &Self::Solution,
+    ) -> Vec<Self::SlotType> {
+        vec![]
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
-
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
-
-impl ToTreeHash for CatalogRefundAction {
-    fn tree_hash(&self) -> TreeHash {
-        CatalogRefundActionArgs::curry_tree_hash(
-            self.launcher_id,
-            self.relative_block_height,
-            self.payout_puzzle_hash,
+    fn spend(
+        self,
+        ctx: &mut SpendContext,
+        registry: &Self::Registry,
+        params: &Self::SpendParams,
+    ) -> Result<(Option<Conditions>, Spend, Self::SpendReturnParams), DriverError> {
+        // calculate announcement
+        let refund_announcement: Bytes32 = clvm_tuple!(
+            params.tail_hash,
+            params.precommit_coin.value.initial_inner_puzzle_hash
         )
+        .tree_hash()
+        .into();
+        let mut refund_announcement: Vec<u8> = refund_announcement.to_vec();
+        refund_announcement.insert(0, b'$');
+
+        let secure_conditions = Conditions::new().assert_puzzle_announcement(announcement_id(
+            registry.coin.puzzle_hash,
+            refund_announcement,
+        ));
+
+        // spend precommit coin
+        let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
+        let initial_inner_puzzle_hash = params.precommit_coin.value.initial_inner_puzzle_hash;
+        params.precommit_coin.spend(
+            ctx,
+            0, // mode 0 = refund
+            spender_inner_puzzle_hash,
+        )?;
+
+        // if there's a slot, spend it
+        if let Some(slot) = params.slot {
+            slot.spend(ctx, spender_inner_puzzle_hash)?;
+        }
+
+        // then, create action spend
+        let action_solution = CatalogRefundActionSolution {
+            precommited_cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                params.precommit_coin.asset_id.tree_hash().into(),
+            )?,
+            precommited_cat_maker_hash: DefaultCatMakerArgs::curry_tree_hash(
+                params.precommit_coin.asset_id.tree_hash().into(),
+            )
+            .into(),
+            precommited_cat_maker_solution: (),
+            tail_hash: params.tail_hash,
+            initial_nft_owner_ph: initial_inner_puzzle_hash,
+            refund_puzzle_hash_hash: params.precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            precommit_amount: params.precommit_coin.coin.amount,
+            neighbors_hash: params.neighbors_hash,
+        };
+        let action_solution = action_solution.to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        Ok((
+            Some(secure_conditions),
+            Spend::new(action_puzzle, action_solution),
+            (),
+        ))
     }
 }
 
