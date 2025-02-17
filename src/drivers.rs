@@ -1193,7 +1193,11 @@ mod tests {
             pricing_solution_hash,
             Bytes32::default(),
             handle_to_refund.clone(),
-            0,
+            if let Some(existing_slot) = slot {
+                existing_slot.info.value.unwrap().expiration + 28 * 24 * 60 * 60 + 1
+            } else {
+                0
+            },
             Bytes32::default(),
             Bytes32::default(),
         );
@@ -1379,6 +1383,7 @@ mod tests {
                 payment_cat.asset_id.tree_hash(),
                 XchandlesFactorPricingPuzzleArgs::curry_tree_hash(base_price),
                 XchandlesFactorPricingSolution {
+                    current_expiration: 0,
                     handle: handle.clone(),
                     num_years: 1,
                 }
@@ -1656,8 +1661,8 @@ mod tests {
             XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(base_price, 1000),
             XchandlesExponentialPremiumRenewPuzzleSolution {
                 buy_time,
-                expiration,
                 pricing_program_solution: XchandlesFactorPricingSolution {
+                    current_expiration: expiration,
                     handle: handle_to_expire.clone(),
                     num_years: 1,
                 },
@@ -1744,6 +1749,7 @@ mod tests {
             };
             let pricing_solution = if use_factor_pricing {
                 XchandlesFactorPricingSolution {
+                    current_expiration: 0,
                     handle: unregistered_handle.clone(),
                     num_years: 1,
                 }
@@ -1751,8 +1757,8 @@ mod tests {
             } else {
                 XchandlesExponentialPremiumRenewPuzzleSolution {
                     buy_time: 28 * 24 * 60 * 60 + 1, // premium should be 0
-                    expiration: 0,
                     pricing_program_solution: XchandlesFactorPricingSolution {
+                        current_expiration: 0,
                         handle: unregistered_handle.clone(),
                         num_years: 1,
                     },
@@ -1790,6 +1796,7 @@ mod tests {
                 .unwrap();
             let existing_handle_pricing_solution = if use_factor_pricing {
                 XchandlesFactorPricingSolution {
+                    current_expiration: existing_slot.info.value.unwrap().expiration,
                     handle: existing_handle.clone(),
                     num_years: 1,
                 }
@@ -1797,8 +1804,8 @@ mod tests {
             } else {
                 XchandlesExponentialPremiumRenewPuzzleSolution {
                     buy_time: existing_slot.info.value.unwrap().expiration + 28 * 24 * 60 * 60 + 1, // premium should be 0
-                    expiration: existing_slot.info.value.unwrap().expiration,
                     pricing_program_solution: XchandlesFactorPricingSolution {
+                        current_expiration: existing_slot.info.value.unwrap().expiration,
                         handle: existing_handle.clone(),
                         num_years: 1,
                     },

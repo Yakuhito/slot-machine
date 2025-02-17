@@ -63,7 +63,7 @@
           ; not (b)
           (any
             (if (= precommited_pricing_puzzle_hash (f (r Current_State)))
-                (= handle_hash (sha256 1 (f precommited_pricing_puzzle_solution))) ()
+                (= handle_hash (sha256 1 (f (r precommited_pricing_puzzle_solution)))) ()
             )
             (if (= precommited_pricing_puzzle_hash (r (r Current_State)))
                 (= handle_hash (sha256 1 (f (r (r precommited_pricing_puzzle_solution))))) ()

@@ -14,6 +14,7 @@
 
 (mod (
     BASE_PRICE ; base price = price per month of a 6+ character handle with at least one number
+    Current_Expiration ; 0 if the handle is being registered, != 0 if extension
     Handle .
     num_years ; number of years to register the handle for
 )

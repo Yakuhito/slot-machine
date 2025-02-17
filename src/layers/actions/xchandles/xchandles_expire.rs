@@ -89,11 +89,11 @@ impl ToTreeHash for XchandlesExpireAction {
 }
 
 pub const XCHANDLES_EXPIRE_PUZZLE: [u8; 1184] =
-    hex!("ff02ffff01ff02ffff03ffff22ffff09ffff02ff36ffff04ff02ffff04ff4fff80808080ff2780ffff09ffff02ff36ffff04ff02ffff04ff82016fff80808080ff778080ffff01ff04ff17ffff02ff2effff04ff02ffff04ff4fffff04ff81afffff04ffff05ffff02ff82016fff8202ef8080ffff04ffff02ff2affff04ff02ffff04ff05ffff04ff8205efffff04ffff0bffff0102ffff0bffff0101ffff0bffff0102ffff0bffff0102ff27ffff02ff36ffff04ff02ffff04ff81afff8080808080ffff0bffff0102ff77ffff02ff36ffff04ff02ffff04ff8202efff80808080808080ffff0bffff0102ffff0bffff0102ff820befffff0bffff0101ff8216ef8080ffff0bffff0102ffff0bffff0101ff820aef80ff823fef808080ff808080808080ffff04ffff04ffff04ff10ffff04ff820aefff808080ffff04ffff04ff10ffff04ff8204efff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ffff0bffff0101ff8216ef80ffff04ff8217efffff04ff8204efffff04ff822fefff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ffff0bffff0101ff8216ef80ffff04ff8217efffff04ffff10ffff06ffff02ff82016fff8202ef8080ff820aef80ffff04ff823fefff80808080808080ff8080808080ff8080808080ff808080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333effff4202ffff02ffff03ff05ffff01ff0bff81fcffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff2cffff04ff02ffff04ff0dff80808080ff808080808080ffff0181dc80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff04ff28ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff0bff81bcffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff2cffff04ff02ffff04ff07ff80808080ff808080808080ff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ff0bffff0bffff0102ffff0bffff0101ff1780ff2f808080ffffff0bff34ffff0bff34ff81dcff0580ffff0bff34ff0bff819c8080ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff36ffff04ff02ffff04ff09ff80808080ffff02ff36ffff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ffff04ffff04ff24ffff04ffff0113ffff04ffff0101ffff04ffff02ff05ffff04ff2fffff04ff0bff80808080ffff04ff17ff808080808080ffff04ffff04ff38ffff04ffff0effff0178ff2f80ff808080ff5f8080ff04ff24ffff04ffff0112ffff04ff80ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
+    hex!("ff02ffff01ff02ffff03ffff22ffff09ffff02ff36ffff04ff02ffff04ff4fff80808080ff2780ffff09ffff02ff36ffff04ff02ffff04ff82016fff80808080ff778080ffff01ff04ff17ffff02ff2effff04ff02ffff04ff4fffff04ff81afffff04ffff05ffff02ff82016fff8202ef8080ffff04ffff02ff2affff04ff02ffff04ff05ffff04ff8205efffff04ffff0bffff0102ffff0bffff0101ffff0bffff0102ffff0bffff0102ff27ffff02ff36ffff04ff02ffff04ff81afff8080808080ffff0bffff0102ff77ffff02ff36ffff04ff02ffff04ff8202efff80808080808080ffff0bffff0102ffff0bffff0102ff820befffff0bffff0101ff8216ef8080ffff0bffff0102ffff0bffff0101ff8204ef80ff823fef808080ff808080808080ffff04ffff04ffff04ff10ffff04ff8204efff808080ffff04ffff04ff10ffff04ff820aefff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ffff0bffff0101ff8216ef80ffff04ff8217efffff04ff820aefffff04ff822fefff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ffff0bffff0101ff8216ef80ffff04ff8217efffff04ffff10ffff06ffff02ff82016fff8202ef8080ff8204ef80ffff04ff823fefff80808080808080ff8080808080ff8080808080ff808080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333effff4202ffff02ffff03ff05ffff01ff0bff81fcffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff2cffff04ff02ffff04ff0dff80808080ff808080808080ffff0181dc80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff04ff28ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff0bff81bcffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff2cffff04ff02ffff04ff07ff80808080ff808080808080ff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ff0bffff0bffff0102ffff0bffff0101ff1780ff2f808080ffffff0bff34ffff0bff34ff81dcff0580ffff0bff34ff0bff819c8080ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff36ffff04ff02ffff04ff09ff80808080ffff02ff36ffff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ffff04ffff04ff24ffff04ffff0113ffff04ffff0101ffff04ffff02ff05ffff04ff2fffff04ff0bff80808080ffff04ff17ff808080808080ffff04ffff04ff38ffff04ffff0effff0178ff2f80ff808080ff5f8080ff04ff24ffff04ffff0112ffff04ff80ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
 
 pub const XCHANDLES_EXPIRE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    d75d6c335d36c982cd99ae6a92f48c6618c993cae636fb19a80a2e6e36a5f3aa
+    848620a1cb62b50b3640fb8c197c0b63203cea9803819dcdc1d314ff87a7ed05
     "
 ));
 
@@ -155,12 +155,12 @@ pub struct XchandlesExpireActionSolution<CMP, CMS, P, S> {
     pub new_rest_hash: Bytes32,
 }
 
-pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 337] =
-    hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ff8201ff8080ffff02ff0effff04ff02ffff04ffff02ff0affff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff05ffff14ffff12ffff0183010000ffff3dffff11ff82017fff81bf80ff048080ff048080ffff04ffff05ffff14ff0bffff17ffff0101ffff05ffff14ffff11ff82017fff81bf80ff048080808080ff8080808080808080ffff04ff17ff808080808080ffff06ffff02ff05ff8201ff808080ffff04ffff01ff83015180ffff02ffff03ff0bffff01ff02ff0affff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ffff015f80ff0180ff8080808080808080ffff015f80ff0180ff02ffff03ffff15ff05ff0b80ffff01ff11ff05ff0b80ff8080ff0180ff018080");
+pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 353] =
+    hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff82017fff8201ff808080ffff02ff0effff04ff02ffff04ffff02ff0affff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff05ffff14ffff12ffff0183010000ffff3dffff11ff81bfff82017f80ff048080ff048080ffff04ffff05ffff14ff0bffff17ffff0101ffff05ffff14ffff11ff81bfff82017f80ff048080808080ff8080808080808080ffff04ff17ff808080808080ffff06ffff02ff05ffff04ff82017fff8201ff80808080ffff04ffff01ff83015180ffff02ffff03ff0bffff01ff02ff0affff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ffff015f80ff0180ff8080808080808080ffff015f80ff0180ff02ffff03ffff15ff05ff0b80ffff01ff11ff05ff0b80ff8080ff0180ff018080");
 
 pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    928128721cb2670216e4a4da916fca1d378ef9f1b04601dfb1217f7df6dd5817
+    946e180f6006f656200ee6241d03de5bc5c3c6f7606a2159df598ccfd47d740a
     "
 ));
 
@@ -256,9 +256,12 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         let puzzle = self.get_puzzle(ctx)?;
         let solution =
             XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
-                expiration,
                 buy_time,
-                pricing_program_solution: XchandlesFactorPricingSolution { handle, num_years },
+                pricing_program_solution: XchandlesFactorPricingSolution {
+                    current_expiration: expiration,
+                    handle,
+                    num_years,
+                },
             }
             .to_clvm(&mut ctx.allocator)?;
         let output = ctx.run(puzzle, solution)?;
@@ -270,7 +273,6 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct XchandlesExponentialPremiumRenewPuzzleSolution<S> {
-    pub expiration: u64,
     pub buy_time: u64,
     #[clvm(rest)]
     pub pricing_program_solution: S,
@@ -303,9 +305,9 @@ mod tests {
                 let solution = XchandlesExponentialPremiumRenewPuzzleSolution::<
                     XchandlesFactorPricingSolution,
                 > {
-                    expiration: 0,
                     buy_time,
                     pricing_program_solution: XchandlesFactorPricingSolution {
+                        current_expiration: 0,
                         handle: "yakuhito".to_string(),
                         num_years: 1,
                     },
@@ -348,9 +350,9 @@ mod tests {
         // check premium after auction is 0
         let solution =
             XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
-                expiration: 0,
                 buy_time: 28 * 24 * 60 * 60,
                 pricing_program_solution: XchandlesFactorPricingSolution {
+                    current_expiration: 0,
                     handle: "yakuhito".to_string(),
                     num_years: 1,
                 },

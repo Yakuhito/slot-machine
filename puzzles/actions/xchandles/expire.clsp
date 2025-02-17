@@ -1,5 +1,6 @@
 ; expire.clsp by yakuhito
-;; Used to expire (i.e., remove) a handle from the registry
+;; When a handle expires, it goes into an 'auction' where the price is controlled by a puzzle
+;;   in the registry's state.
 
 ;; Remember that the slot format is (value (left_value right_value) expiration owner_launcher_id . resolved_launcher_id)
 
@@ -63,7 +64,7 @@
     (defun-inline main (
         handle_hash
         (total_price . registered_time)
-        (current_expiration buy_time . rest)
+        (buy_time current_expiration . rest)
         expired_handle_pricing_puzzle_solution_hash
     )
         (c

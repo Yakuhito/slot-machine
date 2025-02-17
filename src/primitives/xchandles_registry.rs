@@ -337,6 +337,7 @@ impl XchandlesRegistry {
                 base_handle_price,
             )?,
             pricing_puzzle_solution: XchandlesFactorPricingSolution {
+                current_expiration: 0,
                 handle: handle.clone(),
                 num_years,
             },
@@ -454,9 +455,9 @@ impl XchandlesRegistry {
                 .get_puzzle(ctx)?,
             expired_handle_pricing_puzzle_solution:
                 XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
-                    expiration: slot_value.expiration,
                     buy_time: precommit_coin.value.start_time,
                     pricing_program_solution: XchandlesFactorPricingSolution {
+                        current_expiration: slot_value.expiration,
                         handle: precommit_coin.value.secret_and_handle.handle,
                         num_years,
                     },
@@ -556,6 +557,7 @@ impl XchandlesRegistry {
                 base_handle_price,
             )?,
             pricing_solution: XchandlesFactorPricingSolution {
+                current_expiration: slot_value.expiration,
                 handle: handle.clone(),
                 num_years,
             },
