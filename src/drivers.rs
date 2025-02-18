@@ -759,9 +759,11 @@ mod tests {
 
     use crate::{
         CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction,
-        CatalogSlotValue, DelegatedStateAction, DelegatedStateActionSolution, DigAddMirrorAction,
-        DigRewardDistributorConstants, PrecommitCoin, Slot, SpendContextExt,
-        XchandlesPrecommitValue, ANY_METADATA_UPDATER_HASH,
+        CatalogSlotValue, DelegatedStateAction, DelegatedStateActionSolution,
+        DigAddIncentivesAction, DigAddMirrorAction, DigCommitIncentivesAction,
+        DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction,
+        DigRewardDistributorConstants, DigSyncAction, DigWithdrawIncentivesAction, PrecommitCoin,
+        Slot, SpendContextExt, XchandlesPrecommitValue, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -1217,7 +1219,7 @@ mod tests {
                 sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
             };
 
-            let secure_cond = catalog.new_action::<CatalogRegisterAction>().spend(
+            let (secure_cond, new_slots) = catalog.new_action::<CatalogRegisterAction>().spend(
                 ctx,
                 &mut catalog,
                 tail_hash.into(),
@@ -1229,14 +1231,6 @@ mod tests {
                     solution: NodePtr::NIL,
                 },
             )?;
-
-            let new_slot_values = catalog
-                .new_action::<CatalogRegisterAction>()
-                .get_slot_values_from_solution(
-                    ctx,
-                    catalog.pending_actions.last().unwrap().solution,
-                )?;
-            let new_slots = catalog.created_slot_values_to_slots(new_slot_values.to_vec());
 
             catalog = catalog.spend(ctx)?;
 
@@ -2275,7 +2269,7 @@ mod tests {
         let first_epoch_start = 1234;
 
         // launch reserve
-        let (_, security_sk, registry, first_epoch_slot) = launch_dig_reward_distributor(
+        let (_, security_sk, mut registry, first_epoch_slot) = launch_dig_reward_distributor(
             ctx,
             offer,
             first_epoch_start,
@@ -2323,39 +2317,17 @@ mod tests {
         // commit incentives for first epoch
         let rewards_to_add = constants.epoch_seconds;
         let registry_info = registry.info;
-        let (
-            secure_conditions,
-            new_registry,
-            new_reserve,
-            registry_solution,
-            first_epoch_commitment_slot,
-            mut incentive_slots,
-        ) = registry.commit_incentives(
-            ctx,
-            reserve.coin.parent_coin_info,
-            first_epoch_slot,
-            first_epoch_start,
-            cat_minter_puzzle_hash,
-            rewards_to_add,
-        )?;
+        let (secure_conditions, first_epoch_commitment_slot, mut incentive_slots) =
+            registry.new_action::<DigCommitIncentivesAction>().spend(
+                ctx,
+                &mut registry,
+                first_epoch_slot,
+                first_epoch_start,
+                cat_minter_puzzle_hash,
+                rewards_to_add,
+            )?;
 
         // spend reserve and source cat together so deltas add up
-        let reserve_delegated_puzzle = reserve.delegated_puzzle_for_finalizer_controller(
-            ctx,
-            registry_info.state,
-            reserve.coin.amount + rewards_to_add,
-            registry_solution,
-        )?;
-
-        let reserve_cat_spend = CatSpend::new(
-            reserve.to_cat(),
-            reserve.inner_spend(
-                ctx,
-                registry_info.inner_puzzle_hash().into(),
-                reserve_delegated_puzzle,
-                NodePtr::NIL,
-            )?,
-        );
         let source_cat_spend = CatSpend::new(
             source_cat,
             cat_minter_p2.spend_with_conditions(
@@ -2368,12 +2340,8 @@ mod tests {
             )?,
         );
 
-        let cat_spends = [reserve_cat_spend, source_cat_spend];
-        Cat::spend_all(ctx, &cat_spends)?;
-
+        registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
-        reserve = new_reserve;
-        registry = new_registry;
         source_cat = source_cat.wrapped_child(
             cat_minter_puzzle_hash,
             source_cat.coin.amount - rewards_to_add,
@@ -2389,21 +2357,15 @@ mod tests {
         let fifth_epoch_start = first_epoch_start + constants.epoch_seconds * 4;
         let rewards_to_add = constants.epoch_seconds * 10;
         let registry_info = registry.info;
-        let (
-            secure_conditions,
-            new_registry,
-            new_reserve,
-            registry_solution,
-            fifth_epoch_commitment_slot,
-            new_incentive_slots,
-        ) = registry.commit_incentives(
-            ctx,
-            reserve.coin.parent_coin_info,
-            *incentive_slots.last().unwrap(),
-            fifth_epoch_start,
-            cat_minter_puzzle_hash,
-            rewards_to_add,
-        )?;
+        let (secure_conditions, fifth_epoch_commitment_slot, new_incentive_slots) =
+            registry.new_action::<DigCommitIncentivesAction>().spend(
+                ctx,
+                &mut registry,
+                *incentive_slots.last().unwrap(),
+                fifth_epoch_start,
+                cat_minter_puzzle_hash,
+                rewards_to_add,
+            )?;
 
         let new_value_keys = new_incentive_slots
             .iter()
@@ -2413,22 +2375,6 @@ mod tests {
         incentive_slots.extend(new_incentive_slots);
 
         // spend reserve and source cat together so deltas add up
-        let reserve_delegated_puzzle = reserve.delegated_puzzle_for_finalizer_controller(
-            ctx,
-            registry_info.state,
-            reserve.coin.amount + rewards_to_add,
-            registry_solution,
-        )?;
-
-        let reserve_cat_spend = CatSpend::new(
-            reserve.to_cat(),
-            reserve.inner_spend(
-                ctx,
-                registry_info.inner_puzzle_hash().into(),
-                reserve_delegated_puzzle,
-                NodePtr::NIL,
-            )?,
-        );
         let source_cat_spend = CatSpend::new(
             source_cat,
             cat_minter_p2.spend_with_conditions(
@@ -2441,12 +2387,8 @@ mod tests {
             )?,
         );
 
-        let cat_spends = [reserve_cat_spend, source_cat_spend];
-        Cat::spend_all(ctx, &cat_spends)?;
-
+        registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
-        reserve = new_reserve;
-        registry = new_registry;
         source_cat = source_cat.wrapped_child(
             cat_minter_puzzle_hash,
             source_cat.coin.amount - rewards_to_add,
@@ -2461,24 +2403,18 @@ mod tests {
         // 2nd commit incentives for fifth epoch
         let rewards_to_add = constants.epoch_seconds * 2;
         let registry_info = registry.info;
-        let (
-            secure_conditions,
-            new_registry,
-            new_reserve,
-            registry_solution,
-            fifth_epoch_commitment_slot2,
-            new_incentive_slots,
-        ) = registry.commit_incentives(
-            ctx,
-            reserve.coin.parent_coin_info,
-            *incentive_slots
-                .iter()
-                .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
-                .unwrap(),
-            fifth_epoch_start,
-            cat_minter_puzzle_hash,
-            rewards_to_add,
-        )?;
+        let (secure_conditions, fifth_epoch_commitment_slot2, new_incentive_slots) =
+            registry.new_action::<DigCommitIncentivesAction>().spend(
+                ctx,
+                &mut registry,
+                *incentive_slots
+                    .iter()
+                    .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
+                    .unwrap(),
+                fifth_epoch_start,
+                cat_minter_puzzle_hash,
+                rewards_to_add,
+            )?;
 
         let new_value_keys = new_incentive_slots
             .iter()
@@ -2488,22 +2424,6 @@ mod tests {
         incentive_slots.extend(new_incentive_slots);
 
         // spend reserve and source cat together so deltas add up
-        let reserve_delegated_puzzle = reserve.delegated_puzzle_for_finalizer_controller(
-            ctx,
-            registry_info.state,
-            reserve.coin.amount + rewards_to_add,
-            registry_solution,
-        )?;
-
-        let reserve_cat_spend = CatSpend::new(
-            reserve.to_cat(),
-            reserve.inner_spend(
-                ctx,
-                registry_info.inner_puzzle_hash().into(),
-                reserve_delegated_puzzle,
-                NodePtr::NIL,
-            )?,
-        );
         let source_cat_spend = CatSpend::new(
             source_cat,
             cat_minter_p2.spend_with_conditions(
@@ -2516,12 +2436,9 @@ mod tests {
             )?,
         );
 
-        let cat_spends = [reserve_cat_spend, source_cat_spend];
-        Cat::spend_all(ctx, &cat_spends)?;
-
+        registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
-        reserve = new_reserve;
-        registry = new_registry;
+
         source_cat = source_cat.wrapped_child(
             cat_minter_puzzle_hash,
             source_cat.coin.amount - rewards_to_add,
@@ -2533,30 +2450,26 @@ mod tests {
             assert!(sim.coin_state(incentive_slot.coin.coin_id()).is_some());
         }
         assert!(sim
-            .coin_state(reserve.coin.coin_id())
+            .coin_state(registry.reserve.coin.coin_id())
             .unwrap()
             .spent_height
             .is_none());
 
         // withdraw the 1st incentives for epoch 5
-        let reserve_cat = reserve.to_cat();
-        let (
-            withdraw_incentives_conditions,
-            new_registry,
-            new_reserve,
-            withdrawn_amount,
-            new_reward_slot,
-        ) = registry.withdraw_incentives(
-            ctx,
-            reserve,
-            fifth_epoch_commitment_slot,
-            *incentive_slots
-                .iter()
-                .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
-                .unwrap(),
-        )?;
+        let (withdraw_incentives_conditions, new_reward_slot, withdrawn_amount) =
+            registry.new_action::<DigWithdrawIncentivesAction>().spend(
+                ctx,
+                &mut registry,
+                fifth_epoch_commitment_slot,
+                *incentive_slots
+                    .iter()
+                    .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
+                    .unwrap(),
+            )?;
 
-        let payout_coin_id = reserve_cat
+        let payout_coin_id = registry
+            .reserve
+            .to_cat()
             .wrapped_child(
                 cat_minter_puzzle_hash, // fifth_epoch_commitment_slot.info.value.unwrap().clawback_ph,
                 withdrawn_amount,
@@ -2567,11 +2480,10 @@ mod tests {
         let claimer_coin = sim.new_coin(cat_minter_puzzle_hash, 0);
         cat_minter_p2.spend(ctx, claimer_coin, withdraw_incentives_conditions)?;
 
+        registry = registry.finish_spend(ctx, vec![])?;
         sim.set_next_timestamp(first_epoch_start)?;
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
         assert!(sim.coin_state(payout_coin_id).is_some());
-        reserve = new_reserve;
-        registry = new_registry;
         assert!(sim
             .coin_state(fifth_epoch_commitment_slot.coin.coin_id())
             .unwrap()
@@ -2588,15 +2500,15 @@ mod tests {
         incentive_slots.push(new_reward_slot);
 
         // start first epoch
-        let reserve_cat = reserve.to_cat();
+        let reserve_cat = registry.reserve.to_cat();
         let first_epoch_incentives_slot = *incentive_slots
             .iter()
             .find(|s| s.info.value.unwrap().epoch_start == first_epoch_start)
             .unwrap();
-        let (new_epoch_conditions, new_registry, new_reserve, validator_fee, new_reward_slot) =
-            registry.new_epoch(
+        let (new_epoch_conditions, new_reward_slot, validator_fee) =
+            registry.new_action::<DigNewEpochAction>().spend(
                 ctx,
-                reserve,
+                &mut registry,
                 first_epoch_incentives_slot,
                 first_epoch_incentives_slot.info.value.unwrap().rewards,
             )?;
@@ -2607,29 +2519,25 @@ mod tests {
 
         ensure_conditions_met(ctx, &mut sim, new_epoch_conditions, 0)?;
 
+        registry = registry.finish_spend(ctx, vec![])?;
         sim.pass_time(100);
         sim.spend_coins(ctx.take(), &[])?;
         assert!(sim.coin_state(payout_coin_id).is_some());
-        assert_eq!(new_registry.info.state.active_shares, 1);
-        assert_eq!(new_registry.info.state.total_reserves, 4000 - validator_fee);
+        assert_eq!(registry.info.state.active_shares, 1);
+        assert_eq!(registry.info.state.total_reserves, 4000 - validator_fee);
+        assert_eq!(registry.info.state.round_reward_info.cumulative_payout, 0);
         assert_eq!(
-            new_registry.info.state.round_reward_info.cumulative_payout,
-            0
-        );
-        assert_eq!(
-            new_registry.info.state.round_reward_info.remaining_rewards,
+            registry.info.state.round_reward_info.remaining_rewards,
             first_epoch_incentives_slot.info.value.unwrap().rewards - validator_fee
         );
         assert_eq!(
-            new_registry.info.state.round_time_info.last_update,
+            registry.info.state.round_time_info.last_update,
             first_epoch_start
         );
         assert_eq!(
-            new_registry.info.state.round_time_info.epoch_end,
+            registry.info.state.round_time_info.epoch_end,
             first_epoch_start + constants.epoch_seconds
         );
-        reserve = new_reserve;
-        registry = new_registry;
         assert!(sim
             .coin_state(first_epoch_incentives_slot.coin.coin_id())
             .unwrap()
@@ -2647,75 +2555,63 @@ mod tests {
 
         // sync to 10%
         let initial_reward_info = registry.info.state.round_reward_info;
-        let (sync_conditions, new_registry, new_reserve) =
-            registry.sync(ctx, reserve, first_epoch_start + 100)?;
-
+        let sync_conditions = registry.new_action::<DigSyncAction>().spend(
+            ctx,
+            &mut registry,
+            first_epoch_start + 100,
+        )?;
         ensure_conditions_met(ctx, &mut sim, sync_conditions, 0)?;
 
+        registry = registry.finish_spend(ctx, vec![])?;
         sim.pass_time(400);
         sim.spend_coins(ctx.take(), &[])?;
-        assert!(new_registry.info.state.round_time_info.last_update == first_epoch_start + 100);
+        assert!(registry.info.state.round_time_info.last_update == first_epoch_start + 100);
 
         let cumulative_payout_delta = initial_reward_info.remaining_rewards / 10;
         assert!(
-            new_registry.info.state.round_reward_info.remaining_rewards
+            registry.info.state.round_reward_info.remaining_rewards
                 == initial_reward_info.remaining_rewards - cumulative_payout_delta
         );
         assert!(
-            new_registry.info.state.round_reward_info.cumulative_payout
+            registry.info.state.round_reward_info.cumulative_payout
                 == initial_reward_info.cumulative_payout + cumulative_payout_delta
         );
-        reserve = new_reserve;
-        registry = new_registry;
 
         // sync to 50% (so + 40%)
         let initial_reward_info = registry.info.state.round_reward_info;
-        let (sync_conditions, new_registry, new_reserve) =
-            registry.sync(ctx, reserve, first_epoch_start + 500)?;
-
+        let sync_conditions = registry.new_action::<DigSyncAction>().spend(
+            ctx,
+            &mut registry,
+            first_epoch_start + 500,
+        )?;
         ensure_conditions_met(ctx, &mut sim, sync_conditions, 0)?;
 
+        registry = registry.finish_spend(ctx, vec![])?;
         sim.spend_coins(ctx.take(), &[])?;
-        assert!(new_registry.info.state.round_time_info.last_update == first_epoch_start + 500);
+        assert!(registry.info.state.round_time_info.last_update == first_epoch_start + 500);
 
         let cumulative_payout_delta = initial_reward_info.remaining_rewards * 400 / 900;
         assert!(
-            new_registry.info.state.round_reward_info.remaining_rewards
+            registry.info.state.round_reward_info.remaining_rewards
                 == initial_reward_info.remaining_rewards - cumulative_payout_delta
         );
         assert!(
-            new_registry.info.state.round_reward_info.cumulative_payout
+            registry.info.state.round_reward_info.cumulative_payout
                 == initial_reward_info.cumulative_payout + cumulative_payout_delta
         );
-        reserve = new_reserve;
-        registry = new_registry;
 
         // add incentives
         let initial_reward_info = registry.info.state.round_reward_info;
         let incentives_amount = initial_reward_info.remaining_rewards;
         let registry_info = registry.info;
 
-        let (add_incentives_conditions, new_registry, new_reserve, registry_solution) =
-            registry.add_incentives(ctx, &reserve, incentives_amount)?;
-
-        // spend reserve and source cat together so deltas add up
-        let reserve_delegated_puzzle = reserve.delegated_puzzle_for_finalizer_controller(
+        let add_incentives_conditions = registry.new_action::<DigAddIncentivesAction>().spend(
             ctx,
-            registry_info.state,
-            reserve.coin.amount
-                + (incentives_amount - incentives_amount * constants.validator_fee_bps / 10000),
-            registry_solution,
+            &mut registry,
+            incentives_amount,
         )?;
 
-        let reserve_cat_spend = CatSpend::new(
-            reserve.to_cat(),
-            reserve.inner_spend(
-                ctx,
-                registry_info.inner_puzzle_hash().into(),
-                reserve_delegated_puzzle,
-                NodePtr::NIL,
-            )?,
-        );
+        // spend reserve and source cat together so deltas add up
         let source_cat_spend = CatSpend::new(
             source_cat,
             cat_minter_p2.spend_with_conditions(
@@ -2728,39 +2624,35 @@ mod tests {
             )?,
         );
 
-        let cat_spends = [reserve_cat_spend, source_cat_spend];
-        Cat::spend_all(ctx, &cat_spends)?;
-
+        registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
         assert_eq!(
-            new_registry.info.state.round_time_info.last_update,
+            registry.info.state.round_time_info.last_update,
             first_epoch_start + 500
         );
         assert_eq!(
-            new_registry.info.state.round_reward_info.cumulative_payout,
+            registry.info.state.round_reward_info.cumulative_payout,
             registry_info.state.round_reward_info.cumulative_payout
         );
         assert_eq!(
-            new_registry.info.state.round_reward_info.remaining_rewards,
+            registry.info.state.round_reward_info.remaining_rewards,
             registry_info.state.round_reward_info.remaining_rewards
                 + (incentives_amount - incentives_amount * constants.validator_fee_bps / 10000)
         );
-        reserve = new_reserve;
-        registry = new_registry;
         source_cat = source_cat.wrapped_child(
             cat_minter_puzzle_hash,
             source_cat.coin.amount - incentives_amount,
         );
 
         // add mirror2
-        let (validator_conditions, new_registry, new_reserve, mirror2_slot) = registry.add_mirror(
-            ctx,
-            reserve,
-            mirror2_puzzle_hash,
-            2,
-            validator_singleton_inner_puzzle_hash,
-        )?;
-
+        let (validator_conditions, mirror2_slot) =
+            registry.new_action::<DigAddMirrorAction>().spend(
+                ctx,
+                &mut registry,
+                mirror2_puzzle_hash,
+                2,
+                validator_singleton_inner_puzzle_hash,
+            )?;
         (validator_coin, validator_singleton_proof) = spend_validator_singleton(
             ctx,
             validator_coin,
@@ -2768,40 +2660,41 @@ mod tests {
             validator_singleton_puzzle,
             validator_conditions,
         )?;
+
+        registry = registry.finish_spend(ctx, vec![])?;
         sim.pass_time(250);
         sim.spend_coins(ctx.take(), &[])?;
-        assert_eq!(new_registry.info.state.active_shares, 3);
-        reserve = new_reserve;
-        registry = new_registry;
+        assert_eq!(registry.info.state.active_shares, 3);
 
         // sync to 75% (so + 25%)
         let initial_reward_info = registry.info.state.round_reward_info;
-        let (sync_conditions, new_registry, new_reserve) =
-            registry.sync(ctx, reserve, first_epoch_start + 750)?;
-
+        let sync_conditions = registry.new_action::<DigSyncAction>().spend(
+            ctx,
+            &mut registry,
+            first_epoch_start + 750,
+        )?;
         ensure_conditions_met(ctx, &mut sim, sync_conditions, 0)?;
 
+        registry = registry.finish_spend(ctx, vec![])?;
         sim.spend_coins(ctx.take(), &[])?;
-        assert!(new_registry.info.state.round_time_info.last_update == first_epoch_start + 750);
+        assert!(registry.info.state.round_time_info.last_update == first_epoch_start + 750);
 
         let cumulative_payout_delta = initial_reward_info.remaining_rewards * 250 / (3 * 500);
         assert!(
-            new_registry.info.state.round_reward_info.remaining_rewards
+            registry.info.state.round_reward_info.remaining_rewards
                 == initial_reward_info.remaining_rewards - cumulative_payout_delta * 3
         );
         assert!(
-            new_registry.info.state.round_reward_info.cumulative_payout
+            registry.info.state.round_reward_info.cumulative_payout
                 == initial_reward_info.cumulative_payout + cumulative_payout_delta
         );
-        reserve = new_reserve;
-        registry = new_registry;
 
         // remove mirror2
-        let reserve_cat = reserve.to_cat();
-        let (remove_mirror_validator_conditions, new_registry, new_reserve, mirror2_payout_amount) =
-            registry.remove_mirror(
+        let reserve_cat = registry.reserve.to_cat();
+        let (remove_mirror_validator_conditions, mirror2_payout_amount) =
+            registry.new_action::<DigRemoveMirrorAction>().spend(
                 ctx,
-                reserve,
+                &mut registry,
                 mirror2_slot,
                 validator_singleton_inner_puzzle_hash,
             )?;
@@ -2813,9 +2706,9 @@ mod tests {
             validator_singleton_puzzle,
             remove_mirror_validator_conditions,
         )?;
+
+        registry = registry.finish_spend(ctx, vec![])?;
         sim.spend_coins(ctx.take(), &[])?;
-        registry = new_registry;
-        reserve = new_reserve;
         let payout_coin_id = reserve_cat
             .wrapped_child(mirror2_puzzle_hash, mirror2_payout_amount)
             .coin
@@ -2831,10 +2724,10 @@ mod tests {
 
         for epoch in 1..7 {
             let update_time = registry.info.state.round_time_info.epoch_end;
-            let (sync_conditions, new_registry, new_reserve) =
-                registry.sync(ctx, reserve, update_time)?;
-            registry = new_registry;
-            reserve = new_reserve;
+            let sync_conditions =
+                registry
+                    .new_action::<DigSyncAction>()
+                    .spend(ctx, &mut registry, update_time)?;
 
             let reward_slot = *incentive_slots
                 .iter()
@@ -2844,10 +2737,10 @@ mod tests {
                             + if epoch <= 4 { epoch } else { 4 } * constants.epoch_seconds
                 })
                 .unwrap();
-            let (new_epoch_conditions, new_registry, new_reserve, _validator_fee, new_reward_slot) =
-                registry.new_epoch(
+            let (new_epoch_conditions, new_reward_slot, _validator_fee) =
+                registry.new_action::<DigNewEpochAction>().spend(
                     ctx,
-                    reserve,
+                    &mut registry,
                     reward_slot,
                     if epoch <= 4 {
                         reward_slot.info.value.unwrap().rewards
@@ -2855,8 +2748,6 @@ mod tests {
                         0
                     },
                 )?;
-            registry = new_registry;
-            reserve = new_reserve;
             incentive_slots.retain(|s| {
                 s.info.value.unwrap().epoch_start != new_reward_slot.info.value.unwrap().epoch_start
             });
@@ -2869,6 +2760,7 @@ mod tests {
                 0,
             )?;
 
+            registry = registry.finish_spend(ctx, vec![])?;
             sim.set_next_timestamp(update_time)?;
             sim.spend_coins(ctx.take(), &[])?;
         }
@@ -2876,22 +2768,15 @@ mod tests {
         // commit incentives for 10th epoch
         let tenth_epoch_start = first_epoch_start + constants.epoch_seconds * 9;
         let rewards_to_add = constants.epoch_seconds * 10;
-        let registry_info = registry.info;
-        let (
-            secure_conditions,
-            new_registry,
-            new_reserve,
-            registry_solution,
-            fifth_epoch_commitment_slot,
-            new_incentive_slots,
-        ) = registry.commit_incentives(
-            ctx,
-            reserve.coin.parent_coin_info,
-            *incentive_slots.last().unwrap(),
-            tenth_epoch_start,
-            cat_minter_puzzle_hash,
-            rewards_to_add,
-        )?;
+        let (secure_conditions, tenth_epoch_commitment_slot, new_incentive_slots) =
+            registry.new_action::<DigCommitIncentivesAction>().spend(
+                ctx,
+                &mut registry,
+                *incentive_slots.last().unwrap(),
+                tenth_epoch_start,
+                cat_minter_puzzle_hash,
+                rewards_to_add,
+            )?;
 
         let new_value_keys = new_incentive_slots
             .iter()
@@ -2901,22 +2786,6 @@ mod tests {
         incentive_slots.extend(new_incentive_slots);
 
         // spend reserve and source cat together so deltas add up
-        let reserve_delegated_puzzle = reserve.delegated_puzzle_for_finalizer_controller(
-            ctx,
-            registry_info.state,
-            reserve.coin.amount + rewards_to_add,
-            registry_solution,
-        )?;
-
-        let reserve_cat_spend = CatSpend::new(
-            reserve.to_cat(),
-            reserve.inner_spend(
-                ctx,
-                registry_info.inner_puzzle_hash().into(),
-                reserve_delegated_puzzle,
-                NodePtr::NIL,
-            )?,
-        );
         let source_cat_spend = CatSpend::new(
             source_cat,
             cat_minter_p2.spend_with_conditions(
@@ -2929,18 +2798,14 @@ mod tests {
             )?,
         );
 
-        let cat_spends = [reserve_cat_spend, source_cat_spend];
-        Cat::spend_all(ctx, &cat_spends)?;
-
+        registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
         sim.spend_coins(ctx.take(), &[cat_minter_sk.clone()])?;
-        reserve = new_reserve;
-        registry = new_registry;
         let _source_cat = source_cat.wrapped_child(
             cat_minter_puzzle_hash,
             source_cat.coin.amount - rewards_to_add,
         );
         assert!(sim
-            .coin_state(fifth_epoch_commitment_slot.coin.coin_id())
+            .coin_state(tenth_epoch_commitment_slot.coin.coin_id())
             .is_some());
         for incentive_slot in incentive_slots.iter() {
             assert!(sim.coin_state(incentive_slot.coin.coin_id()).is_some());
@@ -2948,10 +2813,10 @@ mod tests {
 
         for epoch in 7..10 {
             let update_time = registry.info.state.round_time_info.epoch_end;
-            let (sync_conditions, new_registry, new_reserve) =
-                registry.sync(ctx, reserve, update_time)?;
-            registry = new_registry;
-            reserve = new_reserve;
+            let sync_conditions =
+                registry
+                    .new_action::<DigSyncAction>()
+                    .spend(ctx, &mut registry, update_time)?;
 
             let reward_slot = *incentive_slots
                 .iter()
@@ -2960,15 +2825,13 @@ mod tests {
                         == first_epoch_start + epoch * constants.epoch_seconds
                 })
                 .unwrap();
-            let (new_epoch_conditions, new_registry, new_reserve, _validator_fee, new_reward_slot) =
-                registry.new_epoch(
+            let (new_epoch_conditions, new_reward_slot, _validator_fee) =
+                registry.new_action::<DigNewEpochAction>().spend(
                     ctx,
-                    reserve,
+                    &mut registry,
                     reward_slot,
                     reward_slot.info.value.unwrap().rewards,
                 )?;
-            registry = new_registry;
-            reserve = new_reserve;
             incentive_slots.retain(|s| {
                 s.info.value.unwrap().epoch_start != new_reward_slot.info.value.unwrap().epoch_start
             });
@@ -2981,24 +2844,26 @@ mod tests {
                 0,
             )?;
 
+            registry = registry.finish_spend(ctx, vec![])?;
             sim.set_next_timestamp(update_time)?;
             sim.spend_coins(ctx.take(), &[])?;
         }
 
         let update_time = registry.info.state.round_time_info.epoch_end - 100;
-        let (sync_conditions, new_registry, new_reserve) =
-            registry.sync(ctx, reserve, update_time)?;
-
-        registry = new_registry;
-        reserve = new_reserve;
+        let sync_conditions =
+            registry
+                .new_action::<DigSyncAction>()
+                .spend(ctx, &mut registry, update_time)?;
 
         // payout mirror
-        let reserve_cat = reserve.to_cat();
-        let (payout_conditions, _new_registry, _new_reserve, _mirror1_slot, withdrawal_amount) =
-            registry.initiate_payout(ctx, reserve, mirror1_slot)?;
+        let reserve_cat = registry.reserve.to_cat();
+        let (payout_conditions, _mirror1_slot, withdrawal_amount) = registry
+            .new_action::<DigInitiatePayoutAction>()
+            .spend(ctx, &mut registry, mirror1_slot)?;
 
         ensure_conditions_met(ctx, &mut sim, payout_conditions.extend(sync_conditions), 0)?;
 
+        let _registry = registry.finish_spend(ctx, vec![])?;
         sim.set_next_timestamp(update_time)?;
         sim.spend_coins(ctx.take(), &[])?;
 
