@@ -8,7 +8,7 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::Allocator;
 
 use crate::{
-    ActionLayer, ActionLayerArgs, DigAddIncentivesAction, DigAddMirrorAction,
+    Action, ActionLayer, ActionLayerArgs, DigAddIncentivesAction, DigAddMirrorAction,
     DigCommitIncentivesAction, DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction,
     DigSyncAction, DigWithdrawIncentivesAction, Finalizer, P2DelegatedBySingletonLayerArgs,
     ReserveFinalizer2ndCurryArgs,
@@ -101,43 +101,30 @@ impl DigRewardDistributorInfo {
         constants: &DigRewardDistributorConstants,
     ) -> [Bytes32; 8] {
         [
-            DigAddIncentivesAction::curry_tree_hash(
-                constants.validator_payout_puzzle_hash,
-                constants.validator_fee_bps,
-            )
-            .into(),
-            DigAddMirrorAction::curry_tree_hash(
-                launcher_id,
-                constants.validator_launcher_id,
-                constants.max_seconds_offset,
-            )
-            .into(),
-            DigCommitIncentivesAction::curry_tree_hash(launcher_id, constants.epoch_seconds).into(),
-            DigInitiatePayoutAction::curry_tree_hash(
-                launcher_id,
-                constants.validator_launcher_id,
-                constants.payout_threshold,
-            )
-            .into(),
-            DigNewEpochAction::curry_tree_hash(
-                launcher_id,
-                constants.validator_payout_puzzle_hash,
-                constants.validator_fee_bps,
-                constants.epoch_seconds,
-            )
-            .into(),
-            DigRemoveMirrorAction::curry_tree_hash(
-                launcher_id,
-                constants.validator_launcher_id,
-                constants.max_seconds_offset,
-            )
-            .into(),
-            DigSyncAction::curry_tree_hash().into(),
-            DigWithdrawIncentivesAction::curry_tree_hash(
-                launcher_id,
-                constants.withdrawal_share_bps,
-            )
-            .into(),
+            DigAddIncentivesAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            DigAddMirrorAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            DigCommitIncentivesAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            DigInitiatePayoutAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            DigNewEpochAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            DigRemoveMirrorAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            DigSyncAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            DigWithdrawIncentivesAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
         ]
     }
 
