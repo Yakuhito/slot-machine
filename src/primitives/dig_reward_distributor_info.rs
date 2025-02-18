@@ -14,6 +14,8 @@ use crate::{
     ReserveFinalizer2ndCurryArgs,
 };
 
+use super::Reserveful;
+
 pub type DigRewardDistributorLayers = SingletonLayer<ActionLayer<DigRewardDistributorState>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
@@ -40,6 +42,16 @@ pub struct DigRewardDistributorState {
     pub active_shares: u64,
     pub round_reward_info: RoundRewardInfo,
     pub round_time_info: RoundTimeInfo,
+}
+
+impl Reserveful for DigRewardDistributorState {
+    fn reserve_amount(&self, index: u64) -> u64 {
+        if index == 0 {
+            self.total_reserves
+        } else {
+            0
+        }
+    }
 }
 
 #[must_use]

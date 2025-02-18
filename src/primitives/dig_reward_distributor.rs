@@ -6,7 +6,7 @@ use chia::{
         LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{CatSpend, DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{Cat, CatSpend, DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
@@ -16,7 +16,8 @@ use crate::{
 };
 
 use super::{
-    DigRewardDistributorConstants, DigRewardDistributorInfo, DigRewardDistributorState, Reserve,
+    DigRewardDistributorConstants, DigRewardDistributorInfo, DigRewardDistributorState,
+    DigSlotNonce, Reserve,
 };
 
 #[derive(Debug, Clone)]
@@ -120,8 +121,8 @@ impl DigRewardDistributor {
     pub fn finish_spend(
         self,
         ctx: &mut SpendContext,
-        other_reserve_cats: CatSpend,
-    ) -> Result<(Spend, Self), DriverError> {
+        other_cat_spends: Vec<CatSpend>,
+    ) -> Result<Self, DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
@@ -161,16 +162,31 @@ impl DigRewardDistributor {
             },
         )?;
 
-        // todo: spend CAT reserve as well
-        self.reserve.spend_for_reserve_finalizer_controller(
+        let my_spend = Spend::new(puzzle, solution);
+        ctx.spend(self.coin, my_spend)?;
+
+        let cat_spend = self.reserve.cat_spend_for_reserve_finalizer_controller(
             ctx,
             self.info.state,
-            self.reserve.coin.amount,
             self.info.inner_puzzle_hash().into(),
             solution,
         )?;
 
-        Ok(Spend::new(puzzle, solution))
+        let mut cat_spends = other_cat_spends;
+        cat_spends.push(cat_spend);
+        Cat::spend_all(ctx, &cat_spends)?;
+
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let new_reward_distributor = DigRewardDistributor::from_parent_spend(
+            &mut ctx.allocator,
+            self.coin,
+            my_puzzle,
+            solution,
+            self.info.constants,
+        )?
+        .unwrap();
+
+        Ok(new_reward_distributor)
     }
 
     pub fn insert(&mut self, action_spend: Spend) {

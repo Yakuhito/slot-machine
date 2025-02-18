@@ -156,7 +156,7 @@ impl Reserve {
         Ok(delegated_puzzle)
     }
 
-    pub fn spend_for_reserve_finalizer_controller<S>(
+    pub fn cat_spend_for_reserve_finalizer_controller<S>(
         &self,
         ctx: &mut SpendContext,
         controlelr_initial_state: S,
