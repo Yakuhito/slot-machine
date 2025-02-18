@@ -2,12 +2,15 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use chia_wallet_sdk::{DriverError, Layer};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
+use crate::{
+    Action, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorState,
+    DigRewardSlotValue, DigSlotNonce, Slot, SpendContextExt,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigNewEpochAction {
@@ -17,20 +20,29 @@ pub struct DigNewEpochAction {
     pub epoch_seconds: u64,
 }
 
-impl DigNewEpochAction {
-    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+impl ToTreeHash for DigNewEpochAction {
+    fn tree_hash(&self) -> TreeHash {
+        DigNewEpochAction::curry_tree_hash(
+            self.launcher_id,
+            self.validator_payout_puzzle_hash,
+            self.validator_fee_bps,
+            self.epoch_seconds,
+        )
+    }
+}
+
+impl Action<DigRewardDistributor> for DigNewEpochAction {
+    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id: info.launcher_id,
-            validator_payout_puzzle_hash: info.constants.validator_payout_puzzle_hash,
-            validator_fee_bps: info.constants.validator_fee_bps,
-            epoch_seconds: info.constants.epoch_seconds,
+            launcher_id,
+            validator_payout_puzzle_hash: constants.validator_payout_puzzle_hash,
+            validator_fee_bps: constants.validator_fee_bps,
+            epoch_seconds: constants.epoch_seconds,
         }
     }
 }
 
-impl Layer for DigNewEpochAction {
-    type Solution = DigNewEpochActionSolution;
-
+impl DigNewEpochAction {
     fn construct_puzzle(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
@@ -48,28 +60,65 @@ impl Layer for DigNewEpochAction {
         .map_err(DriverError::ToClvm)
     }
 
-    fn construct_solution(
+    pub fn get_slot_value_from_solution(
         &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DigNewEpochActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<DigRewardSlotValue, DriverError> {
+        let solution = DigNewEpochActionSolution::from_clvm(&ctx.allocator, solution)?;
+
+        Ok(DigRewardSlotValue {
+            epoch_start: solution.slot_epoch_time,
+            next_epoch_initialized: solution.slot_next_epoch_initialized,
+            rewards: solution.slot_total_rewards,
+        })
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        my_puzzle_hash: Bytes32,
+        my_state: &DigRewardDistributorState,
+        my_inner_puzzle_hash: Bytes32,
+        my_constants: &DigRewardDistributorConstants,
+        reward_slot: Slot<DigRewardSlotValue>,
+        epoch_total_rewards: u64,
+    ) -> Result<(Conditions, Spend, u64), DriverError> {
+        // also returns validator fee
+        let Some(reward_slot_value) = reward_slot.info.value else {
+            return Err(DriverError::Custom("Reward slot value is None".to_string()));
+        };
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
+        let valdiator_fee = epoch_total_rewards * my_constants.validator_fee_bps / 10000;
+
+        // calculate announcement needed to ensure everything's happening as expected
+        let mut new_epoch_announcement: Vec<u8> =
+            my_state.round_time_info.epoch_end.tree_hash().to_vec();
+        new_epoch_announcement.insert(0, b'e');
+        let new_epoch_conditions = Conditions::new()
+            .assert_puzzle_announcement(announcement_id(my_puzzle_hash, new_epoch_announcement))
+            .assert_concurrent_puzzle(reward_slot.coin.puzzle_hash);
+
+        // spend slots
+        reward_slot.spend(ctx, my_inner_puzzle_hash)?;
+
+        // spend self
+        let action_solution = DigNewEpochActionSolution {
+            slot_epoch_time: reward_slot_value.epoch_start,
+            slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
+            slot_total_rewards: reward_slot_value.rewards,
+            epoch_total_rewards,
+            validator_fee: valdiator_fee,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        Ok((
+            new_epoch_conditions,
+            Spend::new(action_puzzle, action_solution),
+            valdiator_fee,
+        ))
     }
 }
 
