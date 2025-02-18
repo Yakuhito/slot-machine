@@ -223,6 +223,7 @@ impl PartialOrd for XchandlesSlotValue {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DigSlotNonce {
     REWARD = 1,
     COMMITMENT = 2,

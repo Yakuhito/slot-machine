@@ -1,31 +1,21 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes, Bytes32, Coin},
+    protocol::{Bytes32, Coin},
     puzzles::{
         singleton::{SingletonSolution, SingletonStruct},
         LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{
-    announcement_id, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext,
-};
-use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
+use chia_wallet_sdk::{CatSpend, DriverError, Layer, Puzzle, Spend, SpendContext};
+use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    ActionLayer, ActionLayerSolution, DigAddIncentivesAction, DigAddIncentivesActionSolution,
-    DigAddMirrorAction, DigAddMirrorActionSolution, DigCommitIncentivesAction,
-    DigCommitIncentivesActionSolution, DigInitiatePayoutAction, DigInitiatePayoutActionSolution,
-    DigNewEpochAction, DigNewEpochActionSolution, DigRemoveMirrorAction,
-    DigRemoveMirrorActionSolution, DigSyncAction, DigSyncActionSolution,
-    DigWithdrawIncentivesAction, DigWithdrawIncentivesActionSolution, RawActionLayerSolution,
-    Registry, ReserveFinalizerSolution,
+    Action, ActionLayer, ActionLayerSolution, DigAddIncentivesAction, DigAddIncentivesActionSolution, DigAddMirrorAction, DigAddMirrorActionSolution, DigCommitIncentivesAction, DigCommitIncentivesActionSolution, DigInitiatePayoutAction, DigInitiatePayoutActionSolution, DigNewEpochAction, DigNewEpochActionSolution, DigRemoveMirrorAction, DigRemoveMirrorActionSolution, DigRewardSlotValue, DigSlotNonce, DigSyncAction, DigSyncActionSolution, DigWithdrawIncentivesAction, DigWithdrawIncentivesActionSolution, RawActionLayerSolution, Registry, ReserveFinalizerSolution, Slot, SlotInfo, SlotProof
 };
 
 use super::{
-    DigCommitmentSlotValue, DigMirrorSlotValue, DigRewardDistributorConstants,
-    DigRewardDistributorInfo, DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce, Reserve,
-    Slot, SlotInfo, SlotProof,
+    DigRewardDistributorConstants, DigRewardDistributorInfo, DigRewardDistributorState, Reserve,
 };
 
 #[derive(Debug, Clone)]
@@ -34,17 +24,19 @@ pub struct DigRewardDistributor {
     pub coin: Coin,
     pub proof: Proof,
     pub info: DigRewardDistributorInfo,
+
+    pub pending_actions: Vec<Spend>,
 }
 
 impl DigRewardDistributor {
     pub fn new(coin: Coin, proof: Proof, info: DigRewardDistributorInfo) -> Self {
-        Self { coin, proof, info }
+        Self {
+            coin,
+            proof,
+            info,
+            pending_actions: Vec::new(),
+        }
     }
-}
-
-impl Registry for DigRewardDistributor {
-    type State = DigRewardDistributorState;
-    type Constants = DigRewardDistributorConstants;
 }
 
 impl DigRewardDistributor {
@@ -111,112 +103,31 @@ impl DigRewardDistributor {
                 coin: new_coin,
                 proof,
                 info: new_info,
+                pending_actions: Vec::new(),
             },
             reserve,
         )))
     }
 }
 
-#[allow(clippy::large_enum_variant)]
-pub enum DigRewardDistributorAction {
-    AddIncentives(DigAddIncentivesActionSolution),
-    AddMirror(DigAddMirrorActionSolution),
-    CommitIncentives(DigCommitIncentivesActionSolution),
-    InitiatePayout(DigInitiatePayoutActionSolution),
-    NewEpoch(DigNewEpochActionSolution),
-    RemoveMirror(DigRemoveMirrorActionSolution),
-    Sync(DigSyncActionSolution),
-    WithdrawIncentives(DigWithdrawIncentivesActionSolution),
+impl Registry for DigRewardDistributor {
+    type State = DigRewardDistributorState;
+    type Constants = DigRewardDistributorConstants;
 }
 
 impl DigRewardDistributor {
-    pub fn spend(
+    pub fn finish_spend(
         self,
         ctx: &mut SpendContext,
+        other_reserve_cats: CatSpend,
         reserve_parent_id: Bytes32,
-        actions: Vec<DigRewardDistributorAction>,
     ) -> Result<Spend, DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
 
-        let action_spends: Vec<Spend> = actions
-            .into_iter()
-            .map(|action| match action {
-                DigRewardDistributorAction::AddIncentives(solution) => {
-                    let layer = DigAddIncentivesAction {
-                        validator_payout_puzzle_hash: self
-                            .info
-                            .constants
-                            .validator_payout_puzzle_hash,
-                        validator_fee_bps: self.info.constants.validator_fee_bps,
-                    };
-
-                    let puzzle = layer.construct_puzzle(ctx)?;
-                    let solution = layer.construct_solution(ctx, solution)?;
-
-                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
-                }
-                DigRewardDistributorAction::AddMirror(solution) => {
-                    let layer = DigAddMirrorAction::from_info(&self.info);
-
-                    let puzzle = layer.construct_puzzle(ctx)?;
-                    let solution = layer.construct_solution(ctx, solution)?;
-
-                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
-                }
-                DigRewardDistributorAction::CommitIncentives(solution) => {
-                    let layer = DigCommitIncentivesAction::from_info(&self.info);
-
-                    let puzzle = layer.construct_puzzle(ctx)?;
-                    let solution = layer.construct_solution(ctx, solution)?;
-
-                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
-                }
-                DigRewardDistributorAction::InitiatePayout(solution) => {
-                    let layer = DigInitiatePayoutAction::from_info(&self.info);
-
-                    let puzzle = layer.construct_puzzle(ctx)?;
-                    let solution = layer.construct_solution(ctx, solution)?;
-
-                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
-                }
-                DigRewardDistributorAction::NewEpoch(solution) => {
-                    let layer = DigNewEpochAction::from_info(&self.info);
-
-                    let puzzle = layer.construct_puzzle(ctx)?;
-                    let solution = layer.construct_solution(ctx, solution)?;
-
-                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
-                }
-                DigRewardDistributorAction::RemoveMirror(solution) => {
-                    let layer = DigRemoveMirrorAction::from_info(&self.info);
-
-                    let puzzle = layer.construct_puzzle(ctx)?;
-                    let solution = layer.construct_solution(ctx, solution)?;
-
-                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
-                }
-                DigRewardDistributorAction::Sync(solution) => {
-                    let layer = DigSyncAction::from_info(&self.info);
-
-                    let puzzle = layer.construct_puzzle(ctx)?;
-                    let solution = layer.construct_solution(ctx, solution)?;
-
-                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
-                }
-                DigRewardDistributorAction::WithdrawIncentives(solution) => {
-                    let layer = DigWithdrawIncentivesAction::from_info(&self.info);
-
-                    let puzzle = layer.construct_puzzle(ctx)?;
-                    let solution = layer.construct_solution(ctx, solution)?;
-
-                    Ok::<Spend, DriverError>(Spend::new(puzzle, solution))
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let action_puzzle_hashes = action_spends
+        let action_puzzle_hashes = self
+            .pending_actions
             .iter()
             .map(|a| ctx.tree_hash(a.puzzle).into())
             .collect::<Vec<Bytes32>>();
@@ -242,12 +153,51 @@ impl DigRewardDistributor {
                         .ok_or(DriverError::Custom(
                             "Couldn't build proofs for one or more actions".to_string(),
                         ))?,
-                    action_spends,
+                    action_spends: self.pending_actions,
                     finalizer_solution,
                 },
             },
         )?;
 
+        // todo: spend CAT reserve as well
+        todo
+
         Ok(Spend::new(puzzle, solution))
+    }
+
+    pub fn insert(&mut self, action_spend: Spend) {
+        self.pending_actions.push(action_spend);
+    }
+
+    pub fn insert_multiple(&mut self, action_spends: Vec<Spend>) {
+        self.pending_actions.extend(action_spends);
+    }
+
+    pub fn new_action<A>(&self) -> A
+    where
+        A: Action<Self>,
+    {
+        A::from_constants(self.info.launcher_id, &self.info.constants)
+    }
+
+    pub fn created_slot_values_to_slots<SlotValue>(
+        &self,
+        slot_values: Vec<SlotValue>,
+        nonce: DigSlotNonce,
+    ) -> Vec<Slot<SlotValue>> where SlotValue: Copy + ToTreeHash {
+        let proof = SlotProof {
+            parent_parent_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+        };
+
+        slot_values
+            .into_iter()
+            .map(|slot_value| {
+                Slot::new(
+                    proof,
+                    SlotInfo::from_value(self.info.launcher_id, slot_value, Some(nonce.to_u64())),
+                )
+            })
+            .collect()
     }
 }
