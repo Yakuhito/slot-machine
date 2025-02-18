@@ -1,6 +1,6 @@
 use bip39::Mnemonic;
 use chia::{
-    bls::{sign, SecretKey, Signature},
+    bls::{sign, PublicKey, SecretKey, Signature},
     clvm_utils::ToTreeHash,
     consensus::consensus_constants::ConsensusConstants,
     protocol::{Bytes32, Coin, CoinSpend},
@@ -36,7 +36,6 @@ pub struct SecuredOneSidedOffer {
     pub coin_spends: Vec<CoinSpend>,
     pub aggregated_signature: Signature,
     pub security_coin: Coin,
-    pub security_coin_sk: SecretKey,
     pub security_base_conditions: Conditions<NodePtr>,
     pub created_cat: Option<Cat>,
 }
@@ -48,9 +47,20 @@ where
     DriverError::Custom(e.to_string())
 }
 
+pub fn new_sk() -> Result<SecretKey, DriverError> {
+    // we need the security coin puzzle hash to spend the offer coin after finding it
+    let mut entropy = [0u8; 32];
+    getrandom::getrandom(&mut entropy).map_err(custom_err)?;
+    let mnemonic = Mnemonic::from_entropy(&entropy).map_err(custom_err)?;
+    let seed = mnemonic.to_seed("");
+    let sk = SecretKey::from_seed(&seed);
+    Ok(sk)
+}
+
 pub fn parse_one_sided_offer(
     ctx: &mut SpendContext,
     offer: Offer,
+    security_public_key: PublicKey,
     cat_destination_puzzle_hash: Option<Bytes32>,
 ) -> Result<SecuredOneSidedOffer, DriverError> {
     let offer = offer.parse(&mut ctx.allocator).map_err(custom_err)?;
@@ -61,13 +71,8 @@ pub fn parse_one_sided_offer(
         ));
     }
 
-    // we need the security coin puzzle hash to spend the offer coin after finding it
-    let mut entropy = [0u8; 32];
-    getrandom::getrandom(&mut entropy).map_err(custom_err)?;
-    let mnemonic = Mnemonic::from_entropy(&entropy).map_err(custom_err)?;
-    let seed = mnemonic.to_seed("");
-    let sk = SecretKey::from_seed(&seed);
-    let security_coin_puzzle_hash: Bytes32 = StandardArgs::curry_tree_hash(sk.public_key()).into();
+    let security_coin_puzzle_hash: Bytes32 =
+        StandardArgs::curry_tree_hash(security_public_key).into();
 
     // returned spends will also spend the offer coin (creating the security coin)
     let mut coin_spends = Vec::with_capacity(offer.coin_spends.len() + 1);
@@ -87,10 +92,8 @@ pub fn parse_one_sided_offer(
                 let cat_args = CatArgs::<NodePtr>::from_clvm(&ctx.allocator, curried_puzzle.args)?;
                 let cat_solution = CatSolution::<NodePtr>::from_clvm(&ctx.allocator, solution_ptr)?;
 
-                println!("about to run");
                 let inner_output =
                     ctx.run(cat_args.inner_puzzle, cat_solution.inner_puzzle_solution)?;
-                println!("done running");
                 let inner_output =
                     Vec::<Condition<NodePtr>>::from_clvm(&ctx.allocator, inner_output)?;
 
@@ -271,7 +274,6 @@ pub fn parse_one_sided_offer(
         coin_spends,
         aggregated_signature: offer.aggregated_signature,
         security_coin,
-        security_coin_sk: sk,
         security_base_conditions: base_conditions,
         created_cat,
     })
@@ -438,7 +440,8 @@ pub fn launch_catalog_registry(
     ),
     DriverError,
 > {
-    let offer = parse_one_sided_offer(ctx, offer, None)?;
+    let security_coin_sk = new_sk()?;
+    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_id = offer.security_coin.coin_id();
@@ -494,14 +497,14 @@ pub fn launch_catalog_registry(
         ctx,
         offer.security_coin,
         security_coin_conditions,
-        &offer.security_coin_sk,
+        &security_coin_sk,
         consensus_constants,
     )?;
 
     // Finally, return the data
     Ok((
         offer.aggregated_signature + &security_coin_sig,
-        offer.security_coin_sk,
+        security_coin_sk,
         catalog_registry,
         slots,
     ))
@@ -524,7 +527,8 @@ pub fn launch_xchandles_registry(
     ),
     DriverError,
 > {
-    let offer = parse_one_sided_offer(ctx, offer, None)?;
+    let security_coin_sk = new_sk()?;
+    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_id = offer.security_coin.coin_id();
@@ -580,14 +584,14 @@ pub fn launch_xchandles_registry(
         ctx,
         offer.security_coin,
         security_coin_conditions,
-        &offer.security_coin_sk,
+        &security_coin_sk,
         consensus_constants,
     )?;
 
     // Finally, return the data
     Ok((
         offer.aggregated_signature + &security_coin_sig,
-        offer.security_coin_sk,
+        security_coin_sk,
         xchandles_registry,
         slots,
     ))
@@ -612,7 +616,13 @@ pub fn launch_dig_reward_distributor(
 > {
     // use a 'trick' to find the launcher id so we can determine reserve id, then call the function again
     //  with the right CAT destination ph
-    let mock_offer = parse_one_sided_offer(ctx, offer.clone(), Some(Bytes32::default()))?;
+    let security_coin_sk = new_sk()?;
+    let mock_offer = parse_one_sided_offer(
+        ctx,
+        offer.clone(),
+        security_coin_sk.public_key(),
+        Some(Bytes32::default()),
+    )?;
     let launcher = Launcher::new(mock_offer.security_coin.coin_id(), 1);
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
@@ -622,7 +632,12 @@ pub fn launch_dig_reward_distributor(
     let reserve_inner_ph =
         P2DelegatedBySingletonLayerArgs::curry_tree_hash(controller_singleton_struct_hash, 0);
 
-    let offer = parse_one_sided_offer(ctx, offer, Some(reserve_inner_ph.into()))?;
+    let offer = parse_one_sided_offer(
+        ctx,
+        offer,
+        security_coin_sk.public_key(),
+        Some(reserve_inner_ph.into()),
+    )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let mut security_coin_conditions = offer.security_base_conditions;
@@ -733,14 +748,14 @@ pub fn launch_dig_reward_distributor(
         ctx,
         offer.security_coin,
         security_coin_conditions,
-        &offer.security_coin_sk,
+        &security_coin_sk,
         consensus_constants,
     )?;
 
     // Finally, return the data
     Ok((
         offer.aggregated_signature + &security_coin_sig,
-        offer.security_coin_sk,
+        security_coin_sk,
         registry,
         slot,
         offer.created_cat.unwrap(),
@@ -2278,7 +2293,6 @@ mod tests {
         let first_epoch_start = 1234;
 
         // launch reserve
-        println!("-1");
         let (_, security_sk, mut registry, first_epoch_slot, new_source_cat) =
             launch_dig_reward_distributor(
                 ctx,
@@ -2299,7 +2313,6 @@ mod tests {
             ],
         )?;
         source_cat = new_source_cat;
-        println!("2");
 
         // add the 1st mirror before reward epoch ('first epoch') begins
         let (validator_conditions, mirror1_slot) =
