@@ -1,6 +1,6 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::{Bytes32, Coin},
+    protocol::Bytes32,
     puzzles::{
         nft::{
             NFT_OWNERSHIP_LAYER_PUZZLE_HASH, NFT_ROYALTY_TRANSFER_PUZZLE_HASH,
@@ -101,15 +101,13 @@ impl CatalogRegisterAction {
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_coin: Coin,
-        my_inner_puzzle_hash: Bytes32,
-        my_constants: &CatalogRegistryConstants,
+        catalog: &mut CatalogRegistry,
         tail_hash: Bytes32,
         left_slot: Slot<CatalogSlotValue>,
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         eve_nft_inner_spend: Spend,
-    ) -> Result<(Conditions, Spend), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
@@ -118,6 +116,7 @@ impl CatalogRegisterAction {
             return Err(DriverError::Custom("Missing right slot value".to_string()));
         };
 
+        let my_inner_puzzle_hash = catalog.info.inner_puzzle_hash().into();
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
         right_slot.spend(ctx, my_inner_puzzle_hash)?;
 
@@ -140,7 +139,7 @@ impl CatalogRegisterAction {
         // spend uniqueness prelauncher
         let uniqueness_prelauncher = UniquenessPrelauncher::<Bytes32>::new(
             &mut ctx.allocator,
-            my_coin.coin_id(),
+            catalog.coin.coin_id(),
             tail_hash,
         )?;
         let nft_launcher = uniqueness_prelauncher.spend(ctx)?;
@@ -151,8 +150,8 @@ impl CatalogRegisterAction {
             initial_inner_puzzle_hash,
             (),
             ANY_METADATA_UPDATER_HASH.into(),
-            my_constants.royalty_address,
-            my_constants.royalty_ten_thousandths,
+            catalog.info.constants.royalty_address,
+            catalog.info.constants.royalty_ten_thousandths,
         )?;
 
         // spend nft launcher
@@ -172,18 +171,18 @@ impl CatalogRegisterAction {
             left_left_tail_hash: left_slot_value.neighbors.left_value,
             right_tail_hash: right_slot_value.asset_id,
             right_right_tail_hash: right_slot_value.neighbors.right_value,
-            my_id: my_coin.coin_id(),
+            my_id: catalog.coin.coin_id(),
         };
         let my_solution = my_solution.to_clvm(&mut ctx.allocator)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
-        Ok((
+        catalog.insert(Spend::new(my_puzzle, my_solution));
+        Ok(
             Conditions::new().assert_puzzle_announcement(announcement_id(
-                my_coin.puzzle_hash,
+                catalog.coin.puzzle_hash,
                 register_announcement,
             )),
-            Spend::new(my_puzzle, my_solution),
-        ))
+        )
     }
 }
 

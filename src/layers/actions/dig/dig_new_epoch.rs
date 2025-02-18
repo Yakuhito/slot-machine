@@ -8,8 +8,8 @@ use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    Action, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorState,
-    DigRewardSlotValue, DigSlotNonce, Slot, SpendContextExt,
+    Action, DigRewardDistributor, DigRewardDistributorConstants, DigRewardSlotValue, DigSlotNonce,
+    Slot, SpendContextExt,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,34 +74,35 @@ impl DigNewEpochAction {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_puzzle_hash: Bytes32,
-        my_state: &DigRewardDistributorState,
-        my_inner_puzzle_hash: Bytes32,
-        my_constants: &DigRewardDistributorConstants,
+        distributor: &mut DigRewardDistributor,
         reward_slot: Slot<DigRewardSlotValue>,
         epoch_total_rewards: u64,
-    ) -> Result<(Conditions, Spend, u64), DriverError> {
+    ) -> Result<(Conditions, u64), DriverError> {
         // also returns validator fee
         let Some(reward_slot_value) = reward_slot.info.value else {
             return Err(DriverError::Custom("Reward slot value is None".to_string()));
         };
 
-        let valdiator_fee = epoch_total_rewards * my_constants.validator_fee_bps / 10000;
+        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
+        let valdiator_fee =
+            epoch_total_rewards * distributor.info.constants.validator_fee_bps / 10000;
 
         // calculate announcement needed to ensure everything's happening as expected
         let mut new_epoch_announcement: Vec<u8> =
             my_state.round_time_info.epoch_end.tree_hash().to_vec();
         new_epoch_announcement.insert(0, b'e');
         let new_epoch_conditions = Conditions::new()
-            .assert_puzzle_announcement(announcement_id(my_puzzle_hash, new_epoch_announcement))
+            .assert_puzzle_announcement(announcement_id(
+                distributor.coin.puzzle_hash,
+                new_epoch_announcement,
+            ))
             .assert_concurrent_puzzle(reward_slot.coin.puzzle_hash);
 
         // spend slots
-        reward_slot.spend(ctx, my_inner_puzzle_hash)?;
+        reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         // spend self
         let action_solution = DigNewEpochActionSolution {
@@ -114,11 +115,8 @@ impl DigNewEpochAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        Ok((
-            new_epoch_conditions,
-            Spend::new(action_puzzle, action_solution),
-            valdiator_fee,
-        ))
+        distributor.insert(Spend::new(action_puzzle, action_solution));
+        Ok((new_epoch_conditions, valdiator_fee))
     }
 }
 

@@ -57,13 +57,12 @@ impl CatalogRefundAction {
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_puzzle_hash: Bytes32,
-        my_inner_puzzle_hash: Bytes32,
+        catalog: &mut CatalogRegistry,
         tail_hash: Bytes32,
         neighbors_hash: Bytes32,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         slot: Option<Slot<CatalogSlotValue>>,
-    ) -> Result<(Conditions, Spend), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // calculate announcement
         let refund_announcement: Bytes32 =
             clvm_tuple!(tail_hash, precommit_coin.value.initial_inner_puzzle_hash)
@@ -72,11 +71,13 @@ impl CatalogRefundAction {
         let mut refund_announcement: Vec<u8> = refund_announcement.to_vec();
         refund_announcement.insert(0, b'$');
 
-        let secure_conditions = Conditions::new()
-            .assert_puzzle_announcement(announcement_id(my_puzzle_hash, refund_announcement));
+        let secure_conditions = Conditions::new().assert_puzzle_announcement(announcement_id(
+            catalog.coin.puzzle_hash,
+            refund_announcement,
+        ));
 
         // spend precommit coin
-        let spender_inner_puzzle_hash: Bytes32 = my_inner_puzzle_hash;
+        let spender_inner_puzzle_hash: Bytes32 = catalog.info.inner_puzzle_hash().into();
         let initial_inner_puzzle_hash = precommit_coin.value.initial_inner_puzzle_hash;
         precommit_coin.spend(
             ctx,
@@ -109,10 +110,8 @@ impl CatalogRefundAction {
         let action_solution = action_solution.to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        Ok((
-            secure_conditions,
-            Spend::new(action_puzzle, action_solution),
-        ))
+        catalog.insert(Spend::new(action_puzzle, action_solution));
+        Ok(secure_conditions)
     }
 }
 

@@ -72,18 +72,17 @@ impl DigInitiatePayoutAction {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_puzzle_hash: Bytes32,
-        my_state: &DigRewardDistributorState,
-        my_inner_puzzle_hash: Bytes32,
+        distributor: &mut DigRewardDistributor,
         mirror_slot: Slot<DigMirrorSlotValue>,
-    ) -> Result<(Conditions, Spend, u64), DriverError> {
+    ) -> Result<(Conditions, u64), DriverError> {
         let Some(mirror_slot_value) = mirror_slot.info.value else {
             return Err(DriverError::Custom("Mirror slot value is None".to_string()));
         };
+
+        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
 
         let withdrawal_amount = mirror_slot_value.shares
             * (my_state.round_reward_info.cumulative_payout
@@ -106,7 +105,7 @@ impl DigInitiatePayoutAction {
         initiate_payout_announcement.insert(0, b'p');
 
         // spend mirror slot
-        mirror_slot.spend(ctx, my_inner_puzzle_hash)?;
+        mirror_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         // spend self
         let action_solution = DigInitiatePayoutActionSolution {
@@ -118,12 +117,12 @@ impl DigInitiatePayoutAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
+        distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(
-                my_puzzle_hash,
+                distributor.coin.puzzle_hash,
                 initiate_payout_announcement,
             )),
-            Spend::new(action_puzzle, action_solution),
             withdrawal_amount,
         ))
     }

@@ -1,6 +1,6 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::{Bytes32, Coin},
+    protocol::Bytes32,
     puzzles::singleton::{SingletonStruct, SINGLETON_TOP_LAYER_PUZZLE_HASH},
 };
 use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
@@ -69,15 +69,14 @@ impl DigAddMirrorAction {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_coin: Coin,
+        distributor: &mut DigRewardDistributor,
         payout_puzzle_hash: Bytes32,
         shares: u64,
         validator_singleton_inner_puzzle_hash: Bytes32,
-    ) -> Result<(Conditions, Spend), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // calculate message that the validator needs to send
         let add_mirror_message: Bytes32 =
             clvm_tuple!(payout_puzzle_hash, shares).tree_hash().into();
@@ -86,7 +85,7 @@ impl DigAddMirrorAction {
         let add_mirror_message = Conditions::new().send_message(
             18,
             add_mirror_message.into(),
-            vec![my_coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            vec![distributor.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
         );
 
         // spend self
@@ -98,10 +97,8 @@ impl DigAddMirrorAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        Ok((
-            add_mirror_message,
-            Spend::new(action_puzzle, action_solution),
-        ))
+        distributor.insert(Spend::new(action_puzzle, action_solution));
+        Ok(add_mirror_message)
     }
 }
 

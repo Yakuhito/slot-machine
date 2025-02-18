@@ -65,16 +65,13 @@ impl DigWithdrawIncentivesAction {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_puzzle_hash: Bytes32,
-        my_inner_puzzle_hash: Bytes32,
-        my_constants: &DigRewardDistributorConstants,
+        distributor: &mut DigRewardDistributor,
         commitment_slot: Slot<DigCommitmentSlotValue>,
         reward_slot: Slot<DigRewardSlotValue>,
-    ) -> Result<(Conditions, Spend, u64), DriverError> {
+    ) -> Result<(Conditions, u64), DriverError> {
         // last u64 = withdrawn amount
         let Some(reward_slot_value) = reward_slot.info.value else {
             return Err(DriverError::Custom("Reward slot value is None".to_string()));
@@ -86,18 +83,19 @@ impl DigWithdrawIncentivesAction {
         };
 
         let withdrawal_share =
-            commitment_slot_value.rewards * my_constants.withdrawal_share_bps / 10000;
+            commitment_slot_value.rewards * distributor.info.constants.withdrawal_share_bps / 10000;
 
         // calculate message that the validator needs to send
         let withdraw_incentives_conditions = Conditions::new()
             .send_message(
                 18,
                 Bytes::new(Vec::new()),
-                vec![my_puzzle_hash.to_clvm(&mut ctx.allocator)?],
+                vec![distributor.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
             )
             .assert_concurrent_puzzle(commitment_slot.coin.puzzle_hash);
 
         // spend slots
+        let my_inner_puzzle_hash: Bytes32 = distributor.info.inner_puzzle_hash().into();
         reward_slot.spend(ctx, my_inner_puzzle_hash)?;
         commitment_slot.spend(ctx, my_inner_puzzle_hash)?;
 
@@ -113,11 +111,8 @@ impl DigWithdrawIncentivesAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        Ok((
-            withdraw_incentives_conditions,
-            Spend::new(action_puzzle, action_solution),
-            withdrawal_share,
-        ))
+        distributor.insert(Spend::new(action_puzzle, action_solution));
+        Ok((withdraw_incentives_conditions, withdrawal_share))
     }
 }
 

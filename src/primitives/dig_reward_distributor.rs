@@ -6,8 +6,8 @@ use chia::{
         LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{Cat, CatSpend, DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{run_puzzle, Cat, CatSpend, DriverError, Layer, Puzzle, Spend, SpendContext};
+use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -226,5 +226,22 @@ impl DigRewardDistributor {
                 )
             })
             .collect()
+    }
+
+    pub fn get_latest_pending_state(
+        &self,
+        allocator: &mut Allocator,
+    ) -> Result<DigRewardDistributorState, DriverError> {
+        let mut state = self.info.state;
+
+        for action in self.pending_actions.iter() {
+            let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
+
+            let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
+            (state, _) =
+                <match_tuple!(DigRewardDistributorState, NodePtr)>::from_clvm(allocator, output)?;
+        }
+
+        Ok(state)
     }
 }

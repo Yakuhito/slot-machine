@@ -7,10 +7,7 @@ use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{
-    Action, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorState,
-    SpendContextExt,
-};
+use crate::{Action, DigRewardDistributor, DigRewardDistributorConstants, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigSyncAction {}
@@ -39,27 +36,27 @@ impl DigSyncAction {
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_puzzle_hash: Bytes32,
-        my_state: &DigRewardDistributorState,
+        distributor: &mut DigRewardDistributor,
         update_time: u64,
-    ) -> Result<(Conditions, Spend), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // calculate announcement needed to ensure everything's happening as expected
+        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
         let mut new_epoch_announcement: Vec<u8> =
             clvm_tuple!(update_time, my_state.round_time_info.epoch_end)
                 .tree_hash()
                 .to_vec();
         new_epoch_announcement.insert(0, b's');
-        let new_epoch_conditions = Conditions::new()
-            .assert_puzzle_announcement(announcement_id(my_puzzle_hash, new_epoch_announcement));
+        let new_epoch_conditions = Conditions::new().assert_puzzle_announcement(announcement_id(
+            distributor.coin.puzzle_hash,
+            new_epoch_announcement,
+        ));
 
         // spend self
         let action_solution = DigSyncActionSolution { update_time }.to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        Ok((
-            new_epoch_conditions,
-            Spend::new(action_puzzle, action_solution),
-        ))
+        distributor.insert(Spend::new(action_puzzle, action_solution));
+        Ok(new_epoch_conditions)
     }
 }
 

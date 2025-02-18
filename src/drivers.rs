@@ -457,134 +457,134 @@ pub fn launch_xchandles_registry(
     ))
 }
 
-#[allow(clippy::type_complexity)]
-pub fn launch_dig_reward_distributor(
-    ctx: &mut SpendContext,
-    offer: Offer,
-    first_epoch_start: u64,
-    constants: DigRewardDistributorConstants,
-    consensus_constants: &ConsensusConstants,
-) -> Result<
-    (
-        Signature,
-        SecretKey,
-        DigRewardDistributor,
-        Slot<DigRewardSlotValue>,
-    ),
-    DriverError,
-> {
-    let offer = parse_one_sided_offer(ctx, offer)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+// #[allow(clippy::type_complexity)]
+// pub fn launch_dig_reward_distributor(
+//     ctx: &mut SpendContext,
+//     offer: Offer,
+//     first_epoch_start: u64,
+//     constants: DigRewardDistributorConstants,
+//     consensus_constants: &ConsensusConstants,
+// ) -> Result<
+//     (
+//         Signature,
+//         SecretKey,
+//         DigRewardDistributor,
+//         Slot<DigRewardSlotValue>,
+//     ),
+//     DriverError,
+// > {
+//     let offer = parse_one_sided_offer(ctx, offer)?;
+//     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let security_coin_id = offer.security_coin.coin_id();
+//     let security_coin_id = offer.security_coin.coin_id();
 
-    // Create coin launcher
-    let launcher = Launcher::new(security_coin_id, 1);
-    let launcher_coin = launcher.coin();
-    let launcher_id = launcher_coin.coin_id();
+//     // Create coin launcher
+//     let launcher = Launcher::new(security_coin_id, 1);
+//     let launcher_coin = launcher.coin();
+//     let launcher_id = launcher_coin.coin_id();
 
-    // Spend intermediary coin and create registry
-    let target_info = DigRewardDistributorInfo::new(
-        launcher_id,
-        DigRewardDistributorState {
-            total_reserves: 0,
-            active_shares: 0,
-            round_reward_info: RoundRewardInfo {
-                cumulative_payout: 0,
-                remaining_rewards: 0,
-            },
-            round_time_info: RoundTimeInfo {
-                last_update: first_epoch_start,
-                epoch_end: first_epoch_start,
-            },
-        },
-        constants.with_launcher_id(launcher_id),
-    );
-    let target_inner_puzzle_hash = target_info.clone().inner_puzzle_hash();
+//     // Spend intermediary coin and create registry
+//     let target_info = DigRewardDistributorInfo::new(
+//         launcher_id,
+//         DigRewardDistributorState {
+//             total_reserves: 0,
+//             active_shares: 0,
+//             round_reward_info: RoundRewardInfo {
+//                 cumulative_payout: 0,
+//                 remaining_rewards: 0,
+//             },
+//             round_time_info: RoundTimeInfo {
+//                 last_update: first_epoch_start,
+//                 epoch_end: first_epoch_start,
+//             },
+//         },
+//         constants.with_launcher_id(launcher_id),
+//     );
+//     let target_inner_puzzle_hash = target_info.clone().inner_puzzle_hash();
 
-    let slot_value = DigRewardSlotValue {
-        epoch_start: first_epoch_start,
-        next_epoch_initialized: false,
-        rewards: 0,
-    };
-    let slot_info = SlotInfo::<DigRewardSlotValue>::from_value(
-        launcher_id,
-        slot_value,
-        Some(DigSlotNonce::REWARD.to_u64()),
-    );
-    let slot_puzzle_hash = Slot::<DigRewardSlotValue>::puzzle_hash(&slot_info);
+//     let slot_value = DigRewardSlotValue {
+//         epoch_start: first_epoch_start,
+//         next_epoch_initialized: false,
+//         rewards: 0,
+//     };
+//     let slot_info = SlotInfo::<DigRewardSlotValue>::from_value(
+//         launcher_id,
+//         slot_value,
+//         Some(DigSlotNonce::REWARD.to_u64()),
+//     );
+//     let slot_puzzle_hash = Slot::<DigRewardSlotValue>::puzzle_hash(&slot_info);
 
-    let slot_hint: Bytes32 =
-        Slot::<()>::first_curry_hash(launcher_id, Some(DigSlotNonce::REWARD.to_u64())).into();
-    let slot_memos = ctx.hint(slot_hint)?;
-    let launcher_memos = ctx.hint(launcher_id)?;
-    let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
-        .create_coin(slot_puzzle_hash.into(), 0, Some(slot_memos))
-        .create_coin(target_inner_puzzle_hash.into(), 1, Some(launcher_memos)))
-    .to_clvm(&mut ctx.allocator)?;
+//     let slot_hint: Bytes32 =
+//         Slot::<()>::first_curry_hash(launcher_id, Some(DigSlotNonce::REWARD.to_u64())).into();
+//     let slot_memos = ctx.hint(slot_hint)?;
+//     let launcher_memos = ctx.hint(launcher_id)?;
+//     let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
+//         .create_coin(slot_puzzle_hash.into(), 0, Some(slot_memos))
+//         .create_coin(target_inner_puzzle_hash.into(), 1, Some(launcher_memos)))
+//     .to_clvm(&mut ctx.allocator)?;
 
-    let eve_singleton_inner_puzzle_hash = ctx.tree_hash(eve_singleton_inner_puzzle);
-    let eve_singleton_proof = Proof::Eve(EveProof {
-        parent_parent_coin_info: launcher_coin.parent_coin_info,
-        parent_amount: launcher_coin.amount,
-    });
+//     let eve_singleton_inner_puzzle_hash = ctx.tree_hash(eve_singleton_inner_puzzle);
+//     let eve_singleton_proof = Proof::Eve(EveProof {
+//         parent_parent_coin_info: launcher_coin.parent_coin_info,
+//         parent_amount: launcher_coin.amount,
+//     });
 
-    let (security_coin_conditions, eve_coin) =
-        launcher
-            .with_singleton_amount(1)
-            .spend(ctx, eve_singleton_inner_puzzle_hash.into(), ())?;
+//     let (security_coin_conditions, eve_coin) =
+//         launcher
+//             .with_singleton_amount(1)
+//             .spend(ctx, eve_singleton_inner_puzzle_hash.into(), ())?;
 
-    let eve_coin_solution = SingletonSolution {
-        lineage_proof: eve_singleton_proof,
-        amount: 1,
-        inner_solution: NodePtr::NIL,
-    }
-    .to_clvm(&mut ctx.allocator)?;
+//     let eve_coin_solution = SingletonSolution {
+//         lineage_proof: eve_singleton_proof,
+//         amount: 1,
+//         inner_solution: NodePtr::NIL,
+//     }
+//     .to_clvm(&mut ctx.allocator)?;
 
-    let eve_singleton_puzzle =
-        ctx.curry(SingletonArgs::new(launcher_id, eve_singleton_inner_puzzle))?;
-    let eve_singleton_spend = Spend::new(eve_singleton_puzzle, eve_coin_solution);
-    ctx.spend(eve_coin, eve_singleton_spend)?;
+//     let eve_singleton_puzzle =
+//         ctx.curry(SingletonArgs::new(launcher_id, eve_singleton_inner_puzzle))?;
+//     let eve_singleton_spend = Spend::new(eve_singleton_puzzle, eve_coin_solution);
+//     ctx.spend(eve_coin, eve_singleton_spend)?;
 
-    let new_registry_coin = Coin::new(
-        eve_coin.coin_id(),
-        SingletonArgs::curry_tree_hash(launcher_id, target_inner_puzzle_hash).into(),
-        1,
-    );
-    let new_proof = Proof::Lineage(LineageProof {
-        parent_parent_coin_info: eve_coin.parent_coin_info,
-        parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
-        parent_amount: 1,
-    });
+//     let new_registry_coin = Coin::new(
+//         eve_coin.coin_id(),
+//         SingletonArgs::curry_tree_hash(launcher_id, target_inner_puzzle_hash).into(),
+//         1,
+//     );
+//     let new_proof = Proof::Lineage(LineageProof {
+//         parent_parent_coin_info: eve_coin.parent_coin_info,
+//         parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
+//         parent_amount: 1,
+//     });
 
-    let slot_proof = SlotProof {
-        parent_parent_info: eve_coin.parent_coin_info,
-        parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
-    };
-    let slot = Slot::new(slot_proof, slot_info);
+//     let slot_proof = SlotProof {
+//         parent_parent_info: eve_coin.parent_coin_info,
+//         parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
+//     };
+//     let slot = Slot::new(slot_proof, slot_info);
 
-    // this creates the launcher & secures the spend
-    let security_coin_conditions =
-        security_coin_conditions.assert_concurrent_spend(eve_coin.coin_id());
-    let registry = DigRewardDistributor::new(new_registry_coin, new_proof, target_info);
+//     // this creates the launcher & secures the spend
+//     let security_coin_conditions =
+//         security_coin_conditions.assert_concurrent_spend(eve_coin.coin_id());
+//     let registry = DigRewardDistributor::new(new_registry_coin, new_proof, target_info);
 
-    // Spend security coin
-    let security_coin_sig = spend_security_coin(
-        ctx,
-        offer.security_coin,
-        security_coin_conditions,
-        &offer.security_coin_sk,
-        consensus_constants,
-    )?;
+//     // Spend security coin
+//     let security_coin_sig = spend_security_coin(
+//         ctx,
+//         offer.security_coin,
+//         security_coin_conditions,
+//         &offer.security_coin_sk,
+//         consensus_constants,
+//     )?;
 
-    // Finally, return the data
-    Ok((
-        offer.aggregated_signature + &security_coin_sig,
-        offer.security_coin_sk,
-        registry,
-        slot,
-    ))
-}
+//     // Finally, return the data
+//     Ok((
+//         offer.aggregated_signature + &security_coin_sig,
+//         offer.security_coin_sk,
+//         registry,
+//         slot,
+//     ))
+// }
 
 #[cfg(test)]
 mod tests {
@@ -819,8 +819,7 @@ mod tests {
 
         let (secure_cond, action_spend) = catalog.new_action::<CatalogRefundAction>().spend(
             ctx,
-            catalog.coin.puzzle_hash,
-            catalog.info.inner_puzzle_hash().into(),
+            &catalog,
             tail_hash.into(),
             if let Some(found_slot) = slot {
                 found_slot.info.value.unwrap().neighbors.tree_hash().into()
@@ -1069,9 +1068,7 @@ mod tests {
 
             let (secure_cond, action_spend) = catalog.new_action::<CatalogRegisterAction>().spend(
                 ctx,
-                catalog.coin,
-                catalog.info.inner_puzzle_hash().into(),
-                &catalog.info.constants,
+                &catalog,
                 tail_hash.into(),
                 left_slot,
                 right_slot,

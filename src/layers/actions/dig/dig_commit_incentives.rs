@@ -34,10 +34,7 @@ impl Action<DigRewardDistributor> for DigCommitIncentivesAction {
 }
 
 impl DigCommitIncentivesAction {
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.dig_commit_incentives_action_puzzle()?,
             args: DigCommitIncentivesActionArgs::new(self.launcher_id, self.epoch_seconds),
@@ -96,17 +93,15 @@ impl DigCommitIncentivesAction {
         Ok((commitment_slot_value, reward_slot_values))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_puzzle_hash: Bytes32,
-        my_inner_puzzle_hash: Bytes32,
+        distributor: &mut DigRewardDistributor,
         reward_slot: Slot<DigRewardSlotValue>,
         epoch_start: u64,
         clawback_ph: Bytes32,
         rewards_to_add: u64,
-    ) -> Result<(Conditions, Spend), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         let Some(reward_slot_value) = reward_slot.info.value else {
             return Err(DriverError::Custom("Reward slot value is None".to_string()));
         };
@@ -123,7 +118,7 @@ impl DigCommitIncentivesAction {
         commit_reward_announcement.insert(0, b'c');
 
         // spend reward slot
-        reward_slot.spend(ctx, my_inner_puzzle_hash)?;
+        reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         // spend self
         let action_solution = DigCommitIncentivesActionSolution {
@@ -137,13 +132,13 @@ impl DigCommitIncentivesAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        Ok((
+        distributor.insert(Spend::new(action_puzzle, action_solution));
+        Ok(
             Conditions::new().assert_puzzle_announcement(announcement_id(
-                my_puzzle_hash,
+                distributor.coin.puzzle_hash,
                 commit_reward_announcement,
             )),
-            Spend::new(action_puzzle, action_solution),
-        ))
+        )
     }
 }
 

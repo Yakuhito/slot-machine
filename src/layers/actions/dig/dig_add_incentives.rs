@@ -1,16 +1,13 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::{Bytes32, Coin},
+    protocol::Bytes32,
 };
 use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{
-    Action, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorState,
-    SpendContextExt,
-};
+use crate::{Action, DigRewardDistributor, DigRewardDistributorConstants, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigAddIncentivesAction {
@@ -49,15 +46,14 @@ impl DigAddIncentivesAction {
         .map_err(DriverError::ToClvm)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_coin: Coin,
-        my_state: &DigRewardDistributorState,
-        my_constants: &DigRewardDistributorConstants,
+        distributor: &mut DigRewardDistributor,
         amount: u64,
-    ) -> Result<(Conditions, Spend), DriverError> {
+    ) -> Result<Conditions, DriverError> {
+        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
+
         // calculate announcement needed to ensure everything's happening as expected
         let mut add_incentives_announcement: Vec<u8> =
             clvm_tuple!(amount, my_state.round_time_info.epoch_end)
@@ -65,21 +61,19 @@ impl DigAddIncentivesAction {
                 .to_vec();
         add_incentives_announcement.insert(0, b'i');
         let add_incentives_announcement = Conditions::new().assert_puzzle_announcement(
-            announcement_id(my_coin.puzzle_hash, add_incentives_announcement),
+            announcement_id(distributor.coin.puzzle_hash, add_incentives_announcement),
         );
 
         // spend self
         let action_solution = DigAddIncentivesActionSolution {
             amount,
-            validator_fee: amount * my_constants.validator_fee_bps / 10000,
+            validator_fee: amount * distributor.info.constants.validator_fee_bps / 10000,
         }
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        Ok((
-            add_incentives_announcement,
-            Spend::new(action_puzzle, action_solution),
-        ))
+        distributor.insert(Spend::new(action_puzzle, action_solution));
+        Ok(add_incentives_announcement)
     }
 }
 

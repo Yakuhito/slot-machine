@@ -9,8 +9,8 @@ use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    Action, DigMirrorSlotValue, DigRewardDistributor, DigRewardDistributorConstants,
-    DigRewardDistributorState, DigSlotNonce, Slot, SpendContextExt,
+    Action, DigMirrorSlotValue, DigRewardDistributor, DigRewardDistributorConstants, DigSlotNonce,
+    Slot, SpendContextExt,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,16 +57,13 @@ impl DigRemoveMirrorAction {
         .map_err(DriverError::ToClvm)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        my_puzzle_hash: Bytes32,
-        my_state: &DigRewardDistributorState,
-        my_inner_puzzle_hash: Bytes32,
+        distributor: &mut DigRewardDistributor,
         mirror_slot: Slot<DigMirrorSlotValue>,
         validator_singleton_inner_puzzle_hash: Bytes32,
-    ) -> Result<(Conditions, Spend, u64), DriverError> {
+    ) -> Result<(Conditions, u64), DriverError> {
         // u64 = last payment amount
         let Some(mirror_slot_value) = mirror_slot.info.value else {
             return Err(DriverError::Custom("Mirror slot value is None".to_string()));
@@ -86,14 +83,15 @@ impl DigRemoveMirrorAction {
             .send_message(
                 18,
                 remove_mirror_message.into(),
-                vec![my_puzzle_hash.to_clvm(&mut ctx.allocator)?],
+                vec![distributor.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
             )
             .assert_concurrent_puzzle(mirror_slot.coin.puzzle_hash);
 
         // spend mirror slot
-        mirror_slot.spend(ctx, my_inner_puzzle_hash)?;
+        mirror_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         // spend self
+        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
         let mirror_payout_amount = mirror_slot_value.shares
             * (my_state.round_reward_info.cumulative_payout
                 - mirror_slot_value.initial_cumulative_payout);
@@ -107,11 +105,8 @@ impl DigRemoveMirrorAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        Ok((
-            remove_mirror_conditions,
-            Spend::new(action_puzzle, action_solution),
-            mirror_payout_amount,
-        ))
+        distributor.insert(Spend::new(action_puzzle, action_solution));
+        Ok((remove_mirror_conditions, mirror_payout_amount))
     }
 }
 
