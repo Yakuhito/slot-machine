@@ -3,7 +3,7 @@ use chia::{
     bls::{sign, SecretKey, Signature},
     clvm_utils::ToTreeHash,
     consensus::consensus_constants::ConsensusConstants,
-    protocol::{Bytes32, Coin, CoinSpend, Program},
+    protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
         cat::{CatArgs, CatSolution, CAT_PUZZLE_HASH},
         offer::{
@@ -12,11 +12,11 @@ use chia::{
         },
         singleton::{SingletonArgs, SingletonSolution, SingletonStruct},
         standard::{StandardArgs, StandardSolution},
-        CoinProof, EveProof, LineageProof, Proof,
+        EveProof, LineageProof, Proof,
     },
 };
 use chia_wallet_sdk::{
-    announcement_id, AggSig, AggSigConstants, AggSigKind, Cat, CatLayer, Condition, Conditions,
+    announcement_id, AggSig, AggSigConstants, AggSigKind, Cat, CatSpend, Condition, Conditions,
     CurriedPuzzle, DriverError, Launcher, Layer, Offer, RequiredBlsSignature, Spend, SpendContext,
     StandardLayer,
 };
@@ -87,8 +87,10 @@ pub fn parse_one_sided_offer(
                 let cat_args = CatArgs::<NodePtr>::from_clvm(&ctx.allocator, curried_puzzle.args)?;
                 let cat_solution = CatSolution::<NodePtr>::from_clvm(&ctx.allocator, solution_ptr)?;
 
+                println!("about to run");
                 let inner_output =
                     ctx.run(cat_args.inner_puzzle, cat_solution.inner_puzzle_solution)?;
+                println!("done running");
                 let inner_output =
                     Vec::<Condition<NodePtr>>::from_clvm(&ctx.allocator, inner_output)?;
 
@@ -138,6 +140,18 @@ pub fn parse_one_sided_offer(
                         SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
                     );
 
+                    // offers don't allow amount 0 coins, so we create an 1-amount coin,
+                    //   which creates a 0-amount coin and spend all the CATs together
+                    let interim_inner_puzzle = clvm_quote!(Conditions::new().create_coin(
+                        cat_destination_puzzle_hash,
+                        0,
+                        Some(chia_wallet_sdk::Memos::new(
+                            vec![cat_destination_puzzle_hash].to_clvm(&mut ctx.allocator)?
+                        ))
+                    ))
+                    .to_clvm(&mut ctx.allocator)?;
+                    let interim_inner_ph: Bytes32 = ctx.tree_hash(interim_inner_puzzle).into();
+
                     let notarized_payment = NotarizedPayment {
                         nonce: offer_coin_cat.coin_id(),
                         payments: vec![
@@ -147,9 +161,9 @@ pub fn parse_one_sided_offer(
                                 memos: Some(Memos(vec![refund_puzzle_hash.into()])),
                             },
                             Payment {
-                                puzzle_hash: cat_destination_puzzle_hash,
-                                amount: 0,
-                                memos: Some(Memos(vec![cat_destination_puzzle_hash.into()])),
+                                puzzle_hash: interim_inner_ph,
+                                amount: 1,
+                                memos: None,
                             },
                         ],
                     };
@@ -158,34 +172,25 @@ pub fn parse_one_sided_offer(
                     }
                     .to_clvm(&mut ctx.allocator)?;
 
-                    let offer_cat_layer =
-                        CatLayer::new(offer_cat.asset_id, ctx.settlement_payments_puzzle()?);
-                    let offer_cat_puzzle = offer_cat_layer.construct_puzzle(ctx)?;
-                    let offer_cat_solution = offer_cat_layer.construct_solution(
-                        ctx,
-                        CatSolution::<NodePtr> {
-                            inner_puzzle_solution: offer_cat_inner_solution,
-                            lineage_proof: offer_cat.lineage_proof,
-                            prev_coin_id: offer_cat.coin.coin_id(),
-                            this_coin_info: offer_cat.coin,
-                            next_coin_proof: CoinProof {
-                                parent_coin_info: offer_cat.coin.parent_coin_info,
-                                inner_puzzle_hash: offer_cat.p2_puzzle_hash,
-                                amount: offer_cat.coin.amount,
-                            },
-                            prev_subtotal: 0,
-                            extra_delta: 0,
-                        },
-                    )?;
+                    let offer_cat_spend = CatSpend::new(
+                        offer_cat,
+                        Spend::new(ctx.settlement_payments_puzzle()?, offer_cat_inner_solution),
+                    );
 
-                    let offer_cat_puzzle = Program::from_clvm(&ctx.allocator, offer_cat_puzzle)?;
-                    let offer_cat_solution =
-                        Program::from_clvm(&ctx.allocator, offer_cat_solution)?;
-                    let offer_cat_spend =
-                        CoinSpend::new(offer_cat.coin, offer_cat_puzzle, offer_cat_solution);
-                    coin_spends.push(offer_cat_spend);
+                    let interim_cat = offer_cat.wrapped_child(interim_inner_ph, 1);
+                    let interim_cat_spend =
+                        CatSpend::new(interim_cat, Spend::new(interim_inner_puzzle, NodePtr::NIL));
 
-                    created_cat = Some(offer_cat.wrapped_child(cat_destination_puzzle_hash, 0));
+                    let orig_spends = ctx.take();
+
+                    Cat::spend_all(ctx, &[offer_cat_spend, interim_cat_spend])?;
+                    coin_spends.extend(ctx.take());
+
+                    for og_spend in orig_spends {
+                        ctx.insert(og_spend);
+                    }
+
+                    created_cat = Some(interim_cat.wrapped_child(cat_destination_puzzle_hash, 0));
                     let announcement_msg: Bytes32 = notarized_payment.tree_hash().into();
                     base_conditions = base_conditions.assert_puzzle_announcement(announcement_id(
                         offer_cat.coin.puzzle_hash,
@@ -601,6 +606,7 @@ pub fn launch_dig_reward_distributor(
         SecretKey,
         DigRewardDistributor,
         Slot<DigRewardSlotValue>,
+        Cat,
     ),
     DriverError,
 > {
@@ -737,6 +743,7 @@ pub fn launch_dig_reward_distributor(
         offer.security_coin_sk,
         registry,
         slot,
+        offer.created_cat.unwrap(),
     ))
 }
 
@@ -758,12 +765,13 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction,
-        CatalogSlotValue, DelegatedStateAction, DelegatedStateActionSolution,
-        DigAddIncentivesAction, DigAddMirrorAction, DigCommitIncentivesAction,
-        DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction,
-        DigRewardDistributorConstants, DigSyncAction, DigWithdrawIncentivesAction, PrecommitCoin,
-        Slot, SpendContextExt, XchandlesPrecommitValue, ANY_METADATA_UPDATER_HASH,
+        print_spend_bundle_to_file, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
+        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
+        DelegatedStateActionSolution, DigAddIncentivesAction, DigAddMirrorAction,
+        DigCommitIncentivesAction, DigInitiatePayoutAction, DigNewEpochAction,
+        DigRemoveMirrorAction, DigRewardDistributorConstants, DigSyncAction,
+        DigWithdrawIncentivesAction, PrecommitCoin, Slot, SpendContextExt, XchandlesPrecommitValue,
+        ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -1322,6 +1330,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(dead_code)]
     #[allow(clippy::too_many_arguments)]
     fn test_refund_for_xchandles(
         ctx: &mut SpendContext,
@@ -2269,23 +2278,20 @@ mod tests {
         let first_epoch_start = 1234;
 
         // launch reserve
-        let (_, security_sk, mut registry, first_epoch_slot) = launch_dig_reward_distributor(
-            ctx,
-            offer,
-            first_epoch_start,
-            constants,
-            &TESTNET11_CONSTANTS,
-        )?;
-
-        let new_source_cat = source_cat
-            .wrapped_child(
-                SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
-                source_cat.coin.amount,
-            )
-            .wrapped_child(cat_minter_puzzle_hash, source_cat.coin.amount);
-
+        println!("-1");
+        let (_, security_sk, mut registry, first_epoch_slot, new_source_cat) =
+            launch_dig_reward_distributor(
+                ctx,
+                offer,
+                first_epoch_start,
+                constants,
+                &TESTNET11_CONSTANTS,
+            )?;
+        println!("1");
+        let spends = ctx.take();
+        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
         sim.spend_coins(
-            ctx.take(),
+            spends,
             &[
                 launcher_sk.clone(),
                 security_sk.clone(),
@@ -2293,6 +2299,7 @@ mod tests {
             ],
         )?;
         source_cat = new_source_cat;
+        println!("2");
 
         // add the 1st mirror before reward epoch ('first epoch') begins
         let (validator_conditions, mirror1_slot) =
@@ -2316,7 +2323,6 @@ mod tests {
 
         // commit incentives for first epoch
         let rewards_to_add = constants.epoch_seconds;
-        let registry_info = registry.info;
         let (secure_conditions, first_epoch_commitment_slot, mut incentive_slots) =
             registry.new_action::<DigCommitIncentivesAction>().spend(
                 ctx,
@@ -2356,7 +2362,6 @@ mod tests {
         // commit incentives for fifth epoch
         let fifth_epoch_start = first_epoch_start + constants.epoch_seconds * 4;
         let rewards_to_add = constants.epoch_seconds * 10;
-        let registry_info = registry.info;
         let (secure_conditions, fifth_epoch_commitment_slot, new_incentive_slots) =
             registry.new_action::<DigCommitIncentivesAction>().spend(
                 ctx,
@@ -2402,7 +2407,6 @@ mod tests {
 
         // 2nd commit incentives for fifth epoch
         let rewards_to_add = constants.epoch_seconds * 2;
-        let registry_info = registry.info;
         let (secure_conditions, fifth_epoch_commitment_slot2, new_incentive_slots) =
             registry.new_action::<DigCommitIncentivesAction>().spend(
                 ctx,
