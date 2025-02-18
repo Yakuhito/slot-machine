@@ -11,7 +11,8 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    Action, ActionLayer, ActionLayerSolution, DigAddIncentivesAction, DigAddIncentivesActionSolution, DigAddMirrorAction, DigAddMirrorActionSolution, DigCommitIncentivesAction, DigCommitIncentivesActionSolution, DigInitiatePayoutAction, DigInitiatePayoutActionSolution, DigNewEpochAction, DigNewEpochActionSolution, DigRemoveMirrorAction, DigRemoveMirrorActionSolution, DigRewardSlotValue, DigSlotNonce, DigSyncAction, DigSyncActionSolution, DigWithdrawIncentivesAction, DigWithdrawIncentivesActionSolution, RawActionLayerSolution, Registry, ReserveFinalizerSolution, Slot, SlotInfo, SlotProof
+    Action, ActionLayer, ActionLayerSolution, RawActionLayerSolution, Registry,
+    ReserveFinalizerSolution, Slot, SlotInfo, SlotProof,
 };
 
 use super::{
@@ -24,16 +25,18 @@ pub struct DigRewardDistributor {
     pub coin: Coin,
     pub proof: Proof,
     pub info: DigRewardDistributorInfo,
+    pub reserve: Reserve,
 
     pub pending_actions: Vec<Spend>,
 }
 
 impl DigRewardDistributor {
-    pub fn new(coin: Coin, proof: Proof, info: DigRewardDistributorInfo) -> Self {
+    pub fn new(coin: Coin, proof: Proof, info: DigRewardDistributorInfo, reserve: Reserve) -> Self {
         Self {
             coin,
             proof,
             info,
+            reserve,
             pending_actions: Vec::new(),
         }
     }
@@ -46,7 +49,7 @@ impl DigRewardDistributor {
         parent_puzzle: Puzzle,
         parent_solution: NodePtr,
         constants: DigRewardDistributorConstants,
-    ) -> Result<Option<(Self, Reserve)>, DriverError>
+    ) -> Result<Option<Self>, DriverError>
     where
         Self: Sized,
     {
@@ -98,15 +101,13 @@ impl DigRewardDistributor {
             new_state.total_reserves,
         );
 
-        Ok(Some((
-            DigRewardDistributor {
-                coin: new_coin,
-                proof,
-                info: new_info,
-                pending_actions: Vec::new(),
-            },
+        Ok(Some(DigRewardDistributor {
+            coin: new_coin,
+            proof,
+            info: new_info,
             reserve,
-        )))
+            pending_actions: Vec::new(),
+        }))
     }
 }
 
@@ -120,8 +121,7 @@ impl DigRewardDistributor {
         self,
         ctx: &mut SpendContext,
         other_reserve_cats: CatSpend,
-        reserve_parent_id: Bytes32,
-    ) -> Result<Spend, DriverError> {
+    ) -> Result<(Spend, Self), DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
@@ -132,8 +132,10 @@ impl DigRewardDistributor {
             .map(|a| ctx.tree_hash(a.puzzle).into())
             .collect::<Vec<Bytes32>>();
 
-        let finalizer_solution =
-            ReserveFinalizerSolution { reserve_parent_id }.to_clvm(&mut ctx.allocator)?;
+        let finalizer_solution = ReserveFinalizerSolution {
+            reserve_parent_id: self.reserve.coin.parent_coin_info,
+        }
+        .to_clvm(&mut ctx.allocator)?;
 
         let solution = layers.construct_solution(
             ctx,
@@ -160,7 +162,13 @@ impl DigRewardDistributor {
         )?;
 
         // todo: spend CAT reserve as well
-        todo
+        self.reserve.spend_for_reserve_finalizer_controller(
+            ctx,
+            self.info.state,
+            self.reserve.coin.amount,
+            self.info.inner_puzzle_hash().into(),
+            solution,
+        )?;
 
         Ok(Spend::new(puzzle, solution))
     }
@@ -184,7 +192,10 @@ impl DigRewardDistributor {
         &self,
         slot_values: Vec<SlotValue>,
         nonce: DigSlotNonce,
-    ) -> Vec<Slot<SlotValue>> where SlotValue: Copy + ToTreeHash {
+    ) -> Vec<Slot<SlotValue>>
+    where
+        SlotValue: Copy + ToTreeHash,
+    {
         let proof = SlotProof {
             parent_parent_info: self.coin.parent_coin_info,
             parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
