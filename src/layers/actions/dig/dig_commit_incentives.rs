@@ -93,6 +93,7 @@ impl DigCommitIncentivesAction {
         Ok((commitment_slot_value, reward_slot_values))
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,
@@ -101,7 +102,14 @@ impl DigCommitIncentivesAction {
         epoch_start: u64,
         clawback_ph: Bytes32,
         rewards_to_add: u64,
-    ) -> Result<Conditions, DriverError> {
+    ) -> Result<
+        (
+            Conditions,
+            Slot<DigCommitmentSlotValue>,
+            Vec<Slot<DigRewardSlotValue>>,
+        ),
+        DriverError,
+    > {
         let Some(reward_slot_value) = reward_slot.info.value else {
             return Err(DriverError::Custom("Reward slot value is None".to_string()));
         };
@@ -132,13 +140,23 @@ impl DigCommitIncentivesAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
+        let (_commitment_slot_value, reward_slot_values) = self.get_slot_values_from_solution(
+            ctx,
+            distributor.info.constants.epoch_seconds,
+            action_solution,
+        )?;
         distributor.insert(Spend::new(action_puzzle, action_solution));
-        Ok(
+        Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 distributor.coin.puzzle_hash,
                 commit_reward_announcement,
             )),
-        )
+            distributor.created_slot_values_to_slots(
+                vec![new_commitment_slot_value],
+                DigSlotNonce::COMMITMENT,
+            )[0],
+            distributor.created_slot_values_to_slots(reward_slot_values, DigSlotNonce::REWARD),
+        ))
     }
 }
 

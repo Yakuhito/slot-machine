@@ -77,7 +77,7 @@ impl DigInitiatePayoutAction {
         ctx: &mut SpendContext,
         distributor: &mut DigRewardDistributor,
         mirror_slot: Slot<DigMirrorSlotValue>,
-    ) -> Result<(Conditions, u64), DriverError> {
+    ) -> Result<(Conditions, Slot<DigMirrorSlotValue>, u64), DriverError> {
         let Some(mirror_slot_value) = mirror_slot.info.value else {
             return Err(DriverError::Custom("Mirror slot value is None".to_string()));
         };
@@ -117,12 +117,14 @@ impl DigInitiatePayoutAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
+        let slot_value = self.get_slot_value_from_solution(ctx, &my_state, action_solution)?;
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 distributor.coin.puzzle_hash,
                 initiate_payout_announcement,
             )),
+            distributor.created_slot_values_to_slots(vec![slot_value], DigSlotNonce::MIRROR)[0],
             withdrawal_amount,
         ))
     }

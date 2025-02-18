@@ -80,7 +80,7 @@ impl DigNewEpochAction {
         distributor: &mut DigRewardDistributor,
         reward_slot: Slot<DigRewardSlotValue>,
         epoch_total_rewards: u64,
-    ) -> Result<(Conditions, u64), DriverError> {
+    ) -> Result<(Conditions, Slot<DigRewardSlotValue>, u64), DriverError> {
         // also returns validator fee
         let Some(reward_slot_value) = reward_slot.info.value else {
             return Err(DriverError::Custom("Reward slot value is None".to_string()));
@@ -115,8 +115,13 @@ impl DigNewEpochAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
+        let slot_value = self.get_slot_value_from_solution(ctx, action_solution)?;
         distributor.insert(Spend::new(action_puzzle, action_solution));
-        Ok((new_epoch_conditions, valdiator_fee))
+        Ok((
+            new_epoch_conditions,
+            distributor.created_slot_values_to_slots(vec![slot_value], DigSlotNonce::REWARD)[0],
+            valdiator_fee,
+        ))
     }
 }
 

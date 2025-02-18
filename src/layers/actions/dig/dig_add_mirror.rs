@@ -76,7 +76,7 @@ impl DigAddMirrorAction {
         payout_puzzle_hash: Bytes32,
         shares: u64,
         validator_singleton_inner_puzzle_hash: Bytes32,
-    ) -> Result<Conditions, DriverError> {
+    ) -> Result<(Conditions, Slot<DigMirrorSlotValue>), DriverError> {
         // calculate message that the validator needs to send
         let add_mirror_message: Bytes32 =
             clvm_tuple!(payout_puzzle_hash, shares).tree_hash().into();
@@ -97,8 +97,13 @@ impl DigAddMirrorAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
+        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
+        let slot_value = self.get_slot_value_from_solution(ctx, &my_state, action_solution)?;
         distributor.insert(Spend::new(action_puzzle, action_solution));
-        Ok(add_mirror_message)
+        Ok((
+            add_mirror_message,
+            distributor.created_slot_values_to_slots(vec![slot_value], DigSlotNonce::MIRROR)[0],
+        ))
     }
 }
 

@@ -32,7 +32,6 @@ impl DigSyncAction {
         ctx.dig_sync_action_puzzle()
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,

@@ -71,7 +71,7 @@ impl DigWithdrawIncentivesAction {
         distributor: &mut DigRewardDistributor,
         commitment_slot: Slot<DigCommitmentSlotValue>,
         reward_slot: Slot<DigRewardSlotValue>,
-    ) -> Result<(Conditions, u64), DriverError> {
+    ) -> Result<(Conditions, Slot<DigRewardSlotValue>, u64), DriverError> {
         // last u64 = withdrawn amount
         let Some(reward_slot_value) = reward_slot.info.value else {
             return Err(DriverError::Custom("Reward slot value is None".to_string()));
@@ -111,8 +111,14 @@ impl DigWithdrawIncentivesAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
+        let slot_value =
+            self.get_slot_value_from_solution(ctx, &distributor.info.constants, action_solution)?;
         distributor.insert(Spend::new(action_puzzle, action_solution));
-        Ok((withdraw_incentives_conditions, withdrawal_share))
+        Ok((
+            withdraw_incentives_conditions,
+            distributor.created_slot_values_to_slots(vec![slot_value], DigSlotNonce::REWARD)[0],
+            withdrawal_share,
+        ))
     }
 }
 

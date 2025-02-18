@@ -759,7 +759,7 @@ mod tests {
 
     use crate::{
         CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction,
-        CatalogSlotValue, DelegatedStateAction, DelegatedStateActionSolution,
+        CatalogSlotValue, DelegatedStateAction, DelegatedStateActionSolution, DigAddMirrorAction,
         DigRewardDistributorConstants, PrecommitCoin, Slot, SpendContextExt,
         XchandlesPrecommitValue, ANY_METADATA_UPDATER_HASH,
     };
@@ -2301,13 +2301,15 @@ mod tests {
         source_cat = new_source_cat;
 
         // add the 1st mirror before reward epoch ('first epoch') begins
-        let (validator_conditions, mut registry, mut reserve, mirror1_slot) = registry.add_mirror(
-            ctx,
-            reserve,
-            mirror1_puzzle_hash,
-            1,
-            validator_singleton_inner_puzzle_hash,
-        )?;
+        let (validator_conditions, mirror1_slot) =
+            registry.new_action::<DigAddMirrorAction>().spend(
+                ctx,
+                &mut registry,
+                mirror1_puzzle_hash,
+                1,
+                validator_singleton_inner_puzzle_hash,
+            )?;
+        registry = registry.finish_spend(ctx, vec![])?;
 
         (validator_coin, validator_singleton_proof) = spend_validator_singleton(
             ctx,

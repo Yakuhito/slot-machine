@@ -107,7 +107,7 @@ impl CatalogRegisterAction {
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         eve_nft_inner_spend: Spend,
-    ) -> Result<Conditions, DriverError> {
+    ) -> Result<(Conditions, Vec<Slot<CatalogSlotValue>>), DriverError> {
         // spend slots
         let Some(left_slot_value) = left_slot.info.value else {
             return Err(DriverError::Custom("Missing left slot value".to_string()));
@@ -176,13 +176,15 @@ impl CatalogRegisterAction {
         let my_solution = my_solution.to_clvm(&mut ctx.allocator)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
+        let slot_values = self.get_slot_values_from_solution(ctx, my_solution)?;
         catalog.insert(Spend::new(my_puzzle, my_solution));
-        Ok(
+        Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 catalog.coin.puzzle_hash,
                 register_announcement,
             )),
-        )
+            catalog.created_slot_values_to_slots(slot_values.to_vec()),
+        ))
     }
 }
 
