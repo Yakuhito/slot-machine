@@ -1,29 +1,33 @@
-use chia::{clvm_utils::TreeHash, protocol::Bytes32};
-use chia_wallet_sdk::{DriverError, Layer};
-use clvm_traits::{FromClvm, ToClvm};
+use chia::{
+    clvm_utils::{ToTreeHash, TreeHash},
+    protocol::Bytes32,
+};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigRewardDistributorInfo, SpendContextExt};
+use crate::{
+    Action, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorState,
+    SpendContextExt,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DigSyncAction {
-    pub launcher_id: Bytes32,
-    pub validator_launcher_id: Bytes32,
-}
+pub struct DigSyncAction {}
 
-impl DigSyncAction {
-    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
-        Self {
-            launcher_id: info.launcher_id,
-            validator_launcher_id: info.constants.validator_launcher_id,
-        }
+impl ToTreeHash for DigSyncAction {
+    fn tree_hash(&self) -> TreeHash {
+        DigSyncActionArgs::curry_tree_hash()
     }
 }
 
-impl Layer for DigSyncAction {
-    type Solution = DigSyncActionSolution;
+impl Action<DigRewardDistributor> for DigSyncAction {
+    fn from_constants(_launcher_id: Bytes32, _constants: &DigRewardDistributorConstants) -> Self {
+        Self {}
+    }
+}
 
+impl DigSyncAction {
     fn construct_puzzle(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
@@ -31,34 +35,31 @@ impl Layer for DigSyncAction {
         ctx.dig_sync_action_puzzle()
     }
 
-    fn construct_solution(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DigSyncActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
-    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        my_puzzle_hash: Bytes32,
+        my_state: &DigRewardDistributorState,
+        update_time: u64,
+    ) -> Result<(Conditions, Spend), DriverError> {
+        // calculate announcement needed to ensure everything's happening as expected
+        let mut new_epoch_announcement: Vec<u8> =
+            clvm_tuple!(update_time, my_state.round_time_info.epoch_end)
+                .tree_hash()
+                .to_vec();
+        new_epoch_announcement.insert(0, b's');
+        let new_epoch_conditions = Conditions::new()
+            .assert_puzzle_announcement(announcement_id(my_puzzle_hash, new_epoch_announcement));
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+        // spend self
+        let action_solution = DigSyncActionSolution { update_time }.to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
-
-impl DigSyncAction {
-    pub fn curry_tree_hash() -> TreeHash {
-        DIG_SYNC_PUZZLE_HASH
+        Ok((
+            new_epoch_conditions,
+            Spend::new(action_puzzle, action_solution),
+        ))
     }
 }
 
@@ -69,6 +70,13 @@ pub const DIG_SYNC_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     59f43204bc4029631fd3d7deaee02af4c66720788dd24249eb5e0176cd8348cc
     "
 ));
+
+pub struct DigSyncActionArgs {}
+impl DigSyncActionArgs {
+    pub fn curry_tree_hash() -> TreeHash {
+        DIG_SYNC_PUZZLE_HASH
+    }
+}
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
