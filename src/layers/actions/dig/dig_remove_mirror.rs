@@ -3,12 +3,15 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::{SingletonStruct, SINGLETON_TOP_LAYER_PUZZLE_HASH},
 };
-use chia_wallet_sdk::{DriverError, Layer};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
+use crate::{
+    Action, DigMirrorSlotValue, DigRewardDistributor, DigRewardDistributorConstants,
+    DigRewardDistributorState, DigSlotNonce, Slot, SpendContextExt,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigRemoveMirrorAction {
@@ -17,19 +20,27 @@ pub struct DigRemoveMirrorAction {
     pub max_seconds_offset: u64,
 }
 
-impl DigRemoveMirrorAction {
-    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+impl ToTreeHash for DigRemoveMirrorAction {
+    fn tree_hash(&self) -> TreeHash {
+        DigRemoveMirrorActionArgs::curry_tree_hash(
+            self.launcher_id,
+            self.validator_launcher_id,
+            self.max_seconds_offset,
+        )
+    }
+}
+
+impl Action<DigRewardDistributor> for DigRemoveMirrorAction {
+    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id: info.launcher_id,
-            validator_launcher_id: info.constants.validator_launcher_id,
-            max_seconds_offset: info.constants.max_seconds_offset,
+            launcher_id,
+            validator_launcher_id: constants.validator_launcher_id,
+            max_seconds_offset: constants.max_seconds_offset,
         }
     }
 }
 
-impl Layer for DigRemoveMirrorAction {
-    type Solution = DigRemoveMirrorActionSolution;
-
+impl DigRemoveMirrorAction {
     fn construct_puzzle(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
@@ -46,46 +57,61 @@ impl Layer for DigRemoveMirrorAction {
         .map_err(DriverError::ToClvm)
     }
 
-    fn construct_solution(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DigRemoveMirrorActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
-    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        my_puzzle_hash: Bytes32,
+        my_state: &DigRewardDistributorState,
+        my_inner_puzzle_hash: Bytes32,
+        mirror_slot: Slot<DigMirrorSlotValue>,
+        validator_singleton_inner_puzzle_hash: Bytes32,
+    ) -> Result<(Conditions, Spend, u64), DriverError> {
+        // u64 = last payment amount
+        let Some(mirror_slot_value) = mirror_slot.info.value else {
+            return Err(DriverError::Custom("Mirror slot value is None".to_string()));
+        };
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
-
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
-
-impl DigRemoveMirrorAction {
-    pub fn curry_tree_hash(
-        launcher_id: Bytes32,
-        validator_launcher_id: Bytes32,
-        max_seconds_offset: u64,
-    ) -> TreeHash {
-        CurriedProgram {
-            program: DIG_REMOVE_MIRROR_PUZZLE_HASH,
-            args: DigRemoveMirrorActionArgs::new(
-                launcher_id,
-                validator_launcher_id,
-                max_seconds_offset,
-            ),
-        }
+        // compute message that the validator needs to send
+        let remove_mirror_message: Bytes32 = clvm_tuple!(
+            mirror_slot_value.payout_puzzle_hash,
+            mirror_slot_value.shares
+        )
         .tree_hash()
+        .into();
+        let mut remove_mirror_message: Vec<u8> = remove_mirror_message.to_vec();
+        remove_mirror_message.insert(0, b'r');
+
+        let remove_mirror_conditions = Conditions::new()
+            .send_message(
+                18,
+                remove_mirror_message.into(),
+                vec![my_puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            )
+            .assert_concurrent_puzzle(mirror_slot.coin.puzzle_hash);
+
+        // spend mirror slot
+        mirror_slot.spend(ctx, my_inner_puzzle_hash)?;
+
+        // spend self
+        let mirror_payout_amount = mirror_slot_value.shares
+            * (my_state.round_reward_info.cumulative_payout
+                - mirror_slot_value.initial_cumulative_payout);
+        let action_solution = DigRemoveMirrorActionSolution {
+            validator_singleton_inner_puzzle_hash,
+            mirror_payout_amount,
+            mirror_payout_puzzle_hash: mirror_slot_value.payout_puzzle_hash,
+            mirror_initial_cumulative_payout: mirror_slot_value.initial_cumulative_payout,
+            mirror_shares: mirror_slot_value.shares,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        Ok((
+            remove_mirror_conditions,
+            Spend::new(action_puzzle, action_solution),
+            mirror_payout_amount,
+        ))
     }
 }
 
@@ -124,6 +150,24 @@ impl DigRemoveMirrorActionArgs {
             .into(),
             max_seconds_offset,
         }
+    }
+}
+
+impl DigRemoveMirrorActionArgs {
+    pub fn curry_tree_hash(
+        launcher_id: Bytes32,
+        validator_launcher_id: Bytes32,
+        max_seconds_offset: u64,
+    ) -> TreeHash {
+        CurriedProgram {
+            program: DIG_REMOVE_MIRROR_PUZZLE_HASH,
+            args: DigRemoveMirrorActionArgs::new(
+                launcher_id,
+                validator_launcher_id,
+                max_seconds_offset,
+            ),
+        }
+        .tree_hash()
     }
 }
 
