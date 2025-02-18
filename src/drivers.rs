@@ -610,7 +610,6 @@ pub fn launch_dig_reward_distributor(
         SecretKey,
         DigRewardDistributor,
         Slot<DigRewardSlotValue>,
-        Cat,
     ),
     DriverError,
 > {
@@ -758,7 +757,6 @@ pub fn launch_dig_reward_distributor(
         security_coin_sk,
         registry,
         slot,
-        offer.created_cat.unwrap(),
     ))
 }
 
@@ -2293,15 +2291,13 @@ mod tests {
         let first_epoch_start = 1234;
 
         // launch reserve
-        let (_, security_sk, mut registry, first_epoch_slot, new_source_cat) =
-            launch_dig_reward_distributor(
-                ctx,
-                offer,
-                first_epoch_start,
-                constants,
-                &TESTNET11_CONSTANTS,
-            )?;
-        println!("1");
+        let (_, security_sk, mut registry, first_epoch_slot) = launch_dig_reward_distributor(
+            ctx,
+            offer,
+            first_epoch_start,
+            constants,
+            &TESTNET11_CONSTANTS,
+        )?;
         let spends = ctx.take();
         print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
         sim.spend_coins(
@@ -2312,7 +2308,13 @@ mod tests {
                 cat_minter_sk.clone(),
             ],
         )?;
-        source_cat = new_source_cat;
+        source_cat = source_cat
+            .wrapped_child(
+                SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+                source_cat.coin.amount,
+            )
+            .wrapped_child(cat_minter_puzzle_hash, source_cat.coin.amount);
+        assert!(sim.coin_state(source_cat.coin.coin_id()).is_some());
 
         // add the 1st mirror before reward epoch ('first epoch') begins
         let (validator_conditions, mirror1_slot) =
