@@ -132,15 +132,11 @@ impl XchandlesRefundAction {
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
-        let new_slot_value = if let Some(slot) = slot {
-            Some(
-                registry.created_slot_values_to_slots(vec![
-                    self.get_slot_value(slot.info.value.unwrap())
-                ])[0],
-            )
-        } else {
-            None
-        };
+        let new_slot_value = slot.map(|slot| {
+            registry
+                .created_slot_values_to_slots(vec![self.get_slot_value(slot.info.value.unwrap())])
+                [0]
+        });
 
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(

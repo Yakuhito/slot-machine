@@ -37,16 +37,6 @@ impl XchandlesOracleAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn construct_solution(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: XchandlesOracleActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
-    }
-
     pub fn get_slot_value(&self, old_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
         old_slot_value // nothing changed
     }
