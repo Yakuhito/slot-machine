@@ -1722,7 +1722,7 @@ mod tests {
 
             // test on-chain extend mechanism for current handle
             let extension_years: u64 = i as u64 + 1;
-            let extension_slot = new_slots[0];
+            let extension_slot = new_slot;
             let pay_for_extension: u64 =
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, extension_years);
 
@@ -1785,7 +1785,7 @@ mod tests {
             // test on-chain mechanism for handle updates
             let new_owner_launcher_id = Bytes32::new([4 + i as u8; 32]);
             let new_resolved_launcher_id = Bytes32::new([u8::MAX - i as u8 - 1; 32]);
-            let update_slot = new_slots[0];
+            let update_slot = new_slot;
 
             let (update_conds, new_slot) = registry.new_action::<XchandlesUpdateAction>().spend(
                 ctx,
