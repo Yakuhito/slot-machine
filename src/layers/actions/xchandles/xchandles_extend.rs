@@ -1,16 +1,19 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::offer::SETTLEMENT_PAYMENTS_PUZZLE_HASH,
+    puzzles::offer::{NotarizedPayment, Payment, SETTLEMENT_PAYMENTS_PUZZLE_HASH},
 };
-use chia_wallet_sdk::{DriverError, Layer, SpendContext};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{Slot, SpendContextExt};
+use crate::{
+    Action, DefaultCatMakerArgs, Slot, SpendContextExt, XchandlesConstants, XchandlesRegistry,
+    XchandlesSlotValue,
+};
 
-use super::XchandlesFactorPricingSolution;
+use super::{XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesExtendAction {
@@ -18,19 +21,22 @@ pub struct XchandlesExtendAction {
     pub payout_puzzle_hash: Bytes32,
 }
 
-impl XchandlesExtendAction {
-    pub fn new(launcher_id: Bytes32, payout_puzzle_hash: Bytes32) -> Self {
+impl ToTreeHash for XchandlesExtendAction {
+    fn tree_hash(&self) -> TreeHash {
+        XchandlesExtendActionArgs::curry_tree_hash(self.launcher_id, self.payout_puzzle_hash)
+    }
+}
+
+impl Action<XchandlesRegistry> for XchandlesExtendAction {
+    fn from_constants(launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
         Self {
             launcher_id,
-            payout_puzzle_hash,
+            payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
         }
     }
 }
 
-impl Layer for XchandlesExtendAction {
-    type Solution =
-        XchandlesExtendActionSolution<NodePtr, XchandlesFactorPricingSolution, NodePtr, ()>;
-
+impl XchandlesExtendAction {
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.xchandles_extend_puzzle()?,
@@ -39,34 +45,94 @@ impl Layer for XchandlesExtendAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn construct_solution(
+    pub fn get_slot_value_from_solution(
         &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: Self::Solution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        ctx: &SpendContext,
+        old_slot_value: XchandlesSlotValue,
+        solution: NodePtr,
+    ) -> Result<XchandlesSlotValue, DriverError> {
+        let solution = XchandlesExtendActionSolution::<
+            NodePtr,
+            XchandlesFactorPricingSolution,
+            NodePtr,
+            (),
+        >::from_clvm(&ctx.allocator, solution)?;
+
+        Ok(old_slot_value.with_expiration(
+            old_slot_value.expiration + solution.pricing_solution.num_years * 366 * 24 * 60 * 60,
+        ))
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        registry: &mut XchandlesRegistry,
+        handle: String,
+        slot: Slot<XchandlesSlotValue>,
+        payment_asset_id: Bytes32,
+        base_handle_price: u64,
+        num_years: u64,
+    ) -> Result<(NotarizedPayment, Conditions, Slot<XchandlesSlotValue>), DriverError> {
+        // spend slots
+        let Some(slot_value) = slot.info.value else {
+            return Err(DriverError::Custom("Missing slot value".to_string()));
+        };
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
+        let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
-impl ToTreeHash for XchandlesExtendAction {
-    fn tree_hash(&self) -> TreeHash {
-        XchandlesExtendActionArgs::curry_tree_hash(self.launcher_id, self.payout_puzzle_hash)
+        slot.spend(ctx, spender_inner_puzzle_hash)?;
+
+        // finally, spend self
+        let action_solution = XchandlesExtendActionSolution {
+            handle_hash: slot_value.handle_hash,
+            pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
+                ctx,
+                base_handle_price,
+            )?,
+            pricing_solution: XchandlesFactorPricingSolution {
+                current_expiration: slot_value.expiration,
+                handle: handle.clone(),
+                num_years,
+            },
+            cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                payment_asset_id.tree_hash().into(),
+            )?,
+            cat_maker_solution: (),
+            neighbors_hash: slot_value.neighbors.tree_hash().into(),
+            expiration: slot_value.expiration,
+            rest_hash: slot_value.launcher_ids_data_hash().into(),
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        registry.insert(Spend::new(action_puzzle, action_solution));
+
+        let renew_amount =
+            XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, num_years);
+
+        let notarized_payment = NotarizedPayment {
+            nonce: clvm_tuple!(handle.clone(), slot_value.expiration)
+                .tree_hash()
+                .into(),
+            payments: vec![Payment {
+                puzzle_hash: registry.info.constants.precommit_payout_puzzle_hash,
+                amount: renew_amount,
+                memos: None,
+            }],
+        };
+
+        let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, handle).tree_hash().to_vec();
+        extend_ann.insert(0, b'e');
+
+        let new_slot_value = self.get_slot_value_from_solution(ctx, slot_value, action_solution)?;
+
+        Ok((
+            notarized_payment,
+            Conditions::new()
+                .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, extend_ann)),
+            registry.created_slot_values_to_slots(vec![new_slot_value])[0],
+        ))
     }
 }
 

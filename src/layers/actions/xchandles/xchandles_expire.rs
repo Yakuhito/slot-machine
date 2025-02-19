@@ -55,7 +55,7 @@ impl XchandlesExpireAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    pub fn get_slot_values_from_solution(
+    pub fn get_slot_value_from_solution(
         &self,
         ctx: &SpendContext,
         old_slot_value: XchandlesSlotValue,
@@ -156,7 +156,7 @@ impl XchandlesExpireAction {
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
-        let new_slot_value = self.get_slot_values_from_solution(
+        let new_slot_value = self.get_slot_value_from_solution(
             ctx,
             slot_value,
             precommit_coin.value,
