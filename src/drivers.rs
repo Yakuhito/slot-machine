@@ -1799,7 +1799,7 @@ mod tests {
             let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
 
             registry = registry.spend(ctx)?;
-            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
             slots.retain(|s| *s != update_slot);
             slots.push(new_slot);
