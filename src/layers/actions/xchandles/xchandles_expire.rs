@@ -132,7 +132,7 @@ impl XchandlesExpireAction {
                     buy_time: precommit_coin.value.start_time,
                     pricing_program_solution: XchandlesFactorPricingSolution {
                         current_expiration: slot_value.expiration,
-                        handle: precommit_coin.value.secret_and_handle.handle,
+                        handle: precommit_coin.value.secret_and_handle.handle.clone(),
                         num_years,
                     },
                 },
@@ -168,7 +168,7 @@ impl XchandlesExpireAction {
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, expire_ann)),
-            registry.created_slot_values_to_slots(vec![new_slot_value], None)[0],
+            registry.created_slot_values_to_slots(vec![new_slot_value])[0],
         ))
     }
 }
