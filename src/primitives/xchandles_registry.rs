@@ -344,63 +344,6 @@ impl XchandlesRegistry {
         ))
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn oracle(
-        self,
-        ctx: &mut SpendContext,
-        slot: Slot<XchandlesSlotValue>,
-    ) -> Result<(Conditions, XchandlesRegistry, Vec<Slot<XchandlesSlotValue>>), DriverError> {
-        // spend slots
-        let Some(slot_value) = slot.info.value else {
-            return Err(DriverError::Custom("Missing slot value".to_string()));
-        };
-
-        let spender_inner_puzzle_hash: Bytes32 = self.info.inner_puzzle_hash().into();
-
-        slot.spend(ctx, spender_inner_puzzle_hash)?;
-
-        let new_slots_proof = SlotProof {
-            parent_parent_info: self.coin.parent_coin_info,
-            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
-        };
-
-        let new_slots = vec![Slot::new(
-            new_slots_proof,
-            SlotInfo::from_value(self.info.launcher_id, slot_value, None),
-        )];
-
-        // finally, spend self
-        let oracle = XchandlesRegistryAction::Oracle(XchandlesOracleActionSolution {
-            data_treehash: slot_value.tree_hash().into(),
-        });
-
-        let my_coin = self.coin;
-        let my_constants = self.info.constants;
-        let my_spend = self.spend(ctx, vec![oracle])?;
-        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
-        let new_xchandles = XchandlesRegistry::from_parent_spend(
-            &mut ctx.allocator,
-            my_coin,
-            my_puzzle,
-            my_spend.solution,
-            my_constants,
-        )?
-        .ok_or(DriverError::Custom(
-            "Could not parse child XCHandles singleton".to_string(),
-        ))?;
-
-        ctx.spend(my_coin, my_spend)?;
-
-        let mut oracle_ann = slot_value.tree_hash().to_vec();
-        oracle_ann.insert(0, b'o');
-        Ok((
-            Conditions::new()
-                .assert_puzzle_announcement(announcement_id(my_coin.puzzle_hash, oracle_ann)),
-            new_xchandles,
-            new_slots,
-        ))
-    }
-
     pub fn update(
         self,
         ctx: &mut SpendContext,
