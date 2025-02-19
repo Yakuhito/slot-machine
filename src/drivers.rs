@@ -1896,6 +1896,8 @@ mod tests {
 
         // assert expire conds
         ensure_conditions_met(ctx, &mut sim, expire_conds, 1)?;
+        registry = registry.spend(ctx)?;
+        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
         // Test refunds
         let unregistered_handle = "yak7".to_string();
