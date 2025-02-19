@@ -3,12 +3,15 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{DriverError, Layer, SpendContext};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{PrecommitLayer, Slot, SpendContextExt};
+use crate::{
+    Action, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SpendContextExt,
+    XchandlesConstants, XchandlesPrecommitValue, XchandlesRegistry, XchandlesSlotValue,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesRefundAction {
@@ -17,23 +20,27 @@ pub struct XchandlesRefundAction {
     pub payout_puzzle_hash: Bytes32,
 }
 
-impl XchandlesRefundAction {
-    pub fn new(
-        launcher_id: Bytes32,
-        relative_block_height: u32,
-        payout_puzzle_hash: Bytes32,
-    ) -> Self {
+impl ToTreeHash for XchandlesRefundAction {
+    fn tree_hash(&self) -> TreeHash {
+        XchandlesRefundActionArgs::curry_tree_hash(
+            self.launcher_id,
+            self.relative_block_height,
+            self.payout_puzzle_hash,
+        )
+    }
+}
+
+impl Action<XchandlesRegistry> for XchandlesRefundAction {
+    fn from_constants(launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
         Self {
             launcher_id,
-            relative_block_height,
-            payout_puzzle_hash,
+            relative_block_height: constants.relative_block_height,
+            payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
         }
     }
 }
 
-impl Layer for XchandlesRefundAction {
-    type Solution = XchandlesRefundActionSolution<NodePtr, (), NodePtr, NodePtr>;
-
+impl XchandlesRefundAction {
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.xchandles_refund_puzzle()?,
@@ -46,38 +53,102 @@ impl Layer for XchandlesRefundAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn construct_solution(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: Self::Solution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+    pub fn get_slot_value(&self, spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
+        spent_slot_value // nothing changed; just oracle
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        registry: &mut XchandlesRegistry,
+        precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
+        precommited_pricing_puzzle_reveal: NodePtr,
+        precommited_pricing_puzzle_solution: NodePtr,
+        slot: Option<Slot<XchandlesSlotValue>>,
+    ) -> Result<(Conditions, Option<Slot<XchandlesSlotValue>>), DriverError> {
+        // calculate announcement
+        let refund_announcement = precommit_coin.value.after_refund_info_hash();
+        let mut refund_announcement: Vec<u8> = refund_announcement.to_vec();
+        refund_announcement.insert(0, b'$');
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
+        // spend precommit coin
+        let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
+        precommit_coin.spend(
+            ctx,
+            0, // mode 0 = refund
+            my_inner_puzzle_hash,
+        )?;
 
-impl ToTreeHash for XchandlesRefundAction {
-    fn tree_hash(&self) -> TreeHash {
-        XchandlesRefundActionArgs::curry_tree_hash(
-            self.launcher_id,
-            self.relative_block_height,
-            self.payout_puzzle_hash,
-        )
+        // if there's a slot, spend it
+        if let Some(slot) = slot {
+            slot.spend(ctx, my_inner_puzzle_hash)?;
+        }
+
+        // then, spend self
+        let action_solution = XchandlesRefundActionSolution {
+            handle_hash: precommit_coin
+                .value
+                .secret_and_handle
+                .handle
+                .tree_hash()
+                .into(),
+            precommited_cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                precommit_coin.asset_id.tree_hash().into(),
+            )?,
+            precommited_cat_maker_hash: DefaultCatMakerArgs::curry_tree_hash(
+                precommit_coin.asset_id.tree_hash().into(),
+            )
+            .into(),
+            precommited_cat_maker_solution: (),
+            precommited_pricing_puzzle_reveal,
+            precommited_pricing_puzzle_hash: ctx
+                .tree_hash(precommited_pricing_puzzle_reveal)
+                .into(),
+            precommited_pricing_puzzle_solution,
+            secret_hash: precommit_coin
+                .value
+                .secret_and_handle
+                .secret
+                .tree_hash()
+                .into(),
+            precommit_value_rest_hash: precommit_coin.value.after_secret_and_handle_hash().into(),
+            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            precommit_amount: precommit_coin.coin.amount,
+            rest_hash: if let Some(slot) = slot {
+                slot.info
+                    .value
+                    .ok_or(DriverError::Custom(
+                        "Slot does not contain value".to_string(),
+                    ))?
+                    .after_handle_data_hash()
+                    .into()
+            } else {
+                Bytes32::default()
+            },
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        registry.insert(Spend::new(action_puzzle, action_solution));
+
+        let new_slot_value = if let Some(slot) = slot {
+            Some(
+                registry.created_slot_values_to_slots(vec![
+                    self.get_slot_value(slot.info.value.unwrap())
+                ])[0],
+            )
+        } else {
+            None
+        };
+
+        Ok((
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                registry.coin.puzzle_hash,
+                refund_announcement,
+            )),
+            new_slot_value,
+        ))
     }
 }
 
