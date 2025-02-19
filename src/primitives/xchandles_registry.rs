@@ -82,7 +82,7 @@ impl XchandlesRegistry {
 }
 
 impl XchandlesRegistry {
-    pub fn spend(self, ctx: &mut SpendContext) -> Result<Spend, DriverError> {
+    pub fn spend(self, ctx: &mut SpendContext) -> Result<Self, DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
@@ -117,7 +117,22 @@ impl XchandlesRegistry {
             },
         )?;
 
-        Ok(Spend::new(puzzle, solution))
+        let my_spend = Spend::new(puzzle, solution);
+        ctx.spend(self.coin, my_spend)?;
+
+        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let new_self = XchandlesRegistry::from_parent_spend(
+            &mut ctx.allocator,
+            self.coin,
+            my_puzzle,
+            my_spend.solution,
+            self.info.constants,
+        )?
+        .ok_or(DriverError::Custom(
+            "Couldn't parse child registry".to_string(),
+        ))?;
+
+        Ok(new_self)
     }
 
     pub fn insert(&mut self, action_spend: Spend) {

@@ -784,7 +784,7 @@ mod tests {
         DigCommitIncentivesAction, DigInitiatePayoutAction, DigNewEpochAction,
         DigRemoveMirrorAction, DigRewardDistributorConstants, DigSyncAction,
         DigWithdrawIncentivesAction, PrecommitCoin, Slot, SpendContextExt, XchandlesPrecommitValue,
-        ANY_METADATA_UPDATER_HASH,
+        XchandlesRefundAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -1343,7 +1343,6 @@ mod tests {
         Ok(())
     }
 
-    #[allow(dead_code)]
     #[allow(clippy::too_many_arguments)]
     fn test_refund_for_xchandles(
         ctx: &mut SpendContext,
@@ -1421,8 +1420,16 @@ mod tests {
 
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
-        let (secure_cond, new_registry) =
-            registry.refund(ctx, precommit_coin, pricing_puzzle, pricing_solution, slot)?;
+        let mut registry = registry;
+        let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
+            ctx,
+            &mut registry,
+            precommit_coin,
+            pricing_puzzle,
+            pricing_solution,
+            slot,
+        )?;
+        let new_registry = registry.spend(ctx)?;
 
         ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
 
