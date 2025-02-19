@@ -6,6 +6,7 @@ mod cli;
 mod debug;
 mod drivers;
 mod layers;
+mod name_nft_metadata;
 mod primitives;
 
 pub use cat_nft_metadata::*;
@@ -13,8 +14,8 @@ pub use cli::*;
 pub use debug::*;
 pub use drivers::*;
 pub use layers::*;
+pub use name_nft_metadata::*;
 pub use primitives::*;
-
 pub trait SpendContextExt {
     fn default_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn action_layer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
@@ -36,7 +37,6 @@ pub trait SpendContextExt {
     fn xchandles_factor_pricing_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_exponential_premium_renew_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn default_cat_maker_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn nonce_wrapper_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_add_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn dig_commit_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
@@ -165,11 +165,6 @@ impl SpendContextExt for SpendContext {
         self.puzzle(DEFAULT_CAT_MAKER_PUZZLE_HASH, &DEFAULT_CAT_MAKER_PUZZLE)
     }
 
-    /// Allocate the nonce wrapper puzzle and return its pointer.
-    fn nonce_wrapper_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(NONCE_WRAPPER_PUZZLE_HASH, &NONCE_WRAPPER_PUZZLE)
-    }
-
     /// Allocate the dig add incentives action puzzle and return its pointer.
     fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(DIG_ADD_INCENTIVES_PUZZLE_HASH, &DIG_ADD_INCENTIVES_PUZZLE)
@@ -267,7 +262,6 @@ mod tests {
         assert_puzzle_hash!(XCHANDLES_FACTOR_PRICING_PUZZLE => XCHANDLES_FACTOR_PRICING_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE => XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH);
         assert_puzzle_hash!(DEFAULT_CAT_MAKER_PUZZLE => DEFAULT_CAT_MAKER_PUZZLE_HASH);
-        assert_puzzle_hash!(NONCE_WRAPPER_PUZZLE => NONCE_WRAPPER_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_ADD_INCENTIVES_PUZZLE => DIG_ADD_INCENTIVES_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_ADD_MIRROR_PUZZLE => DIG_ADD_MIRROR_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_COMMIT_INCENTIVES_PUZZLE => DIG_COMMIT_INCENTIVES_PUZZLE_HASH);

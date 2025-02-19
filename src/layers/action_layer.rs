@@ -105,13 +105,15 @@ impl<S> ActionLayer<S> {
     pub fn get_new_state(
         allocator: &mut Allocator,
         initial_state: S,
-        solution: NodePtr,
+        action_layer_solution: NodePtr,
     ) -> Result<S, DriverError>
     where
         S: ToClvm<Allocator> + FromClvm<Allocator>,
     {
-        let solution =
-            RawActionLayerSolution::<NodePtr, NodePtr, NodePtr>::from_clvm(allocator, solution)?;
+        let solution = RawActionLayerSolution::<NodePtr, NodePtr, NodePtr>::from_clvm(
+            allocator,
+            action_layer_solution,
+        )?;
 
         let mut state: S = initial_state;
         for raw_action in solution.actions {

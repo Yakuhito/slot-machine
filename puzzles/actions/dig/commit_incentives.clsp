@@ -8,7 +8,7 @@
     (total_reserves active_shares reward_info (last_update . epoch_end)) ; Current_State
     (
         slot_epoch_time
-        slot_next_epoch_time
+        slot_next_epoch_initialized
         slot_total_rewards
         epoch_start
         clawback_ph .
@@ -29,14 +29,14 @@
         )
     )
 
-    (defun get_epoch_reward_slot_data_hash (slot_epoch_time slot_next_epoch_time slot_total_rewards)
+    (defun get_epoch_reward_slot_data_hash (slot_epoch_time slot_next_epoch_initialized slot_total_rewards)
         (sha256 2
             (sha256 1 slot_epoch_time)
             (sha256 2
-                (sha256 1 slot_next_epoch_time)
+                (sha256 1 slot_next_epoch_initialized)
                 (sha256 1 slot_total_rewards)
             )
-        ) ; (sha256tree (epoch_time next_epoch_time . total_rewards))
+        ) ; (sha256tree (epoch_time next_epoch_initialized . total_rewards))
     )
 
     (defun initialize_empty_slots (REWARD_SLOT_1ST_CURRY_HASH EPOCH_SECONDS start_epoch_time end_epoch_time)
@@ -47,7 +47,7 @@
             ; else
             (c
                 (create_slot REWARD_SLOT_1ST_CURRY_HASH
-                    (get_epoch_reward_slot_data_hash start_epoch_time (+ start_epoch_time EPOCH_SECONDS) 0)
+                    (get_epoch_reward_slot_data_hash start_epoch_time 1 0)
                 )
                 (initialize_empty_slots
                     REWARD_SLOT_1ST_CURRY_HASH
@@ -81,23 +81,25 @@
                 )
                 (c
                     (spend_slot REWARD_SLOT_1ST_CURRY_HASH
-                        (get_epoch_reward_slot_data_hash slot_epoch_time slot_next_epoch_time slot_total_rewards)
+                        (get_epoch_reward_slot_data_hash slot_epoch_time slot_next_epoch_initialized slot_total_rewards)
                     )
                     (if (= epoch_start slot_epoch_time)
                         ; slot already initialized - just add rewards
                         (list
                             (create_slot REWARD_SLOT_1ST_CURRY_HASH
                                 (get_epoch_reward_slot_data_hash
-                                    slot_epoch_time slot_next_epoch_time (+ slot_total_rewards rewards_to_add)
+                                    slot_epoch_time slot_next_epoch_initialized (+ slot_total_rewards rewards_to_add)
                                 )
                             )
                         )
                         ; else - initialize slots up until slot_epoch_time
-                        (if (= slot_next_epoch_time 0)
+                        (if slot_next_epoch_initialized
+                            (x)
+                            ; else
                             (c
                                 (create_slot REWARD_SLOT_1ST_CURRY_HASH
                                     (get_epoch_reward_slot_data_hash
-                                        slot_epoch_time (+ slot_epoch_time EPOCH_SECONDS) slot_total_rewards
+                                        slot_epoch_time 1 slot_total_rewards
                                     )
                                 ) ; update current latest slot's right neighbor from 0
                                 (c
@@ -112,8 +114,6 @@
                                     ) ; initialize all slots in between
                                 )
                             )
-                            ; else
-                            (x)
                         )
                     )
                 )

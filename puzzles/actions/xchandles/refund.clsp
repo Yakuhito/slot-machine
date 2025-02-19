@@ -48,8 +48,6 @@
   (if (all
     (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
     (= precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_reveal))
-    (> precommit_amount 0) ; don't want any messages to be sent to slots
-    1
   )
     (c
       Current_State ; new state
@@ -63,7 +61,7 @@
           ; not (b)
           (any
             (if (= precommited_pricing_puzzle_hash (f (r Current_State)))
-                (= handle_hash (sha256 1 (f precommited_pricing_puzzle_solution))) ()
+                (= handle_hash (sha256 1 (f (r precommited_pricing_puzzle_solution)))) ()
             )
             (if (= precommited_pricing_puzzle_hash (r (r Current_State)))
                 (= handle_hash (sha256 1 (f (r (r precommited_pricing_puzzle_solution))))) ()

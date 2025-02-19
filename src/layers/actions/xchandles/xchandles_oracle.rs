@@ -2,27 +2,33 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use chia_wallet_sdk::{DriverError, Layer, SpendContext};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{Slot, SpendContextExt};
+use crate::{
+    Action, Slot, SpendContextExt, XchandlesConstants, XchandlesRegistry, XchandlesSlotValue,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesOracleAction {
     pub launcher_id: Bytes32,
 }
 
-impl XchandlesOracleAction {
-    pub fn new(launcher_id: Bytes32) -> Self {
+impl ToTreeHash for XchandlesOracleAction {
+    fn tree_hash(&self) -> TreeHash {
+        XchandlesOracleActionArgs::curry_tree_hash(self.launcher_id)
+    }
+}
+
+impl Action<XchandlesRegistry> for XchandlesOracleAction {
+    fn from_constants(launcher_id: Bytes32, _constants: &XchandlesConstants) -> Self {
         Self { launcher_id }
     }
 }
 
-impl Layer for XchandlesOracleAction {
-    type Solution = XchandlesOracleActionSolution;
-
+impl XchandlesOracleAction {
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.xchandles_oracle_puzzle()?,
@@ -31,34 +37,41 @@ impl Layer for XchandlesOracleAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn construct_solution(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: XchandlesOracleActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+    pub fn get_slot_value(&self, old_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
+        old_slot_value // nothing changed
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        registry: &mut XchandlesRegistry,
+        slot: Slot<XchandlesSlotValue>,
+    ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
+        // spend slots
+        let Some(slot_value) = slot.info.value else {
+            return Err(DriverError::Custom("Missing slot value".to_string()));
+        };
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
+        slot.spend(ctx, registry.info.inner_puzzle_hash().into())?;
 
-impl ToTreeHash for XchandlesOracleAction {
-    fn tree_hash(&self) -> TreeHash {
-        XchandlesOracleActionArgs::curry_tree_hash(self.launcher_id)
+        // finally, spend self
+        let action_solution = XchandlesOracleActionSolution {
+            data_treehash: slot_value.tree_hash().into(),
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        registry.insert(Spend::new(action_puzzle, action_solution));
+
+        let new_slot = self.get_slot_value(slot_value);
+
+        let mut oracle_ann = slot_value.tree_hash().to_vec();
+        oracle_ann.insert(0, b'o');
+        Ok((
+            Conditions::new()
+                .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, oracle_ann)),
+            registry.created_slot_values_to_slots(vec![new_slot])[0],
+        ))
     }
 }
 
@@ -79,7 +92,7 @@ pub struct XchandlesOracleActionArgs {
 impl XchandlesOracleActionArgs {
     pub fn new(launcher_id: Bytes32) -> Self {
         Self {
-            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, None).into(),
+            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
         }
     }
 }

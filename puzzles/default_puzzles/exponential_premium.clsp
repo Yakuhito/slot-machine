@@ -14,9 +14,9 @@
     END_VALUE ; premium at the very end of the expiry auction
     PRECISION ; 10 ** 18
     BITS_LIST ; (list bit1 bit2 bit3 ...)
-    Expiration
-    Buy_Time . ; 'time now' - assumes user is interested in passing in a value as late as possible
-    pricing_program_solution ; pricing_program_solution passed to BASE_PROGRAM (handle . num_years)
+    Buy_Time  ; 'time now' - assumes user is interested in passing in a value as late as possible
+    Expiration . 
+    rest_of_pricing_program_solution ; pricing_program_solution passed to BASE_PROGRAM (r expiration handle . num_years) = (handle . num_years)
 )
     (defconstant DAY 86400) ; seconds in a day = 60 * 60 * 24
 
@@ -60,6 +60,6 @@
     )
 
     (main
-        (a BASE_PROGRAM pricing_program_solution)
+        (a BASE_PROGRAM (c Expiration rest_of_pricing_program_solution))
     )
 )

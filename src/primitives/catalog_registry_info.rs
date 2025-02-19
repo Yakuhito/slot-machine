@@ -9,9 +9,11 @@ use clvmr::Allocator;
 use hex_literal::hex;
 
 use crate::{
-    ActionLayer, ActionLayerArgs, CatalogRefundActionArgs, CatalogRegisterActionArgs,
-    DefaultFinalizer2ndCurryArgs, DelegatedStateActionArgs, Finalizer,
+    Action, ActionLayer, ActionLayerArgs, CatalogRefundAction, CatalogRegisterAction,
+    DefaultFinalizer2ndCurryArgs, DelegatedStateAction, Finalizer,
 };
+
+use super::CatalogRegistry;
 
 pub type CatalogRegistryLayers = SingletonLayer<ActionLayer<CatalogRegistryState>>;
 
@@ -92,29 +94,19 @@ impl CatalogRegistryInfo {
         launcher_id: Bytes32,
         constants: &CatalogRegistryConstants,
     ) -> [Bytes32; 3] {
-        let register_action_hash = CatalogRegisterActionArgs::curry_tree_hash(
-            launcher_id,
-            constants.royalty_address.tree_hash().into(),
-            constants.royalty_ten_thousandths,
-            constants.relative_block_height,
-            constants.precommit_payout_puzzle_hash,
-        )
-        .tree_hash();
-
-        let refund_action_hash = CatalogRefundActionArgs::curry_tree_hash(
-            launcher_id,
-            constants.relative_block_height,
-            constants.precommit_payout_puzzle_hash,
-        )
-        .tree_hash();
-
-        let update_price_action_hash =
-            DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id);
-
         [
-            register_action_hash.into(),
-            refund_action_hash.into(),
-            update_price_action_hash.into(),
+            CatalogRegisterAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            CatalogRefundAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            <DelegatedStateAction as Action<CatalogRegistry>>::from_constants(
+                launcher_id,
+                constants,
+            )
+            .tree_hash()
+            .into(),
         ]
     }
 

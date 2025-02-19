@@ -3,73 +3,21 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{DriverError, Layer, SpendContext};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{PrecommitLayer, Slot, SpendContextExt};
+use crate::{
+    Action, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SpendContextExt,
+    XchandlesConstants, XchandlesPrecommitValue, XchandlesRegistry, XchandlesSlotValue,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesRegisterAction {
     pub launcher_id: Bytes32,
     pub relative_block_height: u32,
     pub payout_puzzle_hash: Bytes32,
-}
-
-impl XchandlesRegisterAction {
-    pub fn new(
-        launcher_id: Bytes32,
-        relative_block_height: u32,
-        payout_puzzle_hash: Bytes32,
-    ) -> Self {
-        Self {
-            launcher_id,
-            relative_block_height,
-            payout_puzzle_hash,
-        }
-    }
-}
-
-impl Layer for XchandlesRegisterAction {
-    type Solution =
-        XchandlesRegisterActionSolution<NodePtr, XchandlesFactorPricingSolution, NodePtr, ()>;
-
-    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        Ok(CurriedProgram {
-            program: ctx.xchandles_register_puzzle()?,
-            args: XchandlesRegisterActionArgs::new(
-                self.launcher_id,
-                self.relative_block_height,
-                self.payout_puzzle_hash,
-            ),
-        }
-        .to_clvm(&mut ctx.allocator)?)
-    }
-
-    fn construct_solution(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: Self::Solution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
-    }
-
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
-
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
 }
 
 impl ToTreeHash for XchandlesRegisterAction {
@@ -82,11 +30,185 @@ impl ToTreeHash for XchandlesRegisterAction {
     }
 }
 
-pub const XCHANDLES_REGISTER_PUZZLE: [u8; 1487] = hex!("ff02ffff01ff02ffff03ffff22ffff09ff4fffff0bffff0101ff8209ef8080ffff15ff4fff81af80ffff15ff82016fff4f80ffff09ff27ffff02ff2effff04ff02ffff04ff820befff8080808080ffff09ff57ffff02ff2effff04ff02ffff04ff8202efff808080808080ffff01ff02ff36ffff04ff02ffff04ff05ffff04ff0bffff04ff17ffff04ff8207efffff04ff4fffff04ffff0bffff0101ff4f80ffff04ffff0bffff0101ff81af80ffff04ffff0bffff0101ff82016f80ffff04ffff02ff8202efff8205ef80ffff04ffff02ff2effff04ff02ffff04ff8205efff80808080ff80808080808080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333effff4202ffff02ffff03ff05ffff01ff0bff81fcffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff2cffff04ff02ffff04ff0dff80808080ff808080808080ffff0181dc80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff04ff28ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff0bff81bcffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff2cffff04ff02ffff04ff07ff80808080ff808080808080ff0bffff0102ff05ffff0bffff0102ffff0bffff0102ff0bff1780ff2f8080ffffff0bff34ffff0bff34ff81dcff0580ffff0bff34ff0bff819c8080ff04ff17ffff04ffff04ff10ffff04ff8202efff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff82017fffff04ff8217efffff04ff8202ffffff04ff822fefff80808080808080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff82017fffff04ff825fefffff04ff82bfefff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff81bfffff04ff82017fffff04ff8202ffffff04ffff0bffff0102ffff0bffff0101ffff10ff8202efff820dff8080ff82016f80ff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff82017fffff04ff8217efffff04ff81bfffff04ff822fefff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff81bfffff04ff825fefffff04ff82bfefff80808080808080ff8080808080ffff04ffff04ff38ffff04ffff0effff0172ffff0bffff0102ff5fffff0bffff0102ffff0bffff0101ffff10ff820dffff8202ef8080ff82016f808080ff808080ffff04ffff04ff24ffff04ffff0113ffff04ffff0101ffff04ffff02ff4fffff04ffff02ff2affff04ff02ffff04ff05ffff04ff820befffff04ffff0bffff0102ffff0bffff0101ffff0bffff0102ffff0bffff0102ff27ffff02ff2effff04ff02ffff04ff81afff8080808080ffff0bffff0102ff57ff820bff808080ffff0bffff0102ffff0bffff0102ff8205efff5f80ffff0bffff0102ffff0bffff0101ff8202ef80ff82016f808080ff808080808080ffff04ff81afff80808080ffff04ff8209ffff808080808080ff80808080808080808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff24ffff04ffff0112ffff04ff80ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
+impl Action<XchandlesRegistry> for XchandlesRegisterAction {
+    fn from_constants(launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
+        Self {
+            launcher_id,
+            relative_block_height: constants.relative_block_height,
+            payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
+        }
+    }
+}
+
+impl XchandlesRegisterAction {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+        Ok(CurriedProgram {
+            program: ctx.xchandles_register_puzzle()?,
+            args: XchandlesRegisterActionArgs::new(
+                self.launcher_id,
+                self.relative_block_height,
+                self.payout_puzzle_hash,
+            ),
+        }
+        .to_clvm(&mut ctx.allocator)?)
+    }
+
+    pub fn get_slot_values_from_solution(
+        &self,
+        ctx: &mut SpendContext,
+        spent_slot_values: [XchandlesSlotValue; 2],
+        precommit_coin_value: XchandlesPrecommitValue,
+        solution: NodePtr,
+    ) -> Result<[XchandlesSlotValue; 3], DriverError> {
+        let (left_slot_value, right_slot_value) = if spent_slot_values[0] < spent_slot_values[1] {
+            (spent_slot_values[0], spent_slot_values[1])
+        } else {
+            (spent_slot_values[1], spent_slot_values[0])
+        };
+
+        let solution = XchandlesRegisterActionSolution::<
+            NodePtr,
+            XchandlesFactorPricingSolution,
+            NodePtr,
+            NodePtr,
+        >::from_clvm(&ctx.allocator, solution)?;
+
+        Ok([
+            left_slot_value
+                .with_neighbors(left_slot_value.neighbors.left_value, solution.handle_hash),
+            XchandlesSlotValue::new(
+                solution.handle_hash,
+                left_slot_value.handle_hash,
+                right_slot_value.handle_hash,
+                precommit_coin_value.start_time
+                    + solution.pricing_puzzle_solution.num_years * 366 * 24 * 60 * 60,
+                precommit_coin_value.owner_launcher_id,
+                precommit_coin_value.resolved_launcher_id,
+            ),
+            right_slot_value
+                .with_neighbors(solution.handle_hash, right_slot_value.neighbors.right_value),
+        ])
+    }
+
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        registry: &mut XchandlesRegistry,
+        left_slot: Slot<XchandlesSlotValue>,
+        right_slot: Slot<XchandlesSlotValue>,
+        precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
+        base_handle_price: u64,
+    ) -> Result<(Conditions, [Slot<XchandlesSlotValue>; 3]), DriverError> {
+        // spend slots
+        let Some(left_slot_value) = left_slot.info.value else {
+            return Err(DriverError::Custom("Missing left slot value".to_string()));
+        };
+        let Some(right_slot_value) = right_slot.info.value else {
+            return Err(DriverError::Custom("Missing right slot value".to_string()));
+        };
+
+        let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
+
+        left_slot.spend(ctx, my_inner_puzzle_hash)?;
+        right_slot.spend(ctx, my_inner_puzzle_hash)?;
+
+        let handle: String = precommit_coin.value.secret_and_handle.handle.clone();
+        let handle_hash: Bytes32 = handle.tree_hash().into();
+
+        let secret = precommit_coin.value.secret_and_handle.secret;
+
+        let start_time = precommit_coin.value.start_time;
+
+        let num_years = precommit_coin.coin.amount
+            / XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, 1);
+        let expiration = precommit_coin.value.start_time + num_years * 366 * 24 * 60 * 60;
+
+        // calculate announcement
+        let register_announcement: Bytes32 = clvm_tuple!(
+            handle.clone(),
+            clvm_tuple!(
+                expiration,
+                clvm_tuple!(
+                    precommit_coin.value.owner_launcher_id,
+                    precommit_coin.value.resolved_launcher_id
+                )
+            )
+        )
+        .tree_hash()
+        .into();
+        let mut register_announcement: Vec<u8> = register_announcement.to_vec();
+        register_announcement.insert(0, b'r');
+
+        // spend precommit coin
+        precommit_coin.spend(
+            ctx,
+            1, // mode 1 = register/expire (use value)
+            my_inner_puzzle_hash,
+        )?;
+
+        // finally, spend self
+        let action_solution = XchandlesRegisterActionSolution {
+            handle_hash,
+            left_value: left_slot_value.handle_hash,
+            right_value: right_slot_value.handle_hash,
+            pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
+                ctx,
+                base_handle_price,
+            )?,
+            pricing_puzzle_solution: XchandlesFactorPricingSolution {
+                current_expiration: 0,
+                handle: handle.clone(),
+                num_years,
+            },
+            cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
+                ctx,
+                precommit_coin.asset_id.tree_hash().into(),
+            )?,
+            cat_maker_solution: (),
+            rest_data_hash: clvm_tuple!(
+                precommit_coin.value.owner_launcher_id,
+                precommit_coin.value.resolved_launcher_id
+            )
+            .tree_hash()
+            .into(),
+            start_time,
+            secret_hash: secret.tree_hash().into(),
+            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            left_left_value_hash: left_slot_value.neighbors.left_value.tree_hash().into(),
+            left_data_hash: left_slot_value.after_neigbors_data_hash().into(),
+            right_right_value_hash: right_slot_value.neighbors.right_value.tree_hash().into(),
+            right_data_hash: right_slot_value.after_neigbors_data_hash().into(),
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        registry.insert(Spend::new(action_puzzle, action_solution));
+
+        let new_slots_values = self.get_slot_values_from_solution(
+            ctx,
+            [left_slot_value, right_slot_value],
+            precommit_coin.value,
+            action_solution,
+        )?;
+
+        Ok((
+            Conditions::new().assert_puzzle_announcement(announcement_id(
+                registry.coin.puzzle_hash,
+                register_announcement,
+            )),
+            registry
+                .created_slot_values_to_slots(new_slots_values.to_vec())
+                .try_into()
+                .unwrap(),
+        ))
+    }
+}
+
+pub const XCHANDLES_REGISTER_PUZZLE: [u8; 1499] = hex!("ff02ffff01ff02ffff03ffff22ffff09ff4fffff0bffff0101ff8215ef8080ffff20ff8209ef80ffff15ff4fff81af80ffff15ff82016fff4f80ffff09ff27ffff02ff2effff04ff02ffff04ff820befff8080808080ffff09ff57ffff02ff2effff04ff02ffff04ff8202efff8080808080ffff010180ffff01ff02ff36ffff04ff02ffff04ff05ffff04ff0bffff04ff17ffff04ff8207efffff04ff4fffff04ffff0bffff0101ff4f80ffff04ffff0bffff0101ff81af80ffff04ffff0bffff0101ff82016f80ffff04ffff02ff8202efff8205ef80ffff04ffff02ff2effff04ff02ffff04ff8205efff80808080ff80808080808080808080808080ffff01ff088080ff0180ffff04ffff01ffffff51ff333effff4202ffff02ffff03ff05ffff01ff0bff81fcffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff2cffff04ff02ffff04ff0dff80808080ff808080808080ffff0181dc80ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff04ff28ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff0bff81bcffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff2cffff04ff02ffff04ff07ff80808080ff808080808080ff0bffff0102ff05ffff0bffff0102ffff0bffff0102ff0bff1780ff2f8080ffffff0bff34ffff0bff34ff81dcff0580ffff0bff34ff0bff819c8080ff04ff17ffff04ffff04ff10ffff04ff8202efff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff82017fffff04ff8217efffff04ff8202ffffff04ff822fefff80808080808080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff82017fffff04ff825fefffff04ff82bfefff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff81bfffff04ff82017fffff04ff8202ffffff04ffff0bffff0102ffff0bffff0101ffff10ff8202efff820dff8080ff82016f80ff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff82017fffff04ff8217efffff04ff81bfffff04ff822fefff80808080808080ff8080808080ffff04ffff02ff12ffff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ff8202ffffff04ff81bfffff04ff825fefffff04ff82bfefff80808080808080ff8080808080ffff04ffff04ff38ffff04ffff0effff0172ffff0bffff0102ff5fffff0bffff0102ffff0bffff0101ffff10ff820dffff8202ef8080ff82016f808080ff808080ffff04ffff04ff24ffff04ffff0113ffff04ffff0101ffff04ffff02ff4fffff04ffff02ff2affff04ff02ffff04ff05ffff04ff820befffff04ffff0bffff0102ffff0bffff0101ffff0bffff0102ffff0bffff0102ff27ffff02ff2effff04ff02ffff04ff81afff8080808080ffff0bffff0102ff57ff820bff808080ffff0bffff0102ffff0bffff0102ff8205efff5f80ffff0bffff0102ffff0bffff0101ff8202ef80ff82016f808080ff808080808080ffff04ff81afff80808080ffff04ff8209ffff808080808080ff80808080808080808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff24ffff04ffff0112ffff04ff80ffff04ffff02ff2affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
 
 pub const XCHANDLES_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    8f8a8d140766c1e24ed061d63c67283c572b2f08359b9051479e8b368699e703
+    42060231b8f1dea4c93951e7da34b86350f1d511d44e107683c147e9ab070b67
     "
 ));
 
@@ -110,7 +232,7 @@ impl XchandlesRegisterActionArgs {
                 payout_puzzle_hash,
             )
             .into(),
-            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, None).into(),
+            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
         }
     }
 }
@@ -153,11 +275,11 @@ pub struct XchandlesRegisterActionSolution<PP, PS, CMP, CMS> {
     pub right_data_hash: Bytes32,
 }
 
-pub const XCHANDLES_FACTOR_PRICING_PUZZLE: [u8; 481] = hex!("ff02ffff01ff02ffff03ffff15ff0fff8080ffff01ff04ffff12ff0fff05ffff02ff0effff04ff02ffff04ffff0dff0b80ffff04ffff02ff0affff04ff02ffff04ff0bff80808080ff808080808080ffff12ff0fff048080ffff01ff088080ff0180ffff04ffff01ff8401e28500ffff02ffff03ff05ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff016080ffff15ffff017bffff0cff05ff80ffff0101808080ffff01ff02ff0affff04ff02ffff04ffff0cff05ffff010180ff80808080ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff012f80ffff15ffff013affff0cff05ff80ffff0101808080ffff01ff10ffff0101ffff02ff0affff04ff02ffff04ffff0cff05ffff010180ff8080808080ffff01ff088080ff018080ff0180ff8080ff0180ff05ffff14ffff02ffff03ffff15ff05ffff010280ffff01ff02ffff03ffff15ff05ffff010480ffff01ff02ffff03ffff09ff05ffff010580ffff01ff0110ffff01ff02ffff03ffff15ff05ffff011f80ffff01ff0880ffff01ff010280ff018080ff0180ffff01ff02ffff03ffff09ff05ffff010380ffff01ff01820080ffff01ff014080ff018080ff0180ffff01ff088080ff0180ffff03ff0bffff0102ffff0101808080ff018080");
+pub const XCHANDLES_FACTOR_PRICING_PUZZLE: [u8; 481] = hex!("ff02ffff01ff02ffff03ffff15ff1fff8080ffff01ff04ffff12ff1fff05ffff02ff0effff04ff02ffff04ffff0dff1780ffff04ffff02ff0affff04ff02ffff04ff17ff80808080ff808080808080ffff12ff1fff048080ffff01ff088080ff0180ffff04ffff01ff8401e28500ffff02ffff03ff05ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff016080ffff15ffff017bffff0cff05ff80ffff0101808080ffff01ff02ff0affff04ff02ffff04ffff0cff05ffff010180ff80808080ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff012f80ffff15ffff013affff0cff05ff80ffff0101808080ffff01ff10ffff0101ffff02ff0affff04ff02ffff04ffff0cff05ffff010180ff8080808080ffff01ff088080ff018080ff0180ff8080ff0180ff05ffff14ffff02ffff03ffff15ff05ffff010280ffff01ff02ffff03ffff15ff05ffff010480ffff01ff02ffff03ffff09ff05ffff010580ffff01ff0110ffff01ff02ffff03ffff15ff05ffff011f80ffff01ff0880ffff01ff010280ff018080ff0180ffff01ff02ffff03ffff09ff05ffff010380ffff01ff01820080ffff01ff014080ff018080ff0180ffff01ff088080ff0180ffff03ff0bffff0102ffff0101808080ff018080");
 
 pub const XCHANDLES_FACTOR_PRICING_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    6461b36f017bdc7e2158b855c5aa79d438fe6301a35085eb393566fa5578df7e
+    129896065abb6e13cce6f46c784add16c771336cfa39a5647644a95a0ee0abd7
     "
 ));
 
@@ -211,6 +333,7 @@ impl XchandlesFactorPricingPuzzleArgs {
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct XchandlesFactorPricingSolution {
+    pub current_expiration: u64,
     pub handle: String,
     #[clvm(rest)]
     pub num_years: u64,
@@ -246,8 +369,12 @@ mod tests {
                         "a".repeat(handle_length)
                     };
 
-                    let solution = XchandlesFactorPricingSolution { handle, num_years }
-                        .to_clvm(&mut ctx.allocator)?;
+                    let solution = XchandlesFactorPricingSolution {
+                        current_expiration: (handle_length - 3) as u64, // shouldn't matter
+                        handle,
+                        num_years,
+                    }
+                    .to_clvm(&mut ctx.allocator)?;
 
                     let output = ctx.run(puzzle, solution)?;
                     let output = XchandlesFactorPricingOutput::from_clvm(&ctx.allocator, output)?;
@@ -275,6 +402,7 @@ mod tests {
         // make sure the puzzle won't let us register a handle of length 2
 
         let solution = XchandlesFactorPricingSolution {
+            current_expiration: 0,
             handle: "aa".to_string(),
             num_years: 1,
         }
@@ -288,6 +416,7 @@ mod tests {
         // make sure the puzzle won't let us register a handle of length 32
 
         let solution = XchandlesFactorPricingSolution {
+            current_expiration: 0,
             handle: "a".repeat(32),
             num_years: 1,
         }
@@ -301,6 +430,7 @@ mod tests {
         // make sure the puzzle won't let us register a handle with invalid characters
 
         let solution = XchandlesFactorPricingSolution {
+            current_expiration: 0,
             handle: "yak@test".to_string(),
             num_years: 1,
         }

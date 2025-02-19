@@ -22,9 +22,9 @@ pub struct SlotInfo<V>
 where
     V: Copy,
 {
+    pub nonce: u64,
     pub launcher_id: Bytes32,
 
-    pub nonce: Option<u64>,
     pub value_hash: Bytes32,
     pub value: Option<V>,
 }
@@ -33,7 +33,7 @@ impl<V> SlotInfo<V>
 where
     V: Copy,
 {
-    pub fn new(launcher_id: Bytes32, value_hash: Bytes32, nonce: Option<u64>) -> Self {
+    pub fn new(launcher_id: Bytes32, nonce: u64, value_hash: Bytes32) -> Self {
         Self {
             launcher_id,
             nonce,
@@ -42,7 +42,7 @@ where
         }
     }
 
-    pub fn from_value(launcher_id: Bytes32, value: V, nonce: Option<u64>) -> Self
+    pub fn from_value(launcher_id: Bytes32, nonce: u64, value: V) -> Self
     where
         V: ToTreeHash,
     {
@@ -223,6 +223,7 @@ impl PartialOrd for XchandlesSlotValue {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DigSlotNonce {
     REWARD = 1,
     COMMITMENT = 2,
@@ -252,7 +253,7 @@ impl DigSlotNonce {
 #[clvm(list)]
 pub struct DigRewardSlotValue {
     pub epoch_start: u64,
-    pub next_epoch_start: u64,
+    pub next_epoch_initialized: bool,
     #[clvm(rest)]
     pub rewards: u64,
 }

@@ -85,8 +85,9 @@
 
     (if (all
         (= (f Current_State) (sha256tree cat_maker_puzzle_reveal)) ; cat maker puzzle reveal is correct
-        (= (f (r Current_State)) (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct\
-        (= handle_hash (sha256 1 (f pricing_solution)))
+        (= (f (r Current_State)) (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
+        (= (f pricing_solution) expiration) ; Current_Expiration truth
+        (= handle_hash (sha256 1 (f (r pricing_solution)))) ; Handle truth
     )
         (main
             (a pricing_puzzle_reveal pricing_solution)

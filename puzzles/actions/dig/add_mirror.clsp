@@ -5,6 +5,9 @@
     SINGLETON_MOD_HASH
     VALIDATOR_SINGLETON_STRUCT_HASH ; (sha256 SINGLETON_STRUCT) for validator singleton
     MIRROR_SLOT_1ST_CURRY_HASH ; after 1st curry
+    MAX_SECONDS_OFFSET ; at most this amount of seconds can pass since last update
+    ; /\ this prevents the reward distributor from 'stealing' earned rewards before MAX_SECONDS_OFFSET by
+    ;    adding a mirror with a gazillion shares during long periods of non-sync
     (total_reserves active_shares reward_info current_round_info) ; Current_State
     (
         validator_singleton_inner_puzzle_hash
@@ -46,6 +49,9 @@
                     )
                 ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
             )
+
+            ; make sure the reward info is up to date
+            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ (f current_round_info) MAX_SECONDS_OFFSET))
         ) ; conditions
     )
         

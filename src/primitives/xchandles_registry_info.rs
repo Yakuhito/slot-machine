@@ -8,13 +8,13 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::Allocator;
 
 use crate::{
-    ActionLayer, ActionLayerArgs, DefaultFinalizer2ndCurryArgs, DelegatedStateActionArgs,
+    Action, ActionLayer, ActionLayerArgs, DefaultFinalizer2ndCurryArgs, DelegatedStateAction,
     Finalizer, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
     XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction,
     XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
 };
 
-use super::DefaultCatMakerArgs;
+use super::{DefaultCatMakerArgs, XchandlesRegistry};
 
 pub type XchandlesRegistryLayers = SingletonLayer<ActionLayer<XchandlesRegistryState>>;
 
@@ -100,33 +100,30 @@ impl XchandlesRegistryInfo {
         constants: &XchandlesConstants,
     ) -> [Bytes32; 7] {
         [
-            XchandlesExpireAction::new(
-                launcher_id,
-                constants.relative_block_height,
-                constants.precommit_payout_puzzle_hash,
-            )
-            .tree_hash()
-            .into(),
-            XchandlesExtendAction::new(launcher_id, constants.precommit_payout_puzzle_hash)
+            XchandlesExpireAction::from_constants(launcher_id, constants)
                 .tree_hash()
                 .into(),
-            XchandlesOracleAction::new(launcher_id).tree_hash().into(),
-            XchandlesRegisterAction::new(
+            XchandlesExtendAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            XchandlesOracleAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            XchandlesRegisterAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            XchandlesUpdateAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            XchandlesRefundAction::from_constants(launcher_id, constants)
+                .tree_hash()
+                .into(),
+            <DelegatedStateAction as Action<XchandlesRegistry>>::from_constants(
                 launcher_id,
-                constants.relative_block_height,
-                constants.precommit_payout_puzzle_hash,
+                constants,
             )
             .tree_hash()
             .into(),
-            XchandlesUpdateAction::new(launcher_id).tree_hash().into(),
-            XchandlesRefundAction::new(
-                launcher_id,
-                constants.relative_block_height,
-                constants.precommit_payout_puzzle_hash,
-            )
-            .tree_hash()
-            .into(),
-            DelegatedStateActionArgs::curry_tree_hash(constants.price_singleton_launcher_id).into(),
         ]
     }
 

@@ -44,10 +44,7 @@
     )
   )
 
-  (if (all
-    (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
-    (> precommit_amount 0) ; don't want any messages to be sent to slots
-  )
+  (if (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
     (c
       Current_State ; new state
 

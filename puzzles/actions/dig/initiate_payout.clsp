@@ -8,6 +8,7 @@
     PAYOUT_THRESHOLD ; to prevent spam, payout needs to be >= PAYOUT_THRESHOLD
     (total_reserves active_shares reward_info current_round_info) ; Current_State
     (
+        mirror_payout_amount
         mirror_payout_puzzle_hash
         mirror_initial_cumulative_payout .
         mirror_shares
@@ -27,54 +28,51 @@
         ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
     )
 
-    (defun higher_or_equal (value threshold)
-        (if (> value threshold)
-            value
-            ; else
-            (x)
-        )
+    (if (all
+        (= (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares) mirror_payout_amount)
+        (not (> PAYOUT_THRESHOLD mirror_payout_amount))
     )
+        (c
+            (list
+                (- total_reserves mirror_payout_amount)
+                active_shares
+                reward_info
+                current_round_info
+            ) ; new state  
+            (list
+                (spend_slot MIRROR_SLOT_1ST_CURRY_HASH
+                    (get_slot_data_hash mirror_payout_puzzle_hash mirror_initial_cumulative_payout mirror_shares)
+                )
 
-    (c
-        (list
-            (- total_reserves
-                (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares)
-            )
-            active_shares
-            reward_info
-            current_round_info
-        ) ; new state  
-        (list
-            (spend_slot MIRROR_SLOT_1ST_CURRY_HASH
-                (get_slot_data_hash mirror_payout_puzzle_hash mirror_initial_cumulative_payout mirror_shares)
-            )
+                (create_slot MIRROR_SLOT_1ST_CURRY_HASH
+                    (get_slot_data_hash mirror_payout_puzzle_hash (f reward_info) mirror_shares)
+                )
 
-            (create_slot MIRROR_SLOT_1ST_CURRY_HASH
-                (get_slot_data_hash mirror_payout_puzzle_hash (f reward_info) mirror_shares)
-            )
-
-            (list CREATE_PUZZLE_ANNOUNCEMENT
-                (concat 'p'
-                    (sha256 2
+                (list CREATE_PUZZLE_ANNOUNCEMENT
+                    (concat 'p'
                         (sha256 2
-                            (sha256 1 mirror_payout_puzzle_hash)
-                            (sha256 1 mirror_shares)
-                        )
-                        (sha256 2
-                            (sha256 1 mirror_initial_cumulative_payout)
-                            (sha256 1 (f reward_info))
-                        )
-                    ) ; (sha256tree ((mirror_payout_puzzle_hash . mirror_shares) . (mirror_initial_cumulative_payout new_mirror_initial_cumulative_payout)))
-                ) 
-            )
+                            (sha256 2
+                                (sha256 1 mirror_payout_puzzle_hash)
+                                (sha256 1 mirror_shares)
+                            )
+                            (sha256 2
+                                (sha256 1 mirror_initial_cumulative_payout)
+                                (sha256 1 (f reward_info))
+                            )
+                        ) ; (sha256tree ((mirror_payout_puzzle_hash . mirror_shares) . (mirror_initial_cumulative_payout new_mirror_initial_cumulative_payout)))
+                    ) 
+                )
 
-            ; leading -42 -> condition will be returned by the reserve
-            (list -42
-                CREATE_COIN
-                mirror_payout_puzzle_hash
-                (higher_or_equal (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares) PAYOUT_THRESHOLD)
-                (list mirror_payout_puzzle_hash)
-            )
-        ) ; conditions
+                ; leading -42 -> condition will be returned by the reserve
+                (list -42
+                    CREATE_COIN
+                    mirror_payout_puzzle_hash
+                    mirror_payout_amount
+                    (list mirror_payout_puzzle_hash)
+                )
+            ) ; conditions
+        )
+        ; esle
+        (x)
     )
 )

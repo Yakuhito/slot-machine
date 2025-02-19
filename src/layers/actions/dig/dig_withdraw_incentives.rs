@@ -1,13 +1,16 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
+    protocol::{Bytes, Bytes32},
 };
-use chia_wallet_sdk::{DriverError, Layer};
+use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{DigRewardDistributorInfo, DigSlotNonce, Slot, SpendContextExt};
+use crate::{
+    Action, DigCommitmentSlotValue, DigRewardDistributor, DigRewardDistributorConstants,
+    DigRewardSlotValue, DigSlotNonce, Slot, SpendContextExt,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigWithdrawIncentivesAction {
@@ -15,18 +18,25 @@ pub struct DigWithdrawIncentivesAction {
     pub withdrawal_share_bps: u64,
 }
 
-impl DigWithdrawIncentivesAction {
-    pub fn from_info(info: &DigRewardDistributorInfo) -> Self {
+impl ToTreeHash for DigWithdrawIncentivesAction {
+    fn tree_hash(&self) -> TreeHash {
+        DigWithdrawIncentivesActionArgs::curry_tree_hash(
+            self.launcher_id,
+            self.withdrawal_share_bps,
+        )
+    }
+}
+
+impl Action<DigRewardDistributor> for DigWithdrawIncentivesAction {
+    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id: info.launcher_id,
-            withdrawal_share_bps: info.constants.withdrawal_share_bps,
+            launcher_id,
+            withdrawal_share_bps: constants.withdrawal_share_bps,
         }
     }
 }
 
-impl Layer for DigWithdrawIncentivesAction {
-    type Solution = DigWithdrawIncentivesActionSolution;
-
+impl DigWithdrawIncentivesAction {
     fn construct_puzzle(
         &self,
         ctx: &mut chia_wallet_sdk::SpendContext,
@@ -39,38 +49,76 @@ impl Layer for DigWithdrawIncentivesAction {
         .map_err(DriverError::ToClvm)
     }
 
-    fn construct_solution(
+    pub fn get_slot_value_from_solution(
         &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: DigWithdrawIncentivesActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        ctx: &SpendContext,
+        my_constants: &DigRewardDistributorConstants,
+        solution: NodePtr,
+    ) -> Result<DigRewardSlotValue, DriverError> {
+        let solution = DigWithdrawIncentivesActionSolution::from_clvm(&ctx.allocator, solution)?;
+        let withdrawal_share = solution.committed_value * my_constants.withdrawal_share_bps / 10000;
+
+        Ok(DigRewardSlotValue {
+            epoch_start: solution.reward_slot_epoch_time,
+            next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
+            rewards: solution.reward_slot_total_rewards - withdrawal_share,
+        })
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        distributor: &mut DigRewardDistributor,
+        commitment_slot: Slot<DigCommitmentSlotValue>,
+        reward_slot: Slot<DigRewardSlotValue>,
+    ) -> Result<(Conditions, Slot<DigRewardSlotValue>, u64), DriverError> {
+        // last u64 = withdrawn amount
+        let Some(reward_slot_value) = reward_slot.info.value else {
+            return Err(DriverError::Custom("Reward slot value is None".to_string()));
+        };
+        let Some(commitment_slot_value) = commitment_slot.info.value else {
+            return Err(DriverError::Custom(
+                "Commitment slot value is None".to_string(),
+            ));
+        };
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
+        let withdrawal_share =
+            commitment_slot_value.rewards * distributor.info.constants.withdrawal_share_bps / 10000;
 
-impl DigWithdrawIncentivesAction {
-    pub fn curry_tree_hash(launcher_id: Bytes32, withdrawal_share_bps: u64) -> TreeHash {
-        CurriedProgram {
-            program: DIG_WITHDRAW_INCENTIVES_PUZZLE_HASH,
-            args: DigWithdrawIncentivesActionArgs::new(launcher_id, withdrawal_share_bps),
+        // calculate message that the validator needs to send
+        let withdraw_incentives_conditions = Conditions::new()
+            .send_message(
+                18,
+                Bytes::new(Vec::new()),
+                vec![distributor.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            )
+            .assert_concurrent_puzzle(commitment_slot.coin.puzzle_hash);
+
+        // spend slots
+        let my_inner_puzzle_hash: Bytes32 = distributor.info.inner_puzzle_hash().into();
+        reward_slot.spend(ctx, my_inner_puzzle_hash)?;
+        commitment_slot.spend(ctx, my_inner_puzzle_hash)?;
+
+        // spend self
+        let action_solution = DigWithdrawIncentivesActionSolution {
+            reward_slot_epoch_time: reward_slot_value.epoch_start,
+            reward_slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
+            reward_slot_total_rewards: reward_slot_value.rewards,
+            clawback_ph: commitment_slot_value.clawback_ph,
+            committed_value: commitment_slot_value.rewards,
+            withdrawal_share,
         }
-        .tree_hash()
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        let slot_value =
+            self.get_slot_value_from_solution(ctx, &distributor.info.constants, action_solution)?;
+        distributor.insert(Spend::new(action_puzzle, action_solution));
+        Ok((
+            withdraw_incentives_conditions,
+            distributor.created_slot_values_to_slots(vec![slot_value], DigSlotNonce::REWARD)[0],
+            withdrawal_share,
+        ))
     }
 }
 
@@ -95,12 +143,12 @@ impl DigWithdrawIncentivesActionArgs {
         Self {
             reward_slot_1st_curry_hash: Slot::<()>::first_curry_hash(
                 launcher_id,
-                Some(DigSlotNonce::REWARD.to_u64()),
+                DigSlotNonce::REWARD.to_u64(),
             )
             .into(),
             commitment_slot_1st_curry_hash: Slot::<()>::first_curry_hash(
                 launcher_id,
-                Some(DigSlotNonce::COMMITMENT.to_u64()),
+                DigSlotNonce::COMMITMENT.to_u64(),
             )
             .into(),
             withdrawal_share_bps,
@@ -108,11 +156,21 @@ impl DigWithdrawIncentivesActionArgs {
     }
 }
 
+impl DigWithdrawIncentivesActionArgs {
+    pub fn curry_tree_hash(launcher_id: Bytes32, withdrawal_share_bps: u64) -> TreeHash {
+        CurriedProgram {
+            program: DIG_WITHDRAW_INCENTIVES_PUZZLE_HASH,
+            args: DigWithdrawIncentivesActionArgs::new(launcher_id, withdrawal_share_bps),
+        }
+        .tree_hash()
+    }
+}
+
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct DigWithdrawIncentivesActionSolution {
     pub reward_slot_epoch_time: u64,
-    pub reward_slot_next_epoch_time: u64,
+    pub reward_slot_next_epoch_initialized: bool,
     pub reward_slot_total_rewards: u64,
     pub clawback_ph: Bytes32,
     pub committed_value: u64,
