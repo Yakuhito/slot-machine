@@ -1010,7 +1010,7 @@ mod tests {
             slot.cloned(),
         )?;
 
-        let new_catalog = catalog.spend(ctx)?;
+        let new_catalog = catalog.finish_spend(ctx)?;
 
         ensure_conditions_met(ctx, sim, secure_cond, 0)?;
 
@@ -1240,7 +1240,7 @@ mod tests {
                 )?;
 
                 catalog.insert(action_spend);
-                catalog = catalog.spend(ctx)?;
+                catalog = catalog.finish_spend(ctx)?;
                 sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
             };
 
@@ -1257,7 +1257,7 @@ mod tests {
                 },
             )?;
 
-            catalog = catalog.spend(ctx)?;
+            catalog = catalog.finish_spend(ctx)?;
 
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
@@ -1433,7 +1433,7 @@ mod tests {
             pricing_solution,
             slot,
         )?;
-        let new_registry = registry.spend(ctx)?;
+        let new_registry = registry.finish_spend(ctx)?;
 
         ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
 
@@ -1683,7 +1683,7 @@ mod tests {
                 )?;
 
                 registry.insert(action_spend);
-                registry = registry.spend(ctx)?;
+                registry = registry.finish_spend(ctx)?;
                 sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
             };
 
@@ -1698,7 +1698,7 @@ mod tests {
 
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
-            registry = registry.spend(ctx)?;
+            registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
             sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
@@ -1798,7 +1798,7 @@ mod tests {
 
             let _new_did = did.update(ctx, &user_puzzle, update_conds)?;
 
-            registry = registry.spend(ctx)?;
+            registry = registry.finish_spend(ctx)?;
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
             slots.retain(|s| *s != update_slot);
@@ -1896,7 +1896,7 @@ mod tests {
 
         // assert expire conds
         ensure_conditions_met(ctx, &mut sim, expire_conds, 1)?;
-        registry = registry.spend(ctx)?;
+        registry = registry.finish_spend(ctx)?;
         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
 
         // Test refunds

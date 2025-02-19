@@ -82,7 +82,7 @@ impl XchandlesRegistry {
 }
 
 impl XchandlesRegistry {
-    pub fn spend(self, ctx: &mut SpendContext) -> Result<Self, DriverError> {
+    pub fn finish_spend(self, ctx: &mut SpendContext) -> Result<Self, DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
