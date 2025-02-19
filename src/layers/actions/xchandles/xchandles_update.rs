@@ -3,27 +3,33 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::{SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH},
 };
-use chia_wallet_sdk::{DriverError, Layer, SpendContext};
-use clvm_traits::{FromClvm, ToClvm};
+use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{Slot, SpendContextExt};
+use crate::{
+    Action, Slot, SpendContextExt, XchandlesConstants, XchandlesRegistry, XchandlesSlotValue,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesUpdateAction {
     pub launcher_id: Bytes32,
 }
 
-impl XchandlesUpdateAction {
-    pub fn new(launcher_id: Bytes32) -> Self {
+impl ToTreeHash for XchandlesUpdateAction {
+    fn tree_hash(&self) -> TreeHash {
+        XchandlesUpdateActionArgs::curry_tree_hash(self.launcher_id)
+    }
+}
+
+impl Action<XchandlesRegistry> for XchandlesUpdateAction {
+    fn from_constants(launcher_id: Bytes32, _constants: &XchandlesConstants) -> Self {
         Self { launcher_id }
     }
 }
 
-impl Layer for XchandlesUpdateAction {
-    type Solution = XchandlesUpdateActionSolution;
-
+impl XchandlesUpdateAction {
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         Ok(CurriedProgram {
             program: ctx.xchandles_update_puzzle()?,
@@ -32,34 +38,70 @@ impl Layer for XchandlesUpdateAction {
         .to_clvm(&mut ctx.allocator)?)
     }
 
-    fn construct_solution(
+    pub fn get_slot_value_from_solution(
         &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-        solution: XchandlesUpdateActionSolution,
-    ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        ctx: &mut SpendContext,
+        spent_slot_value: XchandlesSlotValue,
+        solution: NodePtr,
+    ) -> Result<XchandlesSlotValue, DriverError> {
+        let solution = XchandlesUpdateActionSolution::from_clvm(&ctx.allocator, solution)?;
+
+        Ok(spent_slot_value.with_launcher_ids(
+            solution.new_owner_launcher_id,
+            solution.new_resolved_launcher_id,
+        ))
     }
 
-    fn parse_puzzle(
-        _: &clvmr::Allocator,
-        _: chia_wallet_sdk::Puzzle,
-    ) -> Result<Option<Self>, DriverError>
-    where
-        Self: Sized,
-    {
-        unimplemented!()
-    }
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        registry: &mut XchandlesRegistry,
+        slot: Slot<XchandlesSlotValue>,
+        new_owner_launcher_id: Bytes32,
+        new_resolved_launcher_id: Bytes32,
+        announcer_inner_puzzle_hash: Bytes32,
+    ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
+        // spend slots
+        let Some(slot_value) = slot.info.value else {
+            return Err(DriverError::Custom("Missing slot value".to_string()));
+        };
 
-    fn parse_solution(_: &clvmr::Allocator, _: NodePtr) -> Result<Self::Solution, DriverError> {
-        unimplemented!()
-    }
-}
+        let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
-impl ToTreeHash for XchandlesUpdateAction {
-    fn tree_hash(&self) -> TreeHash {
-        XchandlesUpdateActionArgs::curry_tree_hash(self.launcher_id)
+        slot.spend(ctx, my_inner_puzzle_hash)?;
+
+        // spend self
+        let action_solution = XchandlesUpdateActionSolution {
+            value_hash: slot_value.handle_hash.tree_hash().into(),
+            neighbors_hash: slot_value.neighbors.tree_hash().into(),
+            expiration: slot_value.expiration,
+            current_owner_launcher_id: slot_value.owner_launcher_id,
+            current_resolved_launcher_id: slot_value.resolved_launcher_id,
+            new_owner_launcher_id,
+            new_resolved_launcher_id,
+            announcer_inner_puzzle_hash,
+        }
+        .to_clvm(&mut ctx.allocator)?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        registry.insert(Spend::new(action_puzzle, action_solution));
+
+        let new_slot_value = self.get_slot_value_from_solution(ctx, slot_value, action_solution)?;
+
+        let msg: Bytes32 = clvm_tuple!(
+            slot_value.handle_hash,
+            clvm_tuple!(new_owner_launcher_id, new_resolved_launcher_id)
+        )
+        .tree_hash()
+        .into();
+        Ok((
+            Conditions::new().send_message(
+                18,
+                msg.into(),
+                vec![ctx.alloc(&registry.coin.puzzle_hash)?],
+            ),
+            registry.created_slot_values_to_slots(vec![new_slot_value])[0],
+        ))
     }
 }
 
