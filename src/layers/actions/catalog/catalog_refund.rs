@@ -143,8 +143,7 @@ impl CatalogRefundActionArgs {
                 payout_puzzle_hash,
             )
             .into(),
-            slot_1st_curry_hash: Slot::<CatalogSlotValue>::first_curry_hash(launcher_id, None)
-                .into(),
+            slot_1st_curry_hash: Slot::<CatalogSlotValue>::first_curry_hash(launcher_id, 0).into(),
         }
     }
 }

@@ -164,7 +164,7 @@ impl CatalogRegistry {
             .map(|slot_value| {
                 Slot::new(
                     proof,
-                    SlotInfo::from_value(self.info.launcher_id, slot_value, None),
+                    SlotInfo::from_value(self.info.launcher_id, 0, slot_value),
                 )
             })
             .collect()

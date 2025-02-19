@@ -137,7 +137,7 @@ impl DigAddMirrorActionArgs {
                 .into(),
             mirror_slot_1st_curry_hash: Slot::<()>::first_curry_hash(
                 launcher_id,
-                Some(DigSlotNonce::MIRROR.to_u64()),
+                DigSlotNonce::MIRROR.to_u64(),
             )
             .into(),
             max_second_offset,

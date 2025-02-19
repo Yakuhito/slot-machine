@@ -172,7 +172,7 @@ impl DigNewEpochActionArgs {
         Self {
             reward_slot_1st_curry_hash: Slot::<()>::first_curry_hash(
                 launcher_id,
-                Some(DigSlotNonce::REWARD.to_u64()),
+                DigSlotNonce::REWARD.to_u64(),
             )
             .into(),
             validator_payout_puzzle_hash,

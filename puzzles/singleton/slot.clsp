@@ -12,6 +12,7 @@
 (mod (
     ; 1st curry
     SINGLETON_STRUCT ; owner/controller singleton
+    NONCE ; different nonces will hold different data types
     ; 2nd curry
     VALUE_HASH
     ; info about this coin's parent (previous singleton coin)

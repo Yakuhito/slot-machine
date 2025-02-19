@@ -358,13 +358,13 @@ where
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
 
-    let left_slot_info = SlotInfo::from_value(launcher_id, left_slot_value, None);
+    let left_slot_info = SlotInfo::from_value(launcher_id, 0, left_slot_value);
     let left_slot_puzzle_hash = Slot::<S>::puzzle_hash(&left_slot_info);
 
-    let right_slot_info = SlotInfo::from_value(launcher_id, right_slot_value, None);
+    let right_slot_info = SlotInfo::from_value(launcher_id, 0, right_slot_value);
     let right_slot_puzzle_hash = Slot::<S>::puzzle_hash(&right_slot_info);
 
-    let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id, None).into();
+    let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id, 0).into();
     let slot_memos = ctx.hint(slot_hint)?;
     let launcher_memos = ctx.hint(launcher_id)?;
     let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
@@ -667,13 +667,13 @@ pub fn launch_dig_reward_distributor(
     };
     let slot_info = SlotInfo::<DigRewardSlotValue>::from_value(
         launcher_id,
+        DigSlotNonce::REWARD.to_u64(),
         slot_value,
-        Some(DigSlotNonce::REWARD.to_u64()),
     );
     let slot_puzzle_hash = Slot::<DigRewardSlotValue>::puzzle_hash(&slot_info);
 
     let slot_hint: Bytes32 =
-        Slot::<()>::first_curry_hash(launcher_id, Some(DigSlotNonce::REWARD.to_u64())).into();
+        Slot::<()>::first_curry_hash(launcher_id, DigSlotNonce::REWARD.to_u64()).into();
     let slot_memos = ctx.hint(slot_hint)?;
     let launcher_memos = ctx.hint(launcher_id)?;
     let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()

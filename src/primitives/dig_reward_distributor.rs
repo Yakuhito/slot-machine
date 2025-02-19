@@ -222,7 +222,7 @@ impl DigRewardDistributor {
             .map(|slot_value| {
                 Slot::new(
                     proof,
-                    SlotInfo::from_value(self.info.launcher_id, slot_value, Some(nonce.to_u64())),
+                    SlotInfo::from_value(self.info.launcher_id, nonce.to_u64(), slot_value),
                 )
             })
             .collect()

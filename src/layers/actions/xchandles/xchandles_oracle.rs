@@ -92,7 +92,7 @@ pub struct XchandlesOracleActionArgs {
 impl XchandlesOracleActionArgs {
     pub fn new(launcher_id: Bytes32) -> Self {
         Self {
-            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, None).into(),
+            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
         }
     }
 }
