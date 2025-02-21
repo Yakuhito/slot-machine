@@ -1,0 +1,31 @@
+; state_scheduler.clsp by yakuhito
+;; Used as the inner puzzle of a singleton that schedules state changes for another singleton.
+;; Once 'committed' to a state schedule, the price singleton (which is really the state scheduler singleton)
+;;   has to abide it, with the * that states may come into effect later than scheduled if users don't spend
+;;   the scheduler on time.
+
+;; For an example, see actions/shared/delegated_state.clsp (this is the trusted singleton).
+
+(mod (
+  OTHER_SINGLETON_STRUCT
+  BASE_CONDITIONS
+  NEW_STATE_HASH
+  other_singleton_inner_puzzle_hash
+)
+  (include condition_codes.clib)
+  (include sha256tree.clib)
+  (include curry.clib)
+
+  (c
+    (list
+      SEND_MESSAGE
+      18 ; puzzle-puzzle
+      NEW_STATE_HASH
+      (curry_hashes_inline (f OTHER_SINGLETON_STRUCT)
+        (sha256tree OTHER_SINGLETON_STRUCT)
+        other_singleton_inner_puzzle_hash
+      )
+    )
+    BASE_CONDITIONS
+  )
+)
