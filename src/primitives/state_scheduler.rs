@@ -137,36 +137,6 @@ mod tests {
         }
     }
 
-    fn create_and_spend_launcher<K>(
-        sim: &mut Simulator,
-        ctx: &mut SpendContext,
-        kv_list: K,
-        singleton_inner_puzzle_hash: Bytes32,
-    ) -> Result<(Coin, Bytes32, EveProof), DriverError>
-    where
-        K: ToClvm<Allocator>,
-    {
-        let puz = ctx.alloc(&1)?;
-        let puz_hash = ctx.tree_hash(puz);
-        let parent_coin = sim.new_coin(puz_hash.into(), 1);
-
-        let launcher = Launcher::new(parent_coin.coin_id(), 1);
-        let launcher_id = launcher.coin().coin_id();
-        let (conds, coin) = launcher.spend(ctx, singleton_inner_puzzle_hash, kv_list)?;
-
-        let parent_solution = conds.to_clvm(&mut ctx.allocator)?;
-        ctx.spend(parent_coin, Spend::new(puz, parent_solution))?;
-
-        Ok((
-            coin,
-            launcher_id,
-            EveProof {
-                parent_parent_coin_info: parent_coin.coin_id(),
-                parent_amount: parent_coin.amount,
-            },
-        ))
-    }
-
     #[test]
     fn test_price_scheduler() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
@@ -185,31 +155,45 @@ mod tests {
         let final_puzzle_hash: Bytes32 = "yakuhito".tree_hash().into();
 
         // Launch 'other' singleton, which will consume (reveive) the messages
+        let launcher_parent_puzzle = ctx.alloc(&1)?;
+        let launcher_parent_puzzle_hash = ctx.tree_hash(launcher_parent_puzzle);
+
         let other_singleton_inner_puzzle = ctx.alloc(&1)?;
         let other_singleton_inner_puzzle_hash = ctx.tree_hash(other_singleton_inner_puzzle);
-        let (mut other_singleton_coin, other_singleton_launcher_id, other_singleton_eve_proof) =
-            create_and_spend_launcher(&mut sim, ctx, (), other_singleton_inner_puzzle_hash.into())?;
+
+        let other_launcher_parent_coin = sim.new_coin(launcher_parent_puzzle_hash.into(), 1);
+        let other_launcher = Launcher::new(other_launcher_parent_coin.coin_id(), 1);
+        let other_singleton_launcher = other_launcher.coin();
+        let (other_parnet_conds, mut other_singleton_coin) =
+            other_launcher.spend(ctx, other_singleton_inner_puzzle_hash.into(), ())?;
+
+        let pther_parent_solution = other_parnet_conds.to_clvm(&mut ctx.allocator)?;
+        ctx.spend(
+            other_launcher_parent_coin,
+            Spend::new(launcher_parent_puzzle, pther_parent_solution),
+        )?;
+
         sim.spend_coins(ctx.take(), &[])?;
 
         // Launch state schedulet singleton
-        let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+        let launcher_parent_coin = sim.new_coin(launcher_parent_puzzle_hash.into(), 1);
+
+        let launcher = Launcher::new(launcher_parent_coin.coin_id(), 1);
+        let launcher_id = launcher.coin().coin_id();
 
         let first_coin_info = StateSchedulerInfo::new(
-            launcher_coin.coin_id(),
-            other_singleton_launcher_id,
+            launcher_id,
+            other_singleton_launcher.coin_id(),
             schedule.clone(),
             0,
             final_puzzle_hash,
         );
-
-        let launcher_id = launcher_coin.coin_id();
-        let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
-        let (_conds, state_scheduler_coin) = launcher.spend(
+        let (launcher_conds, state_scheduler_coin) = launcher.spend(
             ctx,
             first_coin_info.inner_puzzle_hash().into(),
             StateSchedulerLauncherHints {
                 my_launcher_id: launcher_id,
-                other_singleton_launcher_id,
+                other_singleton_launcher_id: other_singleton_launcher.coin_id(),
                 final_puzzle_hash,
                 state_schedule: schedule.clone(),
             },
@@ -217,9 +201,16 @@ mod tests {
 
         let spends = ctx.take();
         assert_eq!(spends.len(), 1);
-
         let state_scheduler_launcher_spend = spends[0].clone();
-        sim.spend_coins(vec![state_scheduler_launcher_spend.clone()], &[])?;
+        ctx.insert(state_scheduler_launcher_spend.clone());
+
+        let launcher_solution = launcher_conds.to_clvm(&mut ctx.allocator)?;
+        ctx.spend(
+            launcher_parent_coin,
+            Spend::new(launcher_parent_puzzle, launcher_solution),
+        )?;
+
+        sim.spend_coins(ctx.take(), &[])?;
 
         let mut state_scheduler =
             StateScheduler::from_launcher_spend(ctx, state_scheduler_launcher_spend)?.unwrap();
@@ -240,12 +231,15 @@ mod tests {
             ctx.insert(state_scheduler_spend.clone());
 
             let other_singleton = SingletonLayer::<NodePtr>::new(
-                other_singleton_launcher_id,
+                other_singleton_launcher.coin_id(),
                 other_singleton_inner_puzzle,
             );
 
             let other_singleton_lp = if index == 0 {
-                Proof::Eve(other_singleton_eve_proof)
+                Proof::Eve(EveProof {
+                    parent_parent_coin_info: other_singleton_launcher.parent_coin_info,
+                    parent_amount: other_singleton_launcher.amount,
+                })
             } else {
                 Proof::Lineage(LineageProof {
                     parent_parent_coin_info: other_singleton_coin_parent.parent_coin_info,
