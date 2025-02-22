@@ -122,10 +122,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use chia::bls::Signature;
     use chia_wallet_sdk::{Conditions, Launcher, Simulator, SingletonLayer};
     use clvmr::NodePtr;
 
-    use crate::{CatalogRegistryState, StateSchedulerLauncherHints};
+    use crate::{print_spend_bundle_to_file, CatalogRegistryState, StateSchedulerLauncherHints};
 
     use super::*;
 
@@ -134,6 +135,36 @@ mod tests {
             cat_maker_puzzle_hash: Bytes32::new([generator; 32]),
             registration_price: generator as u64 * 1000,
         }
+    }
+
+    fn create_and_spend_launcher<K>(
+        sim: &mut Simulator,
+        ctx: &mut SpendContext,
+        kv_list: K,
+        singleton_inner_puzzle_hash: Bytes32,
+    ) -> Result<(Coin, Bytes32, EveProof), DriverError>
+    where
+        K: ToClvm<Allocator>,
+    {
+        let puz = ctx.alloc(&1)?;
+        let puz_hash = ctx.tree_hash(puz);
+        let parent_coin = sim.new_coin(puz_hash.into(), 1);
+
+        let launcher = Launcher::new(parent_coin.coin_id(), 1);
+        let launcher_id = launcher.coin().coin_id();
+        let (conds, coin) = launcher.spend(ctx, singleton_inner_puzzle_hash, kv_list)?;
+
+        let parent_solution = conds.to_clvm(&mut ctx.allocator)?;
+        ctx.spend(parent_coin, Spend::new(puz, parent_solution))?;
+
+        Ok((
+            coin,
+            launcher_id,
+            EveProof {
+                parent_parent_coin_info: parent_coin.coin_id(),
+                parent_amount: parent_coin.amount,
+            },
+        ))
     }
 
     #[test]
@@ -154,17 +185,11 @@ mod tests {
         let final_puzzle_hash: Bytes32 = "yakuhito".tree_hash().into();
 
         // Launch 'other' singleton, which will consume (reveive) the messages
-        let other_launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
         let other_singleton_inner_puzzle = ctx.alloc(&1)?;
         let other_singleton_inner_puzzle_hash = ctx.tree_hash(other_singleton_inner_puzzle);
-
-        let other_launcher = Launcher::new(other_launcher_coin.parent_coin_info, 1);
-        let (_conds, mut other_singleton_coin) =
-            other_launcher.spend(ctx, other_singleton_inner_puzzle_hash.into(), ())?;
-
+        let (mut other_singleton_coin, other_singleton_launcher_id, other_singleton_eve_proof) =
+            create_and_spend_launcher(&mut sim, ctx, (), other_singleton_inner_puzzle_hash.into())?;
         sim.spend_coins(ctx.take(), &[])?;
-
-        let other_singleton_launcher_id = other_launcher_coin.coin_id();
 
         // Launch state schedulet singleton
         let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
@@ -220,10 +245,7 @@ mod tests {
             );
 
             let other_singleton_lp = if index == 0 {
-                Proof::Eve(EveProof {
-                    parent_parent_coin_info: other_launcher_coin.parent_coin_info,
-                    parent_amount: other_launcher_coin.amount,
-                })
+                Proof::Eve(other_singleton_eve_proof)
             } else {
                 Proof::Lineage(LineageProof {
                     parent_parent_coin_info: other_singleton_coin_parent.parent_coin_info,
@@ -259,7 +281,9 @@ mod tests {
                 1,
             );
 
-            sim.spend_coins(ctx.take(), &[])?;
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            sim.spend_coins(spends, &[])?;
 
             if index < schedule.len() - 1 {
                 state_scheduler = state_scheduler.child().unwrap();
