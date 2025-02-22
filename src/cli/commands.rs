@@ -33,7 +33,7 @@ enum CatalogCliAction {
     /// Continues/finishes an existing launch
     ContinueLaunch,
     /// Verifies the built-in deployment is valid
-    VerifDeployment,
+    VerifyDeployment,
 }
 
 #[derive(Subcommand)]
@@ -43,7 +43,7 @@ enum XchandlesCliAction {
     /// Continues/finishes an existing launch
     ContinueLaunch,
     /// Verifies the built-in deployment is valid
-    VerifDeployment,
+    VerifyDeployment,
 }
 
 pub async fn run_cli() {
@@ -55,7 +55,7 @@ pub async fn run_cli() {
             CatalogCliAction::ContinueLaunch => {
                 todo!("not yet implemented");
             }
-            CatalogCliAction::VerifDeployment => {
+            CatalogCliAction::VerifyDeployment => {
                 todo!("not yet implemented");
             }
         },
@@ -67,7 +67,7 @@ pub async fn run_cli() {
             XchandlesCliAction::ContinueLaunch => {
                 todo!("not yet implemented");
             }
-            XchandlesCliAction::VerifDeployment => {
+            XchandlesCliAction::VerifyDeployment => {
                 todo!("not yet implemented");
             }
         },

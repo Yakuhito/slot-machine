@@ -5,7 +5,7 @@ use clvm_traits::{ClvmDecoder, ClvmEncoder, FromClvm, FromClvmError, Raw, ToClvm
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatNftMetadata {
-    pub code: String,
+    pub ticker: String,
     pub name: String,
     pub description: String,
     pub precision: u8,
@@ -20,7 +20,7 @@ pub struct CatNftMetadata {
 impl Default for CatNftMetadata {
     fn default() -> Self {
         Self {
-            code: "???".to_string(),
+            ticker: "???".to_string(),
             name: "Unknown CAT".to_string(),
             description: "(no description provided)".to_string(),
             precision: 3,
@@ -41,7 +41,7 @@ impl<N, D: ClvmDecoder<Node = N>> FromClvm<D> for CatNftMetadata {
 
         for (key, Raw(ptr)) in items {
             match key.as_str() {
-                "c" => metadata.code = FromClvm::from_clvm(decoder, ptr)?,
+                "t" => metadata.ticker = FromClvm::from_clvm(decoder, ptr)?,
                 "n" => metadata.name = FromClvm::from_clvm(decoder, ptr)?,
                 "d" => metadata.description = FromClvm::from_clvm(decoder, ptr)?,
                 "p" => metadata.precision = FromClvm::from_clvm(decoder, ptr)?,
@@ -62,7 +62,7 @@ impl<N, D: ClvmDecoder<Node = N>> FromClvm<D> for CatNftMetadata {
 impl<N, E: ClvmEncoder<Node = N>> ToClvm<E> for CatNftMetadata {
     fn to_clvm(&self, encoder: &mut E) -> Result<N, ToClvmError> {
         let items: Vec<(&str, Raw<N>)> = vec![
-            ("c", Raw(self.code.to_clvm(encoder)?)),
+            ("t", Raw(self.ticker.to_clvm(encoder)?)),
             ("n", Raw(self.name.to_clvm(encoder)?)),
             ("d", Raw(self.description.to_clvm(encoder)?)),
             ("p", Raw(self.precision.to_clvm(encoder)?)),

@@ -795,7 +795,7 @@ mod tests {
 
     fn cat_nft_metadata_for_testing() -> CatNftMetadata {
         CatNftMetadata {
-            code: "TDBX".to_string(),
+            ticker: "TDBX".to_string(),
             name: "Testnet dexie bucks".to_string(),
             description: "    Testnet version of dexie bucks".to_string(),
             precision: 4,
@@ -2099,7 +2099,7 @@ mod tests {
 
         // actually try to run updater
         let new_metadata = CatNftMetadata {
-            code: "XXX".to_string(),
+            ticker: "XXX".to_string(),
             name: "Test Name".to_string(),
             description: "Test desc".to_string(),
             precision: 4,

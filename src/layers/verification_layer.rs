@@ -222,10 +222,12 @@ impl VerifiedData {
             version: 1,
             asset_id,
             data_hash: clvm_list!(
-                metadata.code.clone(),
+                metadata.ticker.clone(),
                 metadata.name.clone(),
                 metadata.description.clone(),
-                metadata.image_hash
+                metadata.image_hash,
+                metadata.metadata_hash,
+                metadata.license_hash,
             )
             .tree_hash()
             .into(),
