@@ -122,7 +122,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use chia_wallet_sdk::{Launcher, Simulator};
+    use chia_wallet_sdk::{Conditions, Launcher, Simulator, SingletonLayer};
+    use clvmr::NodePtr;
 
     use crate::{CatalogRegistryState, StateSchedulerLauncherHints};
 
@@ -199,6 +200,76 @@ mod tests {
             StateScheduler::from_launcher_spend(ctx, state_scheduler_launcher_spend)?.unwrap();
         assert_eq!(state_scheduler.info, first_coin_info);
         assert_eq!(state_scheduler.coin, state_scheduler_coin);
+
+        let mut other_singleton_coin_parent = other_singleton_coin;
+        for (index, (block, new_state)) in schedule.iter().enumerate() {
+            println!("index: {}, block: {}", index, block);
+
+            state_scheduler
+                .clone()
+                .spend(ctx, other_singleton_inner_puzzle_hash.into())?;
+
+            let spends = ctx.take();
+            assert_eq!(spends.len(), 1);
+            let state_scheduler_spend = spends[0].clone();
+            ctx.insert(state_scheduler_spend.clone());
+
+            let other_singleton = SingletonLayer::<NodePtr>::new(
+                other_singleton_launcher_id,
+                other_singleton_inner_puzzle,
+            );
+
+            let other_singleton_lp = if index == 0 {
+                Proof::Eve(EveProof {
+                    parent_parent_coin_info: other_launcher_coin.parent_coin_info,
+                    parent_amount: other_launcher_coin.amount,
+                })
+            } else {
+                Proof::Lineage(LineageProof {
+                    parent_parent_coin_info: other_singleton_coin_parent.parent_coin_info,
+                    parent_inner_puzzle_hash: other_singleton_inner_puzzle_hash.into(),
+                    parent_amount: other_singleton_coin_parent.amount,
+                })
+            };
+            let state_scheduler_puzzle_hash_ptr = state_scheduler
+                .coin
+                .puzzle_hash
+                .to_clvm(&mut ctx.allocator)?;
+            let other_singleton_inner_solution = Conditions::new()
+                .receive_message(
+                    18,
+                    new_state.tree_hash().to_vec().into(),
+                    vec![state_scheduler_puzzle_hash_ptr],
+                )
+                .to_clvm(&mut ctx.allocator)?;
+            let other_singleton_spend = other_singleton.construct_spend(
+                ctx,
+                SingletonSolution {
+                    lineage_proof: other_singleton_lp,
+                    amount: 1,
+                    inner_solution: other_singleton_inner_solution,
+                },
+            )?;
+
+            ctx.spend(other_singleton_coin, other_singleton_spend)?;
+            other_singleton_coin_parent = other_singleton_coin;
+            other_singleton_coin = Coin::new(
+                other_singleton_coin.coin_id(),
+                other_singleton_coin.puzzle_hash,
+                1,
+            );
+
+            sim.spend_coins(ctx.take(), &[])?;
+
+            if index < schedule.len() - 1 {
+                state_scheduler = state_scheduler.child().unwrap();
+
+                assert_eq!(state_scheduler.info.state_schedule, schedule);
+                assert_eq!(state_scheduler.info.generation, *block as usize);
+            } else {
+                break;
+            }
+        }
 
         Ok(())
     }
