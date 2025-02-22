@@ -9,7 +9,7 @@
 (mod (
   OTHER_SINGLETON_STRUCT
   BASE_CONDITIONS
-  NEW_STATE_HASH
+  NEW_STATE ; reveal on-chain
   other_singleton_inner_puzzle_hash
 )
   (include condition_codes.clib)
@@ -20,7 +20,7 @@
     (list
       SEND_MESSAGE
       18 ; puzzle-puzzle
-      NEW_STATE_HASH
+      (sha256tree NEW_STATE)
       (curry_hashes_inline (f OTHER_SINGLETON_STRUCT)
         (sha256tree OTHER_SINGLETON_STRUCT)
         other_singleton_inner_puzzle_hash
