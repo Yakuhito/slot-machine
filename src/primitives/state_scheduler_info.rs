@@ -1,8 +1,11 @@
 use chia::{
     clvm_utils::{ToTreeHash, TreeHash},
     protocol::Bytes32,
+    puzzles::singleton::{LauncherSolution, SingletonArgs},
 };
-use chia_wallet_sdk::{Condition, SingletonLayer};
+use chia_wallet_sdk::{Condition, DriverError, SingletonLayer};
+use clvm_traits::{FromClvm, ToClvm};
+use clvmr::{Allocator, NodePtr};
 
 use crate::{StateSchedulerLayer, StateSchedulerLayerArgs};
 
@@ -97,4 +100,45 @@ where
             ),
         ))
     }
+
+    pub fn from_launcher_solution(
+        allocator: &mut Allocator,
+        laucher_solution: LauncherSolution<NodePtr>,
+    ) -> Result<Option<Self>, DriverError>
+    where
+        S: FromClvm<Allocator>,
+    {
+        let hints =
+            StateSchedulerLauncherHints::from_clvm(allocator, laucher_solution.key_value_list)?;
+
+        let candidate = Self::new(
+            hints.my_launcher_id,
+            hints.other_singleton_launcher_id,
+            hints.state_schedule,
+            0,
+            hints.final_puzzle_hash,
+        );
+
+        let predicted_inner_puzzle_hash = candidate.inner_puzzle_hash();
+        let predicted_puzzle_hash =
+            SingletonArgs::curry_tree_hash(hints.my_launcher_id, predicted_inner_puzzle_hash);
+
+        if laucher_solution.amount == 1
+            && laucher_solution.singleton_puzzle_hash == predicted_puzzle_hash.into()
+        {
+            Ok(Some(candidate))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct StateSchedulerLauncherHints<S> {
+    pub my_launcher_id: Bytes32,
+    pub other_singleton_launcher_id: Bytes32,
+    pub final_puzzle_hash: Bytes32,
+    #[clvm(rest)]
+    pub state_schedule: Vec<(u32, S)>,
 }
