@@ -9,7 +9,7 @@ use crate::{
     CatalogRegistryConstants,
 };
 use chia_wallet_sdk::{
-    encode_address, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    encode_address, CoinsetClient, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
 };
 
 pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
@@ -43,7 +43,11 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     )?;
 
     println!("Initializing Chia RPC client...");
-    let client = ChiaClient::coinset(testnet11);
+    let client = if testnet11 {
+        CoinsetClient::testnet11()
+    } else {
+        CoinsetClient::mainnet()
+    };
 
     let launcher_id = db.get_value_by_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
     if launcher_id.is_some() {
@@ -89,44 +93,28 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     println!("  price singleton id: (will be launched as well)");
     yes_no_prompt("Do the constants above have the correct values?")?;
 
-    let price_schedule = price_schedule_for_catalog(testnet11);
-
-    println!("Price schedule:");
-    for (block, mojo_price) in price_schedule.iter() {
-        println!(
-            "  price after block {}: {:.12} XCH",
-            block,
-            *mojo_price as f64 / 1e12
-        );
-    }
-    yes_no_prompt("Is the price schedule correct?")?;
-
-    println!("A one-sided offer (2 mojos) will be needed for launch.");
-    println!(
-        r#"Reference wallet command: chia rpc wallet create_offer_for_ids '{{"offer":{{"1":-1}},"fee":4200000000,"driver_dict":{{}},"validate_only":false}}'"#
-    );
+    println!("A one-sided offer (1 mojo) will be needed for launch.");
     let offer = prompt_for_value("Offer: ")?;
-    println!("Offer: '{}'", offer);
 
     let ctx = &mut SpendContext::new();
-    let initial_registration_price = price_schedule[0].1 * 2;
-    let (sig, _, scheduler, preroller) = initiate_catalog_launch(
-        ctx,
-        Offer::decode(&offer).map_err(CliError::Offer)?,
-        price_schedule,
-        initial_registration_price,
-        todo!("convert cats_to_launch to a vector of AddCat"),
-        cats_per_unroll,
-        CatalogConstants::get(testnet11),
-        if testnet11 {
-            &TESTNET11_CONSTANTS
-        } else {
-            &MAINNET_CONSTANTS
-        },
-    )
-    .map_err(CliError::Driver)?;
+    // let initial_registration_price = price_schedule[0].1 * 2;
+    // let (sig, _, scheduler, preroller) = initiate_catalog_launch(
+    //     ctx,
+    //     Offer::decode(&offer).map_err(CliError::Offer)?,
+    //     price_schedule,
+    //     initial_registration_price,
+    //     todo!("convert cats_to_launch to a vector of AddCat"),
+    //     cats_per_unroll,
+    //     CatalogConstants::get(testnet11),
+    //     if testnet11 {
+    //         &TESTNET11_CONSTANTS
+    //     } else {
+    //         &MAINNET_CONSTANTS
+    //     },
+    // )
+    // .map_err(CliError::Driver)?;
 
-    yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
+    // yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
     //     // launch
     //     // follow in mempool; wait for confirmation

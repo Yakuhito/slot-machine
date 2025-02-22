@@ -25,7 +25,7 @@ tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.6", features = ["sqlite", "runtime-async-std-native-tls"] }
 bech32 = "0.9.1"
 
-chia-wallet-sdk = { git="https://github.com/xch-dev/chia-wallet-sdk.git", rev="1237cbbb7f639ddf8718e704b0ba495ec57ac1c5", features=["offers"] }
+chia-wallet-sdk = { git="https://github.com/xch-dev/chia-wallet-sdk.git", rev="995bf77bfb076af4a73f26f54d65789f99e37b37", features=["offers"] }
 
 [dev-dependencies]
 anyhow = "1.0.86"
