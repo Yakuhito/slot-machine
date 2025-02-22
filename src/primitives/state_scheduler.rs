@@ -103,13 +103,103 @@ where
             return Ok(None);
         };
 
+        let new_coin = Coin::new(
+            launcher_spend.coin.coin_id(),
+            SingletonArgs::curry_tree_hash(info.launcher_id, info.inner_puzzle_hash()).into(),
+            1,
+        );
+
         Ok(Some(Self::new(
-            launcher_spend.coin,
+            new_coin,
             Proof::Eve(EveProof {
                 parent_parent_coin_info: launcher_spend.coin.parent_coin_info,
                 parent_amount: launcher_spend.coin.amount,
             }),
             info,
         )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chia_wallet_sdk::{Launcher, Simulator};
+
+    use crate::{CatalogRegistryState, StateSchedulerLauncherHints};
+
+    use super::*;
+
+    fn mock_state(generator: u8) -> CatalogRegistryState {
+        CatalogRegistryState {
+            cat_maker_puzzle_hash: Bytes32::new([generator; 32]),
+            registration_price: generator as u64 * 1000,
+        }
+    }
+
+    #[test]
+    fn test_price_scheduler() -> anyhow::Result<()> {
+        let ctx = &mut SpendContext::new();
+        let mut sim = Simulator::new();
+
+        let schedule: Vec<(u32, CatalogRegistryState)> = vec![
+            (0, mock_state(0)),
+            (1, mock_state(1)),
+            (2, mock_state(2)),
+            (3, mock_state(3)),
+            (4, mock_state(4)),
+            (5, mock_state(5)),
+            (6, mock_state(6)),
+            (7, mock_state(7)),
+        ];
+        let final_puzzle_hash: Bytes32 = "yakuhito".tree_hash().into();
+
+        // Launch 'other' singleton, which will consume (reveive) the messages
+        let other_launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+        let other_singleton_inner_puzzle = ctx.alloc(&1)?;
+        let other_singleton_inner_puzzle_hash = ctx.tree_hash(other_singleton_inner_puzzle);
+
+        let other_launcher = Launcher::new(other_launcher_coin.parent_coin_info, 1);
+        let (_conds, mut other_singleton_coin) =
+            other_launcher.spend(ctx, other_singleton_inner_puzzle_hash.into(), ())?;
+
+        sim.spend_coins(ctx.take(), &[])?;
+
+        let other_singleton_launcher_id = other_launcher_coin.coin_id();
+
+        // Launch state schedulet singleton
+        let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+
+        let first_coin_info = StateSchedulerInfo::new(
+            launcher_coin.coin_id(),
+            other_singleton_launcher_id,
+            schedule.clone(),
+            0,
+            final_puzzle_hash,
+        );
+
+        let launcher_id = launcher_coin.coin_id();
+        let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
+        let (_conds, state_scheduler_coin) = launcher.spend(
+            ctx,
+            first_coin_info.inner_puzzle_hash().into(),
+            StateSchedulerLauncherHints {
+                my_launcher_id: launcher_id,
+                other_singleton_launcher_id,
+                final_puzzle_hash,
+                state_schedule: schedule.clone(),
+            },
+        )?;
+
+        let spends = ctx.take();
+        assert_eq!(spends.len(), 1);
+
+        let state_scheduler_launcher_spend = spends[0].clone();
+        sim.spend_coins(vec![state_scheduler_launcher_spend.clone()], &[])?;
+
+        let mut state_scheduler =
+            StateScheduler::from_launcher_spend(ctx, state_scheduler_launcher_spend)?.unwrap();
+        assert_eq!(state_scheduler.info, first_coin_info);
+        assert_eq!(state_scheduler.coin, state_scheduler_coin);
+
+        Ok(())
     }
 }
