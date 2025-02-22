@@ -1,9 +1,11 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin},
+    protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
-        singleton::{SingletonArgs, SingletonSolution},
-        LineageProof, Proof,
+        singleton::{
+            LauncherSolution, SingletonArgs, SingletonSolution, SINGLETON_LAUNCHER_PUZZLE_HASH,
+        },
+        EveProof, LineageProof, Proof,
     },
 };
 use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
@@ -32,7 +34,8 @@ where
     }
 
     pub fn child(&self) -> Option<Self> {
-        if self.info.generation >= self.info.state_schedule.len() {
+        // check for both self.info.generation and self.info.generation + 1 to be < self.info.state_schedule.len()
+        if self.info.generation > self.info.state_schedule.len() {
             return None;
         };
 
@@ -42,18 +45,18 @@ where
             parent_amount: self.coin.amount,
         });
 
-        let child_puzzle_hash = SingletonArgs::curry_tree_hash(
-            self.info.launcher_id,
-            self.info
-                .inner_puzzle_hash_for_generation(self.info.generation + 1),
-        );
-        let child_coin = Coin::new(self.coin.coin_id(), child_puzzle_hash.into(), 1);
+        let child_info = self.info.clone().with_generation(self.info.generation + 1);
+        let child_inner_puzzle_hash = child_info.inner_puzzle_hash();
 
-        let new_generation = self.info.generation + 1;
         Some(Self {
-            coin: child_coin,
+            coin: Coin::new(
+                self.coin.coin_id(),
+                SingletonArgs::curry_tree_hash(self.info.launcher_id, child_inner_puzzle_hash)
+                    .into(),
+                1,
+            ),
             proof: child_proof,
-            info: self.info.clone().with_generation(new_generation),
+            info: child_info,
         })
     }
 
@@ -82,5 +85,31 @@ where
         ctx.spend(coin, Spend::new(puzzle, solution))?;
 
         Ok(())
+    }
+
+    pub fn from_launcher_spend(
+        ctx: &mut SpendContext,
+        launcher_spend: CoinSpend,
+    ) -> Result<Option<Self>, DriverError> {
+        if launcher_spend.coin.puzzle_hash != SINGLETON_LAUNCHER_PUZZLE_HASH.into() {
+            return Ok(None);
+        }
+
+        let solution = launcher_spend.solution.to_clvm(&mut ctx.allocator)?;
+        let solution = LauncherSolution::from_clvm(&ctx.allocator, solution)?;
+
+        let Some(info) = StateSchedulerInfo::from_launcher_solution(&mut ctx.allocator, solution)?
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(Self::new(
+            launcher_spend.coin,
+            Proof::Eve(EveProof {
+                parent_parent_coin_info: launcher_spend.coin.parent_coin_info,
+                parent_amount: launcher_spend.coin.amount,
+            }),
+            info,
+        )))
     }
 }
