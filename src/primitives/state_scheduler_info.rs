@@ -9,8 +9,6 @@ use clvmr::{Allocator, NodePtr};
 
 use crate::{StateSchedulerLayer, StateSchedulerLayerArgs};
 
-pub type StateSchedulerLayers<S> = SingletonLayer<StateSchedulerLayer<S>>;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateSchedulerInfo<S> {
     pub launcher_id: Bytes32,
@@ -38,6 +36,13 @@ where
             state_schedule,
             generation,
             final_puzzle_hash,
+        }
+    }
+
+    pub fn with_generation(&self, generation: usize) -> Self {
+        Self {
+            generation,
+            ..self.clone()
         }
     }
 
@@ -82,18 +87,24 @@ where
         self.inner_puzzle_hash_for_generation(self.generation)
     }
 
-    pub fn into_layers(self) -> Option<StateSchedulerLayers<S>> {
+    pub fn into_layers(
+        self,
+        allocator: &mut Allocator,
+    ) -> Result<SingletonLayer<StateSchedulerLayer<NodePtr>>, DriverError>
+    where
+        S: ToClvm<Allocator>,
+    {
         if self.generation >= self.state_schedule.len() {
-            return None;
+            return Err(DriverError::Custom("Generation out of bounds".to_string()));
         }
 
         let (required_block_height, new_state) = self.state_schedule[self.generation].clone();
 
-        Some(SingletonLayer::new(
+        Ok(SingletonLayer::new(
             self.launcher_id,
             StateSchedulerLayer::new(
                 self.other_singleton_launcher_id,
-                new_state,
+                new_state.to_clvm(allocator)?,
                 required_block_height,
                 self.inner_puzzle_hash_for_generation(self.generation + 1)
                     .into(),
