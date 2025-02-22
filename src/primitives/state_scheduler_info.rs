@@ -69,12 +69,12 @@ where
 
         let mut inner_puzzle_hash: TreeHash = self.final_puzzle_hash.into();
 
-        let mut i = self.state_schedule.len() - 1;
+        let mut i = self.state_schedule.len();
         while i > generation {
             inner_puzzle_hash = self.inner_puzzle_hash_for(
                 inner_puzzle_hash.into(),
-                self.state_schedule[i].0,
-                self.state_schedule[i].1.clone(),
+                self.state_schedule[i - 1].0,
+                self.state_schedule[i - 1].1.clone(),
             );
 
             i -= 1;

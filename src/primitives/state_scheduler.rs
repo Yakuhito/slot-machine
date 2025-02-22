@@ -122,11 +122,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use chia::bls::Signature;
     use chia_wallet_sdk::{Conditions, Launcher, Simulator, SingletonLayer};
     use clvmr::NodePtr;
 
-    use crate::{print_spend_bundle_to_file, CatalogRegistryState, StateSchedulerLauncherHints};
+    use crate::{CatalogRegistryState, StateSchedulerLauncherHints};
 
     use super::*;
 
@@ -219,8 +218,6 @@ mod tests {
 
         let mut other_singleton_coin_parent = other_singleton_coin;
         for (index, (block, new_state)) in schedule.iter().enumerate() {
-            println!("index: {}, block: {}", index, block);
-
             state_scheduler
                 .clone()
                 .spend(ctx, other_singleton_inner_puzzle_hash.into())?;
@@ -234,7 +231,6 @@ mod tests {
                 other_singleton_launcher.coin_id(),
                 other_singleton_inner_puzzle,
             );
-
             let other_singleton_lp = if index == 0 {
                 Proof::Eve(EveProof {
                     parent_parent_coin_info: other_singleton_launcher.parent_coin_info,
@@ -257,6 +253,7 @@ mod tests {
                     new_state.tree_hash().to_vec().into(),
                     vec![state_scheduler_puzzle_hash_ptr],
                 )
+                .create_coin(other_singleton_inner_puzzle_hash.into(), 1, None)
                 .to_clvm(&mut ctx.allocator)?;
             let other_singleton_spend = other_singleton.construct_spend(
                 ctx,
@@ -275,15 +272,13 @@ mod tests {
                 1,
             );
 
-            let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            sim.spend_coins(spends, &[])?;
+            sim.spend_coins(ctx.take(), &[])?;
 
             if index < schedule.len() - 1 {
                 state_scheduler = state_scheduler.child().unwrap();
 
                 assert_eq!(state_scheduler.info.state_schedule, schedule);
-                assert_eq!(state_scheduler.info.generation, *block as usize);
+                assert_eq!(state_scheduler.info.generation, *block as usize + 1);
             } else {
                 break;
             }
