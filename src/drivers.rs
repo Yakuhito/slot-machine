@@ -763,6 +763,7 @@ pub fn launch_dig_reward_distributor(
 #[cfg(test)]
 mod tests {
     use chia::{
+        consensus::spendbundle_conditions::get_conditions_from_spendbundle,
         protocol::SpendBundle,
         puzzles::{
             cat::GenesisByCoinIdTailArgs,
@@ -1700,7 +1701,24 @@ mod tests {
 
             registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
-            sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+            let spends = ctx.take();
+            sim.spend_coins(spends.clone(), &[user_sk.clone()])?;
+            let spend_bundle = SpendBundle::new(spends.clone(), Signature::default());
+            let conditions = get_conditions_from_spendbundle(
+                &mut ctx.allocator,
+                &spend_bundle,
+                u64::MAX,
+                100,
+                &TESTNET11_CONSTANTS,
+            )?;
+            println!("register cost: {}", conditions.cost);
+            println!(
+                "storage cost:  {}",
+                spend_bundle.coin_spends.iter().fold(0, |acc, cs| acc
+                    + cs.puzzle_reveal.len()
+                    + cs.solution.len())
+                    * 12000
+            );
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
