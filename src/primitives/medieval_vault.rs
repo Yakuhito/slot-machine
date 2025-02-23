@@ -205,8 +205,10 @@ impl MedievalVault {
 
 #[cfg(test)]
 mod tests {
-    use chia::bls::SecretKey;
+    use chia::bls::{SecretKey, Signature};
     use chia_wallet_sdk::{test_secret_keys, Launcher, Memos, Simulator};
+
+    use crate::print_spend_bundle_to_file;
 
     use super::*;
 
@@ -273,6 +275,7 @@ mod tests {
         assert_eq!(vault.info, current_vault_info);
 
         for (i, (m, pubkeys)) in multisig_configs.clone().into_iter().enumerate().skip(1) {
+            println!("i: {}", i);
             let mut recreate_memos: NodePtr =
                 vec![vault.info.launcher_id].to_clvm(&mut ctx.allocator)?;
 
@@ -300,7 +303,7 @@ mod tests {
 
             let mut used_keys = 0;
             let mut used_pubkeys = vec![];
-            while used_keys < m {
+            while used_keys < vault.info.m {
                 used_pubkeys.push(current_vault_info.public_key_list[used_keys]);
                 used_keys += 1;
             }
