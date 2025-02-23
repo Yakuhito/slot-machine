@@ -68,7 +68,11 @@ impl MOfNLayer {
         Self { m, public_key_list }
     }
 
-    pub fn ensure_non_replayable(conditions: Conditions, coin_id: Bytes32) -> Conditions {
+    pub fn ensure_non_replayable(
+        conditions: Conditions,
+        coin_id: Bytes32,
+        genesis_challenge: NodePtr,
+    ) -> Conditions {
         let found_condition = conditions.clone().into_iter().find(|c| {
             matches!(c, Condition::AssertMyCoinId(..))
                 || matches!(c, Condition::AssertMyParentId(..))
@@ -79,6 +83,7 @@ impl MOfNLayer {
         } else {
             conditions.assert_my_coin_id(coin_id)
         }
+        .remark(genesis_challenge)
     }
 
     pub fn spend(
@@ -87,10 +92,12 @@ impl MOfNLayer {
         coin: Coin,
         conditions: Conditions,
         used_pubkeys: &[PublicKey],
+        genesis_challenge: Bytes32,
     ) -> Result<(), DriverError> {
+        let genesis_challenge = genesis_challenge.to_clvm(&mut ctx.allocator)?;
         let spend = self.spend_with_conditions(
             ctx,
-            Self::ensure_non_replayable(conditions, coin.coin_id()),
+            Self::ensure_non_replayable(conditions, coin.coin_id(), genesis_challenge),
             used_pubkeys,
         )?;
         ctx.spend(coin, spend)

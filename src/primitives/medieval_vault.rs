@@ -161,8 +161,12 @@ impl MedievalVault {
         )))
     }
 
-    pub fn delegated_conditions(conditions: Conditions, coin_id: Bytes32) -> Conditions {
-        MOfNLayer::ensure_non_replayable(conditions, coin_id)
+    pub fn delegated_conditions(
+        conditions: Conditions,
+        coin_id: Bytes32,
+        genesis_challenge: NodePtr,
+    ) -> Conditions {
+        MOfNLayer::ensure_non_replayable(conditions, coin_id, genesis_challenge)
     }
 
     pub fn spend(
@@ -170,14 +174,20 @@ impl MedievalVault {
         ctx: &mut SpendContext,
         used_pubkeys: &[PublicKey],
         conditions: Conditions,
+        genesis_challenge: Bytes32,
     ) -> Result<(), DriverError> {
         let lineage_proof = self.proof;
         let coin = self.coin;
 
         let layers = self.info.into_layers();
 
-        let delegated_puzzle = clvm_quote!(Self::delegated_conditions(conditions, coin.coin_id()))
-            .to_clvm(&mut ctx.allocator)?;
+        let genesis_challenge = genesis_challenge.to_clvm(&mut ctx.allocator)?;
+        let delegated_puzzle = clvm_quote!(Self::delegated_conditions(
+            conditions,
+            coin.coin_id(),
+            genesis_challenge
+        ))
+        .to_clvm(&mut ctx.allocator)?;
 
         let puzzle = layers.construct_puzzle(ctx)?;
         let solution = layers.construct_solution(
@@ -205,7 +215,7 @@ impl MedievalVault {
 #[cfg(test)]
 mod tests {
     use chia::bls::SecretKey;
-    use chia_wallet_sdk::{test_secret_keys, Launcher, Memos, Simulator};
+    use chia_wallet_sdk::{test_secret_keys, Launcher, Memos, Simulator, TESTNET11_CONSTANTS};
 
     use super::*;
 
@@ -303,9 +313,12 @@ mod tests {
                 used_pubkeys.push(current_vault_info.public_key_list[used_keys]);
                 used_keys += 1;
             }
-            vault
-                .clone()
-                .spend(ctx, &used_pubkeys, recreate_condition)?;
+            vault.clone().spend(
+                ctx,
+                &used_pubkeys,
+                recreate_condition,
+                TESTNET11_CONSTANTS.genesis_challenge,
+            )?;
 
             let spends = ctx.take();
             let vault_spend = spends.first().unwrap().clone();
