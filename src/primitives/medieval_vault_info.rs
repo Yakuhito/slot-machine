@@ -2,6 +2,7 @@ use chia::{
     bls::PublicKey, clvm_utils::TreeHash, protocol::Bytes32, puzzles::singleton::SingletonArgs,
 };
 use chia_wallet_sdk::SingletonLayer;
+use clvm_traits::{FromClvm, ToClvm};
 
 use crate::{MOfNLayer, P2MOfNDelegateDirectArgs};
 
@@ -24,6 +25,14 @@ impl MedievalVaultInfo {
         }
     }
 
+    pub fn from_hint(hint: MedievalVaultHint) -> Self {
+        Self {
+            launcher_id: hint.my_launcher_id,
+            m: hint.m,
+            public_key_list: hint.public_key_list,
+        }
+    }
+
     pub fn inner_puzzle_hash(&self) -> TreeHash {
         SingletonArgs::curry_tree_hash(
             self.launcher_id,
@@ -37,4 +46,21 @@ impl MedievalVaultInfo {
             MOfNLayer::new(self.m, self.public_key_list.clone()),
         )
     }
+
+    pub fn to_hint(&self) -> MedievalVaultHint {
+        MedievalVaultHint {
+            my_launcher_id: self.launcher_id,
+            m: self.m,
+            public_key_list: self.public_key_list.clone(),
+        }
+    }
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(solution)]
+pub struct MedievalVaultHint {
+    pub my_launcher_id: Bytes32,
+    pub m: usize,
+    #[clvm(rest)]
+    pub public_key_list: Vec<PublicKey>,
 }

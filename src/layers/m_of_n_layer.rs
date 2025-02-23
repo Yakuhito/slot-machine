@@ -75,7 +75,11 @@ impl MOfNLayer {
         conditions: Conditions,
         used_pubkeys: &[PublicKey],
     ) -> Result<(), DriverError> {
-        let spend = self.spend_with_conditions(ctx, conditions, used_pubkeys)?;
+        let spend = self.spend_with_conditions(
+            ctx,
+            conditions.assert_my_coin_id(coin.coin_id()),
+            used_pubkeys,
+        )?;
         ctx.spend(coin, spend)
     }
 
