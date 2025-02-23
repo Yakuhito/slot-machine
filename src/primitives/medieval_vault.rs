@@ -227,9 +227,6 @@ mod tests {
         let [sk1, sk2, sk3]: [SecretKey; 3] = test_secret_keys(3)?.try_into().unwrap();
         let (pk1, pk2, pk3) = (sk1.public_key(), sk2.public_key(), sk3.public_key());
 
-        let launcher_parent_puzzle = ctx.alloc(&1)?;
-        let launcher_parent_puzzle_hash = ctx.tree_hash(launcher_parent_puzzle);
-
         let multisig_configs = [
             (1, vec![pk1, pk2]),
             (2, vec![pk1, pk2]),
@@ -239,15 +236,14 @@ mod tests {
             (2, vec![pk1, pk2, pk3]),
         ];
 
-        let launcher_parent = sim.new_coin(launcher_parent_puzzle_hash.into(), 1);
-        let launcher = Launcher::new(launcher_parent.coin_id(), 1);
-        let launcher_coin = launcher.coin();
+        let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+        let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
         let launch_hints = MedievalVaultHint {
             my_launcher_id: launcher_coin.coin_id(),
             m: multisig_configs[0].0,
             public_key_list: multisig_configs[0].1.clone(),
         };
-        let (launcher_parent_conds, first_vault_coin) = launcher.spend(
+        let (_conds, first_vault_coin) = launcher.spend(
             ctx,
             P2MOfNDelegateDirectArgs::curry_tree_hash(
                 multisig_configs[0].0,
@@ -257,18 +253,8 @@ mod tests {
             launch_hints,
         )?;
 
-        let launcher_parent_solution = launcher_parent_conds.to_clvm(&mut ctx.allocator)?;
-        ctx.spend(
-            launcher_parent,
-            Spend::new(launcher_parent_puzzle, launcher_parent_solution),
-        )?;
-
         let spends = ctx.take();
-        let launcher_spend = spends
-            .iter()
-            .find(|s| s.coin.puzzle_hash == launcher_coin.puzzle_hash)
-            .unwrap()
-            .clone();
+        let launcher_spend = spends.first().unwrap().clone();
         sim.spend_coins(spends, &[])?;
 
         let mut vault = MedievalVault::from_parent_spend(ctx, launcher_spend)?.unwrap();

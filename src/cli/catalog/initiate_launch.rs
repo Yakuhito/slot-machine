@@ -8,9 +8,8 @@ use crate::{
     },
     CatalogRegistryConstants,
 };
-use chia::protocol::Bytes32;
-use chia_wallet_sdk::{encode_address, CoinsetClient, SpendContext};
-use hex::FromHex;
+use chia_wallet_sdk::{encode_address, CoinsetClient};
+// use hex::FromHex;
 
 pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     println!("Welcome to the CATalog launch setup, deployer.");
@@ -43,7 +42,7 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     )?;
 
     println!("Initializing Chia RPC client...");
-    let client = if testnet11 {
+    let _client = if testnet11 {
         CoinsetClient::testnet11()
     } else {
         CoinsetClient::mainnet()
@@ -69,7 +68,7 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
 
     let cats_per_unroll_str =
         prompt_for_value("How many CATs should be deployed per unroll spend?")?;
-    let cats_per_unroll: u64 = cats_per_unroll_str.parse().map_err(CliError::ParseInt)?;
+    let _cats_per_unroll: u64 = cats_per_unroll_str.parse().map_err(CliError::ParseInt)?;
 
     let constants = CatalogRegistryConstants::get(testnet11);
     let prefix = if testnet11 { "txch" } else { "xch" };
@@ -93,15 +92,15 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     println!("  price singleton id: (will be launched as well)");
     yes_no_prompt("Do the constants above have the correct values?")?;
 
-    let cat_payment_asset_id_str = prompt_for_value("What is the asset id of the payment CAT?")?;
-    let cat_payment_asset_id =
-        Bytes32::new(<[u8; 32]>::from_hex(cat_payment_asset_id_str).map_err(CliError::ParseHex)?);
+    // let cat_payment_asset_id_str = prompt_for_value("What is the asset id of the payment CAT?")?;
+    // let cat_payment_asset_id =
+    //     Bytes32::new(<[u8; 32]>::from_hex(cat_payment_asset_id_str).map_err(CliError::ParseHex)?);
 
-    let cat_registration_price_str =
-        prompt_for_value("What should be the price of a CAT registration in CAT **MOJOS**?")?;
-    let cat_registration_price: u64 = cat_registration_price_str
-        .parse()
-        .map_err(CliError::ParseInt)?;
+    // let cat_registration_price_str =
+    //     prompt_for_value("What should be the price of a CAT registration in CAT **MOJOS**?")?;
+    // let cat_registration_price: u64 = cat_registration_price_str
+    //     .parse()
+    //     .map_err(CliError::ParseInt)?;
 
     // println!("A one-sided offer (2 mojos) will be needed for launch.");
     // let offer = prompt_for_value("Offer: ")?;
