@@ -205,5 +205,120 @@ impl MedievalVault {
 
 #[cfg(test)]
 mod tests {
+    use chia::bls::SecretKey;
+    use chia_wallet_sdk::{test_secret_keys, Launcher, Memos, Simulator};
+
     use super::*;
+
+    #[test]
+    fn test_medieval_vault() -> anyhow::Result<()> {
+        let ctx = &mut SpendContext::new();
+        let mut sim = Simulator::new();
+
+        let [sk1, sk2, sk3]: [SecretKey; 3] = test_secret_keys(3)?.try_into().unwrap();
+        let (pk1, pk2, pk3) = (sk1.public_key(), sk2.public_key(), sk3.public_key());
+
+        let launcher_parent_puzzle = ctx.alloc(&1)?;
+        let launcher_parent_puzzle_hash = ctx.tree_hash(launcher_parent_puzzle);
+
+        let multisig_configs = [
+            (1, vec![pk1, pk2]),
+            (2, vec![pk1, pk2]),
+            (3, vec![pk1, pk2, pk3]),
+            (3, vec![pk1, pk2, pk3]),
+            (1, vec![pk1, pk2, pk3]),
+            (2, vec![pk1, pk2, pk3]),
+        ];
+
+        let launcher_parent = sim.new_coin(launcher_parent_puzzle_hash.into(), 1);
+        let launcher = Launcher::new(launcher_parent.coin_id(), 1);
+        let launcher_coin = launcher.coin();
+        let launch_hints = MedievalVaultHint {
+            my_launcher_id: launcher_coin.coin_id(),
+            m: multisig_configs[0].0,
+            public_key_list: multisig_configs[0].1.clone(),
+        };
+        let (launcher_parent_conds, first_vault_coin) = launcher.spend(
+            ctx,
+            P2MOfNDelegateDirectArgs::curry_tree_hash(
+                multisig_configs[0].0,
+                multisig_configs[0].1.clone(),
+            )
+            .into(),
+            launch_hints,
+        )?;
+
+        let launcher_parent_solution = launcher_parent_conds.to_clvm(&mut ctx.allocator)?;
+        ctx.spend(
+            launcher_parent,
+            Spend::new(launcher_parent_puzzle, launcher_parent_solution),
+        )?;
+
+        let spends = ctx.take();
+        let launcher_spend = spends
+            .iter()
+            .find(|s| s.coin.puzzle_hash == launcher_coin.puzzle_hash)
+            .unwrap()
+            .clone();
+        sim.spend_coins(spends, &[])?;
+
+        let mut vault = MedievalVault::from_parent_spend(ctx, launcher_spend)?.unwrap();
+        assert_eq!(vault.coin, first_vault_coin);
+
+        let mut current_vault_info = MedievalVaultInfo {
+            launcher_id: launcher_coin.coin_id(),
+            m: multisig_configs[0].0,
+            public_key_list: multisig_configs[0].1.clone(),
+        };
+        assert_eq!(vault.info, current_vault_info);
+
+        for (i, (m, pubkeys)) in multisig_configs.clone().into_iter().enumerate().skip(1) {
+            let mut recreate_memos: NodePtr =
+                vec![vault.info.launcher_id].to_clvm(&mut ctx.allocator)?;
+
+            let info_changed =
+                multisig_configs[i - 1].0 != m || multisig_configs[i - 1].1 != pubkeys;
+            if info_changed {
+                recreate_memos = MedievalVaultHint {
+                    my_launcher_id: vault.info.launcher_id,
+                    m,
+                    public_key_list: pubkeys.clone(),
+                }
+                .to_clvm(&mut ctx.allocator)?;
+            }
+            current_vault_info = MedievalVaultInfo {
+                launcher_id: vault.info.launcher_id,
+                m,
+                public_key_list: pubkeys.clone(),
+            };
+
+            let recreate_condition = Conditions::<NodePtr>::new().create_coin(
+                current_vault_info.inner_puzzle_hash().into(),
+                1,
+                Memos::some(recreate_memos),
+            );
+
+            let mut used_keys = 0;
+            let mut used_pubkeys = vec![];
+            while used_keys < m {
+                used_pubkeys.push(current_vault_info.public_key_list[used_keys]);
+                used_keys += 1;
+            }
+            vault
+                .clone()
+                .spend(ctx, &used_pubkeys, recreate_condition)?;
+
+            let spends = ctx.take();
+            let vault_spend = spends.first().unwrap().clone();
+            sim.spend_coins(spends, &[sk1.clone(), sk2.clone(), sk3.clone()])?;
+
+            let check_vault = vault.child(m, pubkeys).unwrap();
+
+            vault = MedievalVault::from_parent_spend(ctx, vault_spend)?.unwrap();
+            assert_eq!(vault.info, current_vault_info);
+            assert_eq!(vault, check_vault);
+        }
+
+        Ok(())
+    }
 }

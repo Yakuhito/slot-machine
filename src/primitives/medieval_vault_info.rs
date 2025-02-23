@@ -1,6 +1,4 @@
-use chia::{
-    bls::PublicKey, clvm_utils::TreeHash, protocol::Bytes32, puzzles::singleton::SingletonArgs,
-};
+use chia::{bls::PublicKey, clvm_utils::TreeHash, protocol::Bytes32};
 use chia_wallet_sdk::SingletonLayer;
 use clvm_traits::{FromClvm, ToClvm};
 
@@ -34,10 +32,7 @@ impl MedievalVaultInfo {
     }
 
     pub fn inner_puzzle_hash(&self) -> TreeHash {
-        SingletonArgs::curry_tree_hash(
-            self.launcher_id,
-            P2MOfNDelegateDirectArgs::curry_tree_hash(self.m, self.public_key_list.clone()),
-        )
+        P2MOfNDelegateDirectArgs::curry_tree_hash(self.m, self.public_key_list.clone())
     }
 
     pub fn into_layers(&self) -> MedievalVaultLayers {
