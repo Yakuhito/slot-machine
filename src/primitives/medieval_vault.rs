@@ -126,8 +126,7 @@ impl MedievalVault {
             )
         } else {
             let memos = recreate_condition.memos.unwrap();
-            let memos = memos.to_clvm(&mut ctx.allocator)?;
-            if let Ok(memos) = MedievalVaultHint::from_clvm(&ctx.allocator, memos) {
+            if let Ok(memos) = MedievalVaultHint::from_clvm(&ctx.allocator, memos.value) {
                 (memos.m, memos.public_key_list)
             } else {
                 (
@@ -205,10 +204,8 @@ impl MedievalVault {
 
 #[cfg(test)]
 mod tests {
-    use chia::bls::{SecretKey, Signature};
+    use chia::bls::SecretKey;
     use chia_wallet_sdk::{test_secret_keys, Launcher, Memos, Simulator};
-
-    use crate::print_spend_bundle_to_file;
 
     use super::*;
 
@@ -275,7 +272,6 @@ mod tests {
         assert_eq!(vault.info, current_vault_info);
 
         for (i, (m, pubkeys)) in multisig_configs.clone().into_iter().enumerate().skip(1) {
-            println!("i: {}", i);
             let mut recreate_memos: NodePtr =
                 vec![vault.info.launcher_id].to_clvm(&mut ctx.allocator)?;
 
