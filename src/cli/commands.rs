@@ -14,6 +14,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Interact with Multisigs
+    Multisig {
+        #[command(subcommand)]
+        action: MultisigCliAction,
+    },
     /// Interact with CATalog
     Catalog {
         #[command(subcommand)]
@@ -24,6 +29,19 @@ enum Commands {
         #[command(subcommand)]
         action: XchandlesCliAction,
     },
+}
+
+#[derive(Subcommand)]
+enum MultisigCliAction {
+    /// Launches a new multisig
+    Launch,
+    /// View history of a vault
+    View,
+    /// Sign a rekey transaction for the vault
+    SignRekey,
+    /// Broadcast a rekey transaction for the vault
+    BroadcastRekey,
+    // Todo: Sign CATalog/XCHandles state updates; perform update
 }
 
 #[derive(Subcommand)]
@@ -50,6 +68,20 @@ pub async fn run_cli() {
     let args = Cli::parse();
 
     let res = match args.command {
+        Commands::Multisig { action } => match action {
+            MultisigCliAction::Launch => {
+                todo!("not yet implemented");
+            }
+            MultisigCliAction::View => {
+                todo!("not yet implemented");
+            }
+            MultisigCliAction::SignRekey => {
+                todo!("not yet implemented");
+            }
+            MultisigCliAction::BroadcastRekey => {
+                todo!("not yet implemented");
+            }
+        },
         Commands::Catalog { action } => match action {
             CatalogCliAction::InitiateLaunch => catalog_initiate_launch(true).await,
             CatalogCliAction::ContinueLaunch => {
