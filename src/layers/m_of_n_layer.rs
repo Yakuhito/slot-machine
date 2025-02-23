@@ -10,21 +10,13 @@ use hex_literal::hex;
 
 use crate::SpendContextExt;
 
-pub const P2_M_OF_N_DELEGATE_DIRECT_PUZZLE: [u8; 453] = hex!("ff02ffff01ff02ffff03ffff09ff05ffff02ff16ffff04ff02ffff04ff17ff8080808080ffff01ff02ff0cffff04ff02ffff04ffff02ff0affff04ff02ffff04ff17ffff04ff0bff8080808080ffff04ffff02ff1effff04ff02ffff04ff2fff80808080ffff04ff2fffff04ff5fff80808080808080ffff01ff088080ff0180ffff04ffff01ffff31ff02ffff03ff05ffff01ff04ffff04ff08ffff04ff09ffff04ff0bff80808080ffff02ff0cffff04ff02ffff04ff0dffff04ff0bffff04ff17ffff04ff2fff8080808080808080ffff01ff02ff17ff2f8080ff0180ffff02ffff03ff05ffff01ff02ffff03ff09ffff01ff04ff13ffff02ff0affff04ff02ffff04ff0dffff04ff1bff808080808080ffff01ff02ff0affff04ff02ffff04ff0dffff04ff1bff808080808080ff0180ff8080ff0180ffff02ffff03ff05ffff01ff10ffff02ff16ffff04ff02ffff04ff0dff80808080ffff02ffff03ff09ffff01ff0101ff8080ff018080ff8080ff0180ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff1effff04ff02ffff04ff09ff80808080ffff02ff1effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080");
-
-pub const P2_M_OF_N_DELEGATE_DIRECT_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
-    "
-    0f199d5263ac1a62b077c159404a71abd3f9691cc57520bf1d4c5cb501504457
-    "
-));
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct P2MOfNLayer {
+pub struct MOfNLayer {
     pub m: usize,
     pub public_key_list: Vec<PublicKey>,
 }
 
-impl Layer for P2MOfNLayer {
+impl Layer for MOfNLayer {
     type Solution = P2MOfNDelegateDirectSolution<NodePtr, NodePtr>;
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
@@ -71,7 +63,7 @@ impl Layer for P2MOfNLayer {
     }
 }
 
-impl P2MOfNLayer {
+impl MOfNLayer {
     pub fn new(m: usize, public_key_list: Vec<PublicKey>) -> Self {
         Self { m, public_key_list }
     }
@@ -108,11 +100,19 @@ impl P2MOfNLayer {
     }
 }
 
-impl ToTreeHash for P2MOfNLayer {
+impl ToTreeHash for MOfNLayer {
     fn tree_hash(&self) -> TreeHash {
         P2MOfNDelegateDirectArgs::curry_tree_hash(self.m, self.public_key_list.clone())
     }
 }
+
+pub const P2_M_OF_N_DELEGATE_DIRECT_PUZZLE: [u8; 453] = hex!("ff02ffff01ff02ffff03ffff09ff05ffff02ff16ffff04ff02ffff04ff17ff8080808080ffff01ff02ff0cffff04ff02ffff04ffff02ff0affff04ff02ffff04ff17ffff04ff0bff8080808080ffff04ffff02ff1effff04ff02ffff04ff2fff80808080ffff04ff2fffff04ff5fff80808080808080ffff01ff088080ff0180ffff04ffff01ffff31ff02ffff03ff05ffff01ff04ffff04ff08ffff04ff09ffff04ff0bff80808080ffff02ff0cffff04ff02ffff04ff0dffff04ff0bffff04ff17ffff04ff2fff8080808080808080ffff01ff02ff17ff2f8080ff0180ffff02ffff03ff05ffff01ff02ffff03ff09ffff01ff04ff13ffff02ff0affff04ff02ffff04ff0dffff04ff1bff808080808080ffff01ff02ff0affff04ff02ffff04ff0dffff04ff1bff808080808080ff0180ff8080ff0180ffff02ffff03ff05ffff01ff10ffff02ff16ffff04ff02ffff04ff0dff80808080ffff02ffff03ff09ffff01ff0101ff8080ff018080ff8080ff0180ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff1effff04ff02ffff04ff09ff80808080ffff02ff1effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080");
+
+pub const P2_M_OF_N_DELEGATE_DIRECT_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
+    "
+    0f199d5263ac1a62b077c159404a71abd3f9691cc57520bf1d4c5cb501504457
+    "
+));
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(curry)]
