@@ -8,9 +8,9 @@ use crate::{
     },
     CatalogRegistryConstants,
 };
-use chia_wallet_sdk::{
-    encode_address, CoinsetClient, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
-};
+use chia::protocol::Bytes32;
+use chia_wallet_sdk::{encode_address, CoinsetClient, SpendContext};
+use hex::FromHex;
 
 pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     println!("Welcome to the CATalog launch setup, deployer.");
@@ -93,10 +93,20 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     println!("  price singleton id: (will be launched as well)");
     yes_no_prompt("Do the constants above have the correct values?")?;
 
-    println!("A one-sided offer (1 mojo) will be needed for launch.");
-    let offer = prompt_for_value("Offer: ")?;
+    let cat_payment_asset_id_str = prompt_for_value("What is the asset id of the payment CAT?")?;
+    let cat_payment_asset_id =
+        Bytes32::new(<[u8; 32]>::from_hex(cat_payment_asset_id_str).map_err(CliError::ParseHex)?);
 
-    let ctx = &mut SpendContext::new();
+    let cat_registration_price_str =
+        prompt_for_value("What should be the price of a CAT registration in CAT **MOJOS**?")?;
+    let cat_registration_price: u64 = cat_registration_price_str
+        .parse()
+        .map_err(CliError::ParseInt)?;
+
+    // println!("A one-sided offer (2 mojos) will be needed for launch.");
+    // let offer = prompt_for_value("Offer: ")?;
+
+    // let ctx = &mut SpendContext::new();
     // let initial_registration_price = price_schedule[0].1 * 2;
     // let (sig, _, scheduler, preroller) = initiate_catalog_launch(
     //     ctx,

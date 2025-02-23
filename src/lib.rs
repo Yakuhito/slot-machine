@@ -48,6 +48,7 @@ pub trait SpendContextExt {
     fn reserve_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn p2_delegated_by_singleton_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn state_scheduler_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn p2_m_of_n_delegate_direct_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -229,6 +230,14 @@ impl SpendContextExt for SpendContext {
     fn state_scheduler_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(STATE_SCHEDULER_PUZZLE_HASH, &STATE_SCHEDULER_PUZZLE)
     }
+
+    /// Allocate the P2 M of N delegate direct puzzle and return its pointer.
+    fn p2_m_of_n_delegate_direct_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            P2_M_OF_N_DELEGATE_DIRECT_PUZZLE_HASH,
+            &P2_M_OF_N_DELEGATE_DIRECT_PUZZLE,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -279,6 +288,7 @@ mod tests {
         assert_puzzle_hash!(RESERVE_FINALIZER_PUZZLE => RESERVE_FINALIZER_PUZZLE_HASH);
         assert_puzzle_hash!(P2_DELEGATED_BY_SINGLETON_PUZZLE => P2_DELEGATED_BY_SINGLETON_PUZZLE_HASH);
         assert_puzzle_hash!(STATE_SCHEDULER_PUZZLE => STATE_SCHEDULER_PUZZLE_HASH);
+        assert_puzzle_hash!(P2_M_OF_N_DELEGATE_DIRECT_PUZZLE => P2_M_OF_N_DELEGATE_DIRECT_PUZZLE_HASH);
         Ok(())
     }
 }

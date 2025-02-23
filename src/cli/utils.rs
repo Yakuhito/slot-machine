@@ -27,6 +27,9 @@ pub enum CliError {
 
     #[error("that's not a clear 'yes'")]
     YesNoPromptRejected,
+
+    #[error("couldn't parse hex: {0}")]
+    ParseHex(#[from] hex::FromHexError),
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {
