@@ -1,6 +1,6 @@
 use chia::{
     bls::PublicKey,
-    protocol::{Coin, CoinSpend},
+    protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
         singleton::{
             LauncherSolution, SingletonArgs, SingletonSolution, SINGLETON_LAUNCHER_PUZZLE_HASH,
@@ -127,8 +127,14 @@ impl MedievalVault {
         } else {
             let memos = recreate_condition.memos.unwrap();
             let memos = memos.to_clvm(&mut ctx.allocator)?;
-            let memos = MedievalVaultHint::from_clvm(&ctx.allocator, memos)?;
-            (memos.m, memos.public_key_list)
+            if let Ok(memos) = MedievalVaultHint::from_clvm(&ctx.allocator, memos) {
+                (memos.m, memos.public_key_list)
+            } else {
+                (
+                    parent_layers.inner_puzzle.m,
+                    parent_layers.inner_puzzle.public_key_list.clone(),
+                )
+            }
         };
 
         let parent_info = MedievalVaultInfo::new(
@@ -156,6 +162,10 @@ impl MedievalVault {
         )))
     }
 
+    pub fn delegated_conditions(conditions: Conditions, coin_id: Bytes32) -> Conditions {
+        MOfNLayer::ensure_non_replayable(conditions, coin_id)
+    }
+
     pub fn spend(
         self,
         ctx: &mut SpendContext,
@@ -167,7 +177,7 @@ impl MedievalVault {
 
         let layers = self.info.into_layers();
 
-        let delegated_puzzle = clvm_quote!(conditions.assert_my_coin_id(self.coin.coin_id()))
+        let delegated_puzzle = clvm_quote!(Self::delegated_conditions(conditions, coin.coin_id()))
             .to_clvm(&mut ctx.allocator)?;
 
         let puzzle = layers.construct_puzzle(ctx)?;
@@ -191,4 +201,9 @@ impl MedievalVault {
 
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 }

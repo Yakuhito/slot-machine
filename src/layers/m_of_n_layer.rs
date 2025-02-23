@@ -1,9 +1,9 @@
 use chia::{
     bls::PublicKey,
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Coin,
+    protocol::{Bytes32, Coin},
 };
-use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{Condition, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -68,6 +68,19 @@ impl MOfNLayer {
         Self { m, public_key_list }
     }
 
+    pub fn ensure_non_replayable(conditions: Conditions, coin_id: Bytes32) -> Conditions {
+        let found_condition = conditions.clone().into_iter().find(|c| {
+            matches!(c, Condition::AssertMyCoinId(..))
+                || matches!(c, Condition::AssertMyParentId(..))
+        });
+
+        if found_condition.is_some() {
+            conditions
+        } else {
+            conditions.assert_my_coin_id(coin_id)
+        }
+    }
+
     pub fn spend(
         &self,
         ctx: &mut SpendContext,
@@ -77,7 +90,7 @@ impl MOfNLayer {
     ) -> Result<(), DriverError> {
         let spend = self.spend_with_conditions(
             ctx,
-            conditions.assert_my_coin_id(coin.coin_id()),
+            Self::ensure_non_replayable(conditions, coin.coin_id()),
             used_pubkeys,
         )?;
         ctx.spend(coin, spend)
