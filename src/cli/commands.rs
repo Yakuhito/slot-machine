@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use super::catalog_initiate_launch;
+use super::{catalog_initiate_launch, multisig_launch};
 
 #[derive(Parser)]
 #[command(
@@ -14,27 +14,39 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Interact with Multisigs
-    Multisig {
+    /// Interact with XCHandles
+    Xchandles {
         #[command(subcommand)]
-        action: MultisigCliAction,
+        action: XchandlesCliAction,
     },
     /// Interact with CATalog
     Catalog {
         #[command(subcommand)]
         action: CatalogCliAction,
     },
-    /// Interact with XCHandles
-    Xchandles {
+    /// Multisig (price singletons) operations
+    Multisig {
         #[command(subcommand)]
-        action: XchandlesCliAction,
+        action: MultisigCliAction,
     },
 }
 
 #[derive(Subcommand)]
 enum MultisigCliAction {
     /// Launches a new multisig
-    Launch,
+    Launch {
+        /// Comma-separated list of pubkeys (no spaces)
+        #[arg(long)]
+        pubkeys: String,
+
+        /// Threshold required for spends (m from m-of-n)
+        #[arg(short)]
+        m: usize,
+
+        /// Use testnet11 (default: mainnet)
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
     /// View history of a vault
     View,
     /// Sign a rekey transaction for the vault
@@ -69,9 +81,11 @@ pub async fn run_cli() {
 
     let res = match args.command {
         Commands::Multisig { action } => match action {
-            MultisigCliAction::Launch => {
-                todo!("not yet implemented");
-            }
+            MultisigCliAction::Launch {
+                pubkeys,
+                m,
+                testnet11,
+            } => multisig_launch(pubkeys, m, testnet11).await,
             MultisigCliAction::View => {
                 todo!("not yet implemented");
             }
