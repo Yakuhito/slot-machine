@@ -1,9 +1,12 @@
+use chia::bls;
 use chia_wallet_sdk::DriverError;
 use std::{
     io::{self, Write},
     num::ParseIntError,
 };
 use thiserror::Error;
+
+use super::ClientError;
 
 #[derive(Debug, Error)]
 pub enum CliError {
@@ -30,6 +33,18 @@ pub enum CliError {
 
     #[error("couldn't parse hex: {0}")]
     ParseHex(#[from] hex::FromHexError),
+
+    #[error("invalid public key")]
+    InvalidPublicKey(#[from] bls::Error),
+
+    #[error("invalid amount: must contain '.'")]
+    InvalidAmount,
+
+    #[error("home directory not found")]
+    HomeDirectoryNotFound,
+
+    #[error("client error: {0}")]
+    ClientError(#[from] ClientError),
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {
@@ -56,4 +71,45 @@ pub fn prompt_for_value(prompt: &str) -> Result<String, CliError> {
     let input = input.trim().to_lowercase();
 
     Ok(input)
+}
+
+pub fn parse_amount(amount: String, is_cat: bool) -> Result<u64, CliError> {
+    if !amount.contains(".") {
+        eprintln!("Amount must contain '.' to make sure you aren't providing mojos :)");
+        return Err(CliError::InvalidAmount);
+    }
+
+    let Some((whole, fractional)) = amount.split_once('.') else {
+        return Err(CliError::InvalidAmount);
+    };
+
+    let whole = whole.parse::<u64>().map_err(|_| CliError::InvalidAmount)?;
+    let fractional = if is_cat {
+        format!("{:0<3}", fractional)
+    } else {
+        format!("{:0<12}", fractional)
+    }
+    .parse::<u64>()
+    .map_err(|_| CliError::InvalidAmount)?;
+
+    if is_cat {
+        // For CATs: 1 CAT = 1000 mojos
+        Ok(whole * 1000 + fractional)
+    } else {
+        // For XCH: 1 XCH = 1_000_000_000_000 mojos
+        Ok(whole * 1_000_000_000_000 + fractional)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cli_parse_amount() -> anyhow::Result<()> {
+        assert_eq!(parse_amount("1.01".to_string(), true)?, 1010);
+        assert_eq!(parse_amount("1.01".to_string(), false)?, 1_010_000_000_000);
+
+        Ok(())
+    }
 }
