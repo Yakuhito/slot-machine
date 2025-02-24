@@ -1,8 +1,10 @@
+use chia::bls::PublicKey;
 use chia::protocol::Bytes32;
 use chia_wallet_sdk::decode_address;
 use csv::ReaderBuilder;
 use hex::FromHex;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 
@@ -72,4 +74,38 @@ pub fn load_catalog_premine_csv<P: AsRef<Path>>(
     }
 
     Ok(records)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AliasRecord {
+    #[serde(deserialize_with = "hex_string_to_pubkey")]
+    pub pubkey: PublicKey,
+    pub alias: String,
+}
+
+fn hex_string_to_pubkey<'de, D>(deserializer: D) -> Result<PublicKey, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: &str = Deserialize::deserialize(deserializer)?;
+    let pubkey = PublicKey::from_bytes(
+        &<[u8; 48]>::from_hex(s.replace("0x", "")).map_err(serde::de::Error::custom)?,
+    )
+    .map_err(serde::de::Error::custom)?;
+    Ok(pubkey)
+}
+
+const ALIASES_CSV_PATH: &str = "aliases.csv";
+
+pub fn get_alias_map() -> Result<HashMap<PublicKey, String>, CliError> {
+    let file = File::open(ALIASES_CSV_PATH)?;
+    let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
+
+    let mut alias_map = HashMap::new();
+    for result in rdr.deserialize() {
+        let record: AliasRecord = result.map_err(CliError::Csv)?;
+        alias_map.insert(record.pubkey, record.alias);
+    }
+
+    Ok(alias_map)
 }
