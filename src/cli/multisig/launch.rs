@@ -1,7 +1,11 @@
-use chia::bls::PublicKey;
-use chia_wallet_sdk::SpendContext;
+use chia::{bls::PublicKey, protocol::SpendBundle};
+use chia_wallet_sdk::{ChiaRpcClient, Launcher, SpendContext, SpendWithConditions, StandardLayer};
 
-use crate::{get_alias_map, get_xch_coin, parse_amount, yes_no_prompt, CliError, SageClient};
+use crate::{
+    get_alias_map, get_coinset_client, get_constants, get_xch_coin, parse_amount, partial_sign,
+    sign_standard_transaction, wait_for_coin, yes_no_prompt, CliError, MedievalVaultHint,
+    P2MOfNDelegateDirectArgs, SageClient,
+};
 
 pub async fn multisig_launch(
     pubkeys_str: String,
@@ -28,11 +32,11 @@ pub async fn multisig_launch(
 
     println!("You're about to create a new multisig with the following settings:");
     println!("  Public Key List:");
-    for pubkey in pubkeys {
+    for pubkey in pubkeys.iter() {
         println!(
             "    - {}",
             alias_map
-                .get(&pubkey)
+                .get(pubkey)
                 .unwrap_or(&format!("0x{}", hex::encode(pubkey.to_bytes())))
         );
     }
@@ -45,7 +49,64 @@ pub async fn multisig_launch(
     let client = SageClient::new(sage_ssl_path)?;
     let mut ctx = SpendContext::new();
 
-    let (sk, coin) = get_xch_coin(&client, &mut ctx, 2, fee, testnet11).await?;
+    let (sk, coin) = get_xch_coin(&client, &mut ctx, 1, fee, testnet11).await?;
+
+    let launcher = Launcher::new(coin.coin_id(), 1);
+    let launcher_coin = launcher.coin();
+    let launch_hints = MedievalVaultHint {
+        my_launcher_id: launcher_coin.coin_id(),
+        m,
+        public_key_list: pubkeys.clone(),
+    };
+    println!(
+        "Vault launcher id: {}",
+        hex::encode(launcher_coin.coin_id().to_bytes())
+    );
+
+    let (create_conditions, _vault_coin) = launcher.spend(
+        &mut ctx,
+        P2MOfNDelegateDirectArgs::curry_tree_hash(m, pubkeys.clone()).into(),
+        launch_hints,
+    )?;
+
+    let coin_spend =
+        StandardLayer::new(sk.public_key()).spend_with_conditions(&mut ctx, create_conditions)?;
+    ctx.spend(coin, coin_spend)?;
+
+    let coin_spends = ctx.take();
+    let mut sig = partial_sign(&client, &coin_spends).await?;
+
+    sig.aggregate(&sign_standard_transaction(
+        &mut ctx,
+        coin,
+        coin_spend,
+        &sk,
+        get_constants(testnet11),
+    )?);
+
+    let spend_bundle = SpendBundle::new(coin_spends, sig);
+
+    println!("Submitting spend bundle...");
+    let cli = get_coinset_client(testnet11);
+    let response = cli.push_tx(spend_bundle).await.map_err(CliError::Reqwest)?;
+    if !response.success {
+        eprintln!(
+            "Failed to submit spend bundle: {}",
+            response.error.unwrap_or("Unknown error".to_string())
+        );
+        return Err(CliError::Custom(
+            "Failed to submit spend bundle".to_string(),
+        ));
+    }
+    println!("Spend bundle successfully included in mempool :)");
+
+    wait_for_coin(&cli, coin.coin_id(), true).await?;
+
+    println!("Vault successfully created!");
+    println!(
+        "As a reminder, the vault launcher id is: {}",
+        hex::encode(launcher_coin.coin_id().to_bytes())
+    );
 
     Ok(())
 }

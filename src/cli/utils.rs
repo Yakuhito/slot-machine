@@ -1,12 +1,16 @@
 use chia::{
-    bls::{self, SecretKey},
+    bls::{self, SecretKey, Signature},
+    consensus::consensus_constants::ConsensusConstants,
     protocol::{Bytes32, Coin, CoinSpend, Program},
     puzzles::standard::StandardArgs,
     traits::Streamable,
 };
-use chia_wallet_sdk::{encode_address, DriverError, SpendContext};
+use chia_wallet_sdk::{
+    encode_address, ChiaRpcClient, CoinsetClient, DriverError, SpendContext, MAINNET_CONSTANTS,
+    TESTNET11_CONSTANTS,
+};
 use hex::FromHex;
-use sage_api::{Amount, CoinSpendJson, SendXch};
+use sage_api::{Amount, CoinJson, CoinSpendJson, SendXch, SignCoinSpends};
 use std::{
     io::{self, Write},
     num::ParseIntError,
@@ -53,10 +57,13 @@ pub enum CliError {
     HomeDirectoryNotFound,
 
     #[error("client error: {0}")]
-    ClientError(#[from] ClientError),
+    Client(#[from] ClientError),
 
     #[error("custom error: {0}")]
     Custom(String),
+
+    #[error("Reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {
@@ -118,6 +125,22 @@ pub fn get_prefix(testnet11: bool) -> String {
         "txch".to_string()
     } else {
         "xch".to_string()
+    }
+}
+
+pub fn get_constants(testnet11: bool) -> &'static ConsensusConstants {
+    if testnet11 {
+        &TESTNET11_CONSTANTS
+    } else {
+        &MAINNET_CONSTANTS
+    }
+}
+
+pub fn get_coinset_client(testnet11: bool) -> CoinsetClient {
+    if testnet11 {
+        CoinsetClient::testnet11()
+    } else {
+        CoinsetClient::mainnet()
     }
 }
 
@@ -208,6 +231,78 @@ pub async fn get_xch_coin(
         ));
     };
     Ok((sk, new_coin))
+}
+
+fn bytes_to_json(bytes: &[u8]) -> String {
+    format!("0x{}", hex::encode(bytes))
+}
+
+fn coin_to_json(coin: &Coin) -> CoinJson {
+    CoinJson {
+        parent_coin_info: bytes_to_json(&coin.parent_coin_info.to_bytes()),
+        puzzle_hash: bytes_to_json(&coin.puzzle_hash.to_bytes()),
+        amount: Amount::Number(coin.amount),
+    }
+}
+
+fn coin_spend_to_json(cs: &CoinSpend) -> Result<CoinSpendJson, CliError> {
+    Ok(CoinSpendJson {
+        coin: coin_to_json(&cs.coin),
+        puzzle_reveal: bytes_to_json(
+            &cs.puzzle_reveal
+                .to_bytes()
+                .map_err(|_| CliError::Custom("could not get puzzle reveal bytes".to_string()))?,
+        ),
+        solution: bytes_to_json(
+            &cs.solution
+                .to_bytes()
+                .map_err(|_| CliError::Custom("could not get solution bytes".to_string()))?,
+        ),
+    })
+}
+
+pub fn signature_from_json(json: &str) -> Result<Signature, CliError> {
+    let bytes = <[u8; 96]>::from_hex(json.replace("0x", "")).map_err(CliError::ParseHex)?;
+    Signature::from_bytes(&bytes).map_err(CliError::InvalidPublicKey)
+}
+
+pub async fn partial_sign(
+    client: &SageClient,
+    coin_spends: &[CoinSpend],
+) -> Result<Signature, CliError> {
+    let response = client
+        .sign_coin_spends(SignCoinSpends {
+            coin_spends: coin_spends
+                .iter()
+                .map(coin_spend_to_json)
+                .collect::<Result<Vec<_>, _>>()?,
+            auto_submit: false,
+            partial: true,
+        })
+        .await?;
+
+    signature_from_json(&response.spend_bundle.aggregated_signature)
+}
+
+#[allow(clippy::nonminimal_bool)]
+pub async fn wait_for_coin(
+    client: &CoinsetClient,
+    coin_id: Bytes32,
+    also_wait_for_spent: bool,
+) -> Result<(), CliError> {
+    println!("Waiting for coin...");
+    loop {
+        let record = client.get_coin_record_by_name(coin_id).await?;
+        if let Some(record) = record.coin_record {
+            if !also_wait_for_spent || (also_wait_for_spent && record.spent) {
+                break;
+            }
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
