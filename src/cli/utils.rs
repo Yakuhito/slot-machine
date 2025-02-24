@@ -1,7 +1,7 @@
 use chia::{
     bls::{self, SecretKey, Signature},
     consensus::consensus_constants::ConsensusConstants,
-    protocol::{Bytes32, Coin, CoinSpend, Program},
+    protocol::{Bytes, Bytes32, Coin, CoinSpend, Program},
     puzzles::standard::StandardArgs,
     traits::Streamable,
 };
@@ -149,6 +149,11 @@ pub fn hex_string_to_bytes32(hex: &str) -> Result<Bytes32, CliError> {
     Ok(Bytes32::from(bytes))
 }
 
+pub fn hex_string_to_bytes(hex: &str) -> Result<Bytes, CliError> {
+    let bytes = hex::decode(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
+    Ok(Bytes::from(bytes))
+}
+
 pub fn json_to_coin_spend(json: CoinSpendJson) -> Result<CoinSpend, CliError> {
     let coin = Coin::new(
         hex_string_to_bytes32(&json.coin.parent_coin_info)?,
@@ -158,8 +163,8 @@ pub fn json_to_coin_spend(json: CoinSpendJson) -> Result<CoinSpend, CliError> {
         ))?,
     );
 
-    let puzzle_reveal = hex_string_to_bytes32(&json.puzzle_reveal)?;
-    let solution = hex_string_to_bytes32(&json.solution)?;
+    let puzzle_reveal = hex_string_to_bytes(&json.puzzle_reveal)?;
+    let solution = hex_string_to_bytes(&json.solution)?;
 
     Ok(CoinSpend::new(
         coin,
@@ -190,7 +195,7 @@ pub async fn get_xch_coin(
     let response = client
         .send_xch(SendXch {
             address: target_address.clone(),
-            amount: Amount::Number(2),
+            amount: Amount::Number(amount),
             fee: Amount::Number(fee),
             memos: vec![],
             auto_submit: false,
