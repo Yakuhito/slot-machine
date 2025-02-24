@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use super::{catalog_initiate_launch, multisig_launch};
+use super::{catalog_initiate_launch, multisig_launch, multisig_view};
 
 #[derive(Parser)]
 #[command(
@@ -56,7 +56,15 @@ enum MultisigCliAction {
         sage_ssl_path: String,
     },
     /// View history of a vault
-    View,
+    View {
+        /// Vault (singleton) launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11 (default: mainnet)
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
     /// Sign a rekey transaction for the vault
     SignRekey,
     /// Broadcast a rekey transaction for the vault
@@ -96,9 +104,10 @@ pub async fn run_cli() {
                 fee,
                 sage_ssl_path,
             } => multisig_launch(pubkeys, m, testnet11, fee, sage_ssl_path).await,
-            MultisigCliAction::View => {
-                todo!("not yet implemented");
-            }
+            MultisigCliAction::View {
+                launcher_id,
+                testnet11,
+            } => multisig_view(launcher_id, testnet11).await,
             MultisigCliAction::SignRekey => {
                 todo!("not yet implemented");
             }
