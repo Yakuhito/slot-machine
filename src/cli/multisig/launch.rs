@@ -1,6 +1,7 @@
 use chia::bls::PublicKey;
+use chia_wallet_sdk::SpendContext;
 
-use crate::{get_alias_map, parse_amount, yes_no_prompt, CliError, SageClient};
+use crate::{get_alias_map, get_xch_coin, parse_amount, yes_no_prompt, CliError, SageClient};
 
 pub async fn multisig_launch(
     pubkeys_str: String,
@@ -42,6 +43,9 @@ pub async fn multisig_launch(
     yes_no_prompt("Continue?")?;
 
     let client = SageClient::new(sage_ssl_path)?;
+    let mut ctx = SpendContext::new();
+
+    let (sk, coin) = get_xch_coin(&client, &mut ctx, 2, fee, testnet11).await?;
 
     Ok(())
 }
