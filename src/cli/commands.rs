@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use super::{catalog_initiate_launch, multisig_launch, multisig_view};
+use super::{catalog_initiate_launch, multisig_view};
 
 #[derive(Parser)]
 #[command(
@@ -33,24 +33,6 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum MultisigCliAction {
-    /// Launches a new multisig
-    Launch {
-        /// Comma-separated list of pubkeys (no spaces)
-        #[arg(long)]
-        pubkeys: String,
-
-        /// Threshold required for spends (m from m-of-n)
-        #[arg(short)]
-        m: usize,
-
-        /// Use testnet11 (default: mainnet)
-        #[arg(long, default_value_t = false)]
-        testnet11: bool,
-
-        /// Fee to use for the launch, in XCH (default: 0.0025 XCH)
-        #[arg(long, default_value = "0.0025")]
-        fee: String,
-    },
     /// View history of a vault
     View {
         /// Vault (singleton) launcher id
@@ -71,7 +53,23 @@ enum MultisigCliAction {
 #[derive(Subcommand)]
 enum CatalogCliAction {
     /// Launches a new CATalog deployment
-    InitiateLaunch,
+    InitiateLaunch {
+        /// Comma-separated list of price singleton pubkeys (no spaces)
+        #[arg(long)]
+        pubkeys: String,
+
+        /// Threshold required for price singleton spends (m from m-of-n)
+        #[arg(short)]
+        m: usize,
+
+        /// Use testnet11 (default: mainnet)
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use for the launch, in XCH (default: 0.0025 XCH)
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     /// Continues/finishes an existing launch
     ContinueLaunch,
     /// Verifies the built-in deployment is valid
@@ -93,12 +91,6 @@ pub async fn run_cli() {
 
     let res = match args.command {
         Commands::Multisig { action } => match action {
-            MultisigCliAction::Launch {
-                pubkeys,
-                m,
-                testnet11,
-                fee,
-            } => multisig_launch(pubkeys, m, testnet11, fee).await,
             MultisigCliAction::View {
                 launcher_id,
                 testnet11,
@@ -111,7 +103,12 @@ pub async fn run_cli() {
             }
         },
         Commands::Catalog { action } => match action {
-            CatalogCliAction::InitiateLaunch => catalog_initiate_launch(true).await,
+            CatalogCliAction::InitiateLaunch {
+                pubkeys,
+                m,
+                testnet11,
+                fee,
+            } => catalog_initiate_launch(pubkeys, m, testnet11, fee).await,
             CatalogCliAction::ContinueLaunch => {
                 todo!("not yet implemented");
             }

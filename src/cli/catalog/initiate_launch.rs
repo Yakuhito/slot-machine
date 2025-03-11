@@ -6,25 +6,74 @@ use crate::{
         Db, CATALOG_LAUNCH_CATS_PER_SPEND_KEY, CATALOG_LAUNCH_GENERATION_KEY,
         CATALOG_LAUNCH_LAUNCHER_ID_KEY,
     },
-    CatalogRegistryConstants,
+    get_alias_map, load_catalog_state_schedule_csv, parse_amount, CatalogRegistryConstants,
 };
+use chia::bls::PublicKey;
 use chia_wallet_sdk::{encode_address, CoinsetClient};
-// use hex::FromHex;
 
-pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
+pub async fn catalog_initiate_launch(
+    pubkeys_str: String,
+    m: usize,
+    testnet11: bool,
+    fee_str: String,
+) -> Result<(), CliError> {
     println!("Welcome to the CATalog launch setup, deployer.");
 
-    println!("Opening database...");
-    let db = Db::new().await?;
+    let alias_map = get_alias_map()?;
+    let mut pubkeys = Vec::new();
+    for pubkey_str in pubkeys_str.split(',') {
+        let pubkey = PublicKey::from_bytes(
+            &hex::decode(pubkey_str.trim().replace("0x", ""))
+                .map_err(CliError::ParseHex)?
+                .try_into()
+                .unwrap(),
+        )
+        .map_err(CliError::InvalidPublicKey)?;
+        pubkeys.push(pubkey);
+    }
 
-    println!("Loading premine data...");
+    let fee = parse_amount(fee_str.clone(), false)?;
 
-    let csv_filename = if testnet11 {
+    println!("First things first, this multisig will have control over the price singleton once the state schedule is over:");
+    println!("  Public Key List:");
+    for pubkey in pubkeys.iter() {
+        println!(
+            "    - {}",
+            alias_map
+                .get(pubkey)
+                .unwrap_or(&format!("0x{}", hex::encode(pubkey.to_bytes())))
+        );
+    }
+    println!("  Signature Threshold: {}", m);
+    println!("  Testnet: {}", testnet11);
+
+    let price_schedule_csv_filename = if testnet11 {
+        "catalog_price_schedule_testnet11.csv"
+    } else {
+        "catalog_price_schedule_mainnet.csv"
+    };
+    println!(
+        "Loading price schedule from '{}'...",
+        price_schedule_csv_filename
+    );
+
+    let price_schedule = load_catalog_state_schedule_csv(price_schedule_csv_filename)?;
+    println!("Price schedule:");
+    for record in price_schedule.iter() {
+        println!(
+            "  After block height {}, a registration will cost {} CAT mojos (asset id: {}).",
+            record.block_height, record.registration_price, record.asset_id
+        );
+    }
+
+    let premine_csv_filename = if testnet11 {
         "catalog_premine_testnet11.csv"
     } else {
         "catalog_premine_mainnet.csv"
     };
-    let cats_to_launch = load_catalog_premine_csv(csv_filename)?;
+
+    println!("Loading premine data from '{}'...", premine_csv_filename);
+    let cats_to_launch = load_catalog_premine_csv(premine_csv_filename)?;
     println!(
         "Loaded {} CATs to be premined. First few records:",
         cats_to_launch.len()
@@ -33,13 +82,11 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
         println!("  code: {:?}, name: {:?}", record.code, record.name);
     }
 
-    yes_no_prompt(
-        format!(
-            "Premine data was be loaded from '{}' - is this the correct data?",
-            csv_filename
-        )
-        .as_str(),
-    )?;
+    println!(
+        "The transaction will use {} XCH ({} mojos) as fee.",
+        fee_str, fee
+    );
+    yes_no_prompt("Is all the data above correct?")?;
 
     println!("Initializing Chia RPC client...");
     let _client = if testnet11 {
@@ -47,6 +94,9 @@ pub async fn catalog_initiate_launch(testnet11: bool) -> Result<(), CliError> {
     } else {
         CoinsetClient::mainnet()
     };
+
+    println!("Opening database...");
+    let db = Db::new().await?;
 
     let launcher_id = db.get_value_by_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
     if launcher_id.is_some() {

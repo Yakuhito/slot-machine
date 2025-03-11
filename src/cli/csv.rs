@@ -109,3 +109,26 @@ pub fn get_alias_map() -> Result<HashMap<PublicKey, String>, CliError> {
 
     Ok(alias_map)
 }
+
+#[derive(Debug, Deserialize)]
+pub struct CatalogStateScheduleRecord {
+    pub block_height: u64,
+    #[serde(deserialize_with = "hex_string_to_bytes32")]
+    pub asset_id: Bytes32,
+    pub registration_price: u64,
+}
+
+pub fn load_catalog_state_schedule_csv<P: AsRef<Path>>(
+    path: P,
+) -> Result<Vec<CatalogStateScheduleRecord>, CliError> {
+    let file = File::open(path)?;
+    let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
+
+    let mut records = Vec::new();
+    for result in rdr.deserialize() {
+        let record: CatalogStateScheduleRecord = result.map_err(CliError::Csv)?;
+        records.push(record);
+    }
+
+    Ok(records)
+}
