@@ -12,7 +12,6 @@ pub async fn multisig_launch(
     m: usize,
     testnet11: bool,
     fee_str: String,
-    sage_ssl_path: String,
 ) -> Result<(), CliError> {
     let mut pubkeys = Vec::new();
     for pubkey_str in pubkeys_str.split(',') {
@@ -46,7 +45,7 @@ pub async fn multisig_launch(
 
     yes_no_prompt("Continue?")?;
 
-    let client = SageClient::new(sage_ssl_path)?;
+    let client = SageClient::new()?;
     let mut ctx = SpendContext::new();
 
     let (sk, coin) = get_xch_coin(&client, &mut ctx, 1, fee, testnet11).await?;

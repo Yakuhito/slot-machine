@@ -64,6 +64,9 @@ pub enum CliError {
 
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
+
+    #[error("Data directory could not be found")]
+    DataDirNotFound,
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {

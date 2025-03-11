@@ -1,10 +1,9 @@
-use dirs::home_dir;
+use dirs::data_dir;
 use reqwest::Identity;
 use sage_api::{
     GetDerivations, GetDerivationsResponse, SendCat, SendCatResponse, SendXch, SignCoinSpends,
     SignCoinSpendsResponse,
 };
-use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use super::CliError;
@@ -26,22 +25,12 @@ pub struct SageClient {
     base_url: String,
 }
 
-fn expand_tilde<P: AsRef<Path>>(path_str: P) -> Result<PathBuf, CliError> {
-    let path = path_str.as_ref();
-    if path.starts_with("~") {
-        let home = home_dir().ok_or(CliError::HomeDirectoryNotFound)?;
-        Ok(home.join(path.strip_prefix("~/").unwrap_or(path)))
-    } else {
-        Ok(path.to_path_buf())
-    }
-}
-
 impl SageClient {
-    pub fn new(sage_ssl_path: String) -> Result<Self, CliError> {
-        let sage_ssl_path = expand_tilde(sage_ssl_path)?;
+    pub fn new() -> Result<Self, CliError> {
+        let data_dir = data_dir().ok_or(CliError::DataDirNotFound)?;
 
-        let cert_file = sage_ssl_path.join("wallet.crt");
-        let key_file = sage_ssl_path.join("wallet.key");
+        let cert_file = data_dir.join("com.rigidnetwork.sage/ssl/wallet.crt");
+        let key_file = data_dir.join("com.rigidnetwork.sage/ssl/wallet.crt");
 
         let cert = std::fs::read(cert_file).map_err(|_| ClientError::CertificateError)?;
         let key = std::fs::read(key_file).map_err(|_| ClientError::CertificateError)?;

@@ -50,10 +50,6 @@ enum MultisigCliAction {
         /// Fee to use for the launch, in XCH (default: 0.0025 XCH)
         #[arg(long, default_value = "0.0025")]
         fee: String,
-
-        /// Path to the Sage SSL certificate directory (needed to talk to the Sage RPC)
-        #[arg(long, default_value = "~/.local/share/com.rigidnetwork.sage/ssl")]
-        sage_ssl_path: String,
     },
     /// View history of a vault
     View {
@@ -102,8 +98,7 @@ pub async fn run_cli() {
                 m,
                 testnet11,
                 fee,
-                sage_ssl_path,
-            } => multisig_launch(pubkeys, m, testnet11, fee, sage_ssl_path).await,
+            } => multisig_launch(pubkeys, m, testnet11, fee).await,
             MultisigCliAction::View {
                 launcher_id,
                 testnet11,
