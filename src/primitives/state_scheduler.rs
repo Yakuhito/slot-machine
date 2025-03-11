@@ -10,7 +10,7 @@ use chia::{
 };
 use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::Allocator;
+use clvmr::{Allocator, NodePtr};
 
 use crate::{StateSchedulerInfo, StateSchedulerLayerSolution};
 
@@ -98,7 +98,8 @@ where
         let solution = launcher_spend.solution.to_clvm(&mut ctx.allocator)?;
         let solution = LauncherSolution::from_clvm(&ctx.allocator, solution)?;
 
-        let Some(info) = StateSchedulerInfo::from_launcher_solution(&mut ctx.allocator, solution)?
+        let Some((info, _other_hints)) =
+            StateSchedulerInfo::from_launcher_solution::<NodePtr>(&mut ctx.allocator, solution)?
         else {
             return Ok(None);
         };
@@ -183,6 +184,7 @@ mod tests {
                 other_singleton_launcher_id: other_singleton_launcher.coin_id(),
                 final_puzzle_hash,
                 state_schedule: schedule.clone(),
+                final_puzzle_hash_hints: NodePtr::NIL,
             },
         )?;
 

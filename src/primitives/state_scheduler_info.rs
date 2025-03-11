@@ -112,15 +112,18 @@ where
         ))
     }
 
-    pub fn from_launcher_solution(
+    pub fn from_launcher_solution<H>(
         allocator: &mut Allocator,
         laucher_solution: LauncherSolution<NodePtr>,
-    ) -> Result<Option<Self>, DriverError>
+    ) -> Result<Option<(Self, H)>, DriverError>
     where
         S: FromClvm<Allocator>,
+        H: FromClvm<Allocator>,
     {
-        let hints =
-            StateSchedulerLauncherHints::from_clvm(allocator, laucher_solution.key_value_list)?;
+        let hints = StateSchedulerLauncherHints::<S, H>::from_clvm(
+            allocator,
+            laucher_solution.key_value_list,
+        )?;
 
         let candidate = Self::new(
             hints.my_launcher_id,
@@ -137,7 +140,7 @@ where
         if laucher_solution.amount == 1
             && laucher_solution.singleton_puzzle_hash == predicted_puzzle_hash.into()
         {
-            Ok(Some(candidate))
+            Ok(Some((candidate, hints.final_puzzle_hash_hints)))
         } else {
             Ok(None)
         }
@@ -146,10 +149,11 @@ where
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(curry)]
-pub struct StateSchedulerLauncherHints<S> {
+pub struct StateSchedulerLauncherHints<S, H> {
     pub my_launcher_id: Bytes32,
     pub other_singleton_launcher_id: Bytes32,
     pub final_puzzle_hash: Bytes32,
-    #[clvm(rest)]
     pub state_schedule: Vec<(u32, S)>,
+    #[clvm(rest)]
+    pub final_puzzle_hash_hints: H,
 }

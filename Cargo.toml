@@ -26,6 +26,7 @@ sqlx = { version = "0.6", features = ["sqlite", "runtime-async-std-native-tls"] 
 bech32 = "0.9.1"
 reqwest = { version = "0.12.12", features = ["json", "rustls-tls"] }
 dirs = "6.0.0"
+directories = "6.0.0"
 
 chia-wallet-sdk = { git="https://github.com/xch-dev/chia-wallet-sdk.git", rev="995bf77bfb076af4a73f26f54d65789f99e37b37", features=["offers"] }
 sage-api = { version = "0.9.5", git = "https://github.com/xch-dev/sage.git" }
