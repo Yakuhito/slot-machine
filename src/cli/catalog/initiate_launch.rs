@@ -10,8 +10,8 @@ use crate::{
     SageClient,
 };
 use chia::bls::PublicKey;
-use chia_wallet_sdk::{encode_address, CoinsetClient};
-use sage_api::{Amount, Assets, MakeOffer};
+use chia_wallet_sdk::{encode_address, CoinsetClient, SpendContext};
+use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 
 pub async fn catalog_initiate_launch(
     pubkeys_str: String,
@@ -156,9 +156,22 @@ pub async fn catalog_initiate_launch(
         "The offer will also use {} XCH ({} mojos) as fee.",
         fee_str, fee
     );
-    yes_no_prompt("Do you want to continue generating the offer?")?;
 
     let sage = SageClient::new()?;
+    let derivation_resp = sage
+        .get_derivations(GetDerivations {
+            hardened: false,
+            offset: 0,
+            limit: 1,
+        })
+        .await?;
+    println!(
+        "Newly-minted CATs will be sent to the active wallet (address: {})",
+        derivation_resp.derivations[0].address
+    );
+
+    yes_no_prompt("Do you want to continue generating the offer?")?;
+
     let offer_resp = sage
         .make_offer(MakeOffer {
             requested_assets: Assets {
@@ -180,7 +193,9 @@ pub async fn catalog_initiate_launch(
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    // let ctx = &mut SpendContext::new();
+    let ctx = &mut SpendContext::new();
+
+    // First, launch registration CAT
     // let initial_registration_price = price_schedule[0].1 * 2;
     // let (sig, _, scheduler, preroller) = initiate_catalog_launch(
     //     ctx,

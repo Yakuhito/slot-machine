@@ -21,7 +21,7 @@ use chia_wallet_sdk::{
     StandardLayer,
 };
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
-use clvmr::NodePtr;
+use clvmr::{Allocator, NodePtr};
 
 use crate::{
     CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
@@ -424,11 +424,15 @@ where
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
-pub fn launch_catalog_registry(
+pub fn launch_catalog_registry<V>(
     ctx: &mut SpendContext,
     offer: Offer,
     initial_registration_price: u64,
     initial_registration_asset_id: Bytes32,
+    // CATalog singleton launcher id, price singleton price launcher id -> price singleton initial inner ph
+    get_initial_price_singleton_inner_puzzle_hash: fn(Bytes32, Bytes32) -> Bytes32,
+    // CATalog singleton launcher id, price singleton price launcher id -> key_value_list
+    get_initial_price_singleton_launch_kv_list: fn(Bytes32, Bytes32) -> V,
     catalog_constants: CatalogRegistryConstants,
     consensus_constants: &ConsensusConstants,
 ) -> Result<
@@ -437,9 +441,15 @@ pub fn launch_catalog_registry(
         SecretKey,
         CatalogRegistry,
         [Slot<CatalogSlotValue>; 2],
+        Bytes32, // intial price singleton launcher id
+        Coin,    // initial price singleton coin
+        Proof,   // initial price singleton proof
     ),
     DriverError,
-> {
+>
+where
+    V: ToClvm<Allocator>,
+{
     let security_coin_sk = new_sk()?;
     let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
@@ -448,7 +458,7 @@ pub fn launch_catalog_registry(
 
     let mut security_coin_conditions = offer.security_base_conditions;
 
-    // Create coin launcher
+    // Create CATalog registry launcher
     let registry_launcher = Launcher::new(security_coin_id, 1);
     let registry_launcher_coin = registry_launcher.coin();
     let registry_launcher_id = registry_launcher_coin.coin_id();
@@ -483,14 +493,37 @@ pub fn launch_catalog_registry(
             ),
         )?;
 
-    // this creates the launcher & secures the spend
-    security_coin_conditions = security_coin_conditions.extend(new_security_coin_conditions);
-
     let catalog_registry = CatalogRegistry::new(
         new_catalog_registry_coin,
         catalog_proof,
         catalog_registry_info,
     );
+
+    // Launch the price singleton now
+    let price_singleton_launcher = Launcher::new(security_coin_id, 3).with_singleton_amount(1);
+    let price_singleton_launcher_coin = price_singleton_launcher.coin();
+    let price_singleton_launcher_id = price_singleton_launcher.coin().coin_id();
+
+    let (price_singleton_conditions, price_singleton_coin) = price_singleton_launcher.spend(
+        ctx,
+        get_initial_price_singleton_inner_puzzle_hash(
+            registry_launcher_id,
+            price_singleton_launcher_id,
+        ),
+        get_initial_price_singleton_launch_kv_list(
+            registry_launcher_id,
+            price_singleton_launcher_id,
+        ),
+    )?;
+    let price_singleton_proof: Proof = Proof::Eve(EveProof {
+        parent_parent_coin_info: price_singleton_launcher_coin.parent_coin_info,
+        parent_amount: price_singleton_launcher_coin.amount,
+    });
+
+    // this creates the CATalog registry & price singleton launchers & secures the spend
+    security_coin_conditions = security_coin_conditions
+        .extend(new_security_coin_conditions)
+        .extend(price_singleton_conditions);
 
     // Spend security coin
     let security_coin_sig = spend_security_coin(
@@ -507,6 +540,9 @@ pub fn launch_catalog_registry(
         security_coin_sk,
         catalog_registry,
         slots,
+        price_singleton_launcher_id,
+        price_singleton_coin,
+        price_singleton_proof,
     ))
 }
 
