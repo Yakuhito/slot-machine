@@ -165,7 +165,7 @@ mod tests {
 
         sim.spend_coins(ctx.take(), &[])?;
 
-        // Launch state schedulet singleton
+        // Launch state scheduler singleton
         let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
         let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
 

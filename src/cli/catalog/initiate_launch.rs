@@ -6,12 +6,78 @@ use crate::{
         Db, CATALOG_LAUNCH_CATS_PER_SPEND_KEY, CATALOG_LAUNCH_GENERATION_KEY,
         CATALOG_LAUNCH_LAUNCHER_ID_KEY,
     },
-    get_alias_map, load_catalog_state_schedule_csv, parse_amount, CatalogRegistryConstants,
-    SageClient,
+    get_alias_map, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
+    CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint,
+    MedievalVaultInfo, SageClient, StateSchedulerInfo,
 };
-use chia::bls::PublicKey;
-use chia_wallet_sdk::{encode_address, CoinsetClient, SpendContext};
+use chia::{
+    bls::PublicKey,
+    clvm_utils::ToTreeHash,
+    protocol::{Bytes32, Coin},
+};
+use chia_wallet_sdk::{
+    encode_address, Cat, CoinsetClient, Conditions, DriverError, Launcher, Memos, Offer,
+    SpendContext,
+};
+use clvmr::NodePtr;
 use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
+
+fn get_additional_info_for_launch(
+    ctx: &mut SpendContext,
+    catalog_launcher_id: Bytes32,
+    security_coin: Coin,
+    (
+        catalog_constants,
+        state_schedule,
+        medieval_vault_memos,
+        cat_amount,
+        cat_destination_puzzle_hash,
+    ): (
+        CatalogRegistryConstants,
+        Vec<(u32, CatalogRegistryState)>,
+        MedievalVaultHint,
+        u64,
+        Bytes32,
+    ),
+) -> Result<(Conditions<NodePtr>, CatalogRegistryConstants, Bytes32), DriverError> {
+    let mut conditions = Conditions::new();
+
+    let price_singleton_launcher =
+        Launcher::new(security_coin.coin_id(), 3).with_singleton_amount(1);
+    let price_singleton_launcher_coin = price_singleton_launcher.coin();
+    let price_singleton_launcher_id = price_singleton_launcher_coin.coin_id();
+
+    let medieval_vault_memos_ptr = ctx.alloc(&medieval_vault_memos)?;
+    let multisig_info = MedievalVaultInfo::from_hint(medieval_vault_memos);
+    let state_scheduler_info = StateSchedulerInfo::new(
+        price_singleton_launcher_id,
+        catalog_launcher_id,
+        state_schedule,
+        0,
+        multisig_info.inner_puzzle_hash().into(),
+    );
+    let (price_singleton_launch_conds, _coin) = price_singleton_launcher.spend(
+        ctx,
+        state_scheduler_info.inner_puzzle_hash().into(),
+        state_scheduler_info.to_hints(medieval_vault_memos_ptr),
+    )?;
+    conditions = conditions.extend(price_singleton_launch_conds);
+
+    let cat_memos = Memos::some(ctx.alloc(&cat_destination_puzzle_hash)?);
+    let (cat_creation_conds, eve_cat) = Cat::single_issuance_eve(
+        ctx,
+        security_coin.coin_id(),
+        cat_amount,
+        Conditions::new().create_coin(cat_destination_puzzle_hash, cat_amount, cat_memos),
+    )?;
+    conditions = conditions.extend(cat_creation_conds);
+
+    Ok((
+        conditions,
+        catalog_constants.with_price_singleton(price_singleton_launcher_id),
+        eve_cat.asset_id,
+    ))
+}
 
 pub async fn catalog_initiate_launch(
     pubkeys_str: String,
@@ -195,23 +261,39 @@ pub async fn catalog_initiate_launch(
 
     let ctx = &mut SpendContext::new();
 
-    // First, launch registration CAT
-    // let initial_registration_price = price_schedule[0].1 * 2;
-    // let (sig, _, scheduler, preroller) = initiate_catalog_launch(
-    //     ctx,
-    //     Offer::decode(&offer).map_err(CliError::Offer)?,
-    //     price_schedule,
-    //     initial_registration_price,
-    //     todo!("convert cats_to_launch to a vector of AddCat"),
-    //     cats_per_unroll,
-    //     CatalogConstants::get(testnet11),
-    //     if testnet11 {
-    //         &TESTNET11_CONSTANTS
-    //     } else {
-    //         &MAINNET_CONSTANTS
-    //     },
-    // )
-    // .map_err(CliError::Driver)?;
+    let (sig, _, scheduler, preroller) = launch_catalog_registry(
+        ctx,
+        Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
+        1,
+        get_additional_info_for_launch,
+        if testnet11 {
+            &TESTNET11_CONSTANTS
+        } else {
+            &MAINNET_CONSTANTS
+        },
+        (
+            CatalogRegistryConstants::get(testnet11),
+            price_schedule
+                .into_iter()
+                .map(|ps| {
+                    (
+                        ps.block_height,
+                        CatalogRegistryState {
+                            cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
+                                ps.asset_id.tree_hash().into(),
+                            )
+                            .into(),
+                            registration_price: ps.registration_price,
+                        },
+                    )
+                })
+                .collect(),
+            medieval_vault_memos,
+            cat_amount,
+            cat_destination_puzzle_hash,
+        ),
+    )
+    .map_err(CliError::Driver)?;
 
     // yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 

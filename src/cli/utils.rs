@@ -6,8 +6,8 @@ use chia::{
     traits::Streamable,
 };
 use chia_wallet_sdk::{
-    encode_address, ChiaRpcClient, CoinsetClient, DriverError, SpendContext, MAINNET_CONSTANTS,
-    TESTNET11_CONSTANTS,
+    encode_address, ChiaRpcClient, CoinsetClient, DriverError, OfferError, SpendContext,
+    MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
 };
 use hex::FromHex;
 use sage_api::{Amount, CoinJson, CoinSpendJson, SendXch, SignCoinSpends};
@@ -67,6 +67,9 @@ pub enum CliError {
 
     #[error("Data directory could not be found")]
     DataDirNotFound,
+
+    #[error("offer: {0}")]
+    Offer(#[from] OfferError),
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {

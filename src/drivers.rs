@@ -428,16 +428,16 @@ pub fn launch_catalog_registry<V>(
     ctx: &mut SpendContext,
     offer: Offer,
     initial_registration_price: u64,
-    // (registry launcher id, security coin) -> (additional conditions, registry constants, initial_registration_asset_id)
-    get_additional_security_coin_conditions_and_catalog_constants: fn(
+    // (registry launcher id, security coin, additional_args) -> (additional conditions, registry constants, initial_registration_asset_id)
+    get_additional_info: fn(
+        ctx: &mut SpendContext,
         Bytes32,
         Coin,
         V,
-    ) -> (
-        Conditions<NodePtr>,
-        CatalogRegistryConstants,
-        Bytes32,
-    ),
+    ) -> Result<
+        (Conditions<NodePtr>, CatalogRegistryConstants, Bytes32),
+        DriverError,
+    >,
     consensus_constants: &ConsensusConstants,
     additional_args: V,
 ) -> Result<
@@ -464,11 +464,12 @@ pub fn launch_catalog_registry<V>(
     let registry_launcher_id = registry_launcher_coin.coin_id();
 
     let (additional_security_coin_conditions, catalog_constants, initial_registration_asset_id) =
-        get_additional_security_coin_conditions_and_catalog_constants(
+        get_additional_info(
+            ctx,
             registry_launcher_id,
             offer.security_coin,
             additional_args,
-        );
+        )?;
 
     let catalog_registry_info = CatalogRegistryInfo::new(
         registry_launcher_id,
@@ -1123,12 +1124,12 @@ mod tests {
             ctx,
             offer,
             initial_registration_price,
-            |_launcher_id, _coin, (catalog_constants, initial_registration_asset_id)| {
-                (
+            |_ctx, _launcher_id, _coin, (catalog_constants, initial_registration_asset_id)| {
+                Ok((
                     Conditions::new(),
                     catalog_constants,
                     initial_registration_asset_id,
-                )
+                ))
             },
             &TESTNET11_CONSTANTS,
             (

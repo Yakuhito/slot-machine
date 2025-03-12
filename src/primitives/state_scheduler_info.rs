@@ -145,6 +145,16 @@ where
             Ok(None)
         }
     }
+
+    pub fn to_hints<H>(&self, final_puzzle_hash_hints: H) -> StateSchedulerLauncherHints<S, H> {
+        StateSchedulerLauncherHints {
+            my_launcher_id: self.launcher_id,
+            other_singleton_launcher_id: self.other_singleton_launcher_id,
+            final_puzzle_hash: self.final_puzzle_hash,
+            state_schedule: self.state_schedule.clone(),
+            final_puzzle_hash_hints,
+        }
+    }
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
