@@ -41,6 +41,9 @@ pub enum CliError {
     #[error("bech32: {0}")]
     Bech32(#[from] bech32::Error),
 
+    #[error("address: {0}")]
+    Address(#[from] chia_wallet_sdk::AddressError),
+
     #[error("that's not a clear 'yes'")]
     YesNoPromptRejected,
 

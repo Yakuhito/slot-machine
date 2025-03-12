@@ -7,39 +7,41 @@ use crate::{
         CATALOG_LAUNCH_LAUNCHER_ID_KEY,
     },
     get_alias_map, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
-    CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint,
-    MedievalVaultInfo, SageClient, StateSchedulerInfo,
+    wait_for_coin, CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs,
+    MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo,
 };
 use chia::{
     bls::PublicKey,
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin},
+    protocol::{Bytes32, Coin, SpendBundle},
+    puzzles::cat::GenesisByCoinIdTailArgs,
 };
 use chia_wallet_sdk::{
-    encode_address, Cat, CoinsetClient, Conditions, DriverError, Launcher, Memos, Offer,
-    SpendContext,
+    decode_address, encode_address, Cat, ChiaRpcClient, CoinsetClient, Conditions, DriverError,
+    Launcher, Memos, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
 };
 use clvmr::NodePtr;
 use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 
+#[allow(clippy::type_complexity)]
 fn get_additional_info_for_launch(
     ctx: &mut SpendContext,
     catalog_launcher_id: Bytes32,
     security_coin: Coin,
-    (
-        catalog_constants,
-        state_schedule,
-        medieval_vault_memos,
-        cat_amount,
-        cat_destination_puzzle_hash,
-    ): (
+    (catalog_constants, state_schedule, pubkeys, m, cat_amount, cat_destination_puzzle_hash): (
         CatalogRegistryConstants,
         Vec<(u32, CatalogRegistryState)>,
-        MedievalVaultHint,
+        Vec<PublicKey>,
+        usize,
         u64,
         Bytes32,
     ),
 ) -> Result<(Conditions<NodePtr>, CatalogRegistryConstants, Bytes32), DriverError> {
+    println!(
+        "CATalog registry launcher id (SAVE THIS): {}",
+        hex::encode(catalog_launcher_id)
+    );
+
     let mut conditions = Conditions::new();
 
     let price_singleton_launcher =
@@ -47,6 +49,11 @@ fn get_additional_info_for_launch(
     let price_singleton_launcher_coin = price_singleton_launcher.coin();
     let price_singleton_launcher_id = price_singleton_launcher_coin.coin_id();
 
+    let medieval_vault_memos = MedievalVaultHint {
+        my_launcher_id: price_singleton_launcher_id,
+        public_key_list: pubkeys,
+        m,
+    };
     let medieval_vault_memos_ptr = ctx.alloc(&medieval_vault_memos)?;
     let multisig_info = MedievalVaultInfo::from_hint(medieval_vault_memos);
     let state_scheduler_info = StateSchedulerInfo::new(
@@ -71,6 +78,15 @@ fn get_additional_info_for_launch(
         Conditions::new().create_coin(cat_destination_puzzle_hash, cat_amount, cat_memos),
     )?;
     conditions = conditions.extend(cat_creation_conds);
+
+    println!(
+        "Premine payment asset id: {}",
+        hex::encode(eve_cat.asset_id)
+    );
+    println!(
+        "Price singleton id (SAVE THIS): {}",
+        hex::encode(price_singleton_launcher_id)
+    );
 
     Ok((
         conditions,
@@ -153,7 +169,7 @@ pub async fn catalog_initiate_launch(
     yes_no_prompt("Is all the data above correct?")?;
 
     println!("Initializing Chia RPC client...");
-    let _client = if testnet11 {
+    let client = if testnet11 {
         CoinsetClient::testnet11()
     } else {
         CoinsetClient::mainnet()
@@ -261,7 +277,7 @@ pub async fn catalog_initiate_launch(
 
     let ctx = &mut SpendContext::new();
 
-    let (sig, _, scheduler, preroller) = launch_catalog_registry(
+    let (sig, _, registry, _slots, security_coin) = launch_catalog_registry(
         ctx,
         Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
         1,
@@ -288,18 +304,38 @@ pub async fn catalog_initiate_launch(
                     )
                 })
                 .collect(),
-            medieval_vault_memos,
-            cat_amount,
-            cat_destination_puzzle_hash,
+            pubkeys,
+            m,
+            cats_to_launch.len() as u64,
+            Bytes32::new(decode_address(&derivation_resp.derivations[0].address)?.0),
         ),
     )
     .map_err(CliError::Driver)?;
 
-    // yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
+    let premine_payment_asset_id: Bytes32 =
+        GenesisByCoinIdTailArgs::curry_tree_hash(security_coin.coin_id()).into();
+    println!(
+        "Premine payment asset id: {}",
+        hex::encode(premine_payment_asset_id)
+    );
 
-    //     // launch
-    //     // follow in mempool; wait for confirmation
-    //     // save values to db for unroll
+    yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
+
+    db.save_key_value(
+        CATALOG_LAUNCH_LAUNCHER_ID_KEY,
+        &hex::encode(registry.info.launcher_id),
+    )
+    .await?;
+    let spend_bundle = SpendBundle::new(ctx.take(), sig);
+
+    println!("Submitting transaction...");
+    let resp = client.push_tx(spend_bundle).await?;
+
+    println!("Transaction submitted; status='{}'", resp.status);
+
+    println!("Waiting for confirmation...");
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
+    println!("Confirmed!");
 
     Ok(())
 }

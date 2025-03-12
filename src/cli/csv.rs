@@ -112,7 +112,7 @@ pub fn get_alias_map() -> Result<HashMap<PublicKey, String>, CliError> {
 
 #[derive(Debug, Deserialize)]
 pub struct CatalogStateScheduleRecord {
-    pub block_height: u64,
+    pub block_height: u32,
     #[serde(deserialize_with = "hex_string_to_bytes32")]
     pub asset_id: Bytes32,
     pub registration_price: u64,
