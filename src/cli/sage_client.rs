@@ -1,8 +1,8 @@
 use dirs::data_dir;
 use reqwest::Identity;
 use sage_api::{
-    GetDerivations, GetDerivationsResponse, SendCat, SendCatResponse, SendXch, SignCoinSpends,
-    SignCoinSpendsResponse,
+    GetDerivations, GetDerivationsResponse, MakeOffer, MakeOfferResponse, SendCat, SendCatResponse,
+    SendXch, SignCoinSpends, SignCoinSpendsResponse,
 };
 use thiserror::Error;
 
@@ -119,6 +119,14 @@ impl SageClient {
         }
 
         let response_body = response.json::<SignCoinSpendsResponse>().await?;
+        Ok(response_body)
+    }
+
+    pub async fn make_offer(&self, request: MakeOffer) -> Result<MakeOfferResponse, ClientError> {
+        let url = format!("{}/make_offer", self.base_url);
+        let response = self.client.post(&url).json(&request).send().await?;
+
+        let response_body = response.json::<MakeOfferResponse>().await?;
         Ok(response_body)
     }
 }

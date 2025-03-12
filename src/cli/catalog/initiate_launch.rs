@@ -7,9 +7,11 @@ use crate::{
         CATALOG_LAUNCH_LAUNCHER_ID_KEY,
     },
     get_alias_map, load_catalog_state_schedule_csv, parse_amount, CatalogRegistryConstants,
+    SageClient,
 };
 use chia::bls::PublicKey;
 use chia_wallet_sdk::{encode_address, CoinsetClient};
+use sage_api::{Amount, Assets, MakeOffer};
 
 pub async fn catalog_initiate_launch(
     pubkeys_str: String,
@@ -82,10 +84,6 @@ pub async fn catalog_initiate_launch(
         println!("  code: {:?}, name: {:?}", record.code, record.name);
     }
 
-    println!(
-        "The transaction will use {} XCH ({} mojos) as fee.",
-        fee_str, fee
-    );
     yes_no_prompt("Is all the data above correct?")?;
 
     println!("Initializing Chia RPC client...");
@@ -120,6 +118,11 @@ pub async fn catalog_initiate_launch(
         prompt_for_value("How many CATs should be deployed per unroll spend?")?;
     let _cats_per_unroll: u64 = cats_per_unroll_str.parse().map_err(CliError::ParseInt)?;
 
+    db.save_key_value(CATALOG_LAUNCH_CATS_PER_SPEND_KEY, &cats_per_unroll_str)
+        .await?;
+    db.save_key_value(CATALOG_LAUNCH_GENERATION_KEY, "0")
+        .await?;
+
     let constants = CatalogRegistryConstants::get(testnet11);
     let prefix = if testnet11 { "txch" } else { "xch" };
     let royalty_address =
@@ -142,18 +145,40 @@ pub async fn catalog_initiate_launch(
     println!("  price singleton id: (will be launched as well)");
     yes_no_prompt("Do the constants above have the correct values?")?;
 
-    // let cat_payment_asset_id_str = prompt_for_value("What is the asset id of the payment CAT?")?;
-    // let cat_payment_asset_id =
-    //     Bytes32::new(<[u8; 32]>::from_hex(cat_payment_asset_id_str).map_err(CliError::ParseHex)?);
+    println!("A one-sided offer ({} mojos) will be needed for launch. The value will be distributed as follows:", 2 + cats_to_launch.len());
+    println!("  CATalog registry singleton - 1 mojo");
+    println!("  CATalog price singleton - 1 mojo");
+    println!(
+        "  CATalog premine registration CAT - {} mojos",
+        cats_to_launch.len()
+    );
+    println!(
+        "The offer will also use {} XCH ({} mojos) as fee.",
+        fee_str, fee
+    );
+    yes_no_prompt("Do you want to continue generating the offer?")?;
 
-    // let cat_registration_price_str =
-    //     prompt_for_value("What should be the price of a CAT registration in CAT **MOJOS**?")?;
-    // let cat_registration_price: u64 = cat_registration_price_str
-    //     .parse()
-    //     .map_err(CliError::ParseInt)?;
+    let sage = SageClient::new()?;
+    let offer_resp = sage
+        .make_offer(MakeOffer {
+            requested_assets: Assets {
+                xch: Amount::u64(0),
+                cats: vec![],
+                nfts: vec![],
+            },
+            offered_assets: Assets {
+                xch: Amount::u64(2 + cats_to_launch.len() as u64),
+                cats: vec![],
+                nfts: vec![],
+            },
+            fee: Amount::u64(fee),
+            receive_address: None,
+            expires_at_second: None,
+            auto_import: false,
+        })
+        .await?;
 
-    // println!("A one-sided offer (2 mojos) will be needed for launch.");
-    // let offer = prompt_for_value("Offer: ")?;
+    println!("Offer with id {} generated.", offer_resp.offer_id);
 
     // let ctx = &mut SpendContext::new();
     // let initial_registration_price = price_schedule[0].1 * 2;
