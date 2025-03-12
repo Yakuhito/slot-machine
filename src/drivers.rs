@@ -424,15 +424,22 @@ where
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
-pub fn launch_catalog_registry(
+pub fn launch_catalog_registry<V>(
     ctx: &mut SpendContext,
     offer: Offer,
     initial_registration_price: u64,
-    initial_registration_asset_id: Bytes32,
-    // (registry launcher id, security coin) -> additional conditions
-    get_additional_security_coin_conditions: fn(Bytes32, Coin) -> Conditions<NodePtr>,
-    catalog_constants: CatalogRegistryConstants,
+    // (registry launcher id, security coin) -> (additional conditions, registry constants, initial_registration_asset_id)
+    get_additional_security_coin_conditions_and_catalog_constants: fn(
+        Bytes32,
+        Coin,
+        V,
+    ) -> (
+        Conditions<NodePtr>,
+        CatalogRegistryConstants,
+        Bytes32,
+    ),
     consensus_constants: &ConsensusConstants,
+    additional_args: V,
 ) -> Result<
     (
         Signature,
@@ -455,6 +462,13 @@ pub fn launch_catalog_registry(
     let registry_launcher = Launcher::new(security_coin_id, 1);
     let registry_launcher_coin = registry_launcher.coin();
     let registry_launcher_id = registry_launcher_coin.coin_id();
+
+    let (additional_security_coin_conditions, catalog_constants, initial_registration_asset_id) =
+        get_additional_security_coin_conditions_and_catalog_constants(
+            registry_launcher_id,
+            offer.security_coin,
+            additional_args,
+        );
 
     let catalog_registry_info = CatalogRegistryInfo::new(
         registry_launcher_id,
@@ -495,10 +509,7 @@ pub fn launch_catalog_registry(
     // this creates the CATalog registry & secures the spend
     security_coin_conditions = security_coin_conditions
         .extend(new_security_coin_conditions)
-        .extend(get_additional_security_coin_conditions(
-            registry_launcher_id,
-            offer.security_coin,
-        ));
+        .extend(additional_security_coin_conditions);
 
     // Spend security coin
     let security_coin_sig = spend_security_coin(
@@ -1112,10 +1123,18 @@ mod tests {
             ctx,
             offer,
             initial_registration_price,
-            payment_cat.asset_id,
-            |_launcher_id, _coin| Conditions::new(),
-            catalog_constants.with_price_singleton(price_singleton_launcher_id),
+            |_launcher_id, _coin, (catalog_constants, initial_registration_asset_id)| {
+                (
+                    Conditions::new(),
+                    catalog_constants,
+                    initial_registration_asset_id,
+                )
+            },
             &TESTNET11_CONSTANTS,
+            (
+                catalog_constants.with_price_singleton(price_singleton_launcher_id),
+                payment_cat.asset_id,
+            ),
         )?;
 
         sim.spend_coins(ctx.take(), &[launcher_sk, security_sk])?;
