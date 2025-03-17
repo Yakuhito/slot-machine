@@ -73,6 +73,9 @@ pub enum CliError {
 
     #[error("offer: {0}")]
     Offer(#[from] OfferError),
+
+    #[error("could not parse db column")]
+    DbColumnParse(),
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {

@@ -1,6 +1,13 @@
-use chia::protocol::{Bytes, Bytes32};
+use chia::{
+    clvm_utils::ToTreeHash,
+    protocol::{Bytes, Bytes32},
+};
+use clvm_traits::FromClvm;
+use clvmr::{serde::node_from_bytes, Allocator};
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::time::Duration;
+
+use crate::{Slot, SlotInfo, SlotProof};
 
 use super::CliError;
 
@@ -133,12 +140,16 @@ impl Db {
         Ok(())
     }
 
-    pub async fn get_slot(
+    pub async fn get_slot<SV>(
         &self,
+        allocator: &mut Allocator,
         singleton_launcher_id: Bytes32,
         nonce: u64,
         value_hash: Bytes32,
-    ) -> Result<Option<(Bytes, Bytes, Bytes32, Bytes32)>, CliError> {
+    ) -> Result<Option<Slot<SV>>, CliError>
+    where
+        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+    {
         let row = sqlx::query(
             "
             SELECT value_hash, value, parent_parent_info, parent_inner_puzzle_hash 
@@ -153,13 +164,34 @@ impl Db {
         .await
         .map_err(CliError::Sqlx)?;
 
-        Ok(row.map(|r| {
-            (
-                r.get::<Vec<u8>, _>("value_hash"),
-                r.get::<Vec<u8>, _>("value"),
-                r.get::<Vec<u8>, _>("parent_parent_info"),
-                r.get::<Vec<u8>, _>("parent_inner_puzzle_hash"),
-            )
-        }))
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let launcher_id = column_to_bytes32(row.get::<&[u8], _>("singleton_launcher_id"))?;
+        let nonce = row.get::<i64, _>("nonce") as u64;
+        let parent_parent_info = column_to_bytes32(row.get::<&[u8], _>("parent_parent_info"))?;
+        let parent_inner_puzzle_hash =
+            column_to_bytes32(row.get::<&[u8], _>("parent_inner_puzzle_hash"))?;
+
+        let value = node_from_bytes(allocator, row.get::<&[u8], _>("value"))?;
+        let value = SV::from_clvm(allocator, value)
+            .map_err(|err| CliError::Driver(chia_wallet_sdk::DriverError::FromClvm(err)))?;
+
+        Ok(Some(Slot::new(
+            SlotProof {
+                parent_parent_info,
+                parent_inner_puzzle_hash,
+            },
+            SlotInfo::<SV>::from_value(launcher_id, nonce, value),
+        )))
     }
+}
+
+pub fn column_to_bytes32(column_value: &[u8]) -> Result<Bytes32, CliError> {
+    Ok(Bytes32::new(
+        column_value
+            .try_into()
+            .map_err(|_| CliError::DbColumnParse())?,
+    ))
 }
