@@ -186,6 +186,27 @@ impl Db {
             SlotInfo::<SV>::from_value(launcher_id, nonce, value),
         )))
     }
+
+    pub async fn remove_slot(
+        &self,
+        singleton_launcher_id: Bytes32,
+        nonce: u64,
+        value_hash: Bytes32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND value_hash = ?3
+            ",
+        )
+        .bind(singleton_launcher_id.to_vec())
+        .bind(nonce as i64)
+        .bind(value_hash.to_vec())
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
 }
 
 pub fn column_to_bytes32(column_value: &[u8]) -> Result<Bytes32, CliError> {
