@@ -177,9 +177,16 @@ pub async fn catalog_initiate_launch(
     let db = Db::new().await?;
 
     let launcher_id = db.get_value_by_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
-    if launcher_id.is_some() {
+    if let Some(launcher_id) = launcher_id {
         yes_no_prompt("Previous deployment found in db - do you wish to override?")?;
 
+        let launcher_id = Bytes32::new(
+            hex::decode(launcher_id)
+                .map_err(CliError::ParseHex)?
+                .try_into()
+                .unwrap(),
+        );
+        db.clear_slots_for_singleton(launcher_id).await?;
         db.remove_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
     }
 
@@ -253,10 +260,10 @@ pub async fn catalog_initiate_launch(
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let ctx = &mut SpendContext::new();
+    let mut ctx = SpendContext::new();
 
-    let (sig, _, registry, _slots, security_coin) = launch_catalog_registry(
-        ctx,
+    let (sig, _, registry, slots, security_coin) = launch_catalog_registry(
+        &mut ctx,
         Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
         1,
         get_additional_info_for_launch,
@@ -304,6 +311,11 @@ pub async fn catalog_initiate_launch(
         &hex::encode(registry.info.launcher_id),
     )
     .await?;
+
+    for slot in slots {
+        db.save_slot(&mut ctx.allocator, slot).await?;
+    }
+
     let spend_bundle = SpendBundle::new(ctx.take(), sig);
 
     println!("Submitting transaction...");

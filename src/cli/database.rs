@@ -1,9 +1,9 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes, Bytes32},
+use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
+use clvm_traits::{FromClvm, ToClvm};
+use clvmr::{
+    serde::{node_from_bytes, node_to_bytes},
+    Allocator,
 };
-use clvm_traits::FromClvm;
-use clvmr::{serde::node_from_bytes, Allocator};
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::time::Duration;
 
@@ -103,15 +103,22 @@ impl Db {
         Ok(())
     }
 
-    pub async fn save_slot(
+    pub async fn save_slot<SV>(
         &self,
-        singleton_launcher_id: Bytes32,
-        nonce: u64,
-        value_hash: Bytes32,
-        value: Bytes,
-        parent_parent_info: Bytes32,
-        parent_inner_puzzle_hash: Bytes32,
-    ) -> Result<(), CliError> {
+        allocator: &mut Allocator,
+        slot: Slot<SV>,
+    ) -> Result<(), CliError>
+    where
+        SV: ToClvm<Allocator> + FromClvm<Allocator> + Copy,
+    {
+        let slot_value_ptr = slot
+            .info
+            .value
+            .unwrap()
+            .to_clvm(allocator)
+            .map_err(|err| CliError::Driver(chia_wallet_sdk::DriverError::ToClvm(err)))?;
+        let slot_value_bytes = node_to_bytes(allocator, slot_value_ptr)?;
+
         sqlx::query(
             "
             INSERT INTO slots (
@@ -127,12 +134,12 @@ impl Db {
                 parent_inner_puzzle_hash = excluded.parent_inner_puzzle_hash
             ",
         )
-        .bind(singleton_launcher_id.to_vec())
-        .bind(nonce as i64)
-        .bind(value_hash.to_vec())
-        .bind(value.to_vec())
-        .bind(parent_parent_info.to_vec())
-        .bind(parent_inner_puzzle_hash.to_vec())
+        .bind(slot.info.launcher_id.to_vec())
+        .bind(slot.info.nonce as i64)
+        .bind(slot.info.value_hash.to_vec())
+        .bind(slot_value_bytes)
+        .bind(slot.proof.parent_parent_info.to_vec())
+        .bind(slot.proof.parent_inner_puzzle_hash.to_vec())
         .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
@@ -201,6 +208,23 @@ impl Db {
         .bind(singleton_launcher_id.to_vec())
         .bind(nonce as i64)
         .bind(value_hash.to_vec())
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
+    pub async fn clear_slots_for_singleton(
+        &self,
+        singleton_launcher_id: Bytes32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM slots WHERE singleton_launcher_id = ?1
+            ",
+        )
+        .bind(singleton_launcher_id.to_vec())
         .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
