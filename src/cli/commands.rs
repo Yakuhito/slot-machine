@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use super::{catalog_initiate_launch, multisig_view};
+use super::{catalog_continue_launch, catalog_initiate_launch, multisig_view};
 
 #[derive(Parser)]
 #[command(
@@ -71,9 +71,25 @@ enum CatalogCliAction {
         fee: String,
     },
     /// Continues/finishes an existing launch
-    ContinueLaunch,
+    ContinueLaunch {
+        /// How many CATs to deploy for this spend
+        #[arg(long)]
+        cats_per_spend: usize,
+
+        /// Use testnet11 (default: mainnet)
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use for the launch, in XCH (default: 0.0025 XCH)
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     /// Verifies the built-in deployment is valid
-    VerifyDeployment,
+    VerifyDeployment {
+        /// Use testnet11 (default: mainnet)
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -109,11 +125,13 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => catalog_initiate_launch(pubkeys, m, testnet11, fee).await,
-            CatalogCliAction::ContinueLaunch => {
-                todo!("not yet implemented");
-            }
-            CatalogCliAction::VerifyDeployment => {
-                todo!("not yet implemented");
+            CatalogCliAction::ContinueLaunch {
+                cats_per_spend,
+                testnet11,
+                fee,
+            } => catalog_continue_launch(cats_per_spend, testnet11, fee).await,
+            CatalogCliAction::VerifyDeployment { testnet11 } => {
+                todo!("not yet implemented {}", testnet11);
             }
         },
 
