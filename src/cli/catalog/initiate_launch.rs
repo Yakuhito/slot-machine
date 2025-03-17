@@ -1,10 +1,8 @@
 use crate::{
     cli::{
         csv::load_catalog_premine_csv,
-        prompt_for_value,
         utils::{yes_no_prompt, CliError},
-        Db, CATALOG_LAUNCH_CATS_PER_SPEND_KEY, CATALOG_LAUNCH_GENERATION_KEY,
-        CATALOG_LAUNCH_LAUNCHER_ID_KEY,
+        Db, CATALOG_LAUNCH_LAUNCHER_ID_KEY,
     },
     get_alias_map, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
     wait_for_coin, CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs,
@@ -70,7 +68,7 @@ fn get_additional_info_for_launch(
     )?;
     conditions = conditions.extend(price_singleton_launch_conds);
 
-    let cat_memos = Memos::some(ctx.alloc(&cat_destination_puzzle_hash)?);
+    let cat_memos = Memos::some(ctx.alloc(&vec![cat_destination_puzzle_hash])?);
     let (cat_creation_conds, eve_cat) = Cat::single_issuance_eve(
         ctx,
         security_coin.coin_id(),
@@ -183,27 +181,7 @@ pub async fn catalog_initiate_launch(
         yes_no_prompt("Previous deployment found in db - do you wish to override?")?;
 
         db.remove_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
-        let cats_per_spend = db
-            .get_value_by_key(CATALOG_LAUNCH_CATS_PER_SPEND_KEY)
-            .await?;
-        if cats_per_spend.is_some() {
-            db.remove_key(CATALOG_LAUNCH_CATS_PER_SPEND_KEY).await?;
-        }
-
-        let generation = db.get_value_by_key(CATALOG_LAUNCH_GENERATION_KEY).await?;
-        if generation.is_some() {
-            db.remove_key(CATALOG_LAUNCH_GENERATION_KEY).await?;
-        }
     }
-
-    let cats_per_unroll_str =
-        prompt_for_value("How many CATs should be deployed per unroll spend?")?;
-    let _cats_per_unroll: u64 = cats_per_unroll_str.parse().map_err(CliError::ParseInt)?;
-
-    db.save_key_value(CATALOG_LAUNCH_CATS_PER_SPEND_KEY, &cats_per_unroll_str)
-        .await?;
-    db.save_key_value(CATALOG_LAUNCH_GENERATION_KEY, "0")
-        .await?;
 
     let constants = CatalogRegistryConstants::get(testnet11);
     let prefix = if testnet11 { "txch" } else { "xch" };

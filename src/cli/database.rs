@@ -4,8 +4,6 @@ use std::time::Duration;
 use super::CliError;
 
 pub static CATALOG_LAUNCH_LAUNCHER_ID_KEY: &str = "catalog-launch_launcher-id";
-pub static CATALOG_LAUNCH_CATS_PER_SPEND_KEY: &str = "catalog-launch_cats-per-spend";
-pub static CATALOG_LAUNCH_GENERATION_KEY: &str = "catalog-launch_generation";
 
 pub struct Db {
     pool: Pool<Sqlite>,
