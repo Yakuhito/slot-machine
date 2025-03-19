@@ -10,7 +10,7 @@ use std::path::Path;
 
 use super::utils::CliError;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct CatalogPremineRecord {
     #[serde(deserialize_with = "hex_string_to_bytes32")]
     pub asset_id: Bytes32,
