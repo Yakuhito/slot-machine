@@ -81,6 +81,22 @@ impl CatalogSlotValue {
             },
         }
     }
+
+    pub fn left_end(right_asset_id: Bytes32) -> Self {
+        Self::new(
+            SLOT32_MIN_VALUE.into(),
+            SLOT32_MIN_VALUE.into(),
+            right_asset_id,
+        )
+    }
+
+    pub fn right_end(left_asset_id: Bytes32) -> Self {
+        Self::new(
+            SLOT32_MAX_VALUE.into(),
+            left_asset_id,
+            SLOT32_MAX_VALUE.into(),
+        )
+    }
 }
 
 impl Ord for CatalogSlotValue {

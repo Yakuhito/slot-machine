@@ -20,7 +20,7 @@ use chia_wallet_sdk::{
     CurriedPuzzle, DriverError, Launcher, Layer, Offer, RequiredBlsSignature, Spend, SpendContext,
     StandardLayer,
 };
-use clvm_traits::{clvm_quote, FromClvm, ToClvm};
+use clvm_traits::{clvm_quote, clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -345,17 +345,17 @@ pub fn sign_standard_transaction(
 //   slot 'premine' (leftmost and rightmost slots) and
 //   transition to the actual registry puzzle
 #[allow(clippy::type_complexity)]
-fn spend_eve_coin_and_create_registry<S, H>(
+fn spend_eve_coin_and_create_registry<S, M>(
     ctx: &mut SpendContext,
     launcher: Launcher,
     target_inner_puzzle_hash: Bytes32,
     left_slot_value: S,
     right_slot_value: S,
-    hint: H,
+    memos_after_hint: M,
 ) -> Result<(Conditions, Coin, Proof, [Slot<S>; 2]), DriverError>
 where
     S: Copy + ToTreeHash,
-    H: ToClvm<Allocator>,
+    M: ToClvm<Allocator>,
 {
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
@@ -369,8 +369,8 @@ where
     let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id, 0).into();
     let slot_memos = ctx.hint(slot_hint)?;
     let launcher_id_ptr = ctx.alloc(&launcher_id)?;
-    let hint_ptr = ctx.alloc(&hint)?;
-    let launcher_memos = ctx.memos(&[launcher_id_ptr, hint_ptr])?;
+    let memos_ptr = ctx.alloc(&memos_after_hint)?;
+    let launcher_memos = ctx.memos(&clvm_tuple!(launcher_id_ptr, memos_ptr))?;
     let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
         .create_coin(left_slot_puzzle_hash.into(), 0, Some(slot_memos))
         .create_coin(right_slot_puzzle_hash.into(), 0, Some(slot_memos))
@@ -491,17 +491,12 @@ pub fn launch_catalog_registry<V>(
             ctx,
             registry_launcher,
             catalog_inner_puzzle_hash.into(),
-            CatalogSlotValue::new(
-                SLOT32_MIN_VALUE.into(),
-                SLOT32_MIN_VALUE.into(),
-                SLOT32_MAX_VALUE.into(),
+            CatalogSlotValue::left_end(SLOT32_MAX_VALUE.into()),
+            CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into()),
+            clvm_tuple!(
+                initial_registration_asset_id,
+                clvm_tuple!(initial_state, ())
             ),
-            CatalogSlotValue::new(
-                SLOT32_MAX_VALUE.into(),
-                SLOT32_MIN_VALUE.into(),
-                SLOT32_MAX_VALUE.into(),
-            ),
-            initial_state,
         )?;
 
     let catalog_registry = CatalogRegistry::new(
@@ -593,7 +588,10 @@ pub fn launch_xchandles_registry(
                 registry_launcher_id,
                 registry_launcher_id,
             ),
-            initial_state,
+            clvm_tuple!(
+                initial_registration_asset_id,
+                clvm_tuple!(initial_state, ())
+            ),
         )?;
 
     // this creates the launcher & secures the spend
