@@ -178,7 +178,7 @@ impl CatalogRegistry {
         &self,
         ctx: &mut SpendContext,
         solution: NodePtr,
-    ) -> Result<Option<Vec<Slot<CatalogSlotValue>>>, DriverError> {
+    ) -> Result<Vec<Slot<CatalogSlotValue>>, DriverError> {
         let solution =
             SingletonSolution::<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>::from_clvm(
                 &ctx.allocator,
@@ -202,6 +202,6 @@ impl CatalogRegistry {
             }
         }
 
-        Ok(Some(self.created_slot_values_to_slots(slot_infos)))
+        Ok(self.created_slot_values_to_slots(slot_infos))
     }
 }

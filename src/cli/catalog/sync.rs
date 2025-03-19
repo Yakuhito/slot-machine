@@ -1,12 +1,7 @@
 use chia::protocol::Bytes32;
-use chia_wallet_sdk::{
-    ChiaRpcClient, CoinRecord, CoinsetClient, DriverError, Puzzle, SpendContext,
-};
+use chia_wallet_sdk::{ChiaRpcClient, CoinsetClient, DriverError, Puzzle, SpendContext};
 
-use crate::{
-    CatalogRegistry, CatalogRegistryConstants, CatalogSlotValue, CliError, Db,
-    CATALOG_LAST_UNSPENT_COIN,
-};
+use crate::{CatalogRegistry, CatalogRegistryConstants, CliError, Db, CATALOG_LAST_UNSPENT_COIN};
 
 pub async fn sync_catalog(
     client: &CoinsetClient,
@@ -65,10 +60,22 @@ pub async fn sync_catalog(
         let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
         let parent_puzzle = Puzzle::parse(&ctx.allocator, puzzle_ptr);
         let solution_ptr = ctx.alloc(&coin_spend.solution)?;
-        if let Some(prev_catalog) = catalog {
-            let new_slots = prev_catalog.get_new_slots_from_spend(ctx, solution_ptr);
+        if let Some(ref prev_catalog) = catalog {
+            let new_slots = prev_catalog.get_new_slots_from_spend(ctx, solution_ptr)?;
 
-            todo!("yak");
+            for slot in new_slots {
+                let asset_id = slot.info.value.unwrap().asset_id;
+
+                if let Some(previous_value_hash) =
+                    db.get_catalog_indexed_slot_value(asset_id).await?
+                {
+                    db.remove_slot(launcher_id, 0, previous_value_hash).await?;
+                }
+
+                db.save_slot(&mut ctx.allocator, slot).await?;
+                db.save_catalog_indexed_slot_value(asset_id, slot.info.value_hash)
+                    .await?;
+            }
         }
 
         let Some(some_catalog) = CatalogRegistry::from_parent_spend(
@@ -91,5 +98,6 @@ pub async fn sync_catalog(
         &hex::encode(last_coin_id.to_vec()),
     )
     .await?;
-    todo!("todo")
+
+    Ok(catalog.unwrap())
 }
