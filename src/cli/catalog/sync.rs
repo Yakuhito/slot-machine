@@ -1,8 +1,11 @@
 use chia::{
+    clvm_utils::tree_hash,
     protocol::{Bytes32, Coin},
     puzzles::singleton::LauncherSolution,
 };
-use chia_wallet_sdk::{ChiaRpcClient, CoinsetClient, DriverError, Puzzle, SpendContext};
+use chia_wallet_sdk::{
+    ChiaRpcClient, CoinsetClient, DriverError, Layer, Puzzle, SingletonLayer, SpendContext,
+};
 use clvm_traits::FromClvm;
 use clvmr::NodePtr;
 
@@ -96,6 +99,29 @@ pub async fn sync_catalog(
         } else if coin_record.coin.coin_id() == launcher_id {
             let solution = LauncherSolution::<NodePtr>::from_clvm(&ctx.allocator, solution_ptr)
                 .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+            let catalog_eve_coin = Coin::new(launcher_id, solution.singleton_puzzle_hash, 1);
+            let catalog_eve_coin_id = catalog_eve_coin.coin_id();
+
+            let eve_coin_puzzle_and_solution_resp = client
+                .get_puzzle_and_solution(
+                    catalog_eve_coin_id,
+                    Some(coin_record.confirmed_block_index),
+                )
+                .await?;
+            let Some(eve_coin_spend) = eve_coin_puzzle_and_solution_resp.coin_solution else {
+                break;
+            };
+
+            let eve_coin_puzzle_ptr = ctx.alloc(&eve_coin_spend.puzzle_reveal)?;
+            let eve_coin_puzzle = Puzzle::parse(&ctx.allocator, eve_coin_puzzle_ptr);
+            let Some(eve_coin_puzzle) =
+                SingletonLayer::<NodePtr>::parse_puzzle(&ctx.allocator, eve_coin_puzzle)?
+            else {
+                break;
+            };
+
+            let eve_coin_inner_puzzle_hah = tree_hash(&ctx.allocator, eve_coin_puzzle.inner_puzzle);
+
             last_coin_id = Coin::new(launcher_id, solution.singleton_puzzle_hash, 1).coin_id();
         } else {
             println!("Breaking");
