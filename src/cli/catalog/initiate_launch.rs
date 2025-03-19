@@ -330,7 +330,6 @@ pub async fn catalog_initiate_launch(
 
     println!("Transaction submitted; status='{}'", resp.status);
 
-    println!("Waiting for confirmation...");
     wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
