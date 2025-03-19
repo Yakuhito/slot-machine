@@ -4,7 +4,10 @@ use clvmr::{
     serde::{node_from_bytes, node_to_bytes},
     Allocator,
 };
-use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
+use sqlx::{
+    sqlite::{SqlitePoolOptions, SqliteRow},
+    Pool, Row, Sqlite,
+};
 use std::time::Duration;
 
 use crate::{Slot, SlotInfo, SlotProof};
@@ -12,6 +15,7 @@ use crate::{Slot, SlotInfo, SlotProof};
 use super::CliError;
 
 pub static CATALOG_LAUNCH_LAUNCHER_ID_KEY: &str = "catalog-launch_launcher-id";
+pub static CATALOG_LAST_UNSPENT_COIN: &str = "catalog_last-unspent-coin";
 pub static SLOTS_TABLE: &str = "slots";
 
 pub struct Db {
@@ -126,9 +130,8 @@ impl Db {
                 parent_parent_info, parent_inner_puzzle_hash
             )
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            ON CONFLICT(singleton_launcher_id, nonce) 
+            ON CONFLICT(singleton_launcher_id, nonce, value_hash) 
             DO UPDATE SET 
-                value_hash = excluded.value_hash,
                 value = excluded.value,
                 parent_parent_info = excluded.parent_parent_info,
                 parent_inner_puzzle_hash = excluded.parent_inner_puzzle_hash
@@ -145,6 +148,29 @@ impl Db {
         .map_err(CliError::Sqlx)?;
 
         Ok(())
+    }
+
+    fn row_to_slot<SV>(allocator: &mut Allocator, row: &SqliteRow) -> Result<Slot<SV>, CliError>
+    where
+        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+    {
+        let launcher_id = column_to_bytes32(row.get::<&[u8], _>("singleton_launcher_id"))?;
+        let nonce = row.get::<i64, _>("nonce") as u64;
+        let parent_parent_info = column_to_bytes32(row.get::<&[u8], _>("parent_parent_info"))?;
+        let parent_inner_puzzle_hash =
+            column_to_bytes32(row.get::<&[u8], _>("parent_inner_puzzle_hash"))?;
+
+        let value = node_from_bytes(allocator, row.get::<&[u8], _>("value"))?;
+        let value = SV::from_clvm(allocator, value)
+            .map_err(|err| CliError::Driver(chia_wallet_sdk::DriverError::FromClvm(err)))?;
+
+        Ok(Slot::new(
+            SlotProof {
+                parent_parent_info,
+                parent_inner_puzzle_hash,
+            },
+            SlotInfo::<SV>::from_value(launcher_id, nonce, value),
+        ))
     }
 
     pub async fn get_slot<SV>(
@@ -175,23 +201,30 @@ impl Db {
             return Ok(None);
         };
 
-        let launcher_id = column_to_bytes32(row.get::<&[u8], _>("singleton_launcher_id"))?;
-        let nonce = row.get::<i64, _>("nonce") as u64;
-        let parent_parent_info = column_to_bytes32(row.get::<&[u8], _>("parent_parent_info"))?;
-        let parent_inner_puzzle_hash =
-            column_to_bytes32(row.get::<&[u8], _>("parent_inner_puzzle_hash"))?;
+        Ok(Some(Self::row_to_slot(allocator, &row)?))
+    }
 
-        let value = node_from_bytes(allocator, row.get::<&[u8], _>("value"))?;
-        let value = SV::from_clvm(allocator, value)
-            .map_err(|err| CliError::Driver(chia_wallet_sdk::DriverError::FromClvm(err)))?;
+    pub async fn get_slots<SV>(
+        &self,
+        allocator: &mut Allocator,
+        singleton_launcher_id: Bytes32,
+        nonce: u64,
+    ) -> Result<Vec<Slot<SV>>, CliError>
+    where
+        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+    {
+        let rows =
+            sqlx::query("SELECT * FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2")
+                .bind(singleton_launcher_id.to_vec())
+                .bind(nonce as i64)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(CliError::Sqlx)?;
 
-        Ok(Some(Slot::new(
-            SlotProof {
-                parent_parent_info,
-                parent_inner_puzzle_hash,
-            },
-            SlotInfo::<SV>::from_value(launcher_id, nonce, value),
-        )))
+        Ok(rows
+            .into_iter()
+            .map(|row| Self::row_to_slot(allocator, &row))
+            .collect::<Result<Vec<_>, _>>()?)
     }
 
     pub async fn remove_slot(
