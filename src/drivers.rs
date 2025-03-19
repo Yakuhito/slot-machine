@@ -21,7 +21,7 @@ use chia_wallet_sdk::{
     StandardLayer,
 };
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
-use clvmr::NodePtr;
+use clvmr::{Allocator, NodePtr};
 
 use crate::{
     CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
@@ -345,15 +345,17 @@ pub fn sign_standard_transaction(
 //   slot 'premine' (leftmost and rightmost slots) and
 //   transition to the actual registry puzzle
 #[allow(clippy::type_complexity)]
-fn spend_eve_coin_and_create_registry<S>(
+fn spend_eve_coin_and_create_registry<S, H>(
     ctx: &mut SpendContext,
     launcher: Launcher,
     target_inner_puzzle_hash: Bytes32,
     left_slot_value: S,
     right_slot_value: S,
+    hint: H,
 ) -> Result<(Conditions, Coin, Proof, [Slot<S>; 2]), DriverError>
 where
     S: Copy + ToTreeHash,
+    H: ToClvm<Allocator>,
 {
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
@@ -366,7 +368,9 @@ where
 
     let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id, 0).into();
     let slot_memos = ctx.hint(slot_hint)?;
-    let launcher_memos = ctx.hint(launcher_id)?;
+    let launcher_id_ptr = ctx.alloc(&launcher_id)?;
+    let hint_ptr = ctx.alloc(&hint)?;
+    let launcher_memos = ctx.memos(&[launcher_id_ptr, hint_ptr])?;
     let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
         .create_coin(left_slot_puzzle_hash.into(), 0, Some(slot_memos))
         .create_coin(right_slot_puzzle_hash.into(), 0, Some(slot_memos))
@@ -471,17 +475,15 @@ pub fn launch_catalog_registry<V>(
             additional_args,
         )?;
 
-    let catalog_registry_info = CatalogRegistryInfo::new(
-        registry_launcher_id,
-        CatalogRegistryState {
-            registration_price: initial_registration_price,
-            cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
-                initial_registration_asset_id.tree_hash().into(),
-            )
-            .into(),
-        },
-        catalog_constants,
-    );
+    let initial_state = CatalogRegistryState {
+        registration_price: initial_registration_price,
+        cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
+            initial_registration_asset_id.tree_hash().into(),
+        )
+        .into(),
+    };
+    let catalog_registry_info =
+        CatalogRegistryInfo::new(registry_launcher_id, initial_state, catalog_constants);
     let catalog_inner_puzzle_hash = catalog_registry_info.clone().inner_puzzle_hash();
 
     let (new_security_coin_conditions, new_catalog_registry_coin, catalog_proof, slots) =
@@ -499,6 +501,7 @@ pub fn launch_catalog_registry<V>(
                 SLOT32_MIN_VALUE.into(),
                 SLOT32_MAX_VALUE.into(),
             ),
+            initial_state,
         )?;
 
     let catalog_registry = CatalogRegistry::new(
@@ -562,14 +565,12 @@ pub fn launch_xchandles_registry(
     let registry_launcher_id = registry_launcher_coin.coin_id();
 
     // Spend intermediary coin and create registry
-    let target_xchandles_info = XchandlesRegistryInfo::new(
-        registry_launcher_id,
-        XchandlesRegistryState::from(
-            initial_registration_asset_id.tree_hash().into(),
-            initial_base_registration_price,
-        ),
-        xchandles_constants,
+    let initial_state = XchandlesRegistryState::from(
+        initial_registration_asset_id.tree_hash().into(),
+        initial_base_registration_price,
     );
+    let target_xchandles_info =
+        XchandlesRegistryInfo::new(registry_launcher_id, initial_state, xchandles_constants);
     let target_xchandles_inner_puzzle_hash = target_xchandles_info.clone().inner_puzzle_hash();
     let (new_security_coin_conditions, new_xchandles_coin, xchandles_proof, slots) =
         spend_eve_coin_and_create_registry(
@@ -592,6 +593,7 @@ pub fn launch_xchandles_registry(
                 registry_launcher_id,
                 registry_launcher_id,
             ),
+            initial_state,
         )?;
 
     // this creates the launcher & secures the spend
