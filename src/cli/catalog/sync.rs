@@ -4,7 +4,8 @@ use chia::{
     puzzles::singleton::LauncherSolution,
 };
 use chia_wallet_sdk::{
-    ChiaRpcClient, CoinsetClient, DriverError, Layer, Puzzle, SingletonLayer, SpendContext,
+    ChiaRpcClient, CoinsetClient, Conditions, DriverError, Layer, Puzzle, SingletonLayer,
+    SpendContext,
 };
 use clvm_traits::FromClvm;
 use clvmr::NodePtr;
@@ -122,7 +123,16 @@ pub async fn sync_catalog(
 
             let eve_coin_inner_puzzle_hah = tree_hash(&ctx.allocator, eve_coin_puzzle.inner_puzzle);
 
-            last_coin_id = Coin::new(launcher_id, solution.singleton_puzzle_hash, 1).coin_id();
+            let eve_coin_solution_ptr = ctx.alloc(&eve_coin_spend.solution)?;
+            let eve_coin_output = ctx.run(eve_coin_puzzle_ptr, eve_coin_solution_ptr)?;
+            let eve_coin_output = ctx.extract::<Conditions<NodePtr>>(eve_coin_output)?;
+
+            // todo: find eve coin output
+            // todo: save 2 new slots created
+            // todo: parse eve coin output memos to determine initial state
+            // todo: set catalog to eve catalog
+
+            last_coin_id = todo!("see above");
         } else {
             println!("Breaking");
             break;

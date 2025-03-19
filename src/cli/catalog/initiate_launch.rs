@@ -7,6 +7,7 @@ use crate::{
     get_alias_map, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
     wait_for_coin, CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs,
     MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo,
+    CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 use chia::{
     bls::PublicKey,
@@ -36,7 +37,7 @@ fn get_additional_info_for_launch(
     ),
 ) -> Result<(Conditions<NodePtr>, CatalogRegistryConstants, Bytes32), DriverError> {
     println!(
-        "CATalog registry launcher id (SAVE THIS): {}",
+        "CATalog registry launcher id: {}",
         hex::encode(catalog_launcher_id)
     );
 
@@ -188,6 +189,7 @@ pub async fn catalog_initiate_launch(
         );
         db.clear_slots_for_singleton(launcher_id).await?;
         db.remove_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
+        db.remove_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY).await?;
     }
 
     let constants = CatalogRegistryConstants::get(testnet11);
@@ -309,6 +311,11 @@ pub async fn catalog_initiate_launch(
     db.save_key_value(
         CATALOG_LAUNCH_LAUNCHER_ID_KEY,
         &hex::encode(registry.info.launcher_id),
+    )
+    .await?;
+    db.save_key_value(
+        CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+        &hex::encode(premine_payment_asset_id),
     )
     .await?;
 
