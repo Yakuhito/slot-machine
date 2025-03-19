@@ -48,11 +48,22 @@ impl Db {
                 id INTEGER PRIMARY KEY,
                 singleton_launcher_id BLOB NOT NULL,
                 nonce INTEGER NOT NULL,
-                value_hash BLOB NOT NULL,
-                value BLOB NOT NULL,
+                slot_value_hash BLOB NOT NULL,
+                slot_value BLOB NOT NULL,
                 parent_parent_info BLOB NOT NULL,
                 parent_inner_puzzle_hash BLOB NOT NULL,
-                UNIQUE(singleton_launcher_id, nonce, value_hash)
+                UNIQUE(singleton_launcher_id, nonce, slot_value_hash)
+            )
+            ",
+        )
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "
+            CREATE TABLE IF NOT EXISTS catalog_indexed_slot_values (
+                asset_id BLOB PRIMARY KEY,
+                slot_value_hash BLOB NOT NULL
             )
             ",
         )
@@ -126,13 +137,13 @@ impl Db {
         sqlx::query(
             "
             INSERT INTO slots (
-                singleton_launcher_id, nonce, value_hash, value, 
+                singleton_launcher_id, nonce, slot_value_hash, slot_value, 
                 parent_parent_info, parent_inner_puzzle_hash
             )
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            ON CONFLICT(singleton_launcher_id, nonce, value_hash) 
+            ON CONFLICT(singleton_launcher_id, nonce, slot_value_hash) 
             DO UPDATE SET 
-                value = excluded.value,
+                slot_value = excluded.slot_value,
                 parent_parent_info = excluded.parent_parent_info,
                 parent_inner_puzzle_hash = excluded.parent_inner_puzzle_hash
             ",
@@ -178,21 +189,21 @@ impl Db {
         allocator: &mut Allocator,
         singleton_launcher_id: Bytes32,
         nonce: u64,
-        value_hash: Bytes32,
+        slot_value_hash: Bytes32,
     ) -> Result<Option<Slot<SV>>, CliError>
     where
         SV: FromClvm<Allocator> + Copy + ToTreeHash,
     {
         let row = sqlx::query(
             "
-            SELECT value_hash, value, parent_parent_info, parent_inner_puzzle_hash 
+            SELECT slot_value_hash, slot_value, parent_parent_info, parent_inner_puzzle_hash 
             FROM slots 
-            WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND value_hash = ?3
+            WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3
             ",
         )
         .bind(singleton_launcher_id.to_vec())
         .bind(nonce as i64)
-        .bind(value_hash.to_vec())
+        .bind(slot_value_hash.to_vec())
         .fetch_optional(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
@@ -221,26 +232,25 @@ impl Db {
                 .await
                 .map_err(CliError::Sqlx)?;
 
-        Ok(rows
-            .into_iter()
+        rows.into_iter()
             .map(|row| Self::row_to_slot(allocator, &row))
-            .collect::<Result<Vec<_>, _>>()?)
+            .collect::<Result<Vec<_>, _>>()
     }
 
     pub async fn remove_slot(
         &self,
         singleton_launcher_id: Bytes32,
         nonce: u64,
-        value_hash: Bytes32,
+        slot_value_hash: Bytes32,
     ) -> Result<(), CliError> {
         sqlx::query(
             "
-            DELETE FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND value_hash = ?3
+            DELETE FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3
             ",
         )
         .bind(singleton_launcher_id.to_vec())
         .bind(nonce as i64)
-        .bind(value_hash.to_vec())
+        .bind(slot_value_hash.to_vec())
         .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
@@ -264,8 +274,51 @@ impl Db {
 
         Ok(())
     }
-}
 
+    pub async fn save_catalog_indexed_slot_value(
+        &self,
+        asset_id: Bytes32,
+        slot_value_hash: Bytes32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            INSERT INTO catalog_indexed_slot_values (asset_id, slot_value_hash) 
+            VALUES (?1, ?2)
+            ON CONFLICT(asset_id) DO UPDATE SET slot_value_hash = excluded.slot_value_hash
+            ",
+        )
+        .bind(asset_id.to_vec())
+        .bind(slot_value_hash.to_vec())
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
+    pub async fn get_catalog_indexed_slot_value(
+        &self,
+        asset_id: Bytes32,
+    ) -> Result<Option<Bytes32>, CliError> {
+        let row = sqlx::query(
+            "
+            SELECT slot_value_hash FROM catalog_indexed_slot_values WHERE asset_id = ?1
+            ",
+        )
+        .bind(asset_id.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        Ok(Some(column_to_bytes32(
+            row.get::<&[u8], _>("slot_value_hash"),
+        )?))
+    }
+}
 pub fn column_to_bytes32(column_value: &[u8]) -> Result<Bytes32, CliError> {
     Ok(Bytes32::new(
         column_value
