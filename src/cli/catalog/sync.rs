@@ -1,16 +1,20 @@
 use chia::{
-    clvm_utils::tree_hash,
+    clvm_utils::{tree_hash, ToTreeHash},
     protocol::{Bytes32, Coin},
-    puzzles::singleton::LauncherSolution,
+    puzzles::{singleton::LauncherSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{
-    ChiaRpcClient, CoinsetClient, Conditions, DriverError, Layer, Puzzle, SingletonLayer,
-    SpendContext,
+    ChiaRpcClient, CoinsetClient, Condition, Conditions, DriverError, Layer, Puzzle,
+    SingletonLayer, SpendContext,
 };
 use clvm_traits::FromClvm;
 use clvmr::NodePtr;
 
-use crate::{CatalogRegistry, CatalogRegistryConstants, CliError, Db, CATALOG_LAST_UNSPENT_COIN};
+use crate::{
+    CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
+    CatalogSlotValue, CliError, Db, Slot, SlotInfo, SlotProof, CATALOG_LAST_UNSPENT_COIN,
+    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+};
 
 pub async fn sync_catalog(
     client: &CoinsetClient,
@@ -127,12 +131,82 @@ pub async fn sync_catalog(
             let eve_coin_output = ctx.run(eve_coin_puzzle_ptr, eve_coin_solution_ptr)?;
             let eve_coin_output = ctx.extract::<Conditions<NodePtr>>(eve_coin_output)?;
 
-            // todo: find eve coin output
-            // todo: save 2 new slots created
-            // todo: parse eve coin output memos to determine initial state
-            // todo: set catalog to eve catalog
+            let Some(Condition::CreateCoin(odd_create_coin)) =
+                eve_coin_output.into_iter().find(|c| {
+                    if let Condition::CreateCoin(create_coin) = c {
+                        // singletons with amount != 1 are weird and I don't support them
+                        create_coin.amount % 2 == 1
+                    } else {
+                        false
+                    }
+                })
+            else {
+                break;
+            };
 
-            last_coin_id = todo!("see above");
+            let (decoded_launcher_id, (_decoded_asset_id, (initial_state, ()))) =
+                <(Bytes32, (Bytes32, (CatalogRegistryState, ())))>::from_clvm(
+                    &ctx.allocator,
+                    odd_create_coin.memos.unwrap().value,
+                )
+                .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+            if decoded_launcher_id != launcher_id {
+                break;
+            }
+
+            let new_coin = Coin::new(
+                catalog_eve_coin_id,
+                odd_create_coin.puzzle_hash,
+                odd_create_coin.amount,
+            );
+            let lineage_proof = LineageProof {
+                parent_parent_coin_info: eve_coin_spend.coin.parent_coin_info,
+                parent_inner_puzzle_hash: eve_coin_inner_puzzle_hah.into(),
+                parent_amount: eve_coin_spend.coin.amount,
+            };
+            let new_catalog = CatalogRegistry::new(
+                new_coin,
+                Proof::Lineage(lineage_proof),
+                CatalogRegistryInfo::new(launcher_id, initial_state, constants),
+            );
+
+            let slot_proof = SlotProof {
+                parent_parent_info: lineage_proof.parent_parent_coin_info,
+                parent_inner_puzzle_hash: lineage_proof.parent_inner_puzzle_hash,
+            };
+            let left_slot_value = CatalogSlotValue::left_end(SLOT32_MAX_VALUE.into());
+            let right_slot_value = CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into());
+
+            db.save_slot(
+                &mut ctx.allocator,
+                Slot::new(
+                    slot_proof,
+                    SlotInfo::from_value(launcher_id, 0, left_slot_value),
+                ),
+            )
+            .await?;
+            db.save_catalog_indexed_slot_value(
+                left_slot_value.asset_id,
+                left_slot_value.tree_hash().into(),
+            )
+            .await?;
+
+            db.save_slot(
+                &mut ctx.allocator,
+                Slot::new(
+                    slot_proof,
+                    SlotInfo::from_value(launcher_id, 0, right_slot_value),
+                ),
+            )
+            .await?;
+            db.save_catalog_indexed_slot_value(
+                right_slot_value.asset_id,
+                right_slot_value.tree_hash().into(),
+            )
+            .await?;
+
+            last_coin_id = new_catalog.coin.coin_id();
+            catalog = Some(new_catalog);
         } else {
             println!("Breaking");
             break;
