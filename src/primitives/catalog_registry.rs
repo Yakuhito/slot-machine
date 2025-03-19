@@ -1,4 +1,5 @@
 use chia::{
+    clvm_utils::{tree_hash, ToTreeHash},
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
@@ -6,7 +7,10 @@ use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::FromClvm;
 use clvmr::{Allocator, NodePtr};
 
-use crate::{Action, ActionLayer, ActionLayerSolution, Registry};
+use crate::{
+    Action, ActionLayer, ActionLayerSolution, CatalogRegisterAction, RawActionLayerSolution,
+    Registry,
+};
 
 use super::{
     CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue, Slot,
@@ -168,5 +172,36 @@ impl CatalogRegistry {
                 )
             })
             .collect()
+    }
+
+    pub fn get_new_slots_from_spend(
+        &self,
+        ctx: &mut SpendContext,
+        solution: NodePtr,
+    ) -> Result<Option<Vec<Slot<CatalogSlotValue>>>, DriverError> {
+        let solution =
+            SingletonSolution::<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>::from_clvm(
+                &ctx.allocator,
+                solution,
+            )?;
+
+        let mut slot_infos = vec![];
+
+        let register_action =
+            CatalogRegisterAction::from_constants(self.info.launcher_id, &self.info.constants);
+        let register_hash = register_action.tree_hash();
+
+        for raw_action in solution.inner_solution.actions {
+            let raw_action_hash = tree_hash(&ctx.allocator, raw_action.action_puzzle_reveal);
+
+            if raw_action_hash == register_hash {
+                slot_infos.extend(
+                    register_action
+                        .get_slot_values_from_solution(ctx, raw_action.action_solution)?,
+                );
+            }
+        }
+
+        Ok(Some(self.created_slot_values_to_slots(slot_infos)))
     }
 }
