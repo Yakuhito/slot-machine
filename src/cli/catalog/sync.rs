@@ -1,5 +1,10 @@
-use chia::protocol::Bytes32;
+use chia::{
+    protocol::{Bytes32, Coin},
+    puzzles::singleton::LauncherSolution,
+};
 use chia_wallet_sdk::{ChiaRpcClient, CoinsetClient, DriverError, Puzzle, SpendContext};
+use clvm_traits::FromClvm;
+use clvmr::NodePtr;
 
 use crate::{CatalogRegistry, CatalogRegistryConstants, CliError, Db, CATALOG_LAST_UNSPENT_COIN};
 
@@ -35,6 +40,7 @@ pub async fn sync_catalog(
 
     let mut catalog: Option<CatalogRegistry> = None;
     loop {
+        println!("coin record by name");
         let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
         let Some(coin_record) = coin_record_response.coin_record else {
             break;
@@ -78,19 +84,23 @@ pub async fn sync_catalog(
             }
         }
 
-        let Some(some_catalog) = CatalogRegistry::from_parent_spend(
+        if let Some(some_catalog) = CatalogRegistry::from_parent_spend(
             &mut ctx.allocator,
             coin_record.coin,
             parent_puzzle,
             solution_ptr,
             constants,
-        )?
-        else {
+        )? {
+            last_coin_id = some_catalog.coin.coin_id();
+            catalog = Some(some_catalog);
+        } else if coin_record.coin.coin_id() == launcher_id {
+            let solution = LauncherSolution::<NodePtr>::from_clvm(&ctx.allocator, solution_ptr)
+                .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+            last_coin_id = Coin::new(launcher_id, solution.singleton_puzzle_hash, 1).coin_id();
+        } else {
+            println!("Breaking");
             break;
         };
-
-        last_coin_id = some_catalog.coin.coin_id();
-        catalog = Some(some_catalog);
     }
 
     db.save_key_value(

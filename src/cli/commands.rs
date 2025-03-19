@@ -76,6 +76,10 @@ enum CatalogCliAction {
         #[arg(long)]
         cats_per_spend: usize,
 
+        /// Price singleton launcher id
+        #[arg(long)]
+        price_singleton_launcher_id: String,
+
         /// Use testnet11 (default: mainnet)
         #[arg(long, default_value_t = false)]
         testnet11: bool,
@@ -127,9 +131,13 @@ pub async fn run_cli() {
             } => catalog_initiate_launch(pubkeys, m, testnet11, fee).await,
             CatalogCliAction::ContinueLaunch {
                 cats_per_spend,
+                price_singleton_launcher_id,
                 testnet11,
                 fee,
-            } => catalog_continue_launch(cats_per_spend, testnet11, fee).await,
+            } => {
+                catalog_continue_launch(cats_per_spend, price_singleton_launcher_id, testnet11, fee)
+                    .await
+            }
             CatalogCliAction::VerifyDeployment { testnet11 } => {
                 todo!("not yet implemented {}", testnet11);
             }
