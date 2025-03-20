@@ -1,5 +1,5 @@
 use chia::bls::PublicKey;
-use chia::protocol::Bytes32;
+use chia::protocol::{Bytes, Bytes32};
 use chia_wallet_sdk::decode_address;
 use csv::ReaderBuilder;
 use hex::FromHex;
@@ -14,6 +14,8 @@ use super::utils::CliError;
 pub struct CatalogPremineRecord {
     #[serde(deserialize_with = "hex_string_to_bytes32")]
     pub asset_id: Bytes32,
+    #[serde(deserialize_with = "hex_string_to_bytes")]
+    pub tail: Bytes,
     #[serde(deserialize_with = "decode_bech32m")]
     pub owner: Bytes32,
     pub code: String,
@@ -59,6 +61,15 @@ where
     let s: &str = Deserialize::deserialize(deserializer)?;
     let bytes = <[u8; 32]>::from_hex(s.replace("0x", "")).map_err(serde::de::Error::custom)?;
     Ok(Bytes32::new(bytes))
+}
+
+fn hex_string_to_bytes<'de, D>(deserializer: D) -> Result<Bytes, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: &str = Deserialize::deserialize(deserializer)?;
+    let bytes = Vec::<u8>::from_hex(s.replace("0x", "")).map_err(serde::de::Error::custom)?;
+    Ok(Bytes::new(bytes))
 }
 
 pub fn load_catalog_premine_csv<P: AsRef<Path>>(

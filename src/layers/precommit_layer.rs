@@ -197,13 +197,13 @@ pub struct CatalogPrecommitValue<T = NodePtr> {
 
 impl<T> CatalogPrecommitValue<T> {
     pub fn with_default_cat_maker(
-        tail_hash_hash: TreeHash,
+        payment_asset_tail_hash_hash: TreeHash,
         initial_inner_puzzle_hash: Bytes32,
         tail_reveal: T,
     ) -> Self {
         Self {
             refund_info_hash: clvm_tuple!(
-                DefaultCatMakerArgs::curry_tree_hash(tail_hash_hash.into()),
+                DefaultCatMakerArgs::curry_tree_hash(payment_asset_tail_hash_hash.into()),
                 ()
             )
             .tree_hash()
