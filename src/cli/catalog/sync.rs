@@ -48,10 +48,6 @@ pub async fn sync_catalog(
 
     let mut catalog: Option<CatalogRegistry> = None;
     loop {
-        println!(
-            "coin record by name; id: {}",
-            hex::encode(last_coin_id.to_vec())
-        );
         let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
         let Some(coin_record) = coin_record_response.coin_record else {
             break;
@@ -60,23 +56,20 @@ pub async fn sync_catalog(
             break;
         }
 
-        println!("puzzle and solution");
         let puzzle_and_solution_resp = client
             .get_puzzle_and_solution(
                 coin_record.coin.coin_id(),
-                Some(coin_record.confirmed_block_index),
+                Some(coin_record.spent_block_index),
             )
             .await?;
         let Some(coin_spend) = puzzle_and_solution_resp.coin_solution else {
             break;
         };
-        println!("coin spend");
 
         let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
         let parent_puzzle = Puzzle::parse(&ctx.allocator, puzzle_ptr);
         let solution_ptr = ctx.alloc(&coin_spend.solution)?;
         if let Some(ref prev_catalog) = catalog {
-            println!("prev catalog");
             let new_slots = prev_catalog.get_new_slots_from_spend(ctx, solution_ptr)?;
 
             for slot in new_slots {
@@ -104,7 +97,6 @@ pub async fn sync_catalog(
             last_coin_id = some_catalog.coin.coin_id();
             catalog = Some(some_catalog);
         } else if coin_record.coin.coin_id() == launcher_id {
-            println!("launcher!");
             let solution = LauncherSolution::<NodePtr>::from_clvm(&ctx.allocator, solution_ptr)
                 .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
             let catalog_eve_coin = Coin::new(launcher_id, solution.singleton_puzzle_hash, 1);
@@ -210,17 +202,18 @@ pub async fn sync_catalog(
 
             last_coin_id = new_catalog.coin.coin_id();
             catalog = Some(new_catalog);
+        } else if coin_record.coin.parent_coin_info == launcher_id {
+            last_coin_id = launcher_id;
         } else {
-            println!("Breaking");
             break;
         };
     }
 
-    // db.save_key_value(
-    //     CATALOG_LAST_UNSPENT_COIN,
-    //     &hex::encode(last_coin_id.to_vec()),
-    // )
-    // .await?;
+    db.save_key_value(
+        CATALOG_LAST_UNSPENT_COIN,
+        &hex::encode(last_coin_id.to_vec()),
+    )
+    .await?;
 
     Ok(catalog.unwrap())
 }

@@ -7,7 +7,7 @@ use crate::{
     get_alias_map, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
     wait_for_coin, CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs,
     MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo,
-    CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+    CATALOG_LAST_UNSPENT_COIN, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 use chia::{
     bls::PublicKey,
@@ -190,6 +190,7 @@ pub async fn catalog_initiate_launch(
         db.clear_slots_for_singleton(launcher_id).await?;
         db.remove_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
         db.remove_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY).await?;
+        db.remove_key(CATALOG_LAST_UNSPENT_COIN).await?;
     }
 
     let constants = CatalogRegistryConstants::get(testnet11);
