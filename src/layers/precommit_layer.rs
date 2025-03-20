@@ -4,7 +4,7 @@ use chia::{
     puzzles::singleton::SINGLETON_TOP_LAYER_PUZZLE_HASH,
 };
 use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, SpendContext};
-use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{clvm_quote, clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
@@ -227,7 +227,7 @@ impl<T> CatalogPrecommitValue<T> {
         conds = conds.update_nft_metadata(ctx.any_metadata_updater()?, updater_solution);
         conds = conds.remark(ctx.alloc(&"MEOW".to_string())?);
 
-        ctx.alloc(&conds)
+        ctx.alloc(&clvm_quote!(conds))
     }
 }
 
