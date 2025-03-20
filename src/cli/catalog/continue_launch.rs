@@ -1,10 +1,12 @@
-use chia::protocol::Bytes32;
+use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
 use chia_wallet_sdk::{CoinsetClient, SpendContext};
+use clvmr::serde::node_from_bytes;
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    load_catalog_premine_csv, parse_amount, sync_catalog, yes_no_prompt, CatalogRegistryConstants,
-    CliError, Db, SageClient, CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+    load_catalog_premine_csv, parse_amount, sync_catalog, yes_no_prompt, CatNftMetadata,
+    CatalogPrecommitValue, CatalogRegistryConstants, CliError, Db, SageClient,
+    CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
 pub async fn catalog_continue_launch(
@@ -81,6 +83,55 @@ pub async fn catalog_continue_launch(
         i += 1;
     }
 
+    let payment_asset_id_str = db
+        .get_value_by_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY)
+        .await?
+        .unwrap();
+    let payment_asset_id = Bytes32::new(
+        hex::decode(payment_asset_id_str.clone())
+            .map_err(CliError::ParseHex)?
+            .try_into()
+            .unwrap(),
+    );
+
+    if i == 0 {
+        println!("No CATs registered yet - looking for precommitment coins...");
+        let mut i = 0;
+        while i < cats_to_launch.len() {
+            let cat = &cats_to_launch[i];
+            let tail_ptr = node_from_bytes(&mut ctx.allocator, &cat.tail)?;
+            let tail_hash = ctx.tree_hash(tail_ptr);
+            if tail_hash != cat.asset_id.into() {
+                eprintln!("CAT {} has a tail hash mismatch - aborting", cat.asset_id);
+                return Err(CliError::Custom("TAIL hash mismatch".to_string()));
+            }
+
+            let initial_inner_puzzle_ptr = CatalogPrecommitValue::<()>::initial_inner_puzzle(
+                &mut ctx,
+                cat.owner,
+                CatNftMetadata {
+                    ticker: cat.code.clone(),
+                    name: cat.name.clone(),
+                    description: "".to_string(),
+                    precision: cat.precision,
+                    image_uris: cat.image_uris.clone(),
+                    image_hash: cat.image_hash,
+                    metadata_uris: vec![],
+                    metadata_hash: None,
+                    license_uris: vec![],
+                    license_hash: None,
+                },
+            )?;
+            let precommit_value = CatalogPrecommitValue::with_default_cat_maker(
+                payment_asset_id.tree_hash(),
+                ctx.tree_hash(initial_inner_puzzle_ptr).into(),
+                tail_ptr,
+            );
+
+            i += 1;
+        }
+    }
+
     println!("These cats will be launched (total number={}):", cats.len());
     for cat in &cats {
         println!("  code: {:?}, name: {:?}", cat.code, cat.name);
@@ -105,10 +156,7 @@ pub async fn catalog_continue_launch(
             offered_assets: Assets {
                 xch: Amount::u64(cats.len() as u64),
                 cats: vec![CatAmount {
-                    asset_id: db
-                        .get_value_by_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY)
-                        .await?
-                        .unwrap(),
+                    asset_id: payment_asset_id_str,
                     amount: Amount::u64(cats.len() as u64),
                 }],
                 nfts: vec![],

@@ -825,9 +825,9 @@ mod tests {
                 hex!("c84607c0e4cb4a878cc34ba913c90504ed0aac0f4484c2078529b9e42387da99")
             ),
             metadata_uris: vec!["https://icons-testnet.dexie.space/test.json".to_string()],
-            metadata_hash: Bytes32::from([2; 32]),
+            metadata_hash: Some(Bytes32::from([2; 32])),
             license_uris: vec!["https://icons-testnet.dexie.space/license.pdf".to_string()],
-            license_hash: Bytes32::from([3; 32]),
+            license_hash: Some(Bytes32::from([3; 32])),
         }
     }
 
@@ -2136,9 +2136,9 @@ mod tests {
             image_uris: vec!["img URI".to_string()],
             image_hash: Bytes32::from([31; 32]),
             metadata_uris: vec!["meta URI".to_string()],
-            metadata_hash: Bytes32::from([8; 32]),
+            metadata_hash: Some(Bytes32::from([8; 32])),
             license_uris: vec!["license URI".to_string()],
-            license_hash: Bytes32::from([9; 32]),
+            license_hash: Some(Bytes32::from([9; 32])),
         };
 
         let metadata_update = Spend {

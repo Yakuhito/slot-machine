@@ -84,7 +84,7 @@ enum CatalogCliAction {
         #[arg(long, default_value_t = false)]
         testnet11: bool,
 
-        /// Fee to use for the launch, in XCH (default: 0.0025 XCH)
+        /// Fee to use, in XCH (default: 0.0025 XCH)
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },

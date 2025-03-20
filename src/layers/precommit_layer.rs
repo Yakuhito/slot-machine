@@ -3,12 +3,12 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SINGLETON_TOP_LAYER_PUZZLE_HASH,
 };
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, SpendContext};
+use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, SpendContext};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
-use crate::{DefaultCatMakerArgs, SpendContextExt};
+use crate::{CatNftMetadata, DefaultCatMakerArgs, SpendContextExt};
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -211,6 +211,23 @@ impl<T> CatalogPrecommitValue<T> {
             initial_inner_puzzle_hash,
             tail_reveal,
         }
+    }
+
+    pub fn initial_inner_puzzle(
+        ctx: &mut SpendContext,
+        owner_inner_puzzle_hash: Bytes32,
+        initial_metadata: CatNftMetadata,
+    ) -> Result<NodePtr, DriverError> {
+        let mut conds = Conditions::new().create_coin(
+            owner_inner_puzzle_hash,
+            1,
+            Some(ctx.hint(owner_inner_puzzle_hash)?),
+        );
+        let updater_solution = ctx.alloc(&initial_metadata)?;
+        conds = conds.update_nft_metadata(ctx.any_metadata_updater()?, updater_solution);
+        conds = conds.remark(ctx.alloc(&"MEOW".to_string())?);
+
+        ctx.alloc(&conds)
     }
 }
 
