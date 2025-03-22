@@ -1,11 +1,15 @@
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
-use chia_wallet_sdk::{CoinsetClient, SpendContext};
+use chia::{
+    clvm_utils::ToTreeHash,
+    protocol::Bytes32,
+    puzzles::{cat::CatArgs, singleton::SingletonStruct},
+};
+use chia_wallet_sdk::{ChiaRpcClient, CoinsetClient, SpendContext};
 use clvmr::serde::node_from_bytes;
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
     load_catalog_premine_csv, parse_amount, sync_catalog, yes_no_prompt, CatNftMetadata,
-    CatalogPrecommitValue, CatalogRegistryConstants, CliError, Db, SageClient,
+    CatalogPrecommitValue, CatalogRegistryConstants, CliError, Db, PrecommitLayer, SageClient,
     CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
@@ -125,11 +129,33 @@ pub async fn catalog_continue_launch(
             let precommit_value = CatalogPrecommitValue::with_default_cat_maker(
                 payment_asset_id.tree_hash(),
                 ctx.tree_hash(initial_inner_puzzle_ptr).into(),
-                tail_ptr,
+                tail_hash, // treehash
             );
+
+            let precommit_inner_puzzle = PrecommitLayer::<CatalogPrecommitValue>::puzzle_hash(
+                SingletonStruct::new(launcher_id).tree_hash().into(),
+                constants.relative_block_height,
+                constants.precommit_payout_puzzle_hash,
+                Bytes32::default(),
+                precommit_value.tree_hash(),
+            );
+
+            let precommit_puzzle =
+                CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle);
+
+            let records_resp = client
+                .get_coin_records_by_puzzle_hash(precommit_puzzle.into(), None, None, Some(true))
+                .await?;
+            if let Some(records) = records_resp.coin_records {
+                if !records.is_empty() {
+                    break;
+                }
+            }
 
             i += 1;
         }
+
+        // todo: if there are unlaunched precommitment coins, launch those first and exit
     }
 
     println!("These cats will be launched (total number={}):", cats.len());
@@ -139,12 +165,13 @@ pub async fn catalog_continue_launch(
 
     let fee = parse_amount(fee_str.clone(), false)?;
     println!("A one-sided offer will be created; it will consume:");
-    println!("  - {} special registration CAT mojos", cats.len());
     println!("  - {} mojos for minting CAT NFTs", cats.len());
     println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
     yes_no_prompt("Proceed?")?;
 
     let sage = SageClient::new()?;
+
+    // todo: check if precommitment coins are available and have the appropriate age
 
     let offer_resp = sage
         .make_offer(MakeOffer {
