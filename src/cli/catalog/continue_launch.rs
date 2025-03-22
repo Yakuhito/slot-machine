@@ -511,7 +511,7 @@ pub async fn catalog_continue_launch(
             .unwrap();
 
         let lineage_proof = lineage_proofs
-            .get(&precommit_coin_record.coin.coin_id())
+            .get(&precommit_coin_record.coin.parent_coin_info)
             .unwrap();
 
         let precommit_coin = PrecommitCoin::new(
