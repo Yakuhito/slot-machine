@@ -1,21 +1,24 @@
+use std::collections::{HashMap, HashSet};
+
 use chia::{
     clvm_utils::{ToTreeHash, TreeHash},
     protocol::{Bytes32, SpendBundle},
-    puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof},
+    puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
 };
 use chia_wallet_sdk::{
-    ChiaRpcClient, CoinsetClient, Conditions, Offer, SingleCatSpend, Spend, SpendContext,
-    MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    CatLayer, ChiaRpcClient, CoinsetClient, Conditions, Layer, Offer, Puzzle, SingleCatSpend,
+    Spend, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
 };
 use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
-    sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
-    CatalogPremineRecord, CatalogRegistryConstants, CliError, Db, PrecommitLayer, SageClient,
-    CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+    load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer,
+    print_spend_bundle_to_file, spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt,
+    CatNftMetadata, CatalogPrecommitValue, CatalogPremineRecord, CatalogRegistryConstants,
+    CliError, Db, PrecommitLayer, SageClient, CATALOG_LAUNCH_LAUNCHER_ID_KEY,
+    CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
 fn precommit_value_for_cat(
@@ -356,6 +359,7 @@ pub async fn catalog_continue_launch(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    let expected_records = precommit_puzzle_hashes.len();
     let phes_resp = client
         .get_coin_records_by_puzzle_hashes(precommit_puzzle_hashes, None, None, Some(false))
         .await?;
@@ -363,6 +367,10 @@ pub async fn catalog_continue_launch(
         eprintln!("Failed to get precommitment coin records - aborting...");
         return Ok(());
     };
+    if precommit_coin_records.len() < expected_records {
+        eprintln!("Received too few records - aborting...");
+        return Ok(());
+    }
 
     let max_confirmed_block_index = precommit_coin_records
         .iter()
@@ -397,6 +405,64 @@ pub async fn catalog_continue_launch(
 
     println!("Precommitment coins are now spendable!");
 
+    print!("Fetching parent records for lineage proofs... ");
+
+    let parent_ids = precommit_coin_records
+        .iter()
+        .map(|cr| cr.coin.parent_coin_info)
+        .collect::<HashSet<Bytes32>>();
+
+    let expected_records = parent_ids.len();
+    let parent_records_resp = client
+        .get_coin_records_by_names(parent_ids.into_iter().collect(), None, None, Some(true))
+        .await?;
+    let Some(parent_records) = parent_records_resp.coin_records else {
+        eprintln!("Failed to get parent records - aborting...");
+        return Ok(());
+    };
+    if parent_records.len() < expected_records {
+        eprintln!("Received too few records - aborting...");
+        return Ok(());
+    }
+
+    let mut lineage_proofs: HashMap<Bytes32, LineageProof> = HashMap::new();
+    for record in parent_records {
+        let puzzle_and_solution_resp = client
+            .get_puzzle_and_solution(record.coin.coin_id(), Some(record.spent_block_index))
+            .await?;
+        let Some(coin_spend) = puzzle_and_solution_resp.coin_solution else {
+            eprintln!(
+                "Failed to get puzzle and solution for coin {} - aborting...",
+                hex::encode(record.coin.coin_id())
+            );
+            return Ok(());
+        };
+
+        let puzzle = node_from_bytes(&mut ctx.allocator, &coin_spend.puzzle_reveal)?;
+        let Some(layer) = CatLayer::<NodePtr>::parse_puzzle(
+            &ctx.allocator,
+            Puzzle::parse(&ctx.allocator, puzzle),
+        )?
+        else {
+            eprintln!(
+                "Failed to parse CAT puzzle for coin {} - aborting...",
+                hex::encode(record.coin.coin_id())
+            );
+            return Ok(());
+        };
+        let inner_puzzle_hash = ctx.tree_hash(layer.inner_puzzle);
+        lineage_proofs.insert(
+            record.coin.coin_id(),
+            LineageProof {
+                parent_parent_coin_info: record.coin.parent_coin_info,
+                parent_inner_puzzle_hash: inner_puzzle_hash.into(),
+                parent_amount: record.coin.amount,
+            },
+        );
+    }
+
+    println!("Done!");
+
     println!("A one-sided offer will be created; it will consume:");
     println!("  - {} mojos for minting CAT NFTs", cats.len());
     println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
@@ -422,6 +488,39 @@ pub async fn catalog_continue_launch(
         .await?;
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
+
+    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
+    let security_coin_sk = new_sk()?;
+    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
+    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+
+    let mut security_coin_conditions = offer.security_base_conditions;
+
+    for precommit_value in precommit_values {
+        // todo
+    }
+
+    let security_coin_sig = spend_security_coin(
+        &mut ctx,
+        offer.security_coin,
+        security_coin_conditions,
+        &security_coin_sk,
+        if testnet11 {
+            &TESTNET11_CONSTANTS
+        } else {
+            &MAINNET_CONSTANTS
+        },
+    )?;
+
+    let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+
+    print_spend_bundle_to_file(sb.coin_spends, sb.aggregated_signature, "sb.debug");
+    // println!("Submitting transaction...");
+    // let resp = client.push_tx(sb).await?;
+
+    // println!("Transaction submitted; status='{}'", resp.status);
+    // wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    // println!("Confirmed!"");
 
     Ok(())
 }
