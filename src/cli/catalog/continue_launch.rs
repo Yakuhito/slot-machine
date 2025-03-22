@@ -14,11 +14,11 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer,
-    print_spend_bundle_to_file, spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt,
-    CatNftMetadata, CatalogPrecommitValue, CatalogPremineRecord, CatalogRegisterAction,
-    CatalogRegistryConstants, CatalogSlotValue, CliError, Db, PrecommitCoin, PrecommitLayer,
-    SageClient, CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+    load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
+    sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
+    CatalogPremineRecord, CatalogRegisterAction, CatalogRegistryConstants, CatalogSlotValue,
+    CliError, Db, PrecommitCoin, PrecommitLayer, SageClient, CATALOG_LAUNCH_LAUNCHER_ID_KEY,
+    CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
 fn initial_cat_inner_puzzle_ptr(
@@ -579,13 +579,12 @@ pub async fn catalog_continue_launch(
 
     let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
 
-    print_spend_bundle_to_file(sb.coin_spends, sb.aggregated_signature, "sb.debug");
-    // println!("Submitting transaction...");
-    // let resp = client.push_tx(sb).await?;
+    println!("Submitting transaction...");
+    let resp = client.push_tx(sb).await?;
 
-    // println!("Transaction submitted; status='{}'", resp.status);
-    // wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
-    // println!("Confirmed!"");
+    println!("Transaction submitted; status='{}'", resp.status);
+    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    println!("Confirmed!");
 
     Ok(())
 }
