@@ -196,6 +196,7 @@ pub async fn catalog_continue_launch(
                 precommitment_inner_puzzle_hashes_to_launch.len()
             );
             println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
+            println!("  - 1 mojo for the sake of it");
             yes_no_prompt("Proceed?")?;
 
             let offer_resp = sage
@@ -206,7 +207,7 @@ pub async fn catalog_continue_launch(
                         nfts: vec![],
                     },
                     offered_assets: Assets {
-                        xch: Amount::u64(0),
+                        xch: Amount::u64(1),
                         cats: vec![CatAmount {
                             asset_id: payment_asset_id_str,
                             amount: Amount::u64(
@@ -243,6 +244,7 @@ pub async fn catalog_continue_launch(
                 offer,
                 security_coin_sk.public_key(),
                 Some(cat_destination_puzzle_hash.into()),
+                false,
             )?;
 
             let Some(created_cat) = one_sided_offer.created_cat else {
@@ -256,7 +258,8 @@ pub async fn catalog_continue_launch(
 
             let security_coin_conditions = one_sided_offer
                 .security_base_conditions
-                .assert_concurrent_spend(created_cat.coin.coin_id());
+                .assert_concurrent_spend(created_cat.coin.coin_id())
+                .reserve_fee(1);
 
             // Spend security coin
             let security_coin_sig = spend_security_coin(
