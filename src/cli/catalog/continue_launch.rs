@@ -12,9 +12,9 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer,
-    print_spend_bundle_to_file, spend_security_coin, sync_catalog, yes_no_prompt, CatNftMetadata,
-    CatalogPrecommitValue, CatalogRegistryConstants, CliError, Db, PrecommitLayer, SageClient,
+    load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
+    sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
+    CatalogRegistryConstants, CliError, Db, PrecommitLayer, SageClient,
     CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
@@ -296,9 +296,17 @@ pub async fn catalog_continue_launch(
                 one_sided_offer.aggregated_signature + &security_coin_sig,
             );
 
-            print_spend_bundle_to_file(sb.coin_spends, sb.aggregated_signature, "sb.debug");
+            println!("Submitting transaction...");
+            let resp = client.push_tx(sb).await?;
+
+            println!("Transaction submitted; status='{}'", resp.status);
+
+            wait_for_coin(&client, one_sided_offer.security_coin.coin_id(), true).await?;
+            println!("Confirmed!");
 
             return Ok(());
+        } else {
+            println!("All precommitment coins have already been created :)");
         }
     }
 
