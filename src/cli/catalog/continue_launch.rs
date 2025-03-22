@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::ToTreeHash,
+    clvm_utils::{ToTreeHash, TreeHash},
     protocol::{Bytes32, SpendBundle},
     puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof},
 };
@@ -14,9 +14,45 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 use crate::{
     load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
     sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
-    CatalogRegistryConstants, CliError, Db, PrecommitLayer, SageClient,
+    CatalogPremineRecord, CatalogRegistryConstants, CliError, Db, PrecommitLayer, SageClient,
     CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
+
+fn precommit_value_for_cat(
+    ctx: &mut SpendContext,
+    cat: &CatalogPremineRecord,
+    payment_asset_id: Bytes32,
+) -> Result<CatalogPrecommitValue, CliError> {
+    let tail_ptr = node_from_bytes(&mut ctx.allocator, &cat.tail)?;
+    let tail_hash = ctx.tree_hash(tail_ptr);
+    if tail_hash != cat.asset_id.into() {
+        eprintln!("CAT {} has a tail hash mismatch - aborting", cat.asset_id);
+        return Err(CliError::Custom("TAIL hash mismatch".to_string()));
+    }
+
+    let initial_inner_puzzle_ptr = CatalogPrecommitValue::<()>::initial_inner_puzzle(
+        ctx,
+        cat.owner,
+        CatNftMetadata {
+            ticker: cat.code.clone(),
+            name: cat.name.clone(),
+            description: "".to_string(),
+            precision: cat.precision,
+            image_uris: cat.image_uris.clone(),
+            image_hash: cat.image_hash,
+            metadata_uris: vec![],
+            metadata_hash: None,
+            license_uris: vec![],
+            license_hash: None,
+        },
+    )?;
+
+    Ok(CatalogPrecommitValue::with_default_cat_maker(
+        payment_asset_id.tree_hash(),
+        ctx.tree_hash(initial_inner_puzzle_ptr).into(),
+        tail_ptr,
+    ))
+}
 
 pub async fn catalog_continue_launch(
     cats_per_spend: usize,
@@ -106,41 +142,16 @@ pub async fn catalog_continue_launch(
         let inner_puzzle_hashes = cats_to_launch
             .iter()
             .map(|cat| {
-                let tail_ptr = node_from_bytes(&mut ctx.allocator, &cat.tail)?;
-                let tail_hash = ctx.tree_hash(tail_ptr);
-                if tail_hash != cat.asset_id.into() {
-                    eprintln!("CAT {} has a tail hash mismatch - aborting", cat.asset_id);
-                    return Err(CliError::Custom("TAIL hash mismatch".to_string()));
-                }
+                let precommit_value = precommit_value_for_cat(&mut ctx, cat, payment_asset_id)?;
+                let precommit_value_ptr = ctx.alloc(&precommit_value)?;
+                let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
 
-                let initial_inner_puzzle_ptr = CatalogPrecommitValue::<()>::initial_inner_puzzle(
-                    &mut ctx,
-                    cat.owner,
-                    CatNftMetadata {
-                        ticker: cat.code.clone(),
-                        name: cat.name.clone(),
-                        description: "".to_string(),
-                        precision: cat.precision,
-                        image_uris: cat.image_uris.clone(),
-                        image_hash: cat.image_hash,
-                        metadata_uris: vec![],
-                        metadata_hash: None,
-                        license_uris: vec![],
-                        license_hash: None,
-                    },
-                )?;
-                let precommit_value = CatalogPrecommitValue::with_default_cat_maker(
-                    payment_asset_id.tree_hash(),
-                    ctx.tree_hash(initial_inner_puzzle_ptr).into(),
-                    tail_hash, // treehash
-                );
-
-                Ok(PrecommitLayer::<CatalogPrecommitValue>::puzzle_hash(
+                Ok::<TreeHash, CliError>(PrecommitLayer::<CatalogPrecommitValue>::puzzle_hash(
                     SingletonStruct::new(launcher_id).tree_hash().into(),
                     constants.relative_block_height,
                     constants.precommit_payout_puzzle_hash,
                     Bytes32::default(),
-                    precommit_value.tree_hash(),
+                    precommit_value_hash,
                 ))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -321,12 +332,75 @@ pub async fn catalog_continue_launch(
         println!("  code: {:?}, name: {:?}", cat.code, cat.name);
     }
 
+    // check if precommitment coins are available and have the appropriate age
+    println!("Checking precommitment coins...");
+    let precommit_values = cats
+        .iter()
+        .map(|cat| precommit_value_for_cat(&mut ctx, cat, payment_asset_id))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let precommit_puzzle_hashes = precommit_values
+        .iter()
+        .map(|pv| {
+            let precommit_value_ptr = ctx.alloc(pv)?;
+            let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
+            let inner_ph = PrecommitLayer::<CatalogPrecommitValue>::puzzle_hash(
+                SingletonStruct::new(launcher_id).tree_hash().into(),
+                constants.relative_block_height,
+                constants.precommit_payout_puzzle_hash,
+                Bytes32::default(),
+                precommit_value_hash,
+            );
+
+            Ok::<Bytes32, CliError>(CatArgs::curry_tree_hash(payment_asset_id, inner_ph).into())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let phes_resp = client
+        .get_coin_records_by_puzzle_hashes(precommit_puzzle_hashes, None, None, Some(false))
+        .await?;
+    let Some(precommit_coin_records) = phes_resp.coin_records else {
+        eprintln!("Failed to get precommitment coin records - aborting...");
+        return Ok(());
+    };
+
+    let max_confirmed_block_index = precommit_coin_records
+        .iter()
+        .map(|cr| cr.confirmed_block_index)
+        .max()
+        .unwrap_or(0);
+
+    let target_block_height = max_confirmed_block_index + constants.relative_block_height + 7;
+    println!(
+        "Last precommitment coin created at block #{}; target spendable block height is #{}",
+        max_confirmed_block_index, target_block_height
+    );
+
+    loop {
+        let resp = client.get_blockchain_state().await?;
+        let Some(blockchain_state) = resp.blockchain_state else {
+            eprintln!("Failed to get blockchain state - aborting...");
+            return Ok(());
+        };
+
+        if blockchain_state.peak.height >= target_block_height {
+            break;
+        }
+
+        println!(
+            "Latest block is #{}; waiting for {} more blocks...",
+            blockchain_state.peak.height,
+            target_block_height - blockchain_state.peak.height
+        );
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+    }
+
+    println!("Precommitment coins are now spendable!");
+
     println!("A one-sided offer will be created; it will consume:");
     println!("  - {} mojos for minting CAT NFTs", cats.len());
     println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
     yes_no_prompt("Proceed?")?;
-
-    // todo: check if precommitment coins are available and have the appropriate age
 
     let offer_resp = sage
         .make_offer(MakeOffer {
