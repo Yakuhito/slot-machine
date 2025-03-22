@@ -188,6 +188,7 @@ pub async fn catalog_initiate_launch(
                 .unwrap(),
         );
         db.clear_slots_for_singleton(launcher_id).await?;
+        db.clear_catalog_indexed_slot_values().await?;
         db.remove_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
         db.remove_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY).await?;
         db.remove_key(CATALOG_LAST_UNSPENT_COIN).await?;

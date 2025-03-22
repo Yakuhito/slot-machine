@@ -6,8 +6,8 @@ use chia::{
     puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
 };
 use chia_wallet_sdk::{
-    CatLayer, ChiaRpcClient, CoinsetClient, Conditions, Layer, Offer, Puzzle, SingleCatSpend,
-    Spend, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    CatLayer, ChiaRpcClient, CoinsetClient, Conditions, DriverError, Layer, Offer, Puzzle,
+    SingleCatSpend, Spend, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
 };
 use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
@@ -16,24 +16,16 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 use crate::{
     load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer,
     print_spend_bundle_to_file, spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt,
-    CatNftMetadata, CatalogPrecommitValue, CatalogPremineRecord, CatalogRegistryConstants,
-    CliError, Db, PrecommitLayer, SageClient, CATALOG_LAUNCH_LAUNCHER_ID_KEY,
-    CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+    CatNftMetadata, CatalogPrecommitValue, CatalogPremineRecord, CatalogRegisterAction,
+    CatalogRegistryConstants, CatalogSlotValue, CliError, Db, PrecommitCoin, PrecommitLayer,
+    SageClient, CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
-fn precommit_value_for_cat(
+fn initial_cat_inner_puzzle_ptr(
     ctx: &mut SpendContext,
     cat: &CatalogPremineRecord,
-    payment_asset_id: Bytes32,
-) -> Result<CatalogPrecommitValue, CliError> {
-    let tail_ptr = node_from_bytes(&mut ctx.allocator, &cat.tail)?;
-    let tail_hash = ctx.tree_hash(tail_ptr);
-    if tail_hash != cat.asset_id.into() {
-        eprintln!("CAT {} has a tail hash mismatch - aborting", cat.asset_id);
-        return Err(CliError::Custom("TAIL hash mismatch".to_string()));
-    }
-
-    let initial_inner_puzzle_ptr = CatalogPrecommitValue::<()>::initial_inner_puzzle(
+) -> Result<NodePtr, DriverError> {
+    CatalogPrecommitValue::<()>::initial_inner_puzzle(
         ctx,
         cat.owner,
         CatNftMetadata {
@@ -48,7 +40,22 @@ fn precommit_value_for_cat(
             license_uris: vec![],
             license_hash: None,
         },
-    )?;
+    )
+}
+
+fn precommit_value_for_cat(
+    ctx: &mut SpendContext,
+    cat: &CatalogPremineRecord,
+    payment_asset_id: Bytes32,
+) -> Result<CatalogPrecommitValue, CliError> {
+    let tail_ptr = node_from_bytes(&mut ctx.allocator, &cat.tail)?;
+    let tail_hash = ctx.tree_hash(tail_ptr);
+    if tail_hash != cat.asset_id.into() {
+        eprintln!("CAT {} has a tail hash mismatch - aborting", cat.asset_id);
+        return Err(CliError::Custom("TAIL hash mismatch".to_string()));
+    }
+
+    let initial_inner_puzzle_ptr = initial_cat_inner_puzzle_ptr(ctx, cat)?;
 
     Ok(CatalogPrecommitValue::with_default_cat_maker(
         payment_asset_id.tree_hash(),
@@ -105,7 +112,7 @@ pub async fn catalog_continue_launch(
             .unwrap(),
     ));
 
-    let catalog = sync_catalog(&client, &db, &mut ctx, launcher_id, constants).await?;
+    let mut catalog = sync_catalog(&client, &db, &mut ctx, launcher_id, constants).await?;
     println!("Latest catalog coin id: {}", catalog.coin.coin_id());
 
     println!("Finding last registered CAT from list...");
@@ -361,7 +368,7 @@ pub async fn catalog_continue_launch(
 
     let expected_records = precommit_puzzle_hashes.len();
     let phes_resp = client
-        .get_coin_records_by_puzzle_hashes(precommit_puzzle_hashes, None, None, Some(false))
+        .get_coin_records_by_puzzle_hashes(precommit_puzzle_hashes.clone(), None, None, Some(false))
         .await?;
     let Some(precommit_coin_records) = phes_resp.coin_records else {
         eprintln!("Failed to get precommitment coin records - aborting...");
@@ -496,9 +503,67 @@ pub async fn catalog_continue_launch(
 
     let mut security_coin_conditions = offer.security_base_conditions;
 
-    for precommit_value in precommit_values {
-        // todo
+    for (i, precommit_value) in precommit_values.iter().enumerate() {
+        let precommit_ph = precommit_puzzle_hashes[i];
+        let precommit_coin_record = precommit_coin_records
+            .iter()
+            .find(|cr| cr.coin.puzzle_hash == precommit_ph)
+            .unwrap();
+
+        let lineage_proof = lineage_proofs
+            .get(&precommit_coin_record.coin.coin_id())
+            .unwrap();
+
+        let precommit_coin = PrecommitCoin::new(
+            &mut ctx,
+            precommit_coin_record.coin.parent_coin_info,
+            *lineage_proof,
+            payment_asset_id,
+            SingletonStruct::new(launcher_id).tree_hash().into(),
+            constants.relative_block_height,
+            constants.precommit_payout_puzzle_hash,
+            Bytes32::default(),
+            *precommit_value,
+            1,
+        )?;
+
+        let tail_hash: Bytes32 = ctx.tree_hash(precommit_value.tail_reveal).into();
+
+        let (left_value_hash, right_value_hash) =
+            db.get_catalog_neighbor_value_hashes(tail_hash).await?;
+
+        let left_slot = db
+            .get_slot::<CatalogSlotValue>(&mut ctx.allocator, launcher_id, 0, left_value_hash)
+            .await?
+            .unwrap();
+
+        let right_slot = db
+            .get_slot::<CatalogSlotValue>(&mut ctx.allocator, launcher_id, 0, right_value_hash)
+            .await?
+            .unwrap();
+
+        let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);
+
+        let eve_nft_inner_puzzle = initial_cat_inner_puzzle_ptr(&mut ctx, &cats[i])?;
+
+        let (sec_conds, new_slots) = catalog.new_action::<CatalogRegisterAction>().spend(
+            &mut ctx,
+            &mut catalog,
+            tail_hash,
+            left_slot,
+            right_slot,
+            precommit_coin,
+            Spend {
+                puzzle: eve_nft_inner_puzzle,
+                solution: NodePtr::NIL,
+            },
+        )?;
+
+        security_coin_conditions = security_coin_conditions.extend(sec_conds);
+        catalog.add_pending_slots(new_slots);
     }
+
+    let _new_catalog = catalog.finish_spend(&mut ctx)?;
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,

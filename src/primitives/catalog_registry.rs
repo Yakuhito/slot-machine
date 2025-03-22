@@ -25,6 +25,7 @@ pub struct CatalogRegistry {
     pub info: CatalogRegistryInfo,
 
     pub pending_actions: Vec<Spend>,
+    pub pending_slots: Vec<Slot<CatalogSlotValue>>,
 }
 
 impl CatalogRegistry {
@@ -34,6 +35,7 @@ impl CatalogRegistry {
             proof,
             info,
             pending_actions: vec![],
+            pending_slots: vec![],
         }
     }
 }
@@ -76,6 +78,7 @@ impl CatalogRegistry {
             proof,
             info: new_info,
             pending_actions: vec![],
+            pending_slots: vec![],
         }))
     }
 }
@@ -203,5 +206,46 @@ impl CatalogRegistry {
         }
 
         Ok(self.created_slot_values_to_slots(slot_infos))
+    }
+
+    pub fn add_pending_slots(&mut self, slots: Vec<Slot<CatalogSlotValue>>) {
+        for slot in slots {
+            self.pending_slots
+                .retain(|s| s.info.value.unwrap().asset_id != slot.info.value.unwrap().asset_id);
+            self.pending_slots.push(slot);
+        }
+    }
+
+    pub fn actual_neigbors(
+        &self,
+        new_tail_hash: Bytes32,
+        on_chain_left_slot: Slot<CatalogSlotValue>,
+        on_chain_right_slot: Slot<CatalogSlotValue>,
+    ) -> (Slot<CatalogSlotValue>, Slot<CatalogSlotValue>) {
+        let mut left = on_chain_left_slot;
+        let mut left_value = left.info.value.unwrap();
+        let mut right = on_chain_right_slot;
+        let mut right_value = right.info.value.unwrap();
+
+        let new_slot_value =
+            CatalogSlotValue::new(new_tail_hash, Bytes32::default(), Bytes32::default());
+
+        for slot in self.pending_slots.iter() {
+            let Some(slot_value) = slot.info.value else {
+                continue;
+            };
+
+            if slot_value < new_slot_value && slot_value <= left_value {
+                left = *slot;
+                left_value = slot_value;
+            }
+
+            if slot_value > new_slot_value && slot_value >= right_value {
+                right = *slot;
+                right_value = slot_value;
+            }
+        }
+
+        (left, right)
     }
 }

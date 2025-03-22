@@ -276,6 +276,19 @@ impl Db {
         Ok(())
     }
 
+    pub async fn clear_catalog_indexed_slot_values(&self) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM catalog_indexed_slot_values
+            ",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
     pub async fn save_catalog_indexed_slot_value(
         &self,
         asset_id: Bytes32,
@@ -319,7 +332,92 @@ impl Db {
             row.get::<&[u8], _>("slot_value_hash"),
         )?))
     }
+
+    pub async fn get_catalog_neighbor_value_hashes(
+        &self,
+        asset_id: Bytes32,
+    ) -> Result<(Bytes32, Bytes32), CliError> {
+        // For signed comparison, we need to handle the sign bit specially
+        // First byte > 0x7F means negative number in signed representation
+        let is_negative = asset_id.as_ref()[0] > 0x7F;
+
+        // Get the previous (lower) neighbor
+        let lower_row = if is_negative {
+            // For negative numbers, "lower" means the bytes are actually greater
+            sqlx::query(
+                "
+                SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
+                WHERE asset_id > ?1 AND asset_id >= x'8000000000000000000000000000000000000000000000000000000000000000'
+                ORDER BY asset_id ASC
+                LIMIT 1
+                ",
+            )
+        } else {
+            // For positive numbers, "lower" means the bytes are actually lower
+            sqlx::query(
+                "
+                SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
+                WHERE asset_id < ?1 AND asset_id < x'8000000000000000000000000000000000000000000000000000000000000000'
+                ORDER BY asset_id DESC
+                LIMIT 1
+                ",
+            )
+        }
+        .bind(asset_id.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        // Get the next (higher) neighbor
+        let higher_row = if is_negative {
+            // For negative numbers, "higher" means the bytes are actually lower
+            sqlx::query(
+                "
+                SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
+                WHERE asset_id < ?1 AND asset_id >= x'8000000000000000000000000000000000000000000000000000000000000000'
+                ORDER BY asset_id DESC
+                LIMIT 1
+                ",
+            )
+        } else {
+            // For positive numbers, "higher" means the bytes are actually higher
+            sqlx::query(
+                "
+                SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
+                WHERE asset_id > ?1 AND asset_id < x'8000000000000000000000000000000000000000000000000000000000000000'
+                ORDER BY asset_id ASC
+                LIMIT 1
+                ",
+            )
+        }
+        .bind(asset_id.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        // Handle edge cases where we might not have a lower or higher neighbor
+        let lower_hash = match lower_row {
+            Some(row) => column_to_bytes32(row.get::<&[u8], _>("slot_value_hash"))?,
+            None => {
+                // If no lower neighbor exists, use the minimum possible value
+                Bytes32::new([0x80; 32])
+            }
+        };
+
+        let higher_hash = match higher_row {
+            Some(row) => column_to_bytes32(row.get::<&[u8], _>("slot_value_hash"))?,
+            None => {
+                // If no higher neighbor exists, use the maximum possible value
+                let mut max_bytes = [0xff; 32];
+                max_bytes[0] = 0x7f;
+                Bytes32::new(max_bytes)
+            }
+        };
+
+        Ok((lower_hash, higher_hash))
+    }
 }
+
 pub fn column_to_bytes32(column_value: &[u8]) -> Result<Bytes32, CliError> {
     Ok(Bytes32::new(
         column_value
