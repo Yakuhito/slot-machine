@@ -532,8 +532,6 @@ pub async fn catalog_continue_launch(
         let (left_value_hash, right_value_hash) =
             db.get_catalog_neighbor_value_hashes(tail_hash).await?;
 
-        println!("left_value_hash: {}", hex::encode(left_value_hash));
-        println!("right_value_hash: {}", hex::encode(right_value_hash));
         let left_slot = db
             .get_slot::<CatalogSlotValue>(&mut ctx.allocator, launcher_id, 0, left_value_hash)
             .await?
@@ -543,15 +541,6 @@ pub async fn catalog_continue_launch(
             .get_slot::<CatalogSlotValue>(&mut ctx.allocator, launcher_id, 0, right_value_hash)
             .await?
             .unwrap();
-
-        println!(
-            "left slot asset id: {}",
-            hex::encode(left_slot.info.value.unwrap().asset_id)
-        );
-        println!(
-            "right slot asset id: {}",
-            hex::encode(right_slot.info.value.unwrap().asset_id)
-        );
 
         let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);
 

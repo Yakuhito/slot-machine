@@ -235,12 +235,12 @@ impl CatalogRegistry {
                 continue;
             };
 
-            if slot_value < new_slot_value && slot_value <= left_value {
+            if slot_value < new_slot_value && slot_value >= left_value {
                 left = *slot;
                 left_value = slot_value;
             }
 
-            if slot_value > new_slot_value && slot_value >= right_value {
+            if slot_value > new_slot_value && slot_value <= right_value {
                 right = *slot;
                 right_value = slot_value;
             }
