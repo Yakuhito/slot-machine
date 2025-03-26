@@ -42,7 +42,7 @@ impl CatalogRegistryConstants {
         if testnet11 {
             return CatalogRegistryConstants {
                 launcher_id: Bytes32::from(hex!(
-                    "ab40598717fcb9bd09da90625f11f8915c57b0fe08519cb807d4477fb1c1fd26"
+                    "31eb6c383c7df69b1bbda50c5a6e1dfce5529594f604410dc91097377013fdac"
                 )),
                 royalty_address: Bytes32::from(hex!(
                     "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
@@ -53,7 +53,7 @@ impl CatalogRegistryConstants {
                 )),
                 relative_block_height: 8,
                 price_singleton_launcher_id: Bytes32::from(hex!(
-                    "52c28ea07cd2c014bb7e8d098d0f46a00e6bbfd597a90362e36c75378e68eaea"
+                    "49dc94f54e90422bdd6bd274db73acc6baf47fc796f7f5639eebb21b3b491197"
                 )),
             };
         }
