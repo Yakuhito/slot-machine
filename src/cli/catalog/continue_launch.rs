@@ -94,9 +94,7 @@ pub async fn catalog_continue_launch(
     if constants.price_singleton_launcher_id == Bytes32::default()
         || constants.launcher_id == Bytes32::default()
     {
-        return Err(CliError::Custom(
-            "CATalog launcher id or price singleton launcher id is not set".to_string(),
-        ));
+        return Err(CliError::ConstantsNotSet);
     }
 
     println!("Syncing CATalog...");

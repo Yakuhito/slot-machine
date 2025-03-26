@@ -82,6 +82,9 @@ pub enum CliError {
 
     #[error("coin not spent: {0}")]
     CoinNotSpent(Bytes32),
+
+    #[error("constants not set (launcher id or price singletong launcher id)")]
+    ConstantsNotSet,
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {

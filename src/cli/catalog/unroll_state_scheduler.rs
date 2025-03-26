@@ -18,15 +18,10 @@ pub async fn catalog_unroll_state_scheduler(
 ) -> Result<(), CliError> {
     let constants = CatalogRegistryConstants::get(testnet11);
 
-    if constants.price_singleton_launcher_id == Bytes32::default() {
-        return Err(CliError::Custom(
-            "Price singleton launcher id is not set".to_string(),
-        ));
-    }
-    if constants.launcher_id == Bytes32::default() {
-        return Err(CliError::Custom(
-            "CATalog launcher id is not set".to_string(),
-        ));
+    if constants.price_singleton_launcher_id == Bytes32::default()
+        || constants.launcher_id == Bytes32::default()
+    {
+        return Err(CliError::ConstantsNotSet);
     }
 
     let cli = if testnet11 {

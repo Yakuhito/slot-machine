@@ -37,7 +37,7 @@ fn get_additional_info_for_launch(
     ),
 ) -> Result<(Conditions<NodePtr>, CatalogRegistryConstants, Bytes32), DriverError> {
     println!(
-        "CATalog registry launcher id: {}",
+        "CATalog registry launcher id (SAVE THIS): {}",
         hex::encode(catalog_launcher_id)
     );
 
