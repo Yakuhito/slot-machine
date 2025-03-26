@@ -28,9 +28,9 @@ impl ToTreeHash for DigWithdrawIncentivesAction {
 }
 
 impl Action<DigRewardDistributor> for DigWithdrawIncentivesAction {
-    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
+    fn from_constants(constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             withdrawal_share_bps: constants.withdrawal_share_bps,
         }
     }

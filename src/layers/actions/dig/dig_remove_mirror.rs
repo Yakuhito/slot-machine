@@ -31,9 +31,9 @@ impl ToTreeHash for DigRemoveMirrorAction {
 }
 
 impl Action<DigRewardDistributor> for DigRemoveMirrorAction {
-    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
+    fn from_constants(constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             validator_launcher_id: constants.validator_launcher_id,
             max_seconds_offset: constants.max_seconds_offset,
         }

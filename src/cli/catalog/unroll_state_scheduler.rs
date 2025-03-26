@@ -5,28 +5,27 @@ use chia_wallet_sdk::{
 use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
-    sync_multisig_singleton, wait_for_coin, yes_no_prompt, CatalogRegistryConstants,
-    CatalogRegistryState, CliError, Db, DelegatedStateAction, MultisigSingleton, SageClient,
+    new_sk, parse_amount, parse_one_sided_offer, spend_security_coin, sync_multisig_singleton,
+    wait_for_coin, yes_no_prompt, CatalogRegistryConstants, CatalogRegistryState, CliError, Db,
+    DelegatedStateAction, MultisigSingleton, SageClient,
 };
 
 use super::sync_catalog;
 
 pub async fn catalog_unroll_state_scheduler(
-    price_singleton_launcher_id_str: Option<String>,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
-    let constants = if let Some(price_singleton_launcher_id_str) = price_singleton_launcher_id_str {
-        CatalogRegistryConstants::get(testnet11)
-            .with_price_singleton(hex_string_to_bytes32(&price_singleton_launcher_id_str)?)
-    } else {
-        CatalogRegistryConstants::get(testnet11)
-    };
+    let constants = CatalogRegistryConstants::get(testnet11);
 
     if constants.price_singleton_launcher_id == Bytes32::default() {
         return Err(CliError::Custom(
             "Price singleton launcher id is not set".to_string(),
+        ));
+    }
+    if constants.launcher_id == Bytes32::default() {
+        return Err(CliError::Custom(
+            "CATalog launcher id is not set".to_string(),
         ));
     }
 
@@ -36,7 +35,6 @@ pub async fn catalog_unroll_state_scheduler(
         CoinsetClient::mainnet()
     };
     let mut ctx = SpendContext::new();
-    let db = Db::new().await?;
 
     let (MultisigSingleton::StateScheduler(state_scheduler), _) =
         sync_multisig_singleton::<CatalogRegistryState>(
@@ -52,14 +50,9 @@ pub async fn catalog_unroll_state_scheduler(
         ));
     };
 
-    let mut catalog = sync_catalog(
-        &cli,
-        &db,
-        &mut ctx,
-        constants.price_singleton_launcher_id,
-        constants,
-    )
-    .await?;
+    let db = Db::new().await?;
+
+    let mut catalog = sync_catalog(&cli, &db, &mut ctx, constants).await?;
 
     let sage = SageClient::new()?;
     let fee = parse_amount(fee_str.clone(), false)?;

@@ -44,9 +44,9 @@ impl ToTreeHash for CatalogRegisterAction {
 }
 
 impl Action<CatalogRegistry> for CatalogRegisterAction {
-    fn from_constants(launcher_id: Bytes32, constants: &CatalogRegistryConstants) -> Self {
+    fn from_constants(constants: &CatalogRegistryConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             royalty_puzzle_hash_hash: constants.royalty_address.tree_hash().into(),
             trade_price_percentage: constants.royalty_ten_thousandths,
             relative_block_height: constants.relative_block_height,

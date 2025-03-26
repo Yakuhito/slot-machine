@@ -32,9 +32,9 @@ impl ToTreeHash for DigNewEpochAction {
 }
 
 impl Action<DigRewardDistributor> for DigNewEpochAction {
-    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
+    fn from_constants(constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             validator_payout_puzzle_hash: constants.validator_payout_puzzle_hash,
             validator_fee_bps: constants.validator_fee_bps,
             epoch_seconds: constants.epoch_seconds,

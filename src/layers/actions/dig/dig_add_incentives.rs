@@ -25,7 +25,7 @@ impl ToTreeHash for DigAddIncentivesAction {
 }
 
 impl Action<DigRewardDistributor> for DigAddIncentivesAction {
-    fn from_constants(_launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
+    fn from_constants(constants: &DigRewardDistributorConstants) -> Self {
         Self {
             validator_payout_puzzle_hash: constants.validator_payout_puzzle_hash,
             validator_fee_bps: constants.validator_fee_bps,

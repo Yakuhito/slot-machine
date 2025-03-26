@@ -526,8 +526,10 @@ pub fn launch_catalog_registry<V>(
         )
         .into(),
     };
-    let catalog_registry_info =
-        CatalogRegistryInfo::new(registry_launcher_id, initial_state, catalog_constants);
+    let catalog_registry_info = CatalogRegistryInfo::new(
+        initial_state,
+        catalog_constants.with_launcher_id(registry_launcher_id),
+    );
     let catalog_inner_puzzle_hash = catalog_registry_info.clone().inner_puzzle_hash();
 
     let (new_security_coin_conditions, new_catalog_registry_coin, catalog_proof, slots) =
@@ -608,8 +610,10 @@ pub fn launch_xchandles_registry(
         initial_registration_asset_id.tree_hash().into(),
         initial_base_registration_price,
     );
-    let target_xchandles_info =
-        XchandlesRegistryInfo::new(registry_launcher_id, initial_state, xchandles_constants);
+    let target_xchandles_info = XchandlesRegistryInfo::new(
+        initial_state,
+        xchandles_constants.with_launcher_id(registry_launcher_id),
+    );
     let target_xchandles_inner_puzzle_hash = target_xchandles_info.clone().inner_puzzle_hash();
     let (new_security_coin_conditions, new_xchandles_coin, xchandles_proof, slots) =
         spend_eve_coin_and_create_registry(
@@ -710,7 +714,6 @@ pub fn launch_dig_reward_distributor(
 
     // Spend intermediary coin and create registry
     let target_info = DigRewardDistributorInfo::new(
-        launcher_id,
         DigRewardDistributorState {
             total_reserves: 0,
             active_shares: 0,
@@ -1025,7 +1028,7 @@ mod tests {
             payment_cat.coin.coin_id(),
             payment_cat.child_lineage_proof(),
             payment_cat.asset_id,
-            SingletonStruct::new(catalog.info.launcher_id)
+            SingletonStruct::new(catalog.info.constants.launcher_id)
                 .tree_hash()
                 .into(),
             catalog_constants.relative_block_height,
@@ -1097,6 +1100,7 @@ mod tests {
         let test_price_schedule = [1000, 500, 250];
 
         let catalog_constants = CatalogRegistryConstants {
+            launcher_id: Bytes32::from([1; 32]),
             royalty_address: Bytes32::from([7; 32]),
             royalty_ten_thousandths: 100,
             precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
@@ -1223,7 +1227,7 @@ mod tests {
                 payment_cat.coin.coin_id(),
                 payment_cat.child_lineage_proof(),
                 payment_cat.asset_id,
-                SingletonStruct::new(catalog.info.launcher_id)
+                SingletonStruct::new(catalog.info.constants.launcher_id)
                     .tree_hash()
                     .into(),
                 catalog_constants.relative_block_height,
@@ -1464,7 +1468,7 @@ mod tests {
             payment_cat.coin.coin_id(),
             payment_cat.child_lineage_proof(),
             payment_cat.asset_id,
-            SingletonStruct::new(registry.info.launcher_id)
+            SingletonStruct::new(registry.info.constants.launcher_id)
                 .tree_hash()
                 .into(),
             registry.info.constants.relative_block_height,
@@ -1528,6 +1532,7 @@ mod tests {
         let test_price_schedule = [1000, 500, 250];
 
         let xchandles_constants = XchandlesConstants {
+            launcher_id: Bytes32::from([1; 32]),
             precommit_payout_puzzle_hash: Bytes32::from([8; 32]),
             relative_block_height: 1,
             price_singleton_launcher_id: Bytes32::from(hex!(
@@ -1660,7 +1665,7 @@ mod tests {
                 payment_cat.coin.coin_id(),
                 payment_cat.child_lineage_proof(),
                 payment_cat.asset_id,
-                SingletonStruct::new(registry.info.launcher_id)
+                SingletonStruct::new(registry.info.constants.launcher_id)
                     .tree_hash()
                     .into(),
                 xchandles_constants.relative_block_height,
@@ -1929,7 +1934,7 @@ mod tests {
             payment_cat.coin.coin_id(),
             payment_cat.child_lineage_proof(),
             payment_cat.asset_id,
-            SingletonStruct::new(registry.info.launcher_id)
+            SingletonStruct::new(registry.info.constants.launcher_id)
                 .tree_hash()
                 .into(),
             xchandles_constants.relative_block_height,
@@ -2279,6 +2284,7 @@ mod tests {
 
         // setup config
         let constants = DigRewardDistributorConstants {
+            launcher_id: Bytes32::from([1; 32]),
             validator_launcher_id,
             validator_payout_puzzle_hash: Bytes32::new([1; 32]),
             epoch_seconds: 1000,

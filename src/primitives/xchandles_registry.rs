@@ -102,10 +102,7 @@ impl XchandlesRegistry {
                     proofs: layers
                         .inner_puzzle
                         .get_proofs(
-                            &XchandlesRegistryInfo::action_puzzle_hashes(
-                                self.info.launcher_id,
-                                &self.info.constants,
-                            ),
+                            &XchandlesRegistryInfo::action_puzzle_hashes(&self.info.constants),
                             &action_puzzle_hashes,
                         )
                         .ok_or(DriverError::Custom(
@@ -147,7 +144,7 @@ impl XchandlesRegistry {
     where
         A: Action<Self>,
     {
-        A::from_constants(self.info.launcher_id, &self.info.constants)
+        A::from_constants(&self.info.constants)
     }
 
     pub fn created_slot_values_to_slots(
@@ -164,7 +161,7 @@ impl XchandlesRegistry {
             .map(|slot_value| {
                 Slot::new(
                     proof,
-                    SlotInfo::from_value(self.info.launcher_id, 0, slot_value),
+                    SlotInfo::from_value(self.info.constants.launcher_id, 0, slot_value),
                 )
             })
             .collect()

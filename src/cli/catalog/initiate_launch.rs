@@ -2,7 +2,7 @@ use crate::{
     cli::{
         csv::load_catalog_premine_csv,
         utils::{yes_no_prompt, CliError},
-        Db, CATALOG_LAUNCH_LAUNCHER_ID_KEY,
+        Db,
     },
     hex_string_to_bytes32, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
     print_medieval_vault_configuration, wait_for_coin, CatalogRegistryConstants,
@@ -167,14 +167,15 @@ pub async fn catalog_initiate_launch(
     println!("Opening database...");
     let db = Db::new().await?;
 
-    let launcher_id = db.get_value_by_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
+    let launcher_id = db
+        .get_value_by_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY)
+        .await?;
     if let Some(launcher_id) = launcher_id {
         yes_no_prompt("Previous deployment found in db - do you wish to override?")?;
 
         let launcher_id = Bytes32::new(hex_string_to_bytes32(&launcher_id)?.into());
         db.clear_slots_for_singleton(launcher_id).await?;
         db.clear_catalog_indexed_slot_values().await?;
-        db.remove_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
         db.remove_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY).await?;
         db.remove_key(CATALOG_LAST_UNSPENT_COIN).await?;
     }
@@ -251,7 +252,7 @@ pub async fn catalog_initiate_launch(
 
     let mut ctx = SpendContext::new();
 
-    let (sig, _, registry, slots, security_coin) = launch_catalog_registry(
+    let (sig, _, _registry, slots, security_coin) = launch_catalog_registry(
         &mut ctx,
         Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
         1,
@@ -295,11 +296,6 @@ pub async fn catalog_initiate_launch(
 
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
-    db.save_key_value(
-        CATALOG_LAUNCH_LAUNCHER_ID_KEY,
-        &hex::encode(registry.info.launcher_id),
-    )
-    .await?;
     db.save_key_value(
         CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
         &hex::encode(premine_payment_asset_id),

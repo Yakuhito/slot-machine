@@ -78,10 +78,6 @@ enum CatalogCliAction {
         #[arg(long)]
         cats_per_spend: usize,
 
-        /// Price singleton launcher id
-        #[arg(long)]
-        price_singleton_launcher_id: String,
-
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
@@ -92,10 +88,6 @@ enum CatalogCliAction {
     },
     /// Unrolls the state scheduler
     UnrollStateScheduler {
-        /// Price singleton launcher id (optional, defaults to the built-in constants)
-        #[arg(long, required = false)]
-        price_singleton_launcher_id: Option<String>,
-
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
@@ -147,18 +139,12 @@ pub async fn run_cli() {
             } => catalog_initiate_launch(pubkeys, m, testnet11, fee).await,
             CatalogCliAction::ContinueLaunch {
                 cats_per_spend,
-                price_singleton_launcher_id,
                 testnet11,
                 fee,
-            } => {
-                catalog_continue_launch(cats_per_spend, price_singleton_launcher_id, testnet11, fee)
-                    .await
+            } => catalog_continue_launch(cats_per_spend, testnet11, fee).await,
+            CatalogCliAction::UnrollStateScheduler { testnet11, fee } => {
+                catalog_unroll_state_scheduler(testnet11, fee).await
             }
-            CatalogCliAction::UnrollStateScheduler {
-                price_singleton_launcher_id,
-                testnet11,
-                fee,
-            } => catalog_unroll_state_scheduler(price_singleton_launcher_id, testnet11, fee).await,
             CatalogCliAction::VerifyDeployment { testnet11 } => {
                 todo!("not yet implemented {}", testnet11);
             }

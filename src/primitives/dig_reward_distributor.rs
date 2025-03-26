@@ -95,7 +95,7 @@ impl DigRewardDistributor {
                 parent_amount: parent_reserve.amount,
             },
             constants.reserve_asset_id,
-            SingletonStruct::new(parent_info.launcher_id)
+            SingletonStruct::new(parent_info.constants.launcher_id)
                 .tree_hash()
                 .into(),
             0,
@@ -147,10 +147,7 @@ impl DigRewardDistributor {
                     proofs: layers
                         .inner_puzzle
                         .get_proofs(
-                            &DigRewardDistributorInfo::action_puzzle_hashes(
-                                self.info.launcher_id,
-                                &self.info.constants,
-                            ),
+                            &DigRewardDistributorInfo::action_puzzle_hashes(&self.info.constants),
                             &action_puzzle_hashes,
                         )
                         .ok_or(DriverError::Custom(
@@ -201,7 +198,7 @@ impl DigRewardDistributor {
     where
         A: Action<Self>,
     {
-        A::from_constants(self.info.launcher_id, &self.info.constants)
+        A::from_constants(&self.info.constants)
     }
 
     pub fn created_slot_values_to_slots<SlotValue>(
@@ -222,7 +219,11 @@ impl DigRewardDistributor {
             .map(|slot_value| {
                 Slot::new(
                     proof,
-                    SlotInfo::from_value(self.info.launcher_id, nonce.to_u64(), slot_value),
+                    SlotInfo::from_value(
+                        self.info.constants.launcher_id,
+                        nonce.to_u64(),
+                        slot_value,
+                    ),
                 )
             })
             .collect()

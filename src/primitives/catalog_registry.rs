@@ -109,10 +109,7 @@ impl CatalogRegistry {
                     proofs: layers
                         .inner_puzzle
                         .get_proofs(
-                            &CatalogRegistryInfo::action_puzzle_hashes(
-                                self.info.launcher_id,
-                                &self.info.constants,
-                            ),
+                            &CatalogRegistryInfo::action_puzzle_hashes(&self.info.constants),
                             &action_puzzle_hashes,
                         )
                         .ok_or(DriverError::Custom(
@@ -154,7 +151,7 @@ impl CatalogRegistry {
     where
         A: Action<Self>,
     {
-        A::from_constants(self.info.launcher_id, &self.info.constants)
+        A::from_constants(&self.info.constants)
     }
 
     pub fn created_slot_values_to_slots(
@@ -171,7 +168,7 @@ impl CatalogRegistry {
             .map(|slot_value| {
                 Slot::new(
                     proof,
-                    SlotInfo::from_value(self.info.launcher_id, 0, slot_value),
+                    SlotInfo::from_value(self.info.constants.launcher_id, 0, slot_value),
                 )
             })
             .collect()
@@ -190,8 +187,7 @@ impl CatalogRegistry {
 
         let mut slot_infos = vec![];
 
-        let register_action =
-            CatalogRegisterAction::from_constants(self.info.launcher_id, &self.info.constants);
+        let register_action = CatalogRegisterAction::from_constants(&self.info.constants);
         let register_hash = register_action.tree_hash();
 
         for raw_action in solution.inner_solution.actions {

@@ -18,7 +18,7 @@ use crate::{
     spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata,
     CatalogPrecommitValue, CatalogPremineRecord, CatalogRegisterAction, CatalogRegistryConstants,
     CatalogSlotValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
-    CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+    CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
 fn initial_cat_inner_puzzle_ptr(
@@ -66,7 +66,6 @@ fn precommit_value_for_cat(
 
 pub async fn catalog_continue_launch(
     cats_per_spend: usize,
-    price_singleton_launcher_id_str: String,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -91,20 +90,19 @@ pub async fn catalog_continue_launch(
     println!("Opening database...");
     let db = Db::new().await?;
 
-    let Some(launcher_id) = db.get_value_by_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await? else {
-        eprintln!("No launcher ID found in database - please run 'catalog initiate-launch' first");
-        return Ok(());
-    };
-    let launcher_id = Bytes32::new(hex_string_to_bytes32(&launcher_id)?.into());
+    let constants = CatalogRegistryConstants::get(testnet11);
+    if constants.price_singleton_launcher_id == Bytes32::default()
+        || constants.launcher_id == Bytes32::default()
+    {
+        return Err(CliError::Custom(
+            "CATalog launcher id or price singleton launcher id is not set".to_string(),
+        ));
+    }
 
     println!("Syncing CATalog...");
     let mut ctx = SpendContext::new();
 
-    let constants = CatalogRegistryConstants::get(testnet11).with_price_singleton(Bytes32::new(
-        hex_string_to_bytes32(&price_singleton_launcher_id_str)?.into(),
-    ));
-
-    let mut catalog = sync_catalog(&client, &db, &mut ctx, launcher_id, constants).await?;
+    let mut catalog = sync_catalog(&client, &db, &mut ctx, constants).await?;
     println!("Latest catalog coin id: {}", catalog.coin.coin_id());
 
     println!("Finding last registered CAT from list...");
@@ -144,7 +142,9 @@ pub async fn catalog_continue_launch(
                 let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
 
                 Ok::<TreeHash, CliError>(PrecommitLayer::<CatalogPrecommitValue>::puzzle_hash(
-                    SingletonStruct::new(launcher_id).tree_hash().into(),
+                    SingletonStruct::new(constants.launcher_id)
+                        .tree_hash()
+                        .into(),
                     constants.relative_block_height,
                     constants.precommit_payout_puzzle_hash,
                     Bytes32::default(),
@@ -342,7 +342,9 @@ pub async fn catalog_continue_launch(
             let precommit_value_ptr = ctx.alloc(pv)?;
             let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
             let inner_ph = PrecommitLayer::<CatalogPrecommitValue>::puzzle_hash(
-                SingletonStruct::new(launcher_id).tree_hash().into(),
+                SingletonStruct::new(constants.launcher_id)
+                    .tree_hash()
+                    .into(),
                 constants.relative_block_height,
                 constants.precommit_payout_puzzle_hash,
                 Bytes32::default(),
@@ -506,7 +508,9 @@ pub async fn catalog_continue_launch(
             precommit_coin_record.coin.parent_coin_info,
             *lineage_proof,
             payment_asset_id,
-            SingletonStruct::new(launcher_id).tree_hash().into(),
+            SingletonStruct::new(constants.launcher_id)
+                .tree_hash()
+                .into(),
             constants.relative_block_height,
             constants.precommit_payout_puzzle_hash,
             Bytes32::default(),
@@ -520,12 +524,22 @@ pub async fn catalog_continue_launch(
             db.get_catalog_neighbor_value_hashes(tail_hash).await?;
 
         let left_slot = db
-            .get_slot::<CatalogSlotValue>(&mut ctx.allocator, launcher_id, 0, left_value_hash)
+            .get_slot::<CatalogSlotValue>(
+                &mut ctx.allocator,
+                constants.launcher_id,
+                0,
+                left_value_hash,
+            )
             .await?
             .unwrap();
 
         let right_slot = db
-            .get_slot::<CatalogSlotValue>(&mut ctx.allocator, launcher_id, 0, right_value_hash)
+            .get_slot::<CatalogSlotValue>(
+                &mut ctx.allocator,
+                constants.launcher_id,
+                0,
+                right_value_hash,
+            )
             .await?
             .unwrap();
 

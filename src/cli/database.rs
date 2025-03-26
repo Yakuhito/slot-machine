@@ -14,7 +14,6 @@ use crate::{Slot, SlotInfo, SlotProof};
 
 use super::CliError;
 
-pub static CATALOG_LAUNCH_LAUNCHER_ID_KEY: &str = "catalog-launch_launcher-id";
 pub static CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY: &str = "catalog-launch_payment-asset-id";
 pub static CATALOG_LAST_UNSPENT_COIN: &str = "catalog_last-unspent-coin";
 pub static SLOTS_TABLE: &str = "slots";

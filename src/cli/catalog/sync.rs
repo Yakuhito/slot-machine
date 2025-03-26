@@ -11,28 +11,22 @@ use clvm_traits::FromClvm;
 use clvmr::NodePtr;
 
 use crate::{
-    CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
-    CatalogSlotValue, CliError, Db, Slot, SlotInfo, SlotProof, CATALOG_LAST_UNSPENT_COIN,
-    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+    hex_string_to_bytes32, CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo,
+    CatalogRegistryState, CatalogSlotValue, CliError, Db, Slot, SlotInfo, SlotProof,
+    CATALOG_LAST_UNSPENT_COIN, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
 };
 
 pub async fn sync_catalog(
     client: &CoinsetClient,
     db: &Db,
     ctx: &mut SpendContext,
-    launcher_id: Bytes32,
     constants: CatalogRegistryConstants,
 ) -> Result<CatalogRegistry, CliError> {
     let last_unspent_coin_id_str = db.get_value_by_key(CATALOG_LAST_UNSPENT_COIN).await?;
 
     let mut last_coin_id: Bytes32 = if let Some(last_unspent_coin_id_str) = last_unspent_coin_id_str
     {
-        let last_unspent_coin_id = Bytes32::new(
-            hex::decode(last_unspent_coin_id_str)?
-                .to_vec()
-                .try_into()
-                .unwrap(),
-        );
+        let last_unspent_coin_id = hex_string_to_bytes32(&last_unspent_coin_id_str)?;
 
         let coin_record_response = client.get_coin_record_by_name(last_unspent_coin_id).await?;
         if let Some(coin_record) = coin_record_response.coin_record {
@@ -43,14 +37,14 @@ pub async fn sync_catalog(
             )));
         }
     } else {
-        launcher_id
+        constants.launcher_id
     };
 
     let mut catalog: Option<CatalogRegistry> = None;
     loop {
         let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
         let Some(coin_record) = coin_record_response.coin_record else {
-            break;
+            return Err(CliError::CoinNotFound(last_coin_id));
         };
         if !coin_record.spent {
             break;
@@ -63,7 +57,7 @@ pub async fn sync_catalog(
             )
             .await?;
         let Some(coin_spend) = puzzle_and_solution_resp.coin_solution else {
-            break;
+            return Err(CliError::CoinNotSpent(last_coin_id));
         };
 
         let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
@@ -78,7 +72,8 @@ pub async fn sync_catalog(
                 if let Some(previous_value_hash) =
                     db.get_catalog_indexed_slot_value(asset_id).await?
                 {
-                    db.remove_slot(launcher_id, 0, previous_value_hash).await?;
+                    db.remove_slot(constants.launcher_id, 0, previous_value_hash)
+                        .await?;
                 }
 
                 db.save_slot(&mut ctx.allocator, slot).await?;
@@ -94,12 +89,14 @@ pub async fn sync_catalog(
             solution_ptr,
             constants,
         )? {
+            println!("Have a catalog!");
             last_coin_id = some_catalog.coin.coin_id();
             catalog = Some(some_catalog);
-        } else if coin_record.coin.coin_id() == launcher_id {
+        } else if coin_record.coin.coin_id() == constants.launcher_id {
             let solution = LauncherSolution::<NodePtr>::from_clvm(&ctx.allocator, solution_ptr)
                 .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
-            let catalog_eve_coin = Coin::new(launcher_id, solution.singleton_puzzle_hash, 1);
+            let catalog_eve_coin =
+                Coin::new(constants.launcher_id, solution.singleton_puzzle_hash, 1);
             let catalog_eve_coin_id = catalog_eve_coin.coin_id();
 
             let eve_coin_puzzle_and_solution_resp = client
@@ -145,7 +142,7 @@ pub async fn sync_catalog(
                     odd_create_coin.memos.unwrap().value,
                 )
                 .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
-            if decoded_launcher_id != launcher_id {
+            if decoded_launcher_id != constants.launcher_id {
                 break;
             }
 
@@ -162,7 +159,7 @@ pub async fn sync_catalog(
             let new_catalog = CatalogRegistry::new(
                 new_coin,
                 Proof::Lineage(lineage_proof),
-                CatalogRegistryInfo::new(launcher_id, initial_state, constants),
+                CatalogRegistryInfo::new(initial_state, constants),
             );
 
             let slot_proof = SlotProof {
@@ -176,7 +173,7 @@ pub async fn sync_catalog(
                 &mut ctx.allocator,
                 Slot::new(
                     slot_proof,
-                    SlotInfo::from_value(launcher_id, 0, left_slot_value),
+                    SlotInfo::from_value(constants.launcher_id, 0, left_slot_value),
                 ),
             )
             .await?;
@@ -190,7 +187,7 @@ pub async fn sync_catalog(
                 &mut ctx.allocator,
                 Slot::new(
                     slot_proof,
-                    SlotInfo::from_value(launcher_id, 0, right_slot_value),
+                    SlotInfo::from_value(constants.launcher_id, 0, right_slot_value),
                 ),
             )
             .await?;
@@ -202,18 +199,28 @@ pub async fn sync_catalog(
 
             last_coin_id = new_catalog.coin.coin_id();
             catalog = Some(new_catalog);
-        } else if coin_record.coin.parent_coin_info == launcher_id {
-            last_coin_id = launcher_id;
+        } else if coin_record.coin.parent_coin_info == constants.launcher_id {
+            last_coin_id = constants.launcher_id;
         } else {
             break;
         };
     }
 
-    db.save_key_value(
-        CATALOG_LAST_UNSPENT_COIN,
-        &hex::encode(last_coin_id.to_vec()),
-    )
-    .await?;
+    if let Some(catalog) = catalog {
+        db.save_key_value(
+            CATALOG_LAST_UNSPENT_COIN,
+            &hex::encode(catalog.coin.parent_coin_info),
+        )
+        .await?;
 
-    Ok(catalog.unwrap())
+        Ok(catalog)
+    } else {
+        db.save_key_value(
+            CATALOG_LAST_UNSPENT_COIN,
+            &hex::encode(constants.launcher_id),
+        )
+        .await?;
+
+        Err(CliError::CoinNotFound(last_coin_id))
+    }
 }

@@ -23,8 +23,10 @@ impl ToTreeHash for XchandlesOracleAction {
 }
 
 impl Action<XchandlesRegistry> for XchandlesOracleAction {
-    fn from_constants(launcher_id: Bytes32, _constants: &XchandlesConstants) -> Self {
-        Self { launcher_id }
+    fn from_constants(constants: &XchandlesConstants) -> Self {
+        Self {
+            launcher_id: constants.launcher_id,
+        }
     }
 }
 

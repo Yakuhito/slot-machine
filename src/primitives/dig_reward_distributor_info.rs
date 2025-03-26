@@ -57,6 +57,7 @@ impl Reserveful for DigRewardDistributorState {
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct DigRewardDistributorConstants {
+    pub launcher_id: Bytes32,
     pub validator_launcher_id: Bytes32,
     pub validator_payout_puzzle_hash: Bytes32,
     pub epoch_seconds: u64,
@@ -71,6 +72,7 @@ pub struct DigRewardDistributorConstants {
 
 impl DigRewardDistributorConstants {
     pub fn with_launcher_id(mut self, launcher_id: Bytes32) -> Self {
+        self.launcher_id = launcher_id;
         self.reserve_inner_puzzle_hash =
             P2DelegatedBySingletonLayerArgs::curry_tree_hash_with_launcher_id(launcher_id, 0)
                 .into();
@@ -84,23 +86,14 @@ impl DigRewardDistributorConstants {
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct DigRewardDistributorInfo {
-    pub launcher_id: Bytes32,
     pub state: DigRewardDistributorState,
 
     pub constants: DigRewardDistributorConstants,
 }
 
 impl DigRewardDistributorInfo {
-    pub fn new(
-        launcher_id: Bytes32,
-        state: DigRewardDistributorState,
-        constants: DigRewardDistributorConstants,
-    ) -> Self {
-        Self {
-            launcher_id,
-            state,
-            constants,
-        }
+    pub fn new(state: DigRewardDistributorState, constants: DigRewardDistributorConstants) -> Self {
+        Self { state, constants }
     }
 
     pub fn with_state(mut self, state: DigRewardDistributorState) -> Self {
@@ -108,33 +101,28 @@ impl DigRewardDistributorInfo {
         self
     }
 
-    pub fn action_puzzle_hashes(
-        launcher_id: Bytes32,
-        constants: &DigRewardDistributorConstants,
-    ) -> [Bytes32; 8] {
+    pub fn action_puzzle_hashes(constants: &DigRewardDistributorConstants) -> [Bytes32; 8] {
         [
-            DigAddIncentivesAction::from_constants(launcher_id, constants)
+            DigAddIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigAddMirrorAction::from_constants(launcher_id, constants)
+            DigAddMirrorAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigCommitIncentivesAction::from_constants(launcher_id, constants)
+            DigCommitIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigInitiatePayoutAction::from_constants(launcher_id, constants)
+            DigInitiatePayoutAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigNewEpochAction::from_constants(launcher_id, constants)
+            DigNewEpochAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigRemoveMirrorAction::from_constants(launcher_id, constants)
+            DigRemoveMirrorAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigSyncAction::from_constants(launcher_id, constants)
-                .tree_hash()
-                .into(),
-            DigWithdrawIncentivesAction::from_constants(launcher_id, constants)
+            DigSyncAction::from_constants(constants).tree_hash().into(),
+            DigWithdrawIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
         ]
@@ -143,12 +131,12 @@ impl DigRewardDistributorInfo {
     #[must_use]
     pub fn into_layers(self) -> DigRewardDistributorLayers {
         SingletonLayer::new(
-            self.launcher_id,
+            self.constants.launcher_id,
             ActionLayer::from_action_puzzle_hashes(
-                &Self::action_puzzle_hashes(self.launcher_id, &self.constants),
+                &Self::action_puzzle_hashes(&self.constants),
                 self.state,
                 Finalizer::Reserve {
-                    hint: self.launcher_id,
+                    hint: self.constants.launcher_id,
                     reserve_full_puzzle_hash: self.constants.reserve_full_puzzle_hash,
                     reserve_inner_puzzle_hash: self.constants.reserve_inner_puzzle_hash,
                 },
@@ -165,7 +153,7 @@ impl DigRewardDistributorInfo {
             return Ok(None);
         };
 
-        let action_puzzle_hashes = Self::action_puzzle_hashes(layers.launcher_id, &constants);
+        let action_puzzle_hashes = Self::action_puzzle_hashes(&constants);
         let merkle_root = MerkleTree::new(&action_puzzle_hashes).root();
         if layers.inner_puzzle.merkle_root != merkle_root {
             return Ok(None);
@@ -179,14 +167,13 @@ impl DigRewardDistributorInfo {
         constants: DigRewardDistributorConstants,
     ) -> Self {
         Self {
-            launcher_id: layers.launcher_id,
             state: layers.inner_puzzle.state,
             constants,
         }
     }
 
     pub fn puzzle_hash(&self) -> TreeHash {
-        SingletonArgs::curry_tree_hash(self.launcher_id, self.inner_puzzle_hash())
+        SingletonArgs::curry_tree_hash(self.constants.launcher_id, self.inner_puzzle_hash())
     }
 
     pub fn inner_puzzle_hash(&self) -> TreeHash {
@@ -194,13 +181,9 @@ impl DigRewardDistributorInfo {
             ReserveFinalizer2ndCurryArgs::curry_tree_hash(
                 self.constants.reserve_full_puzzle_hash,
                 self.constants.reserve_inner_puzzle_hash,
-                self.launcher_id,
+                self.constants.launcher_id,
             ),
-            MerkleTree::new(&Self::action_puzzle_hashes(
-                self.launcher_id,
-                &self.constants,
-            ))
-            .root(),
+            MerkleTree::new(&Self::action_puzzle_hashes(&self.constants)).root(),
             self.state.tree_hash(),
         )
     }

@@ -29,6 +29,7 @@ pub struct CatalogRegistryState {
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct CatalogRegistryConstants {
+    pub launcher_id: Bytes32,
     pub royalty_address: Bytes32,
     pub royalty_ten_thousandths: u16,
     pub precommit_payout_puzzle_hash: Bytes32,
@@ -40,6 +41,9 @@ impl CatalogRegistryConstants {
     pub fn get(testnet11: bool) -> Self {
         if testnet11 {
             return CatalogRegistryConstants {
+                launcher_id: Bytes32::from(hex!(
+                    "0000000000000000000000000000000000000000000000000000000000000000"
+                )),
                 royalty_address: Bytes32::from(hex!(
                     "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
                 )),
@@ -61,28 +65,24 @@ impl CatalogRegistryConstants {
         self.price_singleton_launcher_id = price_singleton_launcher_id;
         self
     }
+
+    pub fn with_launcher_id(mut self, launcher_id: Bytes32) -> Self {
+        self.launcher_id = launcher_id;
+        self
+    }
 }
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct CatalogRegistryInfo {
-    pub launcher_id: Bytes32,
     pub state: CatalogRegistryState,
 
     pub constants: CatalogRegistryConstants,
 }
 
 impl CatalogRegistryInfo {
-    pub fn new(
-        launcher_id: Bytes32,
-        state: CatalogRegistryState,
-        constants: CatalogRegistryConstants,
-    ) -> Self {
-        Self {
-            launcher_id,
-            state,
-            constants,
-        }
+    pub fn new(state: CatalogRegistryState, constants: CatalogRegistryConstants) -> Self {
+        Self { state, constants }
     }
 
     pub fn with_state(mut self, state: CatalogRegistryState) -> Self {
@@ -90,35 +90,29 @@ impl CatalogRegistryInfo {
         self
     }
 
-    pub fn action_puzzle_hashes(
-        launcher_id: Bytes32,
-        constants: &CatalogRegistryConstants,
-    ) -> [Bytes32; 3] {
+    pub fn action_puzzle_hashes(constants: &CatalogRegistryConstants) -> [Bytes32; 3] {
         [
-            CatalogRegisterAction::from_constants(launcher_id, constants)
+            CatalogRegisterAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            CatalogRefundAction::from_constants(launcher_id, constants)
+            CatalogRefundAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            <DelegatedStateAction as Action<CatalogRegistry>>::from_constants(
-                launcher_id,
-                constants,
-            )
-            .tree_hash()
-            .into(),
+            <DelegatedStateAction as Action<CatalogRegistry>>::from_constants(constants)
+                .tree_hash()
+                .into(),
         ]
     }
 
     #[must_use]
     pub fn into_layers(self) -> CatalogRegistryLayers {
         SingletonLayer::new(
-            self.launcher_id,
+            self.constants.launcher_id,
             ActionLayer::from_action_puzzle_hashes(
-                &Self::action_puzzle_hashes(self.launcher_id, &self.constants),
+                &Self::action_puzzle_hashes(&self.constants),
                 self.state,
                 Finalizer::Default {
-                    hint: self.launcher_id,
+                    hint: self.constants.launcher_id,
                 },
             ),
         )
@@ -133,7 +127,7 @@ impl CatalogRegistryInfo {
             return Ok(None);
         };
 
-        let action_puzzle_hashes = Self::action_puzzle_hashes(layers.launcher_id, &constants);
+        let action_puzzle_hashes = Self::action_puzzle_hashes(&constants);
         let merkle_root = MerkleTree::new(&action_puzzle_hashes).root();
         if layers.inner_puzzle.merkle_root != merkle_root {
             return Ok(None);
@@ -144,24 +138,19 @@ impl CatalogRegistryInfo {
 
     pub fn from_layers(layers: CatalogRegistryLayers, constants: CatalogRegistryConstants) -> Self {
         Self {
-            launcher_id: layers.launcher_id,
             state: layers.inner_puzzle.state,
             constants,
         }
     }
 
     pub fn puzzle_hash(&self) -> TreeHash {
-        SingletonArgs::curry_tree_hash(self.launcher_id, self.inner_puzzle_hash())
+        SingletonArgs::curry_tree_hash(self.constants.launcher_id, self.inner_puzzle_hash())
     }
 
     pub fn inner_puzzle_hash(&self) -> TreeHash {
         ActionLayerArgs::curry_tree_hash(
-            DefaultFinalizer2ndCurryArgs::curry_tree_hash(self.launcher_id),
-            MerkleTree::new(&Self::action_puzzle_hashes(
-                self.launcher_id,
-                &self.constants,
-            ))
-            .root(),
+            DefaultFinalizer2ndCurryArgs::curry_tree_hash(self.constants.launcher_id),
+            MerkleTree::new(&Self::action_puzzle_hashes(&self.constants)).root(),
             self.state.tree_hash(),
         )
     }

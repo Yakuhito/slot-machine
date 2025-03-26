@@ -1,7 +1,4 @@
-use chia::{
-    clvm_utils::{ToTreeHash, TreeHash},
-    protocol::Bytes32,
-};
+use chia::clvm_utils::{ToTreeHash, TreeHash};
 use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
@@ -19,7 +16,7 @@ impl ToTreeHash for DigSyncAction {
 }
 
 impl Action<DigRewardDistributor> for DigSyncAction {
-    fn from_constants(_launcher_id: Bytes32, _constants: &DigRewardDistributorConstants) -> Self {
+    fn from_constants(_constants: &DigRewardDistributorConstants) -> Self {
         Self {}
     }
 }

@@ -25,9 +25,9 @@ impl ToTreeHash for DigCommitIncentivesAction {
 }
 
 impl Action<DigRewardDistributor> for DigCommitIncentivesAction {
-    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
+    fn from_constants(constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             epoch_seconds: constants.epoch_seconds,
         }
     }

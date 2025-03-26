@@ -24,7 +24,7 @@ impl ToTreeHash for DelegatedStateAction {
 }
 
 impl Action<CatalogRegistry> for DelegatedStateAction {
-    fn from_constants(_launcher_id: Bytes32, constants: &CatalogRegistryConstants) -> Self {
+    fn from_constants(constants: &CatalogRegistryConstants) -> Self {
         Self {
             other_launcher_id: constants.price_singleton_launcher_id,
         }
@@ -32,7 +32,7 @@ impl Action<CatalogRegistry> for DelegatedStateAction {
 }
 
 impl Action<XchandlesRegistry> for DelegatedStateAction {
-    fn from_constants(_launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
+    fn from_constants(constants: &XchandlesConstants) -> Self {
         Self {
             other_launcher_id: constants.price_singleton_launcher_id,
         }

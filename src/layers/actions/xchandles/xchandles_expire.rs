@@ -33,9 +33,9 @@ impl ToTreeHash for XchandlesExpireAction {
 }
 
 impl Action<XchandlesRegistry> for XchandlesExpireAction {
-    fn from_constants(launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
+    fn from_constants(constants: &XchandlesConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             relative_block_height: constants.relative_block_height,
             payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
         }
