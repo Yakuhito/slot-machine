@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 
 use super::{
-    catalog_continue_launch, catalog_initiate_launch, catalog_unroll_state_scheduler,
-    catalog_verify_deployment, multisig_view,
+    catalog_continue_launch, catalog_initiate_launch, catalog_register,
+    catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_view,
 };
 
 #[derive(Parser)]
@@ -15,6 +15,7 @@ struct Cli {
     command: Commands,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 enum Commands {
     /// Interact with XCHandles
@@ -53,6 +54,7 @@ enum MultisigCliAction {
     // Todo: Sign CATalog/XCHandles state updates; perform update
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 enum CatalogCliAction {
     /// Launches a new CATalog deployment
@@ -103,6 +105,68 @@ enum CatalogCliAction {
         #[arg(long, default_value_t = false)]
         testnet11: bool,
     },
+    /// Register a new CAT
+    Register {
+        /// TAIL reveal
+        #[arg(long)]
+        tail_reveal: String,
+
+        /// Initial CAT ticker (e.g., "SBX")
+        #[arg(long)]
+        ticker: String,
+
+        /// Initial CAT name (e.g., "Spacebucks")
+        #[arg(long)]
+        name: String,
+
+        /// Initial CAT image URIs (comma-separated list of URIs)
+        #[arg(long)]
+        image_uris: String,
+
+        /// Initial CAT image hash
+        #[arg(long)]
+        image_hash: String,
+
+        /// Initial on-chain CAT description (e.g., "Galactic money for a galactic galaxy")
+        #[arg(long, default_value = "")]
+        description: String,
+
+        /// Initial on-chain CAT precision (do not change unless you know what you are doing)
+        #[arg(long, default_value = "4")]
+        precision: u8,
+
+        /// Initial CAT metadata URIs (comma-separated list of URIs)
+        #[arg(long, default_value = "")]
+        metadata_uris: String,
+
+        /// Initial CAT metadata hash
+        #[arg(long, required = false)]
+        metadata_hash: Option<String>,
+
+        /// Initial CAT license URIs (comma-separated list of URIs)
+        #[arg(long, default_value = "")]
+        license_uris: String,
+
+        /// Initial CAT license hash
+        #[arg(long, required = false)]
+        license_hash: Option<String>,
+
+        /// CAT NFT recipient (if not provided, defaults to owner of current wallet)
+        #[arg(long, required = false)]
+        recipient: Option<String>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Payment asset id
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -148,6 +212,42 @@ pub async fn run_cli() {
             }
             CatalogCliAction::VerifyDeployment { testnet11 } => {
                 catalog_verify_deployment(testnet11).await
+            }
+            CatalogCliAction::Register {
+                tail_reveal,
+                ticker,
+                name,
+                image_uris,
+                image_hash,
+                description,
+                precision,
+                metadata_uris,
+                metadata_hash,
+                license_uris,
+                license_hash,
+                recipient,
+                testnet11,
+                payment_asset_id,
+                fee,
+            } => {
+                catalog_register(
+                    tail_reveal,
+                    ticker,
+                    name,
+                    description,
+                    precision,
+                    image_uris,
+                    image_hash,
+                    metadata_uris,
+                    metadata_hash,
+                    license_uris,
+                    license_hash,
+                    recipient,
+                    testnet11,
+                    payment_asset_id,
+                    fee,
+                )
+                .await
             }
         },
 
