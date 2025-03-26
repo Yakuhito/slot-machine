@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 
-use super::{catalog_continue_launch, catalog_initiate_launch, multisig_view};
+use super::{
+    catalog_continue_launch, catalog_initiate_launch, catalog_unroll_state_scheduler, multisig_view,
+};
 
 #[derive(Parser)]
 #[command(
@@ -88,6 +90,20 @@ enum CatalogCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+    /// Unrolls the state scheduler
+    UnrollStateScheduler {
+        /// Price singleton launcher id
+        #[arg(long)]
+        price_singleton_launcher_id: String,
+
+        /// Use testnet11 (default: mainnet)
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH (default: 0.0025 XCH)
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     /// Verifies the built-in deployment is valid
     VerifyDeployment {
         /// Use testnet11 (default: mainnet)
@@ -138,6 +154,11 @@ pub async fn run_cli() {
                 catalog_continue_launch(cats_per_spend, price_singleton_launcher_id, testnet11, fee)
                     .await
             }
+            CatalogCliAction::UnrollStateScheduler {
+                price_singleton_launcher_id,
+                testnet11,
+                fee,
+            } => catalog_unroll_state_scheduler(price_singleton_launcher_id, testnet11, fee).await,
             CatalogCliAction::VerifyDeployment { testnet11 } => {
                 todo!("not yet implemented {}", testnet11);
             }
