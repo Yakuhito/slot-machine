@@ -303,7 +303,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         sync_multisig_singleton::<CatalogRegistryState>(
             &cli,
             &mut ctx,
-            catalog_constants.launcher_id,
+            catalog_constants.price_singleton_launcher_id,
             None,
         )
         .await?
