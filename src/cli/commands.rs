@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
 
 use super::{
-    catalog_continue_launch, catalog_initiate_launch, catalog_unroll_state_scheduler, multisig_view,
+    catalog_continue_launch, catalog_initiate_launch, catalog_unroll_state_scheduler,
+    catalog_verify_deployment, multisig_view,
 };
 
 #[derive(Parser)]
@@ -146,7 +147,7 @@ pub async fn run_cli() {
                 catalog_unroll_state_scheduler(testnet11, fee).await
             }
             CatalogCliAction::VerifyDeployment { testnet11 } => {
-                todo!("not yet implemented {}", testnet11);
+                catalog_verify_deployment(testnet11).await
             }
         },
 

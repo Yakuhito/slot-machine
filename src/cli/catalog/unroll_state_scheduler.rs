@@ -1,13 +1,11 @@
 use chia::protocol::{Bytes32, SpendBundle};
-use chia_wallet_sdk::{
-    ChiaRpcClient, CoinsetClient, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
-};
+use chia_wallet_sdk::{ChiaRpcClient, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS};
 use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    new_sk, parse_amount, parse_one_sided_offer, spend_security_coin, sync_multisig_singleton,
-    wait_for_coin, yes_no_prompt, CatalogRegistryConstants, CatalogRegistryState, CliError, Db,
-    DelegatedStateAction, MultisigSingleton, SageClient,
+    get_coinset_client, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
+    sync_multisig_singleton, wait_for_coin, yes_no_prompt, CatalogRegistryConstants,
+    CatalogRegistryState, CliError, Db, DelegatedStateAction, MultisigSingleton, SageClient,
 };
 
 use super::sync_catalog;
@@ -24,11 +22,7 @@ pub async fn catalog_unroll_state_scheduler(
         return Err(CliError::ConstantsNotSet);
     }
 
-    let cli = if testnet11 {
-        CoinsetClient::testnet11()
-    } else {
-        CoinsetClient::mainnet()
-    };
+    let cli = get_coinset_client(testnet11);
     let mut ctx = SpendContext::new();
 
     let (MultisigSingleton::StateScheduler(state_scheduler), _) =

@@ -4,10 +4,11 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    hex_string_to_bytes32, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
-    print_medieval_vault_configuration, wait_for_coin, CatalogRegistryConstants,
-    CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint, MedievalVaultInfo, SageClient,
-    StateSchedulerInfo, CATALOG_LAST_UNSPENT_COIN, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+    get_coinset_client, hex_string_to_bytes32, launch_catalog_registry,
+    load_catalog_state_schedule_csv, parse_amount, print_medieval_vault_configuration,
+    wait_for_coin, CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs,
+    MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo,
+    CATALOG_LAST_UNSPENT_COIN, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 use chia::{
     bls::PublicKey,
@@ -16,8 +17,8 @@ use chia::{
     puzzles::cat::GenesisByCoinIdTailArgs,
 };
 use chia_wallet_sdk::{
-    decode_address, encode_address, Cat, ChiaRpcClient, CoinsetClient, Conditions, DriverError,
-    Launcher, Memos, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    decode_address, encode_address, Cat, ChiaRpcClient, Conditions, DriverError, Launcher, Memos,
+    Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
 };
 use clvmr::NodePtr;
 use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
@@ -158,11 +159,7 @@ pub async fn catalog_initiate_launch(
     yes_no_prompt("Is all the data above correct?")?;
 
     println!("Initializing Chia RPC client...");
-    let client = if testnet11 {
-        CoinsetClient::testnet11()
-    } else {
-        CoinsetClient::mainnet()
-    };
+    let client = get_coinset_client(testnet11);
 
     println!("Opening database...");
     let db = Db::new().await?;
