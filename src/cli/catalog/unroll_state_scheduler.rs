@@ -1,6 +1,7 @@
 use chia::protocol::Bytes32;
+use chia_wallet_sdk::{hex_string_to_bytes32, CoinsetClient};
 
-use crate::{CatalogRegistryConstants, CliError};
+use crate::{hex_string_to_bytes32, sync_multisig_singleton, CatalogRegistryConstants, CliError};
 
 pub async fn catalog_unroll_state_scheduler(
     price_singleton_launcher_id_str: Option<String>,
@@ -8,12 +9,7 @@ pub async fn catalog_unroll_state_scheduler(
     fee_str: String,
 ) -> Result<(), CliError> {
     let constants = if let Some(price_singleton_launcher_id_str) = price_singleton_launcher_id_str {
-        CatalogRegistryConstants::get(testnet11).with_price_singleton(Bytes32::new(
-            hex::decode(price_singleton_launcher_id_str)
-                .map_err(CliError::ParseHex)?
-                .try_into()
-                .unwrap(),
-        ))
+        CatalogRegistryConstants::get(testnet11).with_price_singleton(hex_string_to_bytes32(&price_singleton_launcher_id_str)?)
     } else {
         CatalogRegistryConstants::get(testnet11)
     };
@@ -23,6 +19,13 @@ pub async fn catalog_unroll_state_scheduler(
             "Price singleton launcher id is not set".to_string(),
         ));
     }
+
+    let cli = if testnet11 {
+        CoinsetClient::testnet11()
+    } else {
+        CoinsetClient::mainnet()
+    };
+    let price_singleton = sync_multisig_singleton(&cli, ctx, launcher_id, print_state_info)
 
     Ok(())
 }

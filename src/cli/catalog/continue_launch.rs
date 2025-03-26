@@ -14,11 +14,11 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
-    sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
-    CatalogPremineRecord, CatalogRegisterAction, CatalogRegistryConstants, CatalogSlotValue,
-    CliError, Db, PrecommitCoin, PrecommitLayer, SageClient, CATALOG_LAUNCH_LAUNCHER_ID_KEY,
-    CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+    hex_string_to_bytes32, load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer,
+    spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata,
+    CatalogPrecommitValue, CatalogPremineRecord, CatalogRegisterAction, CatalogRegistryConstants,
+    CatalogSlotValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
+    CATALOG_LAUNCH_LAUNCHER_ID_KEY, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
 fn initial_cat_inner_puzzle_ptr(
@@ -95,21 +95,13 @@ pub async fn catalog_continue_launch(
         eprintln!("No launcher ID found in database - please run 'catalog initiate-launch' first");
         return Ok(());
     };
-    let launcher_id = Bytes32::new(
-        hex::decode(launcher_id)
-            .map_err(CliError::ParseHex)?
-            .try_into()
-            .unwrap(),
-    );
+    let launcher_id = Bytes32::new(hex_string_to_bytes32(&launcher_id)?.into());
 
     println!("Syncing CATalog...");
     let mut ctx = SpendContext::new();
 
     let constants = CatalogRegistryConstants::get(testnet11).with_price_singleton(Bytes32::new(
-        hex::decode(price_singleton_launcher_id_str)
-            .map_err(CliError::ParseHex)?
-            .try_into()
-            .unwrap(),
+        hex_string_to_bytes32(&price_singleton_launcher_id_str)?.into(),
     ));
 
     let mut catalog = sync_catalog(&client, &db, &mut ctx, launcher_id, constants).await?;
@@ -136,12 +128,7 @@ pub async fn catalog_continue_launch(
         .get_value_by_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY)
         .await?
         .unwrap();
-    let payment_asset_id = Bytes32::new(
-        hex::decode(payment_asset_id_str.clone())
-            .map_err(CliError::ParseHex)?
-            .try_into()
-            .unwrap(),
-    );
+    let payment_asset_id = Bytes32::new(hex_string_to_bytes32(&payment_asset_id_str)?.into());
 
     let sage = SageClient::new()?;
     let fee = parse_amount(fee_str.clone(), false)?;

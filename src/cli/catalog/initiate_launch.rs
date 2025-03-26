@@ -4,7 +4,7 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db, CATALOG_LAUNCH_LAUNCHER_ID_KEY,
     },
-    launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
+    hex_string_to_bytes32, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
     print_medieval_vault_configuration, wait_for_coin, CatalogRegistryConstants,
     CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint, MedievalVaultInfo, SageClient,
     StateSchedulerInfo, CATALOG_LAST_UNSPENT_COIN, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
@@ -171,12 +171,7 @@ pub async fn catalog_initiate_launch(
     if let Some(launcher_id) = launcher_id {
         yes_no_prompt("Previous deployment found in db - do you wish to override?")?;
 
-        let launcher_id = Bytes32::new(
-            hex::decode(launcher_id)
-                .map_err(CliError::ParseHex)?
-                .try_into()
-                .unwrap(),
-        );
+        let launcher_id = Bytes32::new(hex_string_to_bytes32(&launcher_id)?.into());
         db.clear_slots_for_singleton(launcher_id).await?;
         db.clear_catalog_indexed_slot_values().await?;
         db.remove_key(CATALOG_LAUNCH_LAUNCHER_ID_KEY).await?;
