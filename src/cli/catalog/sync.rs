@@ -89,7 +89,6 @@ pub async fn sync_catalog(
             solution_ptr,
             constants,
         )? {
-            println!("Have a catalog!");
             last_coin_id = some_catalog.coin.coin_id();
             catalog = Some(some_catalog);
         } else if coin_record.coin.coin_id() == constants.launcher_id {

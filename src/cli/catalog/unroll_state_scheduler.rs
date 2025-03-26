@@ -52,12 +52,6 @@ pub async fn catalog_unroll_state_scheduler(
     let sage = SageClient::new()?;
     let fee = parse_amount(fee_str.clone(), false)?;
 
-    println!("An offer will be generated offering:");
-    println!(" - 1 mojo");
-    println!(" - {} XCH ({} mojos) as fee", fee_str, fee);
-    yes_no_prompt("The state scheduler and the CATalog registry have been synced. This is the last check - do you wish to continue?")?;
-
-    // spend state scheduler & CATalog
     let (required_height, new_state) =
         state_scheduler.info.state_schedule[state_scheduler.info.generation];
 
@@ -73,6 +67,19 @@ pub async fn catalog_unroll_state_scheduler(
             "Couldn't check current blockchain height; will assume needed height was acheived"
         );
     }
+
+    println!(
+        "Next state sets a price of {} mojos with CAT maker puzzle hash={}",
+        new_state.registration_price,
+        hex::encode(new_state.cat_maker_puzzle_hash)
+    );
+
+    println!("An offer will be generated offering:");
+    println!(" - 1 mojo");
+    println!(" - {} XCH ({} mojos) as fee", fee_str, fee);
+    yes_no_prompt("The state scheduler and the CATalog registry have been synced. This is the last check - do you wish to continue?")?;
+
+    // spend state scheduler & CATalog
 
     // no need to include security conditions as we assert the state scheduler is spent
     // which means the right message is consumed
