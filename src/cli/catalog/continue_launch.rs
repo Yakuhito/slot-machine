@@ -21,7 +21,7 @@ use crate::{
     CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
-fn initial_cat_inner_puzzle_ptr(
+pub fn initial_cat_inner_puzzle_ptr(
     ctx: &mut SpendContext,
     cat: &CatalogPremineRecord,
 ) -> Result<NodePtr, DriverError> {
