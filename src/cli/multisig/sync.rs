@@ -1,4 +1,6 @@
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes32, puzzles::singleton::LauncherSolution};
+use chia::{
+    bls::PublicKey, clvm_utils::ToTreeHash, protocol::Bytes32, puzzles::singleton::LauncherSolution,
+};
 use chia_wallet_sdk::{ChiaRpcClient, CoinsetClient, DriverError, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{serde::node_from_bytes, Allocator, NodePtr};
@@ -14,6 +16,23 @@ where
 {
     StateScheduler(StateScheduler<S>),
     Vault(MedievalVault),
+}
+
+pub fn print_medieval_vault_configuration(m: usize, pubkeys: &[PublicKey]) -> Result<(), CliError> {
+    let alias_map = get_alias_map()?;
+
+    println!("  Public Key List:");
+    for pubkey in pubkeys.iter() {
+        println!(
+            "    - {}",
+            alias_map
+                .get(pubkey)
+                .unwrap_or(&format!("0x{}", hex::encode(pubkey.to_bytes())))
+        );
+    }
+    println!("  Signature Threshold: {}", m);
+
+    Ok(())
 }
 
 // returns object representing last coin, which is either a StateScheduler or a MedievalVault
@@ -68,21 +87,12 @@ where
             }
 
             println!("\nInitial medieval vault configuration: ");
+            print_medieval_vault_configuration(
+                target_vault_info.m,
+                &target_vault_info.public_key_list,
+            )?;
 
-            let alias_map = get_alias_map()?;
-
-            println!("  Public Key List:");
-            for pubkey in target_vault_info.public_key_list.iter() {
-                println!(
-                    "    - {}",
-                    alias_map
-                        .get(pubkey)
-                        .unwrap_or(&format!("0x{}", hex::encode(pubkey.to_bytes())))
-                );
-            }
-            println!("  Signature Threshold: {}", target_vault_info.m);
-
-            println!("\nFollowing coin on-chain...");
+            println!("\nFollowing state scheduler on-chain...");
         }
 
         let Some(mut state_scheduler) =

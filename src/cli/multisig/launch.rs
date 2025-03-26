@@ -2,9 +2,9 @@ use chia::{bls::PublicKey, protocol::SpendBundle};
 use chia_wallet_sdk::{ChiaRpcClient, Launcher, SpendContext, SpendWithConditions, StandardLayer};
 
 use crate::{
-    get_alias_map, get_coinset_client, get_constants, get_xch_coin, parse_amount, partial_sign,
-    sign_standard_transaction, wait_for_coin, yes_no_prompt, CliError, MedievalVaultHint,
-    P2MOfNDelegateDirectArgs, SageClient,
+    get_coinset_client, get_constants, get_xch_coin, parse_amount, partial_sign,
+    print_medieval_vault_configuration, sign_standard_transaction, wait_for_coin, yes_no_prompt,
+    CliError, MedievalVaultHint, P2MOfNDelegateDirectArgs, SageClient,
 };
 
 pub async fn multisig_launch(
@@ -27,19 +27,8 @@ pub async fn multisig_launch(
 
     let fee = parse_amount(fee_str.clone(), false)?;
 
-    let alias_map = get_alias_map()?;
-
     println!("You're about to create a new multisig with the following settings:");
-    println!("  Public Key List:");
-    for pubkey in pubkeys.iter() {
-        println!(
-            "    - {}",
-            alias_map
-                .get(pubkey)
-                .unwrap_or(&format!("0x{}", hex::encode(pubkey.to_bytes())))
-        );
-    }
-    println!("  Signature Threshold: {}", m);
+    print_medieval_vault_configuration(m, &pubkeys)?;
     println!("  Fee: {} XCH ({} mojos)", fee_str, fee);
     println!("  Testnet: {}", testnet11);
 

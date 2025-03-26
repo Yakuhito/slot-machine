@@ -4,10 +4,10 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db, CATALOG_LAUNCH_LAUNCHER_ID_KEY,
     },
-    get_alias_map, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
-    wait_for_coin, CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs,
-    MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo,
-    CATALOG_LAST_UNSPENT_COIN, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
+    launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
+    print_medieval_vault_configuration, wait_for_coin, CatalogRegistryConstants,
+    CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint, MedievalVaultInfo, SageClient,
+    StateSchedulerInfo, CATALOG_LAST_UNSPENT_COIN, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 use chia::{
     bls::PublicKey,
@@ -102,7 +102,6 @@ pub async fn catalog_initiate_launch(
 ) -> Result<(), CliError> {
     println!("Welcome to the CATalog launch setup, deployer.");
 
-    let alias_map = get_alias_map()?;
     let mut pubkeys = Vec::new();
     for pubkey_str in pubkeys_str.split(',') {
         let pubkey = PublicKey::from_bytes(
@@ -118,16 +117,7 @@ pub async fn catalog_initiate_launch(
     let fee = parse_amount(fee_str.clone(), false)?;
 
     println!("First things first, this multisig will have control over the price singleton once the state schedule is over:");
-    println!("  Public Key List:");
-    for pubkey in pubkeys.iter() {
-        println!(
-            "    - {}",
-            alias_map
-                .get(pubkey)
-                .unwrap_or(&format!("0x{}", hex::encode(pubkey.to_bytes())))
-        );
-    }
-    println!("  Signature Threshold: {}", m);
+    print_medieval_vault_configuration(m, &pubkeys)?;
     println!("  Testnet: {}", testnet11);
 
     let price_schedule_csv_filename = if testnet11 {
