@@ -4,8 +4,9 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, CatalogRegistryState, CliError, MedievalVaultHint,
-    MedievalVaultInfo, StateSchedulerInfo, XchandlesRegistryState,
+    get_alias_map, get_coinset_client, hex_string_to_bytes32, CatalogRegistryState, CliError,
+    MedievalVaultHint, MedievalVaultInfo, StateScheduler, StateSchedulerInfo,
+    XchandlesRegistryState,
 };
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
@@ -61,7 +62,79 @@ pub async fn multisig_view(launcher_id_str: String, testnet11: bool) -> Result<(
         return Err(CliError::Custom("Singleton hinted incorrectly".to_string()));
     }
 
-    println!("All good so far.");
+    println!("Vault launched as a state scheduler first. Schedule: ");
+    for (block, state) in state_scheduler_info.state_schedule {
+        match state {
+            StateSchedulerHintedState::Catalog(catalog_state) => {
+                println!(
+                    "  After block {}, price will be {} mojos with a CAT maker puzzle hash of {}.",
+                    block,
+                    catalog_state.registration_price,
+                    hex::encode(catalog_state.cat_maker_puzzle_hash),
+                );
+            }
+            StateSchedulerHintedState::Xchandles(xchandles_state) => {
+                println!(
+                    "  After block {}, the CAT maker puzzle hash will be {}, the pricing puzzle hash will be {}, and the expired handle pricing puzzle hash will be {}.",
+                    block,
+                    hex::encode(xchandles_state.cat_maker_puzzle_hash),
+                    hex::encode(xchandles_state.pricing_puzzle_hash),
+                    hex::encode(xchandles_state.expired_handle_pricing_puzzle_hash),
+                );
+            }
+        }
+    }
+
+    println!("\nInitial medieval vault configuration: ");
+
+    let alias_map = get_alias_map()?;
+
+    println!("  Public Key List:");
+    for pubkey in target_vault_info.public_key_list.iter() {
+        println!(
+            "    - {}",
+            alias_map
+                .get(pubkey)
+                .unwrap_or(&format!("0x{}", hex::encode(pubkey.to_bytes())))
+        );
+    }
+    println!("  Signature Threshold: {}", target_vault_info.m);
+
+    println!("\nFollowing coin on-chain...");
+
+    let Some(mut state_scheduler) =
+        StateScheduler::<StateSchedulerHintedState>::from_launcher_spend(&mut ctx, launcher_spend)?
+    else {
+        return Err(CliError::Custom(
+            "Failed to parse state scheduler".to_string(),
+        ));
+    };
+
+    loop {
+        let coin_record = cli
+            .get_coin_record_by_name(state_scheduler.coin.coin_id())
+            .await?;
+
+        let Some(coin_record) = coin_record.coin_record else {
+            return Err(CliError::CoinNotFound(state_scheduler.coin.coin_id()));
+        };
+
+        if !coin_record.spent {
+            println!("Latest state scheduler coin not spent.");
+            break;
+        }
+
+        if let Some(child) = state_scheduler.child() {
+            state_scheduler = child;
+            println!(
+                "State scheduler spent to update state to one after block {}.",
+                state_scheduler.info.state_schedule[state_scheduler.info.generation - 1].0
+            );
+        } else {
+            println!("State scheduler phase finished - next coin will be a vault.");
+            break;
+        }
+    }
 
     Ok(())
 }
