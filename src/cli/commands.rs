@@ -41,7 +41,7 @@ enum MultisigCliAction {
         #[arg(long)]
         launcher_id: String,
 
-        /// Use testnet11 (default: mainnet)
+        /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
     },
@@ -64,11 +64,11 @@ enum CatalogCliAction {
         #[arg(short)]
         m: usize,
 
-        /// Use testnet11 (default: mainnet)
+        /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
 
-        /// Fee to use for the launch, in XCH (default: 0.0025 XCH)
+        /// Fee to use for the launch, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
@@ -82,31 +82,31 @@ enum CatalogCliAction {
         #[arg(long)]
         price_singleton_launcher_id: String,
 
-        /// Use testnet11 (default: mainnet)
+        /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
 
-        /// Fee to use, in XCH (default: 0.0025 XCH)
+        /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
     /// Unrolls the state scheduler
     UnrollStateScheduler {
-        /// Price singleton launcher id
-        #[arg(long)]
-        price_singleton_launcher_id: String,
+        /// Price singleton launcher id (optional, defaults to the built-in constants)
+        #[arg(long, required = false)]
+        price_singleton_launcher_id: Option<String>,
 
-        /// Use testnet11 (default: mainnet)
+        /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
 
-        /// Fee to use, in XCH (default: 0.0025 XCH)
+        /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
     /// Verifies the built-in deployment is valid
     VerifyDeployment {
-        /// Use testnet11 (default: mainnet)
+        /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
     },
