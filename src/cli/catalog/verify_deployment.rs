@@ -259,7 +259,6 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
                     .await?
                     .coin_record
                 else {
-                    println!("Eve cat NFT coin not found: {}", eve_cat_nft_coin.coin_id());
                     return Err(CliError::CoinNotFound(eve_cat_nft_coin.coin_id()));
                 };
                 if !eve_cat_nft_record.spent {
