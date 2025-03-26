@@ -90,7 +90,9 @@ fn get_additional_info_for_launch(
 
     Ok((
         conditions,
-        catalog_constants.with_price_singleton(price_singleton_launcher_id),
+        catalog_constants
+            .with_price_singleton(price_singleton_launcher_id)
+            .with_launcher_id(catalog_launcher_id),
         eve_cat.asset_id,
     ))
 }

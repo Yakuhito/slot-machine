@@ -1,6 +1,9 @@
-use chia::clvm_utils::ToTreeHash;
+use chia::clvm_utils::{CurriedProgram, ToTreeHash};
 use chia::protocol::{Bytes32, Coin};
-use chia::puzzles::nft::{NftOwnershipLayerArgs, NftRoyaltyTransferPuzzleArgs, NftStateLayerArgs};
+use chia::puzzles::nft::{
+    NftOwnershipLayerArgs, NftRoyaltyTransferPuzzleArgs, NftStateLayerArgs,
+    NFT_STATE_LAYER_PUZZLE_HASH,
+};
 use chia::puzzles::singleton::{SingletonArgs, SINGLETON_LAUNCHER_PUZZLE_HASH};
 use chia::puzzles::{LineageProof, Proof};
 use chia_wallet_sdk::{
@@ -15,7 +18,7 @@ use crate::{
     load_catalog_state_schedule_csv, print_medieval_vault_configuration, CatalogRegistry,
     CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue,
     CliError, DefaultCatMakerArgs, MultisigSingleton, Slot, SlotInfo, UniquenessPrelauncher,
-    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+    ANY_METADATA_UPDATER_HASH, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
 };
 
 use crate::sync_multisig_singleton;
@@ -194,7 +197,6 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
     let mut cat_index = 0;
 
     while cat_index < cats_to_launch.len() {
-        println!("cat_index: {}", cat_index);
         let Some(coin_record) = cli
             .get_coin_record_by_name(catalog.coin.coin_id())
             .await?
@@ -215,7 +217,6 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         let new_slots = catalog.get_new_slots_from_spend(&mut ctx, solution)?;
 
         while cat_index < cats_to_launch.len() {
-            println!("cat_index in the 2nd nested loop: {}", cat_index);
             let top_cat = &cats_to_launch[cat_index];
             let found = new_slots
                 .iter()
@@ -240,18 +241,24 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
 
                 let cat_nft_puzzle_hash = SingletonArgs::curry_tree_hash(
                     cat_nft_launcher_id,
-                    NftStateLayerArgs::curry_tree_hash(
-                        ().tree_hash(),
-                        NftOwnershipLayerArgs::curry_tree_hash(
-                            None,
-                            NftRoyaltyTransferPuzzleArgs::curry_tree_hash(
-                                cat_nft_launcher_id,
-                                catalog_constants.royalty_address,
-                                catalog_constants.royalty_ten_thousandths,
+                    CurriedProgram {
+                        program: NFT_STATE_LAYER_PUZZLE_HASH,
+                        args: NftStateLayerArgs {
+                            mod_hash: NFT_STATE_LAYER_PUZZLE_HASH.into(),
+                            metadata: (),
+                            metadata_updater_puzzle_hash: ANY_METADATA_UPDATER_HASH.into(),
+                            inner_puzzle: NftOwnershipLayerArgs::curry_tree_hash(
+                                None,
+                                NftRoyaltyTransferPuzzleArgs::curry_tree_hash(
+                                    cat_nft_launcher_id,
+                                    catalog_constants.royalty_address,
+                                    catalog_constants.royalty_ten_thousandths,
+                                ),
+                                eve_nft_inner_puzzle_hash,
                             ),
-                            eve_nft_inner_puzzle_hash,
-                        ),
-                    ),
+                        },
+                    }
+                    .tree_hash(),
                 );
 
                 let eve_cat_nft_coin =
@@ -267,14 +274,6 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
                     return Err(CliError::CoinNotSpent(eve_cat_nft_coin.coin_id()));
                 }
             } else {
-                println!("not found - slots were");
-                println!(
-                    "{:?}",
-                    new_slots
-                        .iter()
-                        .map(|s| s.info.value.unwrap().asset_id)
-                        .collect::<Vec<_>>()
-                );
                 break;
             }
         }
@@ -296,7 +295,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             "CATalog not completely unrolled".to_string(),
         ));
     } else {
-        println!("All CATs were unrolled correctly.");
+        println!("All premine CATs were distributed correctly.");
     }
 
     println!("Now let's analyze the price singleton.");
