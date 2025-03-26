@@ -194,6 +194,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
     let mut cat_index = 0;
 
     while cat_index < cats_to_launch.len() {
+        println!("cat_index: {}", cat_index);
         let Some(coin_record) = cli
             .get_coin_record_by_name(catalog.coin.coin_id())
             .await?
@@ -214,6 +215,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         let new_slots = catalog.get_new_slots_from_spend(&mut ctx, solution)?;
 
         while cat_index < cats_to_launch.len() {
+            println!("cat_index in the 2nd nested loop: {}", cat_index);
             let top_cat = &cats_to_launch[cat_index];
             let found = new_slots
                 .iter()
@@ -265,6 +267,14 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
                     return Err(CliError::CoinNotSpent(eve_cat_nft_coin.coin_id()));
                 }
             } else {
+                println!("not found - slots were");
+                println!(
+                    "{:?}",
+                    new_slots
+                        .iter()
+                        .map(|s| s.info.value.unwrap().asset_id)
+                        .collect::<Vec<_>>()
+                );
                 break;
             }
         }
