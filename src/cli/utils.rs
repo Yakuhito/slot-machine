@@ -76,6 +76,12 @@ pub enum CliError {
 
     #[error("could not parse db column")]
     DbColumnParse(),
+
+    #[error("coin not found: {0}")]
+    CoinNotFound(Bytes32),
+
+    #[error("coin not spent: {0}")]
+    CoinNotSpent(Bytes32),
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {
