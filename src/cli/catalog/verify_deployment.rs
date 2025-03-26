@@ -1,15 +1,19 @@
 use chia::clvm_utils::ToTreeHash;
 use chia::protocol::{Bytes32, Coin};
-use chia::puzzles::singleton::{LauncherSolution, SINGLETON_LAUNCHER_PUZZLE_HASH};
-use chia_wallet_sdk::{ChiaRpcClient, Condition, Conditions, DriverError, SpendContext};
+use chia::puzzles::singleton::{SingletonArgs, SINGLETON_LAUNCHER_PUZZLE_HASH};
+use chia::puzzles::{LineageProof, Proof};
+use chia_wallet_sdk::{
+    ChiaRpcClient, Condition, Conditions, DriverError, Layer, Puzzle, SingletonLayer, SpendContext,
+};
 use clvm_traits::FromClvm;
 use clvmr::serde::node_from_bytes;
 use clvmr::NodePtr;
 
 use crate::{
     get_coinset_client, load_catalog_state_schedule_csv, print_medieval_vault_configuration,
-    CatalogRegistryConstants, CatalogRegistryState, CliError, DefaultCatMakerArgs,
-    MultisigSingleton,
+    CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
+    CatalogSlotValue, CliError, DefaultCatMakerArgs, MultisigSingleton, Slot, SlotInfo,
+    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
 };
 
 use crate::sync_multisig_singleton;
@@ -59,7 +63,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         node_from_bytes(&mut ctx.allocator, &launcher_coin_solution.solution)?;
 
     let output_conds = ctx.run(launcher_puzzle_ptr, launcher_solution_ptr)?;
-    let output_conds = Conditions::<NodePtr>::from_clvm(&mut ctx.allocator, output_conds)
+    let output_conds = Conditions::<NodePtr>::from_clvm(&ctx.allocator, output_conds)
         .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
     let create_coin_cond = output_conds
         .into_iter()
@@ -101,30 +105,106 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         return Err(CliError::CoinNotSpent(eve_catalog_coin.coin_id()));
     };
 
-    let eve_puzzle_ptr = node_from_bytes(&mut ctx.allocator, &eve_coin_spend.puzzle_reveal)?;
-    let (_, conditions) = <(u64, Conditions<NodePtr>)>::from_clvm(&ctx.allocator, eve_puzzle_ptr)
+    let eve_puzzle = node_from_bytes(&mut ctx.allocator, &eve_coin_spend.puzzle_reveal)?;
+    let eve_singleton_layer = SingletonLayer::<NodePtr>::parse_puzzle(
+        &ctx.allocator,
+        Puzzle::parse(&ctx.allocator, eve_puzzle),
+    )?
+    .unwrap();
+    let (_, conditions) =
+        <(u64, Conditions<NodePtr>)>::from_clvm(&ctx.allocator, eve_singleton_layer.inner_puzzle)
+            .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+
+    let conditions: Vec<Condition<NodePtr>> = conditions.into_iter().collect();
+    let [Condition::CreateCoin(left_slot_cc), Condition::CreateCoin(right_slot_cc), Condition::CreateCoin(catalog_cc)] =
+        conditions.as_slice()
+    else {
+        return Err(CliError::Custom(
+            "Eve puzzle does not have the right conditions".to_string(),
+        ));
+    };
+
+    let left_slot_info = SlotInfo::from_value(
+        catalog_constants.launcher_id,
+        0,
+        CatalogSlotValue::left_end(SLOT32_MAX_VALUE.into()),
+    );
+    let right_slot_info = SlotInfo::from_value(
+        catalog_constants.launcher_id,
+        0,
+        CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into()),
+    );
+
+    if left_slot_cc.puzzle_hash != Slot::puzzle_hash(&left_slot_info).into()
+        || right_slot_cc.puzzle_hash != Slot::puzzle_hash(&right_slot_info).into()
+    {
+        return Err(CliError::Custom(
+            "Left/right end slot puzzle hashes do not match expected values".to_string(),
+        ));
+    }
+
+    let (hinted_launcher_id, (initial_registration_asset_id, (initial_state, ()))) =
+        <(Bytes32, (Bytes32, (CatalogRegistryState, ())))>::from_clvm(
+            &ctx.allocator,
+            catalog_cc.memos.unwrap().value,
+        )
         .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
 
-    // let (hinted_launcher_id, (initial_registration_asset_id, (initial_state, ()))) =
-    //     launcher_solution.key_value_list;
-    // if hinted_launcher_id != catalog_constants.launcher_id
-    //     || initial_state.registration_price != 1
-    //     || initial_state.cat_maker_puzzle_hash || launcher_coin_record.coin.puzzle_hash != SINGLETON_LAUNCHER_PUZZLE_HASH.into()
-    //         != DefaultCatMakerArgs::curry_tree_hash(
-    //             initial_registration_asset_id.tree_hash().into(),
-    //         )
-    //         .into()
-    // {
-    //     return Err(CliError::Custom(
-    //         "Launcher key_vaule_list not ok".to_string(),
-    //     ));
-    // }
+    let catalog_info = CatalogRegistryInfo::new(initial_state, catalog_constants);
+    let catalog_full_ph = SingletonArgs::curry_tree_hash(
+        catalog_constants.launcher_id,
+        catalog_info.inner_puzzle_hash(),
+    );
+    let catalog = CatalogRegistry::new(
+        Coin::new(eve_catalog_coin.coin_id(), catalog_full_ph.into(), 1),
+        Proof::Lineage(LineageProof {
+            parent_parent_coin_info: eve_catalog_coin.parent_coin_info,
+            parent_inner_puzzle_hash: ctx.tree_hash(eve_singleton_layer.inner_puzzle).into(),
+            parent_amount: 1,
+        }),
+        catalog_info,
+    );
 
-    // println!(
-    //     "Registry launched at height {} with a premine registration CAT asset id of {}.",
-    //     launcher_coin_record.spent_block_index,
-    //     hex::encode(initial_registration_asset_id)
-    // );
+    if hinted_launcher_id != catalog_constants.launcher_id
+        || initial_state.registration_price != 1
+        || initial_state.cat_maker_puzzle_hash
+            != DefaultCatMakerArgs::curry_tree_hash(
+                initial_registration_asset_id.tree_hash().into(),
+            )
+            .into()
+        || launcher_coin_record.coin.puzzle_hash != SINGLETON_LAUNCHER_PUZZLE_HASH.into()
+        || catalog_cc.amount != 1
+        || catalog_cc.puzzle_hash != catalog_info.inner_puzzle_hash().into()
+    {
+        println!(
+            "{} {} {} {} {} {}",
+            hinted_launcher_id != catalog_constants.launcher_id,
+            initial_state.registration_price != 1,
+            initial_state.cat_maker_puzzle_hash
+                != DefaultCatMakerArgs::curry_tree_hash(
+                    initial_registration_asset_id.tree_hash().into()
+                )
+                .into(),
+            launcher_coin_record.coin.puzzle_hash != SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
+            catalog_cc.amount != 1,
+            catalog_cc.puzzle_hash != catalog.coin.puzzle_hash
+        );
+        return Err(CliError::Custom(
+            "Eve coin CATalog create_coin not ok".to_string(),
+        ));
+    }
+
+    println!(
+        "Registry launched at height {} with a premine registration CAT asset id of {}.",
+        launcher_coin_record.spent_block_index,
+        hex::encode(initial_registration_asset_id)
+    );
+
+    todo!("TODO");
+
+    // let mut slot_values = Vec::with_capacity(premine_cats.len() + 2);
+    // slot_values.push(left_slot_info);
+    // slot_values.push(right_slot_info);
 
     println!("Now let's analyze the price singleton.");
     let (MultisigSingleton::Vault(my_vault), Some(state_scheduler_info)) =
