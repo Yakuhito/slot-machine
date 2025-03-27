@@ -1,12 +1,19 @@
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
-use chia_wallet_sdk::SpendContext;
+use chia::{
+    clvm_utils::ToTreeHash,
+    protocol::{Bytes32, SpendBundle},
+    puzzles::{cat::CatArgs, singleton::SingletonStruct},
+};
+use chia_wallet_sdk::{
+    decode_address, ChiaRpcClient, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+};
 use clvmr::serde::node_from_bytes;
-use sage_api::GetDerivations;
+use sage_api::{Amount, Assets, CatAmount, GetDerivations, MakeOffer};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes, hex_string_to_bytes32, parse_amount, sync_catalog,
-    yes_no_prompt, CatNftMetadata, CatalogRegistryConstants, CliError, Db, DefaultCatMakerArgs,
-    SageClient,
+    get_coinset_client, hex_string_to_bytes, hex_string_to_bytes32, new_sk, parse_amount,
+    parse_one_sided_offer, spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt,
+    CatNftMetadata, CatalogPrecommitValue, CatalogRegistryConstants, CliError, Db,
+    DefaultCatMakerArgs, PrecommitLayer, SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -99,6 +106,53 @@ pub async fn catalog_register(
         }
     }
 
+    let recipient_puzzle_hash = Bytes32::new(decode_address(&recipient_address)?.0);
+
+    let initial_nft_puzzle_ptr = CatalogPrecommitValue::<()>::initial_inner_puzzle(
+        &mut ctx,
+        recipient_puzzle_hash,
+        initial_metadata.clone(),
+    )?;
+
+    let precommit_value = CatalogPrecommitValue::with_default_cat_maker(
+        payment_asset_id.tree_hash(),
+        ctx.tree_hash(initial_nft_puzzle_ptr).into(),
+        tail_ptr,
+    );
+    let precommit_value_ptr = ctx.alloc(&precommit_value)?;
+
+    let precommit_inner_puzzle_hash = PrecommitLayer::<()>::puzzle_hash(
+        SingletonStruct::new(catalog_constants.launcher_id)
+            .tree_hash()
+            .into(),
+        catalog_constants.relative_block_height,
+        catalog_constants.precommit_payout_puzzle_hash,
+        recipient_puzzle_hash,
+        ctx.tree_hash(precommit_value_ptr),
+    );
+
+    let precomit_puzzle_hash =
+        CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle_hash);
+
+    let Some(potential_precommit_coin_records) = cli
+        .get_coin_records_by_hint(precommit_inner_puzzle_hash.into(), None, None, Some(false))
+        .await?
+        .coin_records
+    else {
+        return Err(CliError::Custom(
+            "Could not check whether precommit coin exists".to_string(),
+        ));
+    };
+
+    let precommit_coin_record = potential_precommit_coin_records.iter().find(|cr| {
+        cr.coin.puzzle_hash == precomit_puzzle_hash.into() && cr.coin.amount == payment_cat_amount
+    });
+
+    if let Some(_precommit_coin_record) = precommit_coin_record {
+        println!("Precommitment coin found!");
+        todo!("implement this path")
+    }
+
     println!("Registered asset ID: {}", hex::encode(registered_asset_id));
 
     println!("Have one last look at the initial metadata:");
@@ -112,8 +166,74 @@ pub async fn catalog_register(
     println!("A one-sided offer will be created to mint the precommitment coin. It will contain:");
     println!("  {} mojos of the payment asset", payment_cat_amount);
     println!("  {} XCH ({} mojos) fee", fee_str, fee);
+    println!("  1 mojo");
 
     yes_no_prompt("Continue with registration?")?;
+
+    let offer_resp = sage
+        .make_offer(MakeOffer {
+            requested_assets: Assets {
+                xch: Amount::u64(0),
+                cats: vec![],
+                nfts: vec![],
+            },
+            offered_assets: Assets {
+                xch: Amount::u64(1),
+                cats: vec![CatAmount {
+                    asset_id: hex::encode(payment_asset_id),
+                    amount: Amount::u64(payment_cat_amount),
+                }],
+                nfts: vec![],
+            },
+            fee: Amount::u64(fee),
+            receive_address: None,
+            expires_at_second: None,
+            auto_import: false,
+        })
+        .await?;
+    println!("Offer with id {} generated.", offer_resp.offer_id);
+
+    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
+    let security_coin_sk = new_sk()?;
+
+    // Parse one-sided offer
+    let one_sided_offer =
+        parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
+    one_sided_offer
+        .coin_spends
+        .into_iter()
+        .for_each(|cs| ctx.insert(cs));
+
+    // todo: create precommitment coin
+    todo!("secure precommitment coin created");
+
+    let security_coin_conditions = one_sided_offer.security_base_conditions.reserve_fee(1);
+
+    // Spend security coin
+    let security_coin_sig = spend_security_coin(
+        &mut ctx,
+        one_sided_offer.security_coin,
+        security_coin_conditions,
+        &security_coin_sk,
+        if testnet11 {
+            &TESTNET11_CONSTANTS
+        } else {
+            &MAINNET_CONSTANTS
+        },
+    )?;
+
+    let sb = SpendBundle::new(
+        ctx.take(),
+        one_sided_offer.aggregated_signature + &security_coin_sig,
+    );
+
+    println!("Submitting transaction...");
+    let resp = cli.push_tx(sb).await?;
+
+    println!("Transaction submitted; status='{}'", resp.status);
+
+    wait_for_coin(&cli, one_sided_offer.security_coin.coin_id(), true).await?;
+    println!("Confirmed!");
 
     Ok(())
 }

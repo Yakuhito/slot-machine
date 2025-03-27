@@ -198,9 +198,6 @@ impl CatalogRegistry {
                     register_action
                         .get_slot_values_from_solution(ctx, raw_action.action_solution)?,
                 );
-            } else {
-                println!("raw_action_hash: {}", hex::encode(raw_action_hash));
-                println!("register_hash: {}", hex::encode(register_hash));
             }
         }
 
