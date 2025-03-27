@@ -76,7 +76,13 @@ pub async fn catalog_register(
     payment_cat_amount_str: Option<String>,
     fee_str: String,
 ) -> Result<(), CliError> {
-    println!("Welcome to the CATalog registration process, issuer!");
+    if refund {
+        println!(
+            "Ouch - it sucks when things go wrong. Thankfully, the refund path is available to handle a lot of those cases :)"
+        );
+    } else {
+        println!("Welcome to the CATalog registration process, issuer!");
+    }
 
     let mut ctx = SpendContext::new();
     let cli = get_coinset_client(testnet11);
@@ -257,7 +263,11 @@ pub async fn catalog_register(
         )?;
 
         println!("A one-sided offer will be created; it will consume:");
-        println!("  - 1 mojo for minting the CAT NFT");
+        if refund {
+            println!("  - 1 mojo");
+        } else {
+            println!("  - 1 mojo for minting the CAT NFT");
+        }
         println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
         yes_no_prompt("Proceed?")?;
 
@@ -321,18 +331,21 @@ pub async fn catalog_register(
                 None
             };
 
-            catalog.new_action::<CatalogRefundAction>().spend(
-                &mut ctx,
-                &mut catalog,
-                registered_asset_id,
-                if let Some(slot) = slot {
-                    slot.info.value.unwrap().neighbors.tree_hash().into()
-                } else {
-                    Bytes32::default()
-                },
-                precommit_coin,
-                slot,
-            )?
+            catalog
+                .new_action::<CatalogRefundAction>()
+                .spend(
+                    &mut ctx,
+                    &mut catalog,
+                    registered_asset_id,
+                    if let Some(slot) = slot {
+                        slot.info.value.unwrap().neighbors.tree_hash().into()
+                    } else {
+                        Bytes32::default()
+                    },
+                    precommit_coin,
+                    slot,
+                )?
+                .reserve_fee(1)
         } else {
             let (left_value_hash, right_value_hash) = db
                 .get_catalog_neighbor_value_hashes(registered_asset_id)
