@@ -68,7 +68,7 @@ where
         let lineage_proof = self.proof;
         let coin = self.coin;
 
-        let layers = self.info.into_layers(&mut ctx.allocator)?;
+        let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
         let solution = layers.construct_solution(
@@ -182,7 +182,7 @@ mod tests {
             first_coin_info.inner_puzzle_hash().into(),
             StateSchedulerLauncherHints {
                 my_launcher_id: launcher_coin.coin_id(),
-                other_singleton_launcher_id: other_singleton_launcher.coin_id(),
+                receiver_singleton_launcher_id: other_singleton_launcher.coin_id(),
                 final_puzzle_hash,
                 state_schedule: schedule.clone(),
                 final_puzzle_hash_hints: NodePtr::NIL,
