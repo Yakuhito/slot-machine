@@ -78,6 +78,7 @@ where
                 amount: coin.amount,
                 inner_solution: StateSchedulerLayerSolution {
                     other_singleton_inner_puzzle_hash,
+                    inner_solution: (),
                 },
             },
         )?;

@@ -1,10 +1,10 @@
 use chia::{
     clvm_utils::{ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::{LauncherSolution, SingletonArgs},
+    puzzles::singleton::{LauncherSolution, SingletonArgs, SingletonStruct},
 };
 use chia_wallet_sdk::{Condition, DriverError, SingletonLayer};
-use clvm_traits::{FromClvm, ToClvm};
+use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{StateSchedulerLayer, StateSchedulerLayerArgs};
@@ -13,7 +13,7 @@ use crate::{StateSchedulerLayer, StateSchedulerLayerArgs};
 pub struct StateSchedulerInfo<S> {
     pub launcher_id: Bytes32,
 
-    pub other_singleton_launcher_id: Bytes32,
+    pub receiver_singleton_launcher_id: Bytes32,
     pub state_schedule: Vec<(u32, S)>, // block height + state
     pub generation: usize,
     pub final_puzzle_hash: Bytes32,
@@ -25,14 +25,14 @@ where
 {
     pub fn new(
         launcher_id: Bytes32,
-        other_singleton_launcher_id: Bytes32,
+        receiver_singleton_launcher_id: Bytes32,
         state_schedule: Vec<(u32, S)>,
         generation: usize,
         final_puzzle_hash: Bytes32,
     ) -> Self {
         Self {
             launcher_id,
-            other_singleton_launcher_id,
+            receiver_singleton_launcher_id,
             state_schedule,
             generation,
             final_puzzle_hash,
@@ -52,13 +52,17 @@ where
         required_block_height: u32,
         new_state: S,
     ) -> TreeHash {
+        let message: Bytes32 = new_state.tree_hash().into();
+
         StateSchedulerLayerArgs::curry_tree_hash(
-            self.other_singleton_launcher_id,
-            vec![
+            SingletonStruct::new(self.receiver_singleton_launcher_id)
+                .tree_hash()
+                .into(),
+            message,
+            clvm_quote!(vec![
                 Condition::<()>::create_coin(next_puzzle_hash, 1, None),
                 Condition::assert_height_absolute(required_block_height),
-            ],
-            new_state,
+            ]),
         )
     }
 
@@ -87,29 +91,21 @@ where
         self.inner_puzzle_hash_for_generation(self.generation)
     }
 
-    pub fn into_layers(
-        self,
-        allocator: &mut Allocator,
-    ) -> Result<SingletonLayer<StateSchedulerLayer<NodePtr>>, DriverError>
-    where
-        S: ToClvm<Allocator>,
-    {
-        if self.generation >= self.state_schedule.len() {
-            return Err(DriverError::Custom("Generation out of bounds".to_string()));
-        }
-
+    pub fn into_layers(self) -> SingletonLayer<StateSchedulerLayer> {
         let (required_block_height, new_state) = self.state_schedule[self.generation].clone();
 
-        Ok(SingletonLayer::new(
+        SingletonLayer::new(
             self.launcher_id,
             StateSchedulerLayer::new(
-                self.other_singleton_launcher_id,
-                new_state.to_clvm(allocator)?,
+                SingletonStruct::new(self.receiver_singleton_launcher_id)
+                    .tree_hash()
+                    .into(),
+                new_state.tree_hash().into(),
                 required_block_height,
                 self.inner_puzzle_hash_for_generation(self.generation + 1)
                     .into(),
             ),
-        ))
+        )
     }
 
     pub fn from_launcher_solution<H>(
@@ -127,7 +123,7 @@ where
 
         let candidate = Self::new(
             hints.my_launcher_id,
-            hints.other_singleton_launcher_id,
+            hints.receiver_singleton_launcher_id,
             hints.state_schedule,
             0,
             hints.final_puzzle_hash,
@@ -149,7 +145,7 @@ where
     pub fn to_hints<H>(&self, final_puzzle_hash_hints: H) -> StateSchedulerLauncherHints<S, H> {
         StateSchedulerLauncherHints {
             my_launcher_id: self.launcher_id,
-            other_singleton_launcher_id: self.other_singleton_launcher_id,
+            receiver_singleton_launcher_id: self.receiver_singleton_launcher_id,
             final_puzzle_hash: self.final_puzzle_hash,
             state_schedule: self.state_schedule.clone(),
             final_puzzle_hash_hints,
@@ -161,7 +157,7 @@ where
 #[clvm(curry)]
 pub struct StateSchedulerLauncherHints<S, H> {
     pub my_launcher_id: Bytes32,
-    pub other_singleton_launcher_id: Bytes32,
+    pub receiver_singleton_launcher_id: Bytes32,
     pub final_puzzle_hash: Bytes32,
     pub state_schedule: Vec<(u32, S)>,
     #[clvm(rest)]
