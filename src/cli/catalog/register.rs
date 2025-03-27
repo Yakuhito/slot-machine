@@ -137,8 +137,10 @@ pub async fn catalog_register(
     let mut payment_cat_amount = catalog.info.state.registration_price;
     if let Some(payment_cat_amount_str) = payment_cat_amount_str {
         let parsed_payment_cat_amount = parse_amount(payment_cat_amount_str, true)?;
-        if !refund && parsed_payment_cat_amount != payment_cat_amount {
-            yes_no_prompt("Payment CAT amount is different from the specified registration price. Registration will likely fail. Continue at your own risk?")?;
+        if parsed_payment_cat_amount != payment_cat_amount {
+            if !refund {
+                yes_no_prompt("Payment CAT amount is different from the specified registration price. Registration will likely fail. Continue at your own risk?")?;
+            }
             payment_cat_amount = parsed_payment_cat_amount;
         }
     }
