@@ -35,7 +35,7 @@ where
 
     pub fn child(&self) -> Option<Self> {
         // check for both self.info.generation and self.info.generation + 1 to be < self.info.state_schedule.len()
-        if self.info.generation > self.info.state_schedule.len() {
+        if self.info.generation + 1 >= self.info.state_schedule.len() {
             return None;
         };
 

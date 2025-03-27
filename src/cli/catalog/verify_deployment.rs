@@ -350,5 +350,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
     println!("Current (latest unspent) vault info:");
     print_medieval_vault_configuration(my_vault.info.m, &my_vault.info.public_key_list)?;
 
+    println!("\nEverything seems OK");
+
     Ok(())
 }

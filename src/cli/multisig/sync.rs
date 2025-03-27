@@ -54,20 +54,20 @@ where
 {
     let print_sync = print_state_info.is_some();
 
-    let launcher_coin_record = client.get_coin_record_by_name(launcher_id).await?;
-    let Some(launcher_coin_record) = launcher_coin_record.coin_record else {
-        return Err(CliError::CoinNotFound(launcher_id));
-    };
+    let launcher_coin_record = client
+        .get_coin_record_by_name(launcher_id)
+        .await?
+        .coin_record
+        .ok_or(CliError::CoinNotFound(launcher_id))?;
     if !launcher_coin_record.spent {
         return Err(CliError::CoinNotSpent(launcher_id));
     }
 
     let launcher_spend = client
         .get_puzzle_and_solution(launcher_id, Some(launcher_coin_record.spent_block_index))
-        .await?;
-    let Some(launcher_spend) = launcher_spend.coin_solution else {
-        return Err(CliError::CoinNotSpent(launcher_id));
-    };
+        .await?
+        .coin_solution
+        .ok_or(CliError::CoinNotSpent(launcher_id))?;
 
     let launcher_solution_ptr = node_from_bytes(&mut ctx.allocator, &launcher_spend.solution)?;
     let launcher_solution =
@@ -101,22 +101,17 @@ where
                 println!("\nFollowing state scheduler on-chain...");
             }
 
-            let Some(mut state_scheduler) =
-                StateScheduler::<S>::from_launcher_spend(ctx, launcher_spend)?
-            else {
-                return Err(CliError::Custom(
-                    "Failed to parse state scheduler".to_string(),
-                ));
-            };
+            let mut state_scheduler =
+                StateScheduler::<S>::from_launcher_spend(ctx, launcher_spend)?.ok_or(
+                    CliError::Custom("Failed to parse state scheduler".to_string()),
+                )?;
 
             loop {
                 let coin_record = client
                     .get_coin_record_by_name(state_scheduler.coin.coin_id())
-                    .await?;
-
-                let Some(coin_record) = coin_record.coin_record else {
-                    return Err(CliError::CoinNotFound(state_scheduler.coin.coin_id()));
-                };
+                    .await?
+                    .coin_record
+                    .ok_or(CliError::CoinNotFound(state_scheduler.coin.coin_id()))?;
 
                 if !coin_record.spent {
                     if print_sync {
@@ -161,11 +156,9 @@ where
 
             (eve_vault, Some(state_scheduler_info))
         } else {
-            let Some(eve_vault) = MedievalVault::from_launcher_spend(ctx, launcher_spend)? else {
-                return Err(CliError::Custom(
-                    "Singleton not a state scheduler nor a vault".to_string(),
-                ));
-            };
+            let eve_vault = MedievalVault::from_launcher_spend(ctx, launcher_spend)?.ok_or(
+                CliError::Custom("Singleton not a state scheduler nor a vault".to_string()),
+            )?;
 
             if print_sync {
                 println!("Singleton directly launched as a vault with info: ");
@@ -177,7 +170,37 @@ where
             (eve_vault, None)
         };
 
-    println!("Following vault on-chain...");
-    println!("TODO");
-    Ok((MultisigSingleton::Vault(eve_vault), state_scheduler_info))
+    if print_sync {
+        println!("Following vault on-chain...");
+    }
+    let mut vault = eve_vault;
+    loop {
+        println!("loop"); // todo
+        let coin_record = client
+            .get_coin_record_by_name(vault.coin.coin_id())
+            .await?
+            .coin_record
+            .ok_or(CliError::CoinNotFound(vault.coin.coin_id()))?;
+
+        if !coin_record.spent {
+            if print_sync {
+                println!("Latest vault coin not spent.");
+            }
+            break;
+        }
+
+        let vault_spend = client
+            .get_puzzle_and_solution(vault.coin.coin_id(), Some(coin_record.spent_block_index))
+            .await?
+            .coin_solution
+            .ok_or(CliError::CoinNotSpent(vault.coin.coin_id()))?;
+
+        let Some(new_vault) = MedievalVault::from_parent_spend(ctx, vault_spend)? else {
+            break;
+        };
+
+        vault = new_vault;
+    }
+
+    Ok((MultisigSingleton::Vault(vault), state_scheduler_info))
 }
