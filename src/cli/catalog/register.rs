@@ -1,19 +1,16 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, SpendBundle},
+    protocol::Bytes32,
     puzzles::{cat::CatArgs, singleton::SingletonStruct},
 };
-use chia_wallet_sdk::{
-    decode_address, ChiaRpcClient, Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
-};
+use chia_wallet_sdk::{decode_address, encode_address, ChiaRpcClient, SpendContext};
 use clvmr::serde::node_from_bytes;
-use sage_api::{Amount, Assets, CatAmount, GetDerivations, MakeOffer};
+use sage_api::{Amount, GetDerivations, SendCat};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt,
-    CatNftMetadata, CatalogPrecommitValue, CatalogRegistryConstants, CliError, Db,
-    DefaultCatMakerArgs, PrecommitLayer, SageClient,
+    get_coinset_client, get_prefix, hex_string_to_bytes, hex_string_to_bytes32, parse_amount,
+    sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
+    CatalogRegistryConstants, CliError, Db, DefaultCatMakerArgs, PrecommitLayer, SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -163,76 +160,33 @@ pub async fn catalog_register(
 
     println!("\nCONFIRM THE ADDRESS IS CORRECT - NFT CANNOT BE RECOVERED AFTER REGISTRATION\n");
 
-    println!("A one-sided offer will be created to mint the precommitment coin. It will contain:");
-    println!("  {} mojos of the payment asset", payment_cat_amount);
-    println!("  {} XCH ({} mojos) fee", fee_str, fee);
-    println!("  1 mojo");
+    println!(
+        "Your wallet will send {} mojos of the payment asset with a fee of {} XCH ({} mojos)",
+        payment_cat_amount, fee_str, fee
+    );
 
     yes_no_prompt("Continue with registration?")?;
 
-    let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![CatAmount {
-                    asset_id: hex::encode(payment_asset_id),
-                    amount: Amount::u64(payment_cat_amount),
-                }],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
+    let precommit_coin_address =
+        encode_address(precommit_inner_puzzle_hash.into(), &get_prefix(testnet11))?;
+    let send_resp = sage
+        .send_cat(SendCat {
+            asset_id: format!("0x{}", hex::encode(payment_asset_id)),
+            address: precommit_coin_address,
+            amount: Amount::Number(payment_cat_amount),
+            fee: Amount::Number(fee),
+            memos: vec![],
+            auto_submit: true,
         })
         .await?;
-    println!("Offer with id {} generated.", offer_resp.offer_id);
+    println!("Transaction sent.");
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-
-    // Parse one-sided offer
-    let one_sided_offer =
-        parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
-    one_sided_offer
-        .coin_spends
-        .into_iter()
-        .for_each(|cs| ctx.insert(cs));
-
-    // todo: create precommitment coin
-    todo!("secure precommitment coin created");
-
-    let security_coin_conditions = one_sided_offer.security_base_conditions.reserve_fee(1);
-
-    // Spend security coin
-    let security_coin_sig = spend_security_coin(
-        &mut ctx,
-        one_sided_offer.security_coin,
-        security_coin_conditions,
-        &security_coin_sk,
-        if testnet11 {
-            &TESTNET11_CONSTANTS
-        } else {
-            &MAINNET_CONSTANTS
-        },
-    )?;
-
-    let sb = SpendBundle::new(
-        ctx.take(),
-        one_sided_offer.aggregated_signature + &security_coin_sig,
-    );
-
-    println!("Submitting transaction...");
-    let resp = cli.push_tx(sb).await?;
-
-    println!("Transaction submitted; status='{}'", resp.status);
-
-    wait_for_coin(&cli, one_sided_offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(
+        &cli,
+        hex_string_to_bytes32(&send_resp.summary.inputs[0].coin_id)?,
+        true,
+    )
+    .await?;
     println!("Confirmed!");
 
     Ok(())
