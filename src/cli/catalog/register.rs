@@ -88,7 +88,7 @@ pub async fn catalog_register(
     let cli = get_coinset_client(testnet11);
     let catalog_constants = CatalogRegistryConstants::get(testnet11);
     let sage = SageClient::new()?;
-    let db = Db::new().await?;
+    let db = Db::new(false).await?;
 
     let fee = parse_amount(fee_str.clone(), false)?;
 

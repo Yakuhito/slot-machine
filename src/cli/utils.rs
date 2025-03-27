@@ -77,6 +77,9 @@ pub enum CliError {
     #[error("could not parse db column")]
     DbColumnParse(),
 
+    #[error("could not find db column")]
+    DbColumnNotFound(),
+
     #[error("coin not found: {0}")]
     CoinNotFound(Bytes32),
 

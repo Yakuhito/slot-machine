@@ -295,7 +295,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             "CATalog not completely unrolled".to_string(),
         ));
     } else {
-        println!("All premine CATs were distributed correctly.");
+        println!("All premined CATs were distributed correctly.");
     }
 
     println!("Now let's analyze the price singleton.");
