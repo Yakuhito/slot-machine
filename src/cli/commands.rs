@@ -163,71 +163,9 @@ enum CatalogCliAction {
         #[arg(long, required = false)]
         payment_cat_amount: Option<String>,
 
-        /// Use testnet11
+        /// Refund path
         #[arg(long, default_value_t = false)]
-        testnet11: bool,
-
-        /// Fee to use, in XCH
-        #[arg(long, default_value = "0.0025")]
-        fee: String,
-    },
-    /// Refund a CAT registration
-    Refund {
-        /// TAIL reveal (hex CLVM)
-        #[arg(long)]
-        tail_reveal: String,
-
-        /// Initial CAT ticker (e.g., "SBX")
-        #[arg(long)]
-        ticker: String,
-
-        /// Initial CAT name (e.g., "Spacebucks")
-        #[arg(long)]
-        name: String,
-
-        /// Initial CAT image URIs (comma-separated list of URIs)
-        #[arg(long)]
-        image_uris: String,
-
-        /// Initial CAT image hash
-        #[arg(long)]
-        image_hash: String,
-
-        /// Initial on-chain CAT description (e.g., "Galactic money for a galactic galaxy")
-        #[arg(long, default_value = "")]
-        description: String,
-
-        /// Initial on-chain CAT precision (do not change unless you know what you are doing)
-        #[arg(long, default_value = "4")]
-        precision: u8,
-
-        /// Initial CAT metadata URIs (comma-separated list of URIs)
-        #[arg(long, default_value = "")]
-        metadata_uris: String,
-
-        /// Initial CAT metadata hash
-        #[arg(long, required = false)]
-        metadata_hash: Option<String>,
-
-        /// Initial CAT license URIs (comma-separated list of URIs)
-        #[arg(long, default_value = "")]
-        license_uris: String,
-
-        /// Initial CAT license hash
-        #[arg(long, required = false)]
-        license_hash: Option<String>,
-
-        /// CAT NFT recipient (if not provided, defaults to owner of current wallet)
-        #[arg(long, required = false)]
-        recipient: Option<String>,
-
-        /// Payment asset id (payment CAT tail hash)
-        #[arg(long)]
-        payment_asset_id: String,
-
-        /// Payment CAT amount (only provide if refunding)
-        #[arg(long)]
-        payment_cat_amount: String,
+        refund: bool,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -296,6 +234,7 @@ pub async fn run_cli() {
                 license_uris,
                 license_hash,
                 recipient,
+                refund,
                 testnet11,
                 payment_asset_id,
                 payment_cat_amount,
@@ -314,44 +253,7 @@ pub async fn run_cli() {
                     license_uris,
                     license_hash,
                     recipient,
-                    testnet11,
-                    payment_asset_id,
-                    payment_cat_amount,
-                    fee,
-                )
-                .await
-            }
-            CatalogCliAction::Refund {
-                tail_reveal,
-                ticker,
-                name,
-                image_uris,
-                image_hash,
-                description,
-                precision,
-                metadata_uris,
-                metadata_hash,
-                license_uris,
-                license_hash,
-                recipient,
-                testnet11,
-                payment_asset_id,
-                payment_cat_amount,
-                fee,
-            } => {
-                catalog_refund(
-                    tail_reveal,
-                    ticker,
-                    name,
-                    description,
-                    precision,
-                    image_uris,
-                    image_hash,
-                    metadata_uris,
-                    metadata_hash,
-                    license_uris,
-                    license_hash,
-                    recipient,
+                    refund,
                     testnet11,
                     payment_asset_id,
                     payment_cat_amount,

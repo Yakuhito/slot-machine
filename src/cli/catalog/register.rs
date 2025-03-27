@@ -13,9 +13,9 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer, SendCat};
 use crate::{
     get_coinset_client, get_constants, get_prefix, hex_string_to_bytes, hex_string_to_bytes32,
     new_sk, parse_amount, parse_one_sided_offer, spend_security_coin, sync_catalog, wait_for_coin,
-    yes_no_prompt, CatNftMetadata, CatalogPrecommitValue, CatalogRegisterAction,
-    CatalogRegistryConstants, CatalogSlotValue, CliError, Db, DefaultCatMakerArgs, PrecommitCoin,
-    PrecommitLayer, SageClient,
+    yes_no_prompt, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
+    CatalogRegisterAction, CatalogRegistryConstants, CatalogSlotValue, CliError, Db,
+    DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -70,6 +70,7 @@ pub async fn catalog_register(
     license_uris_str: String,
     license_hash_str: Option<String>,
     recipient_address: Option<String>,
+    refund: bool,
     testnet11: bool,
     payment_asset_id_str: String,
     payment_cat_amount_str: Option<String>,
@@ -120,8 +121,9 @@ pub async fn catalog_register(
     let tail_ptr = node_from_bytes(&mut ctx.allocator, &hex_string_to_bytes(&tail_reveal_str)?)?;
     let registered_asset_id: Bytes32 = ctx.tree_hash(tail_ptr).into();
 
-    if DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
-        != catalog.info.state.cat_maker_puzzle_hash.into()
+    if !refund
+        && DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
+            != catalog.info.state.cat_maker_puzzle_hash.into()
     {
         yes_no_prompt("CAT maker puzzle hash doesn't correspond to the given payment asset ID. Registration will NOT work unless the price singleton changes the registry's state. Continue at your own risk?")?;
     }
@@ -129,7 +131,7 @@ pub async fn catalog_register(
     let mut payment_cat_amount = catalog.info.state.registration_price;
     if let Some(payment_cat_amount_str) = payment_cat_amount_str {
         let parsed_payment_cat_amount = parse_amount(payment_cat_amount_str, true)?;
-        if parsed_payment_cat_amount != payment_cat_amount {
+        if !refund && parsed_payment_cat_amount != payment_cat_amount {
             yes_no_prompt("Payment CAT amount is different from the specified registration price. Registration will likely fail. Continue at your own risk?")?;
             payment_cat_amount = parsed_payment_cat_amount;
         }
@@ -254,30 +256,6 @@ pub async fn catalog_register(
             payment_cat_amount,
         )?;
 
-        let (left_value_hash, right_value_hash) = db
-            .get_catalog_neighbor_value_hashes(registered_asset_id)
-            .await?;
-
-        let left_slot = db
-            .get_slot::<CatalogSlotValue>(
-                &mut ctx.allocator,
-                catalog_constants.launcher_id,
-                0,
-                left_value_hash,
-            )
-            .await?
-            .unwrap();
-
-        let right_slot = db
-            .get_slot::<CatalogSlotValue>(
-                &mut ctx.allocator,
-                catalog_constants.launcher_id,
-                0,
-                right_value_hash,
-            )
-            .await?
-            .unwrap();
-
         println!("A one-sided offer will be created; it will consume:");
         println!("  - 1 mojo for minting the CAT NFT");
         println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
@@ -310,18 +288,93 @@ pub async fn catalog_register(
             parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
         offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-        let (sec_conds, _new_slots) = catalog.new_action::<CatalogRegisterAction>().spend(
-            &mut ctx,
-            &mut catalog,
-            registered_asset_id,
-            left_slot,
-            right_slot,
-            precommit_coin,
-            Spend {
-                puzzle: initial_nft_puzzle_ptr,
-                solution: NodePtr::NIL,
-            },
-        )?;
+        let sec_conds = if refund {
+            let slot: Option<Slot<CatalogSlotValue>> = if DefaultCatMakerArgs::curry_tree_hash(
+                payment_asset_id.tree_hash().into(),
+            ) == catalog
+                .info
+                .state
+                .cat_maker_puzzle_hash
+                .into()
+                && payment_cat_amount == catalog.info.state.registration_price
+            {
+                let Some(slot_value_hash) = db
+                    .get_catalog_indexed_slot_value(registered_asset_id)
+                    .await?
+                else {
+                    return Err(CliError::Custom(
+                                "Refund not available - precommit uses right CAT & amount & tries to register a new CAT".to_string(),
+                            ));
+                };
+
+                Some(
+                    db.get_slot::<CatalogSlotValue>(
+                        &mut ctx.allocator,
+                        catalog_constants.launcher_id,
+                        0,
+                        slot_value_hash,
+                    )
+                    .await?
+                    .unwrap(),
+                )
+            } else {
+                None
+            };
+
+            catalog.new_action::<CatalogRefundAction>().spend(
+                &mut ctx,
+                &mut catalog,
+                registered_asset_id,
+                if let Some(slot) = slot {
+                    slot.info.value.unwrap().neighbors.tree_hash().into()
+                } else {
+                    Bytes32::default()
+                },
+                precommit_coin,
+                slot,
+            )?
+        } else {
+            let (left_value_hash, right_value_hash) = db
+                .get_catalog_neighbor_value_hashes(registered_asset_id)
+                .await?;
+
+            let left_slot = db
+                .get_slot::<CatalogSlotValue>(
+                    &mut ctx.allocator,
+                    catalog_constants.launcher_id,
+                    0,
+                    left_value_hash,
+                )
+                .await?
+                .unwrap();
+
+            let right_slot = db
+                .get_slot::<CatalogSlotValue>(
+                    &mut ctx.allocator,
+                    catalog_constants.launcher_id,
+                    0,
+                    right_value_hash,
+                )
+                .await?
+                .unwrap();
+
+            catalog
+                .new_action::<CatalogRegisterAction>()
+                .spend(
+                    &mut ctx,
+                    &mut catalog,
+                    registered_asset_id,
+                    left_slot,
+                    right_slot,
+                    precommit_coin,
+                    Spend {
+                        puzzle: initial_nft_puzzle_ptr,
+                        solution: NodePtr::NIL,
+                    },
+                )?
+                .0
+        };
+
         let _new_catalog = catalog.finish_spend(&mut ctx)?;
 
         let security_coin_sig = spend_security_coin(
@@ -342,6 +395,11 @@ pub async fn catalog_register(
         println!("Confirmed!");
 
         return Ok(());
+    }
+    if refund {
+        return Err(CliError::Custom(
+            "Precommitment coin not found but --refund was provided".to_string(),
+        ));
     }
 
     println!("Registered asset ID: {}", hex::encode(registered_asset_id));
