@@ -295,6 +295,7 @@ pub async fn catalog_register(
                 solution: NodePtr::NIL,
             },
         )?;
+        let _new_catalog = catalog.finish_spend(&mut ctx)?;
 
         let security_coin_sig = spend_security_coin(
             &mut ctx,
