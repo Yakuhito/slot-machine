@@ -330,7 +330,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         let (block, state) = state_scheduler_info.state_schedule[i];
         if record.block_height != block
             || record.registration_price != state.registration_price
-            || record.asset_id
+            || state.cat_maker_puzzle_hash
                 != DefaultCatMakerArgs::curry_tree_hash(record.asset_id.tree_hash().into()).into()
         {
             price_schedule_ok = false;
