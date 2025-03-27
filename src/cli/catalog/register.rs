@@ -1,16 +1,19 @@
 use chia::{
     clvm_utils::ToTreeHash,
     protocol::Bytes32,
-    puzzles::{cat::CatArgs, singleton::SingletonStruct},
+    puzzles::{cat::CatArgs, singleton::SingletonStruct, LineageProof},
 };
-use chia_wallet_sdk::{decode_address, encode_address, ChiaRpcClient, SpendContext};
-use clvmr::serde::node_from_bytes;
+use chia_wallet_sdk::{
+    decode_address, encode_address, CatLayer, ChiaRpcClient, Layer, Puzzle, SpendContext,
+};
+use clvmr::{serde::node_from_bytes, NodePtr};
 use sage_api::{Amount, GetDerivations, SendCat};
 
 use crate::{
     get_coinset_client, get_prefix, hex_string_to_bytes, hex_string_to_bytes32, parse_amount,
     sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
-    CatalogRegistryConstants, CliError, Db, DefaultCatMakerArgs, PrecommitLayer, SageClient,
+    CatalogRegistryConstants, CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer,
+    SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -145,9 +148,84 @@ pub async fn catalog_register(
         cr.coin.puzzle_hash == precomit_puzzle_hash.into() && cr.coin.amount == payment_cat_amount
     });
 
-    if let Some(_precommit_coin_record) = precommit_coin_record {
-        println!("Precommitment coin found!");
-        todo!("implement this path")
+    if let Some(precommit_coin_record) = precommit_coin_record {
+        let target_block_height = precommit_coin_record.confirmed_block_index
+            + catalog_constants.relative_block_height
+            + 7;
+        println!(
+            "Precommitment coin found! It was created at block #{}; target spendable block height is #{}",
+            target_block_height, target_block_height
+        );
+
+        loop {
+            let resp = cli.get_blockchain_state().await?;
+            let Some(blockchain_state) = resp.blockchain_state else {
+                eprintln!("Failed to get blockchain state - aborting...");
+                return Ok(());
+            };
+
+            if blockchain_state.peak.height >= target_block_height {
+                break;
+            }
+
+            println!(
+                "Latest block is #{}; waiting for {} more blocks...",
+                blockchain_state.peak.height,
+                target_block_height - blockchain_state.peak.height
+            );
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        }
+
+        println!("Precommitment coin is now spendable! Fetching its lineage proof...");
+
+        let Some(parent_coin_spend) = cli
+            .get_puzzle_and_solution(
+                precommit_coin_record.coin.parent_coin_info,
+                Some(precommit_coin_record.confirmed_block_index),
+            )
+            .await?
+            .coin_solution
+        else {
+            return Err(CliError::CoinNotSpent(
+                precommit_coin_record.coin.parent_coin_info,
+            ));
+        };
+
+        let parent_puzzle = node_from_bytes(&mut ctx.allocator, &parent_coin_spend.puzzle_reveal)?;
+        let Some(parent_cat_layer) = CatLayer::<NodePtr>::parse_puzzle(
+            &ctx.allocator,
+            Puzzle::parse(&ctx.allocator, parent_puzzle),
+        )?
+        else {
+            eprintln!(
+                "Failed to parse CAT puzzle for coin {} - aborting...",
+                hex::encode(precommit_coin_record.coin.coin_id())
+            );
+            return Ok(());
+        };
+        let parent_inner_puzzle_hash = ctx.tree_hash(parent_cat_layer.inner_puzzle);
+        let lineage_proof = LineageProof {
+            parent_parent_coin_info: parent_coin_spend.coin.parent_coin_info,
+            parent_inner_puzzle_hash: parent_inner_puzzle_hash.into(),
+            parent_amount: parent_coin_spend.coin.amount,
+        };
+
+        let precommit_coin = PrecommitCoin::new(
+            &mut ctx,
+            precommit_coin_record.coin.parent_coin_info,
+            lineage_proof,
+            payment_asset_id,
+            SingletonStruct::new(catalog_constants.launcher_id)
+                .tree_hash()
+                .into(),
+            catalog_constants.relative_block_height,
+            catalog_constants.precommit_payout_puzzle_hash,
+            recipient_puzzle_hash,
+            precommit_value,
+            payment_cat_amount,
+        )?;
+
+        return Ok(());
     }
 
     println!("Registered asset ID: {}", hex::encode(registered_asset_id));
@@ -171,7 +249,7 @@ pub async fn catalog_register(
         encode_address(precommit_inner_puzzle_hash.into(), &get_prefix(testnet11))?;
     let send_resp = sage
         .send_cat(SendCat {
-            asset_id: format!("0x{}", hex::encode(payment_asset_id)),
+            asset_id: hex::encode(payment_asset_id),
             address: precommit_coin_address,
             amount: Amount::Number(payment_cat_amount),
             fee: Amount::Number(fee),
@@ -188,6 +266,8 @@ pub async fn catalog_register(
     )
     .await?;
     println!("Confirmed!");
+
+    println!("To spend the precommitment coin, run the same command again");
 
     Ok(())
 }
