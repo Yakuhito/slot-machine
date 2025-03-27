@@ -1,7 +1,4 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes, Bytes32},
-};
+use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{
     serde::{node_from_bytes, node_to_bytes},
@@ -26,7 +23,7 @@ pub struct Db {
 }
 
 impl Db {
-    pub async fn new(is_listener: bool) -> Result<Self, CliError> {
+    pub async fn new() -> Result<Self, CliError> {
         let pool = SqlitePoolOptions::new()
             .idle_timeout(Duration::from_secs(5))
             .acquire_timeout(Duration::from_secs(5))
@@ -72,50 +69,6 @@ impl Db {
         )
         .execute(&pool)
         .await?;
-
-        if is_listener {
-            sqlx::query(
-                "
-                CREATE TABLE IF NOT EXISTS followed_singletons (
-                    service INTEGER NOT NULL,
-                    launcher_id BLOB NOT NULL,
-                    latest_processed_coin BLOB,
-                    PRIMARY KEY (service, launcher_id)
-                )
-                ",
-            )
-            .execute(&pool)
-            .await?;
-
-            sqlx::query(
-                "
-                CREATE TABLE IF NOT EXISTS processed_blocks (
-                    service INTEGER NOT NULL,
-                    height INTEGER NOT NULL,
-                    header_hash BLOB NOT NULL,
-                    prev_height INTEGER,
-                    PRIMARY KEY (service, height)
-                )
-                ",
-            )
-            .execute(&pool)
-            .await?;
-
-            sqlx::query(
-                "
-                CREATE TABLE IF NOT EXISTS processed_coins (
-                    service INTEGER NOT NULL,
-                    coin_id BLOB NOT NULL,
-                    parent_coin_id BLOB,
-                    height INTEGER NOT NULL,
-                    parsed_data BLOB NOT NULL,
-                    PRIMARY KEY (service, coin_id)
-                )
-                ",
-            )
-            .execute(&pool)
-            .await?;
-        }
 
         Ok(Self { pool })
     }
@@ -486,191 +439,6 @@ impl Db {
         let higher_hash = column_to_bytes32(higher_row.get::<&[u8], _>("slot_value_hash"))?;
 
         Ok((lower_hash, higher_hash))
-    }
-
-    pub async fn get_followed_singleton_latest_processed_coin(
-        &self,
-        service: u8,
-        launcher_id: Bytes32,
-    ) -> Result<Option<Bytes32>, CliError> {
-        let row = sqlx::query(
-            "
-            SELECT latest_processed_coin FROM followed_singletons 
-            WHERE service = ?1 AND launcher_id = ?2
-            ",
-        )
-        .bind(service as i64)
-        .bind(launcher_id.to_vec())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?
-        .ok_or(CliError::DbColumnNotFound())?;
-
-        row.get::<Option<Vec<u8>>, _>(0)
-            .map(|bytes| column_to_bytes32(&bytes))
-            .transpose()
-    }
-
-    pub async fn set_followed_singleton_latest_processed_coin(
-        &self,
-        service: u8,
-        launcher_id: Bytes32,
-        latest_processed_coin: Option<Bytes32>,
-    ) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            INSERT INTO followed_singletons (service, launcher_id, latest_processed_coin)
-            VALUES (?1, ?2, ?3)
-            ON CONFLICT(service, launcher_id) 
-            DO UPDATE SET latest_processed_coin = excluded.latest_processed_coin
-            ",
-        )
-        .bind(service as i64)
-        .bind(launcher_id.to_vec())
-        .bind(latest_processed_coin.map(|b| b.to_vec()))
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
-    }
-
-    pub async fn remove_followed_singleton(
-        &self,
-        service: u8,
-        launcher_id: Bytes32,
-    ) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            DELETE FROM followed_singletons 
-            WHERE service = ?1 AND launcher_id = ?2
-            ",
-        )
-        .bind(service as i64)
-        .bind(launcher_id.to_vec())
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
-    }
-
-    pub async fn get_processed_block(
-        &self,
-        service: u8,
-        height: u32,
-    ) -> Result<(Bytes32, Option<u32>), CliError> {
-        let row = sqlx::query(
-            "
-            SELECT header_hash, prev_height FROM processed_blocks 
-            WHERE service = ?1 AND height = ?2
-            ",
-        )
-        .bind(service as i64)
-        .bind(height as i64)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?
-        .ok_or(CliError::DbColumnNotFound())?;
-
-        let header_hash = column_to_bytes32(row.get::<&[u8], _>("header_hash"))?;
-        let prev_height = row.get::<Option<i64>, _>("prev_height").map(|h| h as u32);
-        Ok((header_hash, prev_height))
-    }
-
-    pub async fn remove_processed_block(
-        &self,
-        service: u8,
-        height: u32,
-        header_hash: Bytes32,
-    ) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            DELETE FROM processed_blocks 
-            WHERE service = ?1 AND height = ?2 AND header_hash = ?3
-            ",
-        )
-        .bind(service as i64)
-        .bind(height as i64)
-        .bind(header_hash.to_vec())
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
-    }
-
-    pub async fn add_processed_coin(
-        &self,
-        service: u8,
-        coin_id: Bytes32,
-        parent_coin_id: Option<Bytes32>,
-        height: u32,
-        parsed_data: Bytes,
-    ) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            INSERT INTO processed_coins (service, coin_id, parent_coin_id, height, parsed_data)
-            VALUES (?1, ?2, ?3, ?4, ?5)
-            ",
-        )
-        .bind(service as i64)
-        .bind(coin_id.to_vec())
-        .bind(parent_coin_id.map(|b| b.to_vec()))
-        .bind(height as i64)
-        .bind(parsed_data.to_vec())
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
-    }
-
-    pub async fn get_processed_coin(
-        &self,
-        service: u8,
-        coin_id: Bytes32,
-    ) -> Result<(Option<Bytes32>, u32, Bytes), CliError> {
-        let row = sqlx::query(
-            "
-            SELECT parent_coin_id, height, parsed_data FROM processed_coins 
-            WHERE service = ?1 AND coin_id = ?2
-            ",
-        )
-        .bind(service as i64)
-        .bind(coin_id.to_vec())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?
-        .ok_or(CliError::DbColumnNotFound())?;
-
-        let parent_coin_id = match row.get::<Option<Vec<u8>>, _>("parent_coin_id") {
-            Some(bytes) => Some(column_to_bytes32(&bytes)?),
-            None => None,
-        };
-        let height = row.get::<i64, _>("height") as u32;
-        let parsed_data = row.get::<Vec<u8>, _>("parsed_data");
-        Ok((parent_coin_id, height, Bytes::from(parsed_data)))
-    }
-
-    pub async fn remove_processed_coin(
-        &self,
-        service: u8,
-        coin_id: Bytes32,
-    ) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            DELETE FROM processed_coins 
-            WHERE service = ?1 AND coin_id = ?2
-            ",
-        )
-        .bind(service as i64)
-        .bind(coin_id.to_vec())
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
     }
 }
 

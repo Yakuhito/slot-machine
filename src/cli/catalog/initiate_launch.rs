@@ -164,7 +164,7 @@ pub async fn catalog_initiate_launch(
     let client = get_coinset_client(testnet11);
 
     println!("Opening database...");
-    let db = Db::new(false).await?;
+    let db = Db::new().await?;
 
     let launcher_id = db
         .get_value_by_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY)
