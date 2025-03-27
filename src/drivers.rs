@@ -1064,7 +1064,7 @@ mod tests {
 
         let slot = slots
             .iter()
-            .find(|s| s.info.value.unwrap().asset_id == tail_hash.into());
+            .find(|s| s.info.value.asset_id == tail_hash.into());
 
         let mut catalog = catalog;
         let secure_cond = catalog.new_action::<CatalogRefundAction>().spend(
@@ -1072,7 +1072,7 @@ mod tests {
             &mut catalog,
             tail_hash.into(),
             if let Some(found_slot) = slot {
-                found_slot.info.value.unwrap().neighbors.tree_hash().into()
+                found_slot.info.value.neighbors.tree_hash().into()
             } else {
                 Bytes32::default()
             },
@@ -1258,7 +1258,7 @@ mod tests {
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
 
             // call the 'register' action on CATalog
-            slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
+            slots.sort_unstable_by(|a, b| a.info.value.cmp(&b.info.value));
 
             let slot_value_to_insert =
                 CatalogSlotValue::new(tail_hash.into(), Bytes32::default(), Bytes32::default());
@@ -1266,17 +1266,16 @@ mod tests {
             let mut left_slot: Option<Slot<CatalogSlotValue>> = None;
             let mut right_slot: Option<Slot<CatalogSlotValue>> = None;
             for slot in slots.iter() {
-                let slot_value = slot.info.value.unwrap();
+                let slot_value = slot.info.value;
 
                 if slot_value < slot_value_to_insert {
                     // slot belongs to the left
-                    if left_slot.is_none() || slot_value > left_slot.unwrap().info.value.unwrap() {
+                    if left_slot.is_none() || slot_value > left_slot.unwrap().info.value {
                         left_slot = Some(*slot);
                     }
                 } else {
                     // slot belongs to the right
-                    if right_slot.is_none() || slot_value < right_slot.unwrap().info.value.unwrap()
-                    {
+                    if right_slot.is_none() || slot_value < right_slot.unwrap().info.value {
                         right_slot = Some(*slot);
                     }
                 }
@@ -1453,7 +1452,7 @@ mod tests {
             Bytes32::default(),
             handle_to_refund.clone(),
             if let Some(existing_slot) = slot {
-                existing_slot.info.value.unwrap().expiration + 28 * 24 * 60 * 60 + 1
+                existing_slot.info.value.expiration + 28 * 24 * 60 * 60 + 1
             } else {
                 0
             },
@@ -1695,7 +1694,7 @@ mod tests {
 
             sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
             // call the 'register' action on CNS
-            slots.sort_unstable_by(|a, b| a.info.value.unwrap().cmp(&b.info.value.unwrap()));
+            slots.sort_unstable_by(|a, b| a.info.value.cmp(&b.info.value));
 
             let slot_value_to_insert = XchandlesSlotValue::new(
                 handle_hash,
@@ -1709,17 +1708,16 @@ mod tests {
             let mut left_slot: Option<Slot<XchandlesSlotValue>> = None;
             let mut right_slot: Option<Slot<XchandlesSlotValue>> = None;
             for slot in slots.iter() {
-                let slot_value = slot.info.value.unwrap();
+                let slot_value = slot.info.value;
 
                 if slot_value < slot_value_to_insert {
                     // slot belongs to the left
-                    if left_slot.is_none() || slot_value > left_slot.unwrap().info.value.unwrap() {
+                    if left_slot.is_none() || slot_value > left_slot.unwrap().info.value {
                         left_slot = Some(*slot);
                     }
                 } else {
                     // slot belongs to the right
-                    if right_slot.is_none() || slot_value < right_slot.unwrap().info.value.unwrap()
-                    {
+                    if right_slot.is_none() || slot_value < right_slot.unwrap().info.value {
                         right_slot = Some(*slot);
                     }
                 }
@@ -1897,13 +1895,13 @@ mod tests {
         let handle_hash: Bytes32 = handle_to_expire.tree_hash().into();
         let initial_slot = slots
             .iter()
-            .find(|s| s.info.value.unwrap().handle_hash == handle_hash)
+            .find(|s| s.info.value.handle_hash == handle_hash)
             .unwrap();
 
         // precommit coin needed
         let refund_puzzle = ctx.alloc(&1)?;
         let refund_puzzle_hash = ctx.tree_hash(refund_puzzle);
-        let expiration = initial_slot.info.value.unwrap().expiration;
+        let expiration = initial_slot.info.value.expiration;
         let buy_time = expiration + 27 * 24 * 60 * 60; // last day of auction; 0 < premium < 1 CAT
         let value = XchandlesPrecommitValue::for_normal_registration(
             payment_cat.asset_id.tree_hash(),
@@ -2037,20 +2035,20 @@ mod tests {
             };
             let existing_slot = *slots
                 .iter()
-                .find(|s| s.info.value.unwrap().handle_hash == existing_handle.tree_hash().into())
+                .find(|s| s.info.value.handle_hash == existing_handle.tree_hash().into())
                 .unwrap();
             let existing_handle_pricing_solution = if use_factor_pricing {
                 XchandlesFactorPricingSolution {
-                    current_expiration: existing_slot.info.value.unwrap().expiration,
+                    current_expiration: existing_slot.info.value.expiration,
                     handle: existing_handle.clone(),
                     num_years: 1,
                 }
                 .to_clvm(&mut ctx.allocator)?
             } else {
                 XchandlesExponentialPremiumRenewPuzzleSolution {
-                    buy_time: existing_slot.info.value.unwrap().expiration + 28 * 24 * 60 * 60 + 1, // premium should be 0
+                    buy_time: existing_slot.info.value.expiration + 28 * 24 * 60 * 60 + 1, // premium should be 0
                     pricing_program_solution: XchandlesFactorPricingSolution {
-                        current_expiration: existing_slot.info.value.unwrap().expiration,
+                        current_expiration: existing_slot.info.value.expiration,
                         handle: existing_handle.clone(),
                         num_years: 1,
                     },
@@ -2479,9 +2477,9 @@ mod tests {
 
         let new_value_keys = new_incentive_slots
             .iter()
-            .map(|s| s.info.value.unwrap().epoch_start)
+            .map(|s| s.info.value.epoch_start)
             .collect::<Vec<_>>();
-        incentive_slots.retain(|s| !new_value_keys.contains(&s.info.value.unwrap().epoch_start));
+        incentive_slots.retain(|s| !new_value_keys.contains(&s.info.value.epoch_start));
         incentive_slots.extend(new_incentive_slots);
 
         // spend reserve and source cat together so deltas add up
@@ -2518,7 +2516,7 @@ mod tests {
                 &mut registry,
                 *incentive_slots
                     .iter()
-                    .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
+                    .find(|s| s.info.value.epoch_start == fifth_epoch_start)
                     .unwrap(),
                 fifth_epoch_start,
                 cat_minter_puzzle_hash,
@@ -2527,9 +2525,9 @@ mod tests {
 
         let new_value_keys = new_incentive_slots
             .iter()
-            .map(|s| s.info.value.unwrap().epoch_start)
+            .map(|s| s.info.value.epoch_start)
             .collect::<Vec<_>>();
-        incentive_slots.retain(|s| !new_value_keys.contains(&s.info.value.unwrap().epoch_start));
+        incentive_slots.retain(|s| !new_value_keys.contains(&s.info.value.epoch_start));
         incentive_slots.extend(new_incentive_slots);
 
         // spend reserve and source cat together so deltas add up
@@ -2572,7 +2570,7 @@ mod tests {
                 fifth_epoch_commitment_slot,
                 *incentive_slots
                     .iter()
-                    .find(|s| s.info.value.unwrap().epoch_start == fifth_epoch_start)
+                    .find(|s| s.info.value.epoch_start == fifth_epoch_start)
                     .unwrap(),
             )?;
 
@@ -2603,23 +2601,22 @@ mod tests {
             .unwrap()
             .spent_height
             .is_none());
-        incentive_slots.retain(|s| {
-            s.info.value.unwrap().epoch_start != new_reward_slot.info.value.unwrap().epoch_start
-        });
+        incentive_slots
+            .retain(|s| s.info.value.epoch_start != new_reward_slot.info.value.epoch_start);
         incentive_slots.push(new_reward_slot);
 
         // start first epoch
         let reserve_cat = registry.reserve.to_cat();
         let first_epoch_incentives_slot = *incentive_slots
             .iter()
-            .find(|s| s.info.value.unwrap().epoch_start == first_epoch_start)
+            .find(|s| s.info.value.epoch_start == first_epoch_start)
             .unwrap();
         let (new_epoch_conditions, new_reward_slot, validator_fee) =
             registry.new_action::<DigNewEpochAction>().spend(
                 ctx,
                 &mut registry,
                 first_epoch_incentives_slot,
-                first_epoch_incentives_slot.info.value.unwrap().rewards,
+                first_epoch_incentives_slot.info.value.rewards,
             )?;
         let payout_coin_id = reserve_cat
             .wrapped_child(constants.validator_payout_puzzle_hash, validator_fee)
@@ -2637,7 +2634,7 @@ mod tests {
         assert_eq!(registry.info.state.round_reward_info.cumulative_payout, 0);
         assert_eq!(
             registry.info.state.round_reward_info.remaining_rewards,
-            first_epoch_incentives_slot.info.value.unwrap().rewards - validator_fee
+            first_epoch_incentives_slot.info.value.rewards - validator_fee
         );
         assert_eq!(
             registry.info.state.round_time_info.last_update,
@@ -2657,9 +2654,8 @@ mod tests {
             .unwrap()
             .spent_height
             .is_none());
-        incentive_slots.retain(|s| {
-            s.info.value.unwrap().epoch_start != new_reward_slot.info.value.unwrap().epoch_start
-        });
+        incentive_slots
+            .retain(|s| s.info.value.epoch_start != new_reward_slot.info.value.epoch_start);
         incentive_slots.push(new_reward_slot);
 
         // sync to 10%
@@ -2841,7 +2837,7 @@ mod tests {
             let reward_slot = *incentive_slots
                 .iter()
                 .find(|s| {
-                    s.info.value.unwrap().epoch_start
+                    s.info.value.epoch_start
                         == first_epoch_start
                             + if epoch <= 4 { epoch } else { 4 } * constants.epoch_seconds
                 })
@@ -2852,14 +2848,13 @@ mod tests {
                     &mut registry,
                     reward_slot,
                     if epoch <= 4 {
-                        reward_slot.info.value.unwrap().rewards
+                        reward_slot.info.value.rewards
                     } else {
                         0
                     },
                 )?;
-            incentive_slots.retain(|s| {
-                s.info.value.unwrap().epoch_start != new_reward_slot.info.value.unwrap().epoch_start
-            });
+            incentive_slots
+                .retain(|s| s.info.value.epoch_start != new_reward_slot.info.value.epoch_start);
             incentive_slots.push(new_reward_slot);
 
             ensure_conditions_met(
@@ -2889,9 +2884,9 @@ mod tests {
 
         let new_value_keys = new_incentive_slots
             .iter()
-            .map(|s| s.info.value.unwrap().epoch_start)
+            .map(|s| s.info.value.epoch_start)
             .collect::<Vec<_>>();
-        incentive_slots.retain(|s| !new_value_keys.contains(&s.info.value.unwrap().epoch_start));
+        incentive_slots.retain(|s| !new_value_keys.contains(&s.info.value.epoch_start));
         incentive_slots.extend(new_incentive_slots);
 
         // spend reserve and source cat together so deltas add up
@@ -2930,8 +2925,7 @@ mod tests {
             let reward_slot = *incentive_slots
                 .iter()
                 .find(|s| {
-                    s.info.value.unwrap().epoch_start
-                        == first_epoch_start + epoch * constants.epoch_seconds
+                    s.info.value.epoch_start == first_epoch_start + epoch * constants.epoch_seconds
                 })
                 .unwrap();
             let (new_epoch_conditions, new_reward_slot, _validator_fee) =
@@ -2939,11 +2933,10 @@ mod tests {
                     ctx,
                     &mut registry,
                     reward_slot,
-                    reward_slot.info.value.unwrap().rewards,
+                    reward_slot.info.value.rewards,
                 )?;
-            incentive_slots.retain(|s| {
-                s.info.value.unwrap().epoch_start != new_reward_slot.info.value.unwrap().epoch_start
-            });
+            incentive_slots
+                .retain(|s| s.info.value.epoch_start != new_reward_slot.info.value.epoch_start);
             incentive_slots.push(new_reward_slot);
 
             ensure_conditions_met(

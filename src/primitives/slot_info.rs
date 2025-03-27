@@ -26,19 +26,19 @@ where
     pub launcher_id: Bytes32,
 
     pub value_hash: Bytes32,
-    pub value: Option<V>,
+    pub value: V,
 }
 
 impl<V> SlotInfo<V>
 where
     V: Copy,
 {
-    pub fn new(launcher_id: Bytes32, nonce: u64, value_hash: Bytes32) -> Self {
+    pub fn new(launcher_id: Bytes32, nonce: u64, value_hash: Bytes32, value: V) -> Self {
         Self {
             launcher_id,
             nonce,
             value_hash,
-            value: None,
+            value,
         }
     }
 
@@ -50,7 +50,7 @@ where
             launcher_id,
             nonce,
             value_hash: value.tree_hash().into(),
-            value: Some(value),
+            value,
         }
     }
 }

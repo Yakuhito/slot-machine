@@ -110,10 +110,6 @@ impl DigCommitIncentivesAction {
         ),
         DriverError,
     > {
-        let Some(reward_slot_value) = reward_slot.info.value else {
-            return Err(DriverError::Custom("Reward slot value is None".to_string()));
-        };
-
         let new_commitment_slot_value = DigCommitmentSlotValue {
             epoch_start,
             clawback_ph,
@@ -130,9 +126,9 @@ impl DigCommitIncentivesAction {
 
         // spend self
         let action_solution = DigCommitIncentivesActionSolution {
-            slot_epoch_time: reward_slot_value.epoch_start,
-            slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
-            slot_total_rewards: reward_slot_value.rewards,
+            slot_epoch_time: reward_slot.info.value.epoch_start,
+            slot_next_epoch_initialized: reward_slot.info.value.next_epoch_initialized,
+            slot_total_rewards: reward_slot.info.value.rewards,
             epoch_start,
             clawback_ph,
             rewards_to_add,

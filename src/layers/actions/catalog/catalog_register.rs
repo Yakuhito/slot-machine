@@ -109,13 +109,6 @@ impl CatalogRegisterAction {
         eve_nft_inner_spend: Spend,
     ) -> Result<(Conditions, Vec<Slot<CatalogSlotValue>>), DriverError> {
         // spend slots
-        let Some(left_slot_value) = left_slot.info.value else {
-            return Err(DriverError::Custom("Missing left slot value".to_string()));
-        };
-        let Some(right_slot_value) = right_slot.info.value else {
-            return Err(DriverError::Custom("Missing right slot value".to_string()));
-        };
-
         let my_inner_puzzle_hash = catalog.info.inner_puzzle_hash().into();
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
         right_slot.spend(ctx, my_inner_puzzle_hash)?;
@@ -167,10 +160,10 @@ impl CatalogRegisterAction {
             tail_hash,
             initial_nft_owner_ph: initial_inner_puzzle_hash,
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
-            left_tail_hash: left_slot_value.asset_id,
-            left_left_tail_hash: left_slot_value.neighbors.left_value,
-            right_tail_hash: right_slot_value.asset_id,
-            right_right_tail_hash: right_slot_value.neighbors.right_value,
+            left_tail_hash: left_slot.info.value.asset_id,
+            left_left_tail_hash: left_slot.info.value.neighbors.left_value,
+            right_tail_hash: right_slot.info.value.asset_id,
+            right_right_tail_hash: right_slot.info.value.neighbors.right_value,
             my_id: catalog.coin.coin_id(),
         };
         let my_solution = my_solution.to_clvm(&mut ctx.allocator)?;

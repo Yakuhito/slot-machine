@@ -75,23 +75,19 @@ impl XchandlesExtendAction {
         num_years: u64,
     ) -> Result<(NotarizedPayment, Conditions, Slot<XchandlesSlotValue>), DriverError> {
         // spend slots
-        let Some(slot_value) = slot.info.value else {
-            return Err(DriverError::Custom("Missing slot value".to_string()));
-        };
-
         let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
         slot.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
         let action_solution = XchandlesExtendActionSolution {
-            handle_hash: slot_value.handle_hash,
+            handle_hash: slot.info.value.handle_hash,
             pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
                 ctx,
                 base_handle_price,
             )?,
             pricing_solution: XchandlesFactorPricingSolution {
-                current_expiration: slot_value.expiration,
+                current_expiration: slot.info.value.expiration,
                 handle: handle.clone(),
                 num_years,
             },
@@ -100,9 +96,9 @@ impl XchandlesExtendAction {
                 payment_asset_id.tree_hash().into(),
             )?,
             cat_maker_solution: (),
-            neighbors_hash: slot_value.neighbors.tree_hash().into(),
-            expiration: slot_value.expiration,
-            rest_hash: slot_value.launcher_ids_data_hash().into(),
+            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
+            expiration: slot.info.value.expiration,
+            rest_hash: slot.info.value.launcher_ids_data_hash().into(),
         }
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
@@ -113,7 +109,7 @@ impl XchandlesExtendAction {
             XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, num_years);
 
         let notarized_payment = NotarizedPayment {
-            nonce: clvm_tuple!(handle.clone(), slot_value.expiration)
+            nonce: clvm_tuple!(handle.clone(), slot.info.value.expiration)
                 .tree_hash()
                 .into(),
             payments: vec![Payment {
@@ -126,7 +122,8 @@ impl XchandlesExtendAction {
         let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, handle).tree_hash().to_vec();
         extend_ann.insert(0, b'e');
 
-        let new_slot_value = self.get_slot_value_from_solution(ctx, slot_value, action_solution)?;
+        let new_slot_value =
+            self.get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
 
         Ok((
             notarized_payment,

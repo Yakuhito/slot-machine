@@ -73,17 +73,9 @@ impl DigWithdrawIncentivesAction {
         reward_slot: Slot<DigRewardSlotValue>,
     ) -> Result<(Conditions, Slot<DigRewardSlotValue>, u64), DriverError> {
         // last u64 = withdrawn amount
-        let Some(reward_slot_value) = reward_slot.info.value else {
-            return Err(DriverError::Custom("Reward slot value is None".to_string()));
-        };
-        let Some(commitment_slot_value) = commitment_slot.info.value else {
-            return Err(DriverError::Custom(
-                "Commitment slot value is None".to_string(),
-            ));
-        };
-
-        let withdrawal_share =
-            commitment_slot_value.rewards * distributor.info.constants.withdrawal_share_bps / 10000;
+        let withdrawal_share = commitment_slot.info.value.rewards
+            * distributor.info.constants.withdrawal_share_bps
+            / 10000;
 
         // calculate message that the validator needs to send
         let withdraw_incentives_conditions = Conditions::new()
@@ -101,11 +93,11 @@ impl DigWithdrawIncentivesAction {
 
         // spend self
         let action_solution = DigWithdrawIncentivesActionSolution {
-            reward_slot_epoch_time: reward_slot_value.epoch_start,
-            reward_slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
-            reward_slot_total_rewards: reward_slot_value.rewards,
-            clawback_ph: commitment_slot_value.clawback_ph,
-            committed_value: commitment_slot_value.rewards,
+            reward_slot_epoch_time: reward_slot.info.value.epoch_start,
+            reward_slot_next_epoch_initialized: reward_slot.info.value.next_epoch_initialized,
+            reward_slot_total_rewards: reward_slot.info.value.rewards,
+            clawback_ph: commitment_slot.info.value.clawback_ph,
+            committed_value: commitment_slot.info.value.rewards,
             withdrawal_share,
         }
         .to_clvm(&mut ctx.allocator)?;

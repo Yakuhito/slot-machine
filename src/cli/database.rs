@@ -129,7 +129,6 @@ impl Db {
         let slot_value_ptr = slot
             .info
             .value
-            .unwrap()
             .to_clvm(allocator)
             .map_err(|err| CliError::Driver(chia_wallet_sdk::DriverError::ToClvm(err)))?;
         let slot_value_bytes = node_to_bytes(allocator, slot_value_ptr)?;

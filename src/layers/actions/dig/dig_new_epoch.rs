@@ -82,10 +82,6 @@ impl DigNewEpochAction {
         epoch_total_rewards: u64,
     ) -> Result<(Conditions, Slot<DigRewardSlotValue>, u64), DriverError> {
         // also returns validator fee
-        let Some(reward_slot_value) = reward_slot.info.value else {
-            return Err(DriverError::Custom("Reward slot value is None".to_string()));
-        };
-
         let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
         let valdiator_fee =
             epoch_total_rewards * distributor.info.constants.validator_fee_bps / 10000;
@@ -106,9 +102,9 @@ impl DigNewEpochAction {
 
         // spend self
         let action_solution = DigNewEpochActionSolution {
-            slot_epoch_time: reward_slot_value.epoch_start,
-            slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
-            slot_total_rewards: reward_slot_value.rewards,
+            slot_epoch_time: reward_slot.info.value.epoch_start,
+            slot_next_epoch_initialized: reward_slot.info.value.next_epoch_initialized,
+            slot_total_rewards: reward_slot.info.value.rewards,
             epoch_total_rewards,
             validator_fee: valdiator_fee,
         }

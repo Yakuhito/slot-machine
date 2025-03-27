@@ -340,7 +340,7 @@ pub async fn catalog_register(
                     &mut catalog,
                     registered_asset_id,
                     if let Some(slot) = slot {
-                        slot.info.value.unwrap().neighbors.tree_hash().into()
+                        slot.info.value.neighbors.tree_hash().into()
                     } else {
                         Bytes32::default()
                     },

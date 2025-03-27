@@ -116,13 +116,7 @@ impl XchandlesRefundAction {
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
             precommit_amount: precommit_coin.coin.amount,
             rest_hash: if let Some(slot) = slot {
-                slot.info
-                    .value
-                    .ok_or(DriverError::Custom(
-                        "Slot does not contain value".to_string(),
-                    ))?
-                    .after_handle_data_hash()
-                    .into()
+                slot.info.value.after_handle_data_hash().into()
             } else {
                 Bytes32::default()
             },
@@ -133,9 +127,7 @@ impl XchandlesRefundAction {
         registry.insert(Spend::new(action_puzzle, action_solution));
 
         let new_slot_value = slot.map(|slot| {
-            registry
-                .created_slot_values_to_slots(vec![self.get_slot_value(slot.info.value.unwrap())])
-                [0]
+            registry.created_slot_values_to_slots(vec![self.get_slot_value(slot.info.value)])[0]
         });
 
         Ok((

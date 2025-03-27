@@ -78,24 +78,20 @@ impl DigInitiatePayoutAction {
         distributor: &mut DigRewardDistributor,
         mirror_slot: Slot<DigMirrorSlotValue>,
     ) -> Result<(Conditions, Slot<DigMirrorSlotValue>, u64), DriverError> {
-        let Some(mirror_slot_value) = mirror_slot.info.value else {
-            return Err(DriverError::Custom("Mirror slot value is None".to_string()));
-        };
-
         let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
 
-        let withdrawal_amount = mirror_slot_value.shares
+        let withdrawal_amount = mirror_slot.info.value.shares
             * (my_state.round_reward_info.cumulative_payout
-                - mirror_slot_value.initial_cumulative_payout);
+                - mirror_slot.info.value.initial_cumulative_payout);
 
         // this announcement should be asserted to ensure everything goes according to plan
         let initiate_payout_announcement: Bytes32 = clvm_tuple!(
             clvm_tuple!(
-                mirror_slot_value.payout_puzzle_hash,
-                mirror_slot_value.shares
+                mirror_slot.info.value.payout_puzzle_hash,
+                mirror_slot.info.value.shares
             ),
             clvm_tuple!(
-                mirror_slot_value.initial_cumulative_payout,
+                mirror_slot.info.value.initial_cumulative_payout,
                 my_state.round_reward_info.cumulative_payout
             ),
         )
@@ -110,9 +106,9 @@ impl DigInitiatePayoutAction {
         // spend self
         let action_solution = DigInitiatePayoutActionSolution {
             mirror_payout_amount: withdrawal_amount,
-            mirror_payout_puzzle_hash: mirror_slot_value.payout_puzzle_hash,
-            mirror_initial_cumulative_payout: mirror_slot_value.initial_cumulative_payout,
-            mirror_shares: mirror_slot_value.shares,
+            mirror_payout_puzzle_hash: mirror_slot.info.value.payout_puzzle_hash,
+            mirror_initial_cumulative_payout: mirror_slot.info.value.initial_cumulative_payout,
+            mirror_shares: mirror_slot.info.value.shares,
         }
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;

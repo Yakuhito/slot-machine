@@ -100,13 +100,6 @@ impl XchandlesRegisterAction {
         base_handle_price: u64,
     ) -> Result<(Conditions, [Slot<XchandlesSlotValue>; 3]), DriverError> {
         // spend slots
-        let Some(left_slot_value) = left_slot.info.value else {
-            return Err(DriverError::Custom("Missing left slot value".to_string()));
-        };
-        let Some(right_slot_value) = right_slot.info.value else {
-            return Err(DriverError::Custom("Missing right slot value".to_string()));
-        };
-
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
@@ -149,8 +142,8 @@ impl XchandlesRegisterAction {
         // finally, spend self
         let action_solution = XchandlesRegisterActionSolution {
             handle_hash,
-            left_value: left_slot_value.handle_hash,
-            right_value: right_slot_value.handle_hash,
+            left_value: left_slot.info.value.handle_hash,
+            right_value: right_slot.info.value.handle_hash,
             pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
                 ctx,
                 base_handle_price,
@@ -174,10 +167,16 @@ impl XchandlesRegisterAction {
             start_time,
             secret_hash: secret.tree_hash().into(),
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
-            left_left_value_hash: left_slot_value.neighbors.left_value.tree_hash().into(),
-            left_data_hash: left_slot_value.after_neigbors_data_hash().into(),
-            right_right_value_hash: right_slot_value.neighbors.right_value.tree_hash().into(),
-            right_data_hash: right_slot_value.after_neigbors_data_hash().into(),
+            left_left_value_hash: left_slot.info.value.neighbors.left_value.tree_hash().into(),
+            left_data_hash: left_slot.info.value.after_neigbors_data_hash().into(),
+            right_right_value_hash: right_slot
+                .info
+                .value
+                .neighbors
+                .right_value
+                .tree_hash()
+                .into(),
+            right_data_hash: right_slot.info.value.after_neigbors_data_hash().into(),
         }
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
@@ -186,7 +185,7 @@ impl XchandlesRegisterAction {
 
         let new_slots_values = self.get_slot_values_from_solution(
             ctx,
-            [left_slot_value, right_slot_value],
+            [left_slot.info.value, right_slot.info.value],
             precommit_coin.value,
             action_solution,
         )?;

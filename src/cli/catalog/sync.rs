@@ -67,7 +67,7 @@ pub async fn sync_catalog(
             let new_slots = prev_catalog.get_new_slots_from_spend(ctx, solution_ptr)?;
 
             for slot in new_slots {
-                let asset_id = slot.info.value.unwrap().asset_id;
+                let asset_id = slot.info.value.asset_id;
 
                 if let Some(previous_value_hash) =
                     db.get_catalog_indexed_slot_value(asset_id).await?

@@ -96,10 +96,6 @@ impl XchandlesExpireAction {
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
         // spend slot
-        let Some(slot_value) = slot.info.value else {
-            return Err(DriverError::Custom("Missing slot value".to_string()));
-        };
-
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
         slot.spend(ctx, my_inner_puzzle_hash)?;
 
@@ -131,7 +127,7 @@ impl XchandlesExpireAction {
                 XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
                     buy_time: precommit_coin.value.start_time,
                     pricing_program_solution: XchandlesFactorPricingSolution {
-                        current_expiration: slot_value.expiration,
+                        current_expiration: slot.info.value.expiration,
                         handle: precommit_coin.value.secret_and_handle.handle.clone(),
                         num_years,
                     },
@@ -143,8 +139,8 @@ impl XchandlesExpireAction {
                 .secret
                 .tree_hash()
                 .into(),
-            neighbors_hash: slot_value.neighbors.tree_hash().into(),
-            old_rest_hash: slot_value.launcher_ids_data_hash().into(),
+            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
+            old_rest_hash: slot.info.value.launcher_ids_data_hash().into(),
             new_rest_hash: clvm_tuple!(
                 precommit_coin.value.owner_launcher_id,
                 precommit_coin.value.resolved_launcher_id
@@ -158,7 +154,7 @@ impl XchandlesExpireAction {
         registry.insert(Spend::new(action_puzzle, action_solution));
         let new_slot_value = self.get_slot_value_from_solution(
             ctx,
-            slot_value,
+            slot.info.value,
             precommit_coin.value,
             action_solution,
         )?;

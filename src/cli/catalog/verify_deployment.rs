@@ -220,7 +220,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             let top_cat = &cats_to_launch[cat_index];
             let found = new_slots
                 .iter()
-                .find(|slot| slot.info.value.unwrap().asset_id == top_cat.asset_id);
+                .find(|slot| slot.info.value.asset_id == top_cat.asset_id);
             if found.is_some() {
                 cat_index += 1;
 
