@@ -1,0 +1,40 @@
+; use_singleton_full_puzzle_hash.clsp by yakuhito
+;; Used to output a condition that uses a singleton's full puzzle hash given its inner puzzle. 
+;;   The condition is prepended to the list outputted by the inner puzzle.
+;; For example, this is useful in the 'state scheduler' phase of a price singleton, where the 
+;;   state scheduler sends precomitted messages containing state hashes to the CATalog/XCHandles singletons.
+
+;; For a more concrete example, see actions/shared/delegated_state.clsp (this is the trusted singleton).
+
+(mod (
+  SINGLETON_MOD_HASH
+  OTHER_SINGLETON_STRUCT_HASH
+  PREFIX ; e.g., (list SEND_MESSAGE 18 NEW_STATE_HASH)
+  SUFFIX ; e.g., ()
+  INNER_PUZZLE
+  other_singleton_inner_puzzle_hash .
+  inner_solution
+)
+  (include curry.clib)
+
+  (defun prepend_prefix (prefix stuff)
+    (if prefix
+      (c (f prefix) (prepend_prefix (r prefix) stuff))
+      ; else
+      stuff
+    )
+  )
+
+  (c
+    (prepend_prefix PREFIX
+     (c
+        (curry_hashes_inline SINGLETON_MOD_HASH
+          OTHER_SINGLETON_STRUCT_HASH
+          other_singleton_inner_puzzle_hash
+        )
+        SUFFIX
+      )
+    )
+    (a INNER_PUZZLE inner_solution)
+  )
+)
