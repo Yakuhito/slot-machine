@@ -34,6 +34,35 @@ impl Default for CatNftMetadata {
     }
 }
 
+impl CatNftMetadata {
+    pub fn pretty_print(&self, prefix: &str) {
+        println!("{}Ticker: {}", prefix, self.ticker);
+        println!("{}Name: {}", prefix, self.name);
+        println!("{}Description: {}", prefix, self.description);
+        println!("{}Precision: {}", prefix, self.precision);
+        println!("{}Image URIs: {}", prefix, self.image_uris.join(", "));
+        println!("{}Image Hash: {}", prefix, self.image_hash);
+
+        if !self.metadata_uris.is_empty() {
+            println!("{}Metadata URIs: {}", prefix, self.metadata_uris.join(", "));
+            if let Some(metadata_hash) = self.metadata_hash {
+                println!("{}Metadata Hash: {}", prefix, metadata_hash);
+            } else {
+                println!("{}Metadata Hash: None", prefix);
+            }
+        }
+
+        if !self.license_uris.is_empty() {
+            println!("{}License URIs: {}", prefix, self.license_uris.join(", "));
+            if let Some(license_hash) = self.license_hash {
+                println!("{}License Hash: {}", prefix, license_hash);
+            } else {
+                println!("{}License Hash: None", prefix);
+            }
+        }
+    }
+}
+
 impl<N, D: ClvmDecoder<Node = N>> FromClvm<D> for CatNftMetadata {
     fn from_clvm(decoder: &D, node: N) -> Result<Self, FromClvmError> {
         let items: Vec<(String, Raw<N>)> = FromClvm::from_clvm(decoder, node)?;

@@ -107,7 +107,7 @@ enum CatalogCliAction {
     },
     /// Register a new CAT
     Register {
-        /// TAIL reveal
+        /// TAIL reveal (hex CLVM)
         #[arg(long)]
         tail_reveal: String,
 
@@ -155,13 +155,17 @@ enum CatalogCliAction {
         #[arg(long, required = false)]
         recipient: Option<String>,
 
+        /// Payment asset id (payment CAT tail hash)
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Payment CAT amount (only provide if refunding)
+        #[arg(long, required = false)]
+        payment_cat_amount: Option<String>,
+
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
-
-        /// Payment asset id
-        #[arg(long)]
-        payment_asset_id: String,
 
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
@@ -228,6 +232,7 @@ pub async fn run_cli() {
                 recipient,
                 testnet11,
                 payment_asset_id,
+                payment_cat_amount,
                 fee,
             } => {
                 catalog_register(
@@ -245,6 +250,7 @@ pub async fn run_cli() {
                     recipient,
                     testnet11,
                     payment_asset_id,
+                    payment_cat_amount,
                     fee,
                 )
                 .await
