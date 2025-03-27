@@ -2,7 +2,10 @@ use chia::{
     bls::PublicKey,
     clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
-    puzzles::{singleton::LauncherSolution, LineageProof, Proof},
+    puzzles::{
+        singleton::{LauncherSolution, SingletonArgs},
+        LineageProof, Proof,
+    },
 };
 use chia_wallet_sdk::{ChiaRpcClient, CoinsetClient, DriverError, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
@@ -144,7 +147,11 @@ where
 
             let new_vault_coin = Coin::new(
                 state_scheduler.coin.coin_id(),
-                state_scheduler.info.final_puzzle_hash,
+                SingletonArgs::curry_tree_hash(
+                    launcher_id,
+                    state_scheduler.info.final_puzzle_hash.into(),
+                )
+                .into(),
                 state_scheduler.coin.amount,
             );
             let new_vault_proof = Proof::Lineage(LineageProof {
@@ -175,7 +182,6 @@ where
     }
     let mut vault = eve_vault;
     loop {
-        println!("loop"); // todo
         let coin_record = client
             .get_coin_record_by_name(vault.coin.coin_id())
             .await?
