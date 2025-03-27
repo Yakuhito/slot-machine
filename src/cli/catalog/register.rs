@@ -19,6 +19,44 @@ use crate::{
 };
 
 #[allow(clippy::too_many_arguments)]
+pub fn initial_metadata_from_arguments(
+    ticker: String,
+    name: String,
+    description: String,
+    precision: u8,
+    image_uris_str: String,
+    image_hash_str: String,
+    metadata_uris_str: String,
+    metadata_hash_str: Option<String>,
+    license_uris_str: String,
+    license_hash_str: Option<String>,
+) -> Result<CatNftMetadata, CliError> {
+    Ok(CatNftMetadata {
+        ticker,
+        name,
+        description,
+        precision,
+        image_uris: image_uris_str.split(',').map(|s| s.to_string()).collect(),
+        image_hash: hex_string_to_bytes32(&image_hash_str)?,
+        metadata_uris: metadata_uris_str
+            .split(',')
+            .map(|s| s.to_string())
+            .collect(),
+        metadata_hash: if let Some(metadata_hash_str) = metadata_hash_str {
+            Some(hex_string_to_bytes32(&metadata_hash_str)?)
+        } else {
+            None
+        },
+        license_uris: license_uris_str.split(',').map(|s| s.to_string()).collect(),
+        license_hash: if let Some(license_hash_str) = license_hash_str {
+            Some(hex_string_to_bytes32(&license_hash_str)?)
+        } else {
+            None
+        },
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn catalog_register(
     tail_reveal_str: String,
     ticker: String,
@@ -47,29 +85,18 @@ pub async fn catalog_register(
 
     let fee = parse_amount(fee_str.clone(), false)?;
 
-    let initial_metadata = CatNftMetadata {
+    let initial_metadata = initial_metadata_from_arguments(
         ticker,
         name,
         description,
         precision,
-        image_uris: image_uris_str.split(',').map(|s| s.to_string()).collect(),
-        image_hash: hex_string_to_bytes32(&image_hash_str)?,
-        metadata_uris: metadata_uris_str
-            .split(',')
-            .map(|s| s.to_string())
-            .collect(),
-        metadata_hash: if let Some(metadata_hash_str) = metadata_hash_str {
-            Some(hex_string_to_bytes32(&metadata_hash_str)?)
-        } else {
-            None
-        },
-        license_uris: license_uris_str.split(',').map(|s| s.to_string()).collect(),
-        license_hash: if let Some(license_hash_str) = license_hash_str {
-            Some(hex_string_to_bytes32(&license_hash_str)?)
-        } else {
-            None
-        },
-    };
+        image_uris_str,
+        image_hash_str,
+        metadata_uris_str,
+        metadata_hash_str,
+        license_uris_str,
+        license_hash_str,
+    )?;
 
     let payment_asset_id = hex_string_to_bytes32(&payment_asset_id_str)?;
 
