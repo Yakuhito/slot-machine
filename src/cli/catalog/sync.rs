@@ -34,6 +34,7 @@ pub async fn sync_catalog(
 
     let mut catalog: Option<CatalogRegistry> = None;
     loop {
+        db.finish_transaction().await?;
         let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
         let Some(coin_record) = coin_record_response.coin_record else {
             return Err(CliError::CoinNotFound(last_coin_id));
@@ -63,7 +64,7 @@ pub async fn sync_catalog(
             for slot in new_slots {
                 let asset_id = slot.info.value.asset_id;
 
-                if let Some(previous_value_hash) =
+                let is_new_slot = if let Some(previous_value_hash) =
                     db.get_catalog_indexed_slot_value(asset_id).await?
                 {
                     db.mark_slot_as_spent(
@@ -73,9 +74,15 @@ pub async fn sync_catalog(
                         coin_record.spent_block_index,
                     )
                     .await?;
-                }
 
-                db.save_slot(&mut ctx.allocator, slot, None).await?;
+                    previous_value_hash != slot.info.value_hash
+                } else {
+                    true
+                };
+
+                if is_new_slot {
+                    db.save_slot(&mut ctx.allocator, slot, None).await?;
+                }
                 db.save_catalog_indexed_slot_value(asset_id, slot.info.value_hash)
                     .await?;
             }
@@ -217,9 +224,8 @@ pub async fn sync_catalog(
         } else {
             break;
         };
-
-        db.finish_transaction().await?;
     }
+    db.finish_transaction().await?;
 
     if let Some(catalog) = catalog {
         Ok(catalog)

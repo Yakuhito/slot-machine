@@ -12,10 +12,10 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer, SendCat};
 
 use crate::{
     get_coinset_client, get_constants, get_prefix, hex_string_to_bytes, hex_string_to_bytes32,
-    new_sk, parse_amount, parse_one_sided_offer, spend_security_coin, sync_catalog, wait_for_coin,
-    yes_no_prompt, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
-    CatalogRegisterAction, CatalogRegistryConstants, CatalogSlotValue, CliError, Db,
-    DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
+    new_sk, parse_amount, parse_one_sided_offer, print_spend_bundle_to_file, spend_security_coin,
+    sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
+    CatalogRefundAction, CatalogRegisterAction, CatalogRegistryConstants, CatalogSlotValue,
+    CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -403,6 +403,11 @@ pub async fn catalog_register(
         let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
 
         println!("Submitting transaction...");
+        print_spend_bundle_to_file(
+            sb.coin_spends.clone(),
+            sb.aggregated_signature.clone(),
+            "sb.debug",
+        );
         let resp = cli.push_tx(sb).await?;
 
         println!("Transaction submitted; status='{}'", resp.status);
