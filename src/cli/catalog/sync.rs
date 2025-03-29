@@ -4,38 +4,30 @@ use chia::{
     puzzles::{singleton::LauncherSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{
-    ChiaRpcClient, CoinsetClient, Condition, Conditions, DriverError, Layer, Puzzle,
+    ChiaRpcClient, CoinRecord, CoinsetClient, Condition, Conditions, DriverError, Layer, Puzzle,
     SingletonLayer, SpendContext,
 };
 use clvm_traits::FromClvm;
 use clvmr::NodePtr;
 
 use crate::{
-    hex_string_to_bytes32, CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo,
-    CatalogRegistryState, CatalogSlotValue, CliError, Db, Slot, SlotInfo, SlotProof,
-    CATALOG_LAST_UNSPENT_COIN, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+    CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
+    CatalogSlotValue, CliError, Db, Slot, SlotInfo, SlotProof, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
 };
 
 pub async fn sync_catalog(
     client: &CoinsetClient,
-    db: &Db,
+    db: &mut Db,
     ctx: &mut SpendContext,
     constants: CatalogRegistryConstants,
 ) -> Result<CatalogRegistry, CliError> {
-    let last_unspent_coin_id_str = db.get_value_by_key(CATALOG_LAST_UNSPENT_COIN).await?;
+    let last_unspent_coin_info = db
+        .get_last_unspent_singleton_coin(constants.launcher_id)
+        .await?;
 
-    let mut last_coin_id: Bytes32 = if let Some(last_unspent_coin_id_str) = last_unspent_coin_id_str
+    let mut last_coin_id: Bytes32 = if let Some((_coin_id, parent_coin_id)) = last_unspent_coin_info
     {
-        let last_unspent_coin_id = hex_string_to_bytes32(&last_unspent_coin_id_str)?;
-
-        let coin_record_response = client.get_coin_record_by_name(last_unspent_coin_id).await?;
-        if let Some(coin_record) = coin_record_response.coin_record {
-            coin_record.coin.parent_coin_info
-        } else {
-            return Err(CliError::Driver(DriverError::Custom(
-                "Could not find latest unspent coin".to_string(),
-            )));
-        }
+        parent_coin_id
     } else {
         constants.launcher_id
     };
@@ -49,6 +41,8 @@ pub async fn sync_catalog(
         if !coin_record.spent {
             break;
         }
+        db.save_singleton_coin(constants.launcher_id, coin_record)
+            .await?;
 
         let puzzle_and_solution_resp = client
             .get_puzzle_and_solution(
@@ -72,11 +66,16 @@ pub async fn sync_catalog(
                 if let Some(previous_value_hash) =
                     db.get_catalog_indexed_slot_value(asset_id).await?
                 {
-                    db.remove_slot(constants.launcher_id, 0, previous_value_hash)
-                        .await?;
+                    db.mark_slot_as_spent(
+                        constants.launcher_id,
+                        0,
+                        previous_value_hash,
+                        coin_record.spent_block_index,
+                    )
+                    .await?;
                 }
 
-                db.save_slot(&mut ctx.allocator, slot).await?;
+                db.save_slot(&mut ctx.allocator, slot, None).await?;
                 db.save_catalog_indexed_slot_value(asset_id, slot.info.value_hash)
                     .await?;
             }
@@ -174,6 +173,7 @@ pub async fn sync_catalog(
                     slot_proof,
                     SlotInfo::from_value(constants.launcher_id, 0, left_slot_value),
                 ),
+                None,
             )
             .await?;
             db.save_catalog_indexed_slot_value(
@@ -188,11 +188,25 @@ pub async fn sync_catalog(
                     slot_proof,
                     SlotInfo::from_value(constants.launcher_id, 0, right_slot_value),
                 ),
+                None,
             )
             .await?;
             db.save_catalog_indexed_slot_value(
                 right_slot_value.asset_id,
                 right_slot_value.tree_hash().into(),
+            )
+            .await?;
+
+            db.save_singleton_coin(
+                constants.launcher_id,
+                CoinRecord {
+                    coin: new_coin,
+                    coinbase: false,
+                    confirmed_block_index: coin_record.spent_block_index,
+                    spent: false,
+                    spent_block_index: 0,
+                    timestamp: 0,
+                },
             )
             .await?;
 
@@ -203,23 +217,13 @@ pub async fn sync_catalog(
         } else {
             break;
         };
+
+        db.finish_transaction().await?;
     }
 
     if let Some(catalog) = catalog {
-        db.save_key_value(
-            CATALOG_LAST_UNSPENT_COIN,
-            &hex::encode(catalog.coin.parent_coin_info),
-        )
-        .await?;
-
         Ok(catalog)
     } else {
-        db.save_key_value(
-            CATALOG_LAST_UNSPENT_COIN,
-            &hex::encode(constants.launcher_id),
-        )
-        .await?;
-
         Err(CliError::CoinNotFound(last_coin_id))
     }
 }

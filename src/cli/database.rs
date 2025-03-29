@@ -1,4 +1,5 @@
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
+use chia_wallet_sdk::CoinRecord;
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{
     serde::{node_from_bytes, node_to_bytes},
@@ -492,10 +493,7 @@ impl Db {
     pub async fn save_singleton_coin(
         &mut self,
         launcher_id: Bytes32,
-        coin_id: Bytes32,
-        parent_coin_id: Bytes32,
-        creation_block_height: u32,
-        spent_block_height: Option<u32>,
+        coin_record: CoinRecord,
     ) -> Result<(), CliError> {
         sqlx::query(
             "
@@ -504,8 +502,8 @@ impl Db {
             WHERE coin_id = ?2 AND spent_block_height IS NULL
             ",
         )
-        .bind(creation_block_height)
-        .bind(parent_coin_id.to_vec())
+        .bind(coin_record.confirmed_block_index)
+        .bind(coin_record.coin.parent_coin_info.to_vec())
         .execute(&mut self.transaction)
         .await
         .map_err(CliError::Sqlx)?;
@@ -514,17 +512,46 @@ impl Db {
             "
             INSERT INTO singleton_coins (launcher_id, coin_id, parent_coin_id, spent_block_height) 
             VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(coin_id) DO UPDATE SET spent_block_height = excluded.spent_block_height
             ",
         )
         .bind(launcher_id.to_vec())
-        .bind(coin_id.to_vec())
-        .bind(parent_coin_id.to_vec())
-        .bind(spent_block_height)
+        .bind(coin_record.coin.coin_id().to_vec())
+        .bind(coin_record.coin.parent_coin_info.to_vec())
+        .bind(if coin_record.spent_block_index == 0 {
+            None
+        } else {
+            Some(coin_record.spent_block_index)
+        })
         .execute(&mut self.transaction)
         .await
         .map_err(CliError::Sqlx)?;
 
         Ok(())
+    }
+
+    pub async fn get_last_unspent_singleton_coin(
+        &mut self,
+        launcher_id: Bytes32,
+    ) -> Result<Option<(Bytes32, Bytes32)>, CliError> {
+        let row = sqlx::query(
+            "
+            SELECT coin_id, parent_coin_id FROM singleton_coins WHERE launcher_id = ?1 AND spent_block_height IS NULL LIMIT 1
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .fetch_optional(&mut self.transaction)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let coin_id = column_to_bytes32(row.get::<&[u8], _>("coin_id"))?;
+        let parent_coin_id = column_to_bytes32(row.get::<&[u8], _>("parent_coin_id"))?;
+
+        Ok(Some((coin_id, parent_coin_id)))
     }
 }
 
