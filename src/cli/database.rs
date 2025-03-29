@@ -37,7 +37,7 @@ impl Db {
                 slot_value BLOB NOT NULL,
                 parent_parent_info BLOB NOT NULL,
                 parent_inner_puzzle_hash BLOB NOT NULL,
-                PRIMARY KEY (singleton_launcher_id, nonce, slot_value_hash, spent_block_height)
+                PRIMARY KEY (singleton_launcher_id, nonce, slot_value_hash, parent_parent_info)
             )
             ",
         )
@@ -114,6 +114,7 @@ impl Db {
                 slot_value, parent_parent_info, parent_inner_puzzle_hash
             )
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ON CONFLICT(singleton_launcher_id, nonce, slot_value_hash, parent_parent_info) DO UPDATE SET spent_block_height = excluded.spent_block_height
             ",
         )
         .bind(slot.info.launcher_id.to_vec())
@@ -153,13 +154,12 @@ impl Db {
         ))
     }
 
-    pub async fn get_slot<SV>(
+    pub async fn get_unspent_slot<SV>(
         &mut self,
         allocator: &mut Allocator,
         singleton_launcher_id: Bytes32,
         nonce: u64,
         slot_value_hash: Bytes32,
-        spent_block_height: Option<u32>,
     ) -> Result<Option<Slot<SV>>, CliError>
     where
         SV: FromClvm<Allocator> + Copy + ToTreeHash,
@@ -167,13 +167,12 @@ impl Db {
         let row = sqlx::query(
             "
             SELECT * FROM slots 
-            WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3 AND spent_block_height = ?4
+            WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3 AND spent_block_height IS NULL
             ",
         )
         .bind(singleton_launcher_id.to_vec())
         .bind(nonce as i64)
         .bind(slot_value_hash.to_vec())
-        .bind(spent_block_height)
         .fetch_optional(&mut self.transaction)
         .await
         .map_err(CliError::Sqlx)?;

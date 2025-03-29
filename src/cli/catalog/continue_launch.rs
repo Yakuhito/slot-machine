@@ -518,23 +518,21 @@ pub async fn catalog_continue_launch(
             db.get_catalog_neighbor_value_hashes(tail_hash).await?;
 
         let left_slot = db
-            .get_slot::<CatalogSlotValue>(
+            .get_unspent_slot::<CatalogSlotValue>(
                 &mut ctx.allocator,
                 constants.launcher_id,
                 0,
                 left_value_hash,
-                None,
             )
             .await?
             .unwrap();
 
         let right_slot = db
-            .get_slot::<CatalogSlotValue>(
+            .get_unspent_slot::<CatalogSlotValue>(
                 &mut ctx.allocator,
                 constants.launcher_id,
                 0,
                 right_value_hash,
-                None,
             )
             .await?
             .unwrap();
