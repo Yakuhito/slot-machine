@@ -18,7 +18,6 @@ use crate::{
     spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata,
     CatalogPrecommitValue, CatalogPremineRecord, CatalogRegisterAction, CatalogRegistryConstants,
     CatalogSlotValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
-    CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 
 pub fn initial_cat_inner_puzzle_ptr(
@@ -65,6 +64,7 @@ fn precommit_value_for_cat(
 }
 
 pub async fn catalog_continue_launch(
+    payment_asset_id_str: String,
     cats_per_spend: usize,
     testnet11: bool,
     fee_str: String,
@@ -88,7 +88,7 @@ pub async fn catalog_continue_launch(
     };
 
     println!("Opening database...");
-    let db = Db::new().await?;
+    let mut db = Db::new().await?;
 
     let constants = CatalogRegistryConstants::get(testnet11);
     if constants.price_singleton_launcher_id == Bytes32::default()
@@ -100,7 +100,7 @@ pub async fn catalog_continue_launch(
     println!("Syncing CATalog...");
     let mut ctx = SpendContext::new();
 
-    let mut catalog = sync_catalog(&client, &db, &mut ctx, constants).await?;
+    let mut catalog = sync_catalog(&client, &mut db, &mut ctx, constants).await?;
     println!("Latest catalog coin id: {}", catalog.coin.coin_id());
 
     println!("Finding last registered CAT from list...");
@@ -120,10 +120,6 @@ pub async fn catalog_continue_launch(
         return Ok(());
     }
 
-    let payment_asset_id_str = db
-        .get_value_by_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY)
-        .await?
-        .unwrap();
     let payment_asset_id = Bytes32::new(hex_string_to_bytes32(&payment_asset_id_str)?.into());
 
     let sage = SageClient::new()?;
@@ -527,6 +523,7 @@ pub async fn catalog_continue_launch(
                 constants.launcher_id,
                 0,
                 left_value_hash,
+                None,
             )
             .await?
             .unwrap();
@@ -537,6 +534,7 @@ pub async fn catalog_continue_launch(
                 constants.launcher_id,
                 0,
                 right_value_hash,
+                None,
             )
             .await?
             .unwrap();

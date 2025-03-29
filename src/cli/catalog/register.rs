@@ -88,7 +88,7 @@ pub async fn catalog_register(
     let cli = get_coinset_client(testnet11);
     let catalog_constants = CatalogRegistryConstants::get(testnet11);
     let sage = SageClient::new()?;
-    let db = Db::new().await?;
+    let mut db = Db::new().await?;
 
     let fee = parse_amount(fee_str.clone(), false)?;
 
@@ -108,7 +108,7 @@ pub async fn catalog_register(
     let payment_asset_id = hex_string_to_bytes32(&payment_asset_id_str)?;
 
     print!("First, let's sync CATalog... ");
-    let mut catalog = sync_catalog(&cli, &db, &mut ctx, catalog_constants).await?;
+    let mut catalog = sync_catalog(&cli, &mut db, &mut ctx, catalog_constants).await?;
     println!("done.");
 
     let recipient_address = if let Some(provided_recipient_address) = recipient_address {
@@ -325,6 +325,7 @@ pub async fn catalog_register(
                         catalog_constants.launcher_id,
                         0,
                         slot_value_hash,
+                        None,
                     )
                     .await?
                     .unwrap(),
@@ -359,6 +360,7 @@ pub async fn catalog_register(
                     catalog_constants.launcher_id,
                     0,
                     left_value_hash,
+                    None,
                 )
                 .await?
                 .unwrap();
@@ -369,6 +371,7 @@ pub async fn catalog_register(
                     catalog_constants.launcher_id,
                     0,
                     right_value_hash,
+                    None,
                 )
                 .await?
                 .unwrap();

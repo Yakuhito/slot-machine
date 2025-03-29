@@ -8,7 +8,6 @@ use crate::{
     load_catalog_state_schedule_csv, parse_amount, print_medieval_vault_configuration,
     wait_for_coin, CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs,
     MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo,
-    CATALOG_LAST_UNSPENT_COIN, CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
 };
 use chia::{
     bls::PublicKey,
@@ -289,20 +288,14 @@ pub async fn catalog_initiate_launch(
     let premine_payment_asset_id: Bytes32 =
         GenesisByCoinIdTailArgs::curry_tree_hash(security_coin.coin_id()).into();
     println!(
-        "Premine payment asset id: {}",
+        "Premine payment asset id (SAVE THIS): {}",
         hex::encode(premine_payment_asset_id)
     );
 
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
-    db.save_key_value(
-        CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY,
-        &hex::encode(premine_payment_asset_id),
-    )
-    .await?;
-
     for slot in slots {
-        db.save_slot(&mut ctx.allocator, slot).await?;
+        db.save_slot(&mut ctx.allocator, slot, None).await?;
     }
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);

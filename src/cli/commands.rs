@@ -77,6 +77,10 @@ enum CatalogCliAction {
     },
     /// Continues/finishes an existing launch
     ContinueLaunch {
+        /// Payment asset id (payment CAT tail hash from launch initiation)
+        #[arg(long)]
+        payment_asset_id: String,
+
         /// How many CATs to deploy for this spend
         #[arg(long)]
         cats_per_spend: usize,
@@ -211,10 +215,11 @@ pub async fn run_cli() {
                 fee,
             } => catalog_initiate_launch(pubkeys, m, testnet11, fee).await,
             CatalogCliAction::ContinueLaunch {
+                payment_asset_id,
                 cats_per_spend,
                 testnet11,
                 fee,
-            } => catalog_continue_launch(cats_per_spend, testnet11, fee).await,
+            } => catalog_continue_launch(payment_asset_id, cats_per_spend, testnet11, fee).await,
             CatalogCliAction::UnrollStateScheduler { testnet11, fee } => {
                 catalog_unroll_state_scheduler(testnet11, fee).await
             }

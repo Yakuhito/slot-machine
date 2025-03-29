@@ -39,9 +39,9 @@ pub async fn catalog_unroll_state_scheduler(
         ));
     };
 
-    let db = Db::new().await?;
+    let mut db = Db::new().await?;
 
-    let mut catalog = sync_catalog(&cli, &db, &mut ctx, constants).await?;
+    let mut catalog = sync_catalog(&cli, &mut db, &mut ctx, constants).await?;
 
     let sage = SageClient::new()?;
     let fee = parse_amount(fee_str.clone(), false)?;
