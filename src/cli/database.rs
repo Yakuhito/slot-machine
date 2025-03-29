@@ -28,7 +28,6 @@ impl Db {
         sqlx::query(
             "
             CREATE TABLE IF NOT EXISTS slots (
-                id INTEGER PRIMARY KEY,
                 singleton_launcher_id BLOB NOT NULL,
                 nonce INTEGER NOT NULL,
                 slot_value_hash BLOB NOT NULL,
@@ -36,7 +35,7 @@ impl Db {
                 slot_value BLOB NOT NULL,
                 parent_parent_info BLOB NOT NULL,
                 parent_inner_puzzle_hash BLOB NOT NULL,
-                UNIQUE(singleton_launcher_id, nonce, slot_value_hash, spent_block_height)
+                PRIMARY KEY (singleton_launcher_id, nonce, slot_value_hash, spent_block_height)
             )
             ",
         )
@@ -49,6 +48,28 @@ impl Db {
                 asset_id BLOB PRIMARY KEY,
                 slot_value_hash BLOB NOT NULL
             )
+            ",
+        )
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "
+            CREATE TABLE IF NOT EXISTS singleton_coins (
+                launcher_id BLOB NOT NULL,
+                coin_id BLOB NOT NULL PRIMARY KEY,
+                parent_coin_id BLOB,
+                spent_block_height INTEGER
+            )
+            ",
+        )
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "
+            CREATE INDEX IF NOT EXISTS idx_singleton_coins_launcher_spent 
+            ON singleton_coins(launcher_id, spent_block_height)
             ",
         )
         .execute(&pool)
@@ -403,6 +424,23 @@ impl Db {
         let higher_hash = column_to_bytes32(higher_row.get::<&[u8], _>("slot_value_hash"))?;
 
         Ok((lower_hash, higher_hash))
+    }
+
+    pub async fn clear_spent_slots(
+        &self,
+        spent_block_height_threshold: u32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM slots WHERE spent_block_height IS NOT NULL AND spent_block_height < ?1
+            ",
+        )
+        .bind(spent_block_height_threshold)
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
     }
 }
 
