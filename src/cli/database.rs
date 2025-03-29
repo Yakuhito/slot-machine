@@ -557,7 +557,7 @@ impl Db {
 
 impl Drop for Db {
     fn drop(&mut self) {
-        // Transaction will be rolled back when dropped
+        // tx will be rolled back
     }
 }
 

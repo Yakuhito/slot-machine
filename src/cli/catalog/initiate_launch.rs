@@ -4,10 +4,10 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    get_coinset_client, hex_string_to_bytes32, launch_catalog_registry,
-    load_catalog_state_schedule_csv, parse_amount, print_medieval_vault_configuration,
-    wait_for_coin, CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs,
-    MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo,
+    get_coinset_client, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
+    print_medieval_vault_configuration, wait_for_coin, CatalogRegistryConstants,
+    CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint, MedievalVaultInfo, SageClient,
+    StateSchedulerInfo,
 };
 use chia::{
     bls::PublicKey,
@@ -163,22 +163,21 @@ pub async fn catalog_initiate_launch(
     let client = get_coinset_client(testnet11);
 
     println!("Opening database...");
-    let db = Db::new().await?;
-
-    let launcher_id = db
-        .get_value_by_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY)
-        .await?;
-    if let Some(launcher_id) = launcher_id {
-        yes_no_prompt("Previous deployment found in db - do you wish to override?")?;
-
-        let launcher_id = Bytes32::new(hex_string_to_bytes32(&launcher_id)?.into());
-        db.clear_slots_for_singleton(launcher_id).await?;
-        db.clear_catalog_indexed_slot_values().await?;
-        db.remove_key(CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY).await?;
-        db.remove_key(CATALOG_LAST_UNSPENT_COIN).await?;
-    }
+    let mut db = Db::new().await?;
 
     let constants = CatalogRegistryConstants::get(testnet11);
+    let singleton_coin_maybe = db
+        .get_last_unspent_singleton_coin(constants.launcher_id)
+        .await?;
+    if singleton_coin_maybe.is_some() {
+        yes_no_prompt("Previous deployment found in db - do you wish to override?")?;
+
+        db.clear_slots_for_singleton(constants.launcher_id).await?;
+        db.clear_catalog_indexed_slot_values().await?;
+        db.delete_all_singleton_coins(constants.launcher_id).await?;
+        db.finish_transaction().await?;
+    }
+
     let prefix = if testnet11 { "txch" } else { "xch" };
     let royalty_address =
         encode_address(constants.royalty_address.into(), prefix).map_err(CliError::Bech32)?;
@@ -297,6 +296,7 @@ pub async fn catalog_initiate_launch(
     for slot in slots {
         db.save_slot(&mut ctx.allocator, slot, None).await?;
     }
+    db.finish_transaction().await?;
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);
 

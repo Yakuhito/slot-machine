@@ -538,6 +538,7 @@ pub async fn catalog_continue_launch(
             )
             .await?
             .unwrap();
+        db.finish_transaction().await?;
 
         let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);
 
