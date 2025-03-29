@@ -17,7 +17,7 @@ use crate::{
     hex_string_to_bytes32, load_catalog_premine_csv, new_sk, parse_amount, parse_one_sided_offer,
     spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata,
     CatalogPrecommitValue, CatalogPremineRecord, CatalogRegisterAction, CatalogRegistryConstants,
-    CatalogSlotValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
+    CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
 };
 
 pub fn initial_cat_inner_puzzle_ptr(
@@ -514,28 +514,9 @@ pub async fn catalog_continue_launch(
 
         let tail_hash: Bytes32 = ctx.tree_hash(precommit_value.tail_reveal).into();
 
-        let (left_value_hash, right_value_hash) =
-            db.get_catalog_neighbor_value_hashes(tail_hash).await?;
-
-        let left_slot = db
-            .get_unspent_slot::<CatalogSlotValue>(
-                &mut ctx.allocator,
-                constants.launcher_id,
-                0,
-                left_value_hash,
-            )
-            .await?
-            .unwrap();
-
-        let right_slot = db
-            .get_unspent_slot::<CatalogSlotValue>(
-                &mut ctx.allocator,
-                constants.launcher_id,
-                0,
-                right_value_hash,
-            )
-            .await?
-            .unwrap();
+        let (left_slot, right_slot) = db
+            .get_catalog_neighbors(&mut ctx.allocator, constants.launcher_id, tail_hash)
+            .await?;
         db.finish_transaction().await?;
 
         let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);

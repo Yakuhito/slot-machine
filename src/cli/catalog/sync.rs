@@ -82,9 +82,12 @@ pub async fn sync_catalog(
 
                 if is_new_slot {
                     db.save_slot(&mut ctx.allocator, slot, None).await?;
-                }
-                db.save_catalog_indexed_slot_value(asset_id, slot.info.value_hash)
+                    db.save_catalog_indexed_slot_value(
+                        slot.info.value.asset_id,
+                        slot.info.value_hash,
+                    )
                     .await?;
+                }
             }
         }
 

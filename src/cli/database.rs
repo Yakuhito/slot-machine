@@ -11,7 +11,7 @@ use sqlx::{
 };
 use std::time::Duration;
 
-use crate::{Slot, SlotInfo, SlotProof};
+use crate::{CatalogSlotValue, Slot, SlotInfo, SlotProof};
 
 use super::CliError;
 pub struct Db {
@@ -328,10 +328,12 @@ impl Db {
         )?))
     }
 
-    pub async fn get_catalog_neighbor_value_hashes(
+    pub async fn get_catalog_neighbors(
         &mut self,
+        allocator: &mut Allocator,
+        launcher_id: Bytes32,
         asset_id: Bytes32,
-    ) -> Result<(Bytes32, Bytes32), CliError> {
+    ) -> Result<(Slot<CatalogSlotValue>, Slot<CatalogSlotValue>), CliError> {
         // First byte > 0x7F means negative number in signed representation
         let is_negative = asset_id.as_ref()[0] > 0x7F;
 
@@ -340,7 +342,7 @@ impl Db {
             sqlx::query(
                 "
                 SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
-                WHERE asset_id < ?1 AND asset_id >= x'8000000000000000000000000000000000000000000000000000000000000000'
+                WHERE asset_id <= ?1 AND asset_id >= x'8000000000000000000000000000000000000000000000000000000000000000'
                 ORDER BY asset_id ASC
                 LIMIT 1
                 ",
@@ -349,7 +351,7 @@ impl Db {
             sqlx::query(
                 "
                 SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
-                WHERE asset_id < ?1 AND asset_id < x'8000000000000000000000000000000000000000000000000000000000000000'
+                WHERE asset_id <= ?1 AND asset_id < x'8000000000000000000000000000000000000000000000000000000000000000'
                 ORDER BY asset_id DESC
                 LIMIT 1
                 ",
@@ -360,14 +362,8 @@ impl Db {
         .await
         .map_err(CliError::Sqlx)?;
 
-        // If no lower neighbor in same sign range, wrap around to the maximum value of opposite sign
         if lower_row.is_none() {
-            lower_row = if is_negative {
-                // If we're negative and found no lower, fff
-                eprintln!("negative and found no lower");
-                return Err(CliError::DbColumnParse());
-            } else {
-                sqlx::query(
+            lower_row = sqlx::query(
                     "
                     SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
                     WHERE asset_id >= x'8000000000000000000000000000000000000000000000000000000000000000'
@@ -375,51 +371,6 @@ impl Db {
                     LIMIT 1
                     ",
                 )
-            }
-            .fetch_optional(&mut self.transaction)
-            .await
-            .map_err(CliError::Sqlx)?;
-        }
-
-        // Get the next (higher) neighbor
-        let mut higher_row = if is_negative {
-            sqlx::query(
-                "
-                SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
-                WHERE asset_id > ?1 AND asset_id >= x'8000000000000000000000000000000000000000000000000000000000000000'
-                ORDER BY asset_id DESC
-                LIMIT 1
-                ",
-            )
-        } else {
-            sqlx::query(
-                "
-                SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
-                WHERE asset_id > ?1 AND asset_id < x'8000000000000000000000000000000000000000000000000000000000000000'
-                ORDER BY asset_id ASC
-                LIMIT 1
-                ",
-            )
-        }
-        .bind(asset_id.to_vec())
-        .fetch_optional(&mut self.transaction)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        if higher_row.is_none() {
-            higher_row = if is_negative {
-                sqlx::query(
-                    "
-                    SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
-                    WHERE asset_id < x'8000000000000000000000000000000000000000000000000000000000000000'
-                    ORDER BY asset_id ASC
-                    LIMIT 1
-                    ",
-                )
-            } else {
-                eprintln!("positive and found no higher");
-                return Err(CliError::DbColumnParse());
-            }
             .fetch_optional(&mut self.transaction)
             .await
             .map_err(CliError::Sqlx)?;
@@ -428,14 +379,25 @@ impl Db {
         let Some(lower_row) = lower_row else {
             return Err(CliError::DbColumnParse());
         };
-        let Some(higher_row) = higher_row else {
-            return Err(CliError::DbColumnParse());
-        };
 
-        let lower_hash = column_to_bytes32(lower_row.get::<&[u8], _>("slot_value_hash"))?;
-        let higher_hash = column_to_bytes32(higher_row.get::<&[u8], _>("slot_value_hash"))?;
+        let left_hash = column_to_bytes32(lower_row.get::<&[u8], _>("slot_value_hash"))?;
 
-        Ok((lower_hash, higher_hash))
+        let left_slot = self
+            .get_unspent_slot::<CatalogSlotValue>(allocator, launcher_id, 0, left_hash)
+            .await?
+            .unwrap();
+
+        let right_value_hash = self
+            .get_catalog_indexed_slot_value(left_slot.info.value.neighbors.right_value)
+            .await?
+            .unwrap();
+
+        let right_slot = self
+            .get_unspent_slot::<CatalogSlotValue>(allocator, launcher_id, 0, right_value_hash)
+            .await?
+            .unwrap();
+
+        Ok((left_slot, right_slot))
     }
 
     pub async fn clear_spent_slots(

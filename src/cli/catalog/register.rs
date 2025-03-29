@@ -349,29 +349,13 @@ pub async fn catalog_register(
                 )?
                 .reserve_fee(1)
         } else {
-            let (left_value_hash, right_value_hash) = db
-                .get_catalog_neighbor_value_hashes(registered_asset_id)
+            let (left_slot, right_slot) = db
+                .get_catalog_neighbors(
+                    &mut ctx.allocator,
+                    catalog_constants.launcher_id,
+                    registered_asset_id,
+                )
                 .await?;
-
-            let left_slot = db
-                .get_unspent_slot::<CatalogSlotValue>(
-                    &mut ctx.allocator,
-                    catalog_constants.launcher_id,
-                    0,
-                    left_value_hash,
-                )
-                .await?
-                .unwrap();
-
-            let right_slot = db
-                .get_unspent_slot::<CatalogSlotValue>(
-                    &mut ctx.allocator,
-                    catalog_constants.launcher_id,
-                    0,
-                    right_value_hash,
-                )
-                .await?
-                .unwrap();
 
             catalog
                 .new_action::<CatalogRegisterAction>()
