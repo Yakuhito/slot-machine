@@ -136,7 +136,7 @@ enum CatalogCliAction {
         description: String,
 
         /// Initial on-chain CAT precision (do not change unless you know what you are doing)
-        #[arg(long, default_value = "4")]
+        #[arg(long, default_value = "3")]
         precision: u8,
 
         /// Initial CAT metadata URIs (comma-separated list of URIs)
