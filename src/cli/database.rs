@@ -463,6 +463,7 @@ impl Db {
             "
             INSERT INTO singleton_coins (launcher_id, coin_id, parent_coin_id, spent_block_height) 
             VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(coin_id) DO NOTHING
             ",
         )
         .bind(launcher_id.to_vec())
