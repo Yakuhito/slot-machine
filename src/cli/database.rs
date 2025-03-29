@@ -442,6 +442,48 @@ impl Db {
 
         Ok(())
     }
+
+    pub async fn save_singleton_coin(
+        &self,
+        launcher_id: Bytes32,
+        coin_id: Bytes32,
+        parent_coin_id: Bytes32,
+        creation_block_height: u32,
+        spent_block_height: Option<u32>,
+    ) -> Result<(), CliError> {
+        let mut tx = self.pool.begin().await.map_err(CliError::Sqlx)?;
+
+        sqlx::query(
+            "
+            UPDATE singleton_coins 
+            SET spent_block_height = ?1 
+            WHERE coin_id = ?2 AND spent_block_height IS NULL
+            ",
+        )
+        .bind(creation_block_height)
+        .bind(parent_coin_id.to_vec())
+        .execute(&mut tx)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        sqlx::query(
+            "
+            INSERT INTO singleton_coins (launcher_id, coin_id, parent_coin_id, spent_block_height) 
+            VALUES (?1, ?2, ?3, ?4)
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .bind(coin_id.to_vec())
+        .bind(parent_coin_id.to_vec())
+        .bind(spent_block_height)
+        .execute(&mut tx)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        tx.commit().await.map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
 }
 
 pub fn column_to_bytes32(column_value: &[u8]) -> Result<Bytes32, CliError> {
