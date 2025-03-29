@@ -295,6 +295,8 @@ pub async fn catalog_initiate_launch(
 
     for slot in slots {
         db.save_slot(&mut ctx.allocator, slot, 0).await?;
+        db.save_catalog_indexed_slot_value(slot.info.value.asset_id, slot.info.value_hash)
+            .await?;
     }
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);

@@ -23,7 +23,7 @@ impl Db {
         let pool = SqlitePoolOptions::new()
             .idle_timeout(Duration::from_secs(5))
             .acquire_timeout(Duration::from_secs(5))
-            .connect("sqlite://data.db")
+            .connect("sqlite://data.db?mode=rwc")
             .await?;
 
         sqlx::query(
@@ -374,6 +374,7 @@ impl Db {
         let mut right_slots = Vec::new();
 
         for row in rows {
+            println!("row!");
             let side: String = row.get("side");
             let slot = Self::row_to_slot(allocator, &row)?;
             if side == "left" {
@@ -384,6 +385,8 @@ impl Db {
         }
 
         if left_slots.is_empty() || right_slots.is_empty() {
+            println!("left_slots: {:?}", left_slots.len());
+            println!("right_slots: {:?}", right_slots.len());
             return Err(CliError::DbColumnNotFound());
         }
 
