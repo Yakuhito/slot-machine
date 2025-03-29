@@ -49,7 +49,7 @@ async fn connect_websocket(testnet11: bool) -> Result<(), CliError> {
             Ok(Message::Text(text)) => match serde_json::from_str::<WebSocketMessage>(&text) {
                 Ok(msg) => {
                     if msg.message_type == "peak" {
-                        println!("Received peak update - checking if CATalog coin was spent");
+                        println!("Received new peak");
 
                         let coin_resp = client
                             .get_coin_record_by_name(catalog.coin.coin_id())
@@ -57,13 +57,14 @@ async fn connect_websocket(testnet11: bool) -> Result<(), CliError> {
 
                         if let Some(coin_record) = coin_resp.coin_record {
                             if coin_record.spent {
-                                println!(
-                                    "Latest CATalog coin was spent at height {} - syncing...",
+                                print!(
+                                    "Latest CATalog coin was spent at height {}... ",
                                     coin_record.spent_block_index
                                 );
                                 let mut ctx = SpendContext::new();
                                 catalog =
                                     sync_catalog(&client, &mut db, &mut ctx, constants).await?;
+                                println!("synced :)")
                             }
                         } else {
                             return Err(CliError::Custom(
