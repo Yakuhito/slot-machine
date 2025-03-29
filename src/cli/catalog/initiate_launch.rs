@@ -175,7 +175,6 @@ pub async fn catalog_initiate_launch(
         db.clear_slots_for_singleton(constants.launcher_id).await?;
         db.clear_catalog_indexed_slot_values().await?;
         db.delete_all_singleton_coins(constants.launcher_id).await?;
-        db.finish_transaction().await?;
     }
 
     let prefix = if testnet11 { "txch" } else { "xch" };
@@ -296,7 +295,6 @@ pub async fn catalog_initiate_launch(
     for slot in slots {
         db.save_slot(&mut ctx.allocator, slot, None).await?;
     }
-    db.finish_transaction().await?;
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);
 

@@ -34,7 +34,6 @@ pub async fn sync_catalog(
 
     let mut catalog: Option<CatalogRegistry> = None;
     loop {
-        db.finish_transaction().await?;
         let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
         let Some(coin_record) = coin_record_response.coin_record else {
             return Err(CliError::CoinNotFound(last_coin_id));
@@ -228,7 +227,6 @@ pub async fn sync_catalog(
             break;
         };
     }
-    db.finish_transaction().await?;
 
     if let Some(catalog) = catalog {
         Ok(catalog)

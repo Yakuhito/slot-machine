@@ -11,12 +11,11 @@ use sqlx::{
 };
 use std::time::Duration;
 
-use crate::{CatalogSlotValue, Slot, SlotInfo, SlotProof};
+use crate::{Slot, SlotInfo, SlotProof};
 
 use super::CliError;
 pub struct Db {
     pool: Pool<Sqlite>,
-    transaction: sqlx::Transaction<'static, Sqlite>,
 }
 
 impl Db {
@@ -33,7 +32,7 @@ impl Db {
                 singleton_launcher_id BLOB NOT NULL,
                 nonce INTEGER NOT NULL,
                 slot_value_hash BLOB NOT NULL,
-                spent_block_height INTEGER,
+                spent_block_height INTEGER NOT NULL,
                 slot_value BLOB NOT NULL,
                 parent_parent_info BLOB NOT NULL,
                 parent_inner_puzzle_hash BLOB NOT NULL,
@@ -61,7 +60,7 @@ impl Db {
                 launcher_id BLOB NOT NULL,
                 coin_id BLOB NOT NULL PRIMARY KEY,
                 parent_coin_id BLOB,
-                spent_block_height INTEGER
+                spent_block_height NOT NULL
             )
             ",
         )
@@ -77,25 +76,23 @@ impl Db {
         .execute(&pool)
         .await?;
 
-        let transaction = pool.begin().await.map_err(CliError::Sqlx)?;
+        sqlx::query(
+            "
+            CREATE INDEX IF NOT EXISTS idx_slots_neighbors 
+            ON slots(singleton_launcher_id, nonce, spent_block_height, slot_value_hash)
+            ",
+        )
+        .execute(&pool)
+        .await?;
 
-        Ok(Self { pool, transaction })
-    }
-
-    pub async fn finish_transaction(&mut self) -> Result<(), CliError> {
-        let old_tx = std::mem::replace(
-            &mut self.transaction,
-            self.pool.begin().await.map_err(CliError::Sqlx)?,
-        );
-        old_tx.commit().await.map_err(CliError::Sqlx)?;
-        Ok(())
+        Ok(Self { pool })
     }
 
     pub async fn save_slot<SV>(
         &mut self,
         allocator: &mut Allocator,
         slot: Slot<SV>,
-        spent_block_height: Option<u32>,
+        spent_block_height: u32,
     ) -> Result<(), CliError>
     where
         SV: ToClvm<Allocator> + FromClvm<Allocator> + Copy,
@@ -124,7 +121,7 @@ impl Db {
         .bind(slot_value_bytes)
         .bind(slot.proof.parent_parent_info.to_vec())
         .bind(slot.proof.parent_inner_puzzle_hash.to_vec())
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -154,12 +151,13 @@ impl Db {
         ))
     }
 
-    pub async fn get_unspent_slot<SV>(
+    pub async fn get_slot<SV>(
         &mut self,
         allocator: &mut Allocator,
         singleton_launcher_id: Bytes32,
         nonce: u64,
         slot_value_hash: Bytes32,
+        spent_block_height: u32,
     ) -> Result<Option<Slot<SV>>, CliError>
     where
         SV: FromClvm<Allocator> + Copy + ToTreeHash,
@@ -167,13 +165,14 @@ impl Db {
         let row = sqlx::query(
             "
             SELECT * FROM slots 
-            WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3 AND spent_block_height IS NULL
+            WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3 AND spent_block_height = ?4
             ",
         )
         .bind(singleton_launcher_id.to_vec())
         .bind(nonce as i64)
         .bind(slot_value_hash.to_vec())
-        .fetch_optional(&mut self.transaction)
+        .bind(spent_block_height)
+        .fetch_optional(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -189,7 +188,7 @@ impl Db {
         allocator: &mut Allocator,
         singleton_launcher_id: Bytes32,
         nonce: u64,
-        spent_block_height: Option<u32>,
+        spent_block_height: u32,
     ) -> Result<Vec<Slot<SV>>, CliError>
     where
         SV: FromClvm<Allocator> + Copy + ToTreeHash,
@@ -199,7 +198,7 @@ impl Db {
                 .bind(singleton_launcher_id.to_vec())
                 .bind(nonce as i64)
                 .bind(spent_block_height)
-                .fetch_all(&mut self.transaction)
+                .fetch_all(&self.pool)
                 .await
                 .map_err(CliError::Sqlx)?;
 
@@ -213,7 +212,7 @@ impl Db {
         singleton_launcher_id: Bytes32,
         nonce: u64,
         slot_value_hash: Bytes32,
-        spent_block_height: Option<u32>,
+        spent_block_height: u32,
     ) -> Result<(), CliError> {
         sqlx::query(
             "
@@ -224,14 +223,14 @@ impl Db {
         .bind(nonce as i64)
         .bind(slot_value_hash.to_vec())
         .bind(spent_block_height)
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
         Ok(())
     }
 
-    pub async fn clear_slots_for_singleton(
+    pub async fn delete_all_slots_for_singleton(
         &mut self,
         singleton_launcher_id: Bytes32,
     ) -> Result<(), CliError> {
@@ -241,20 +240,20 @@ impl Db {
             ",
         )
         .bind(singleton_launcher_id.to_vec())
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
         Ok(())
     }
 
-    pub async fn clear_catalog_indexed_slot_values(&mut self) -> Result<(), CliError> {
+    pub async fn delete_all_catalog_indexed_slot_values(&mut self) -> Result<(), CliError> {
         sqlx::query(
             "
             DELETE FROM catalog_indexed_slot_values
             ",
         )
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -270,14 +269,14 @@ impl Db {
     ) -> Result<(), CliError> {
         sqlx::query(
             "
-            UPDATE slots SET spent_block_height = ?1 WHERE singleton_launcher_id = ?2 AND nonce = ?3 AND slot_value_hash = ?4 AND spent_block_height IS NULL
+            UPDATE slots SET spent_block_height = ?1 WHERE singleton_launcher_id = ?2 AND nonce = ?3 AND slot_value_hash = ?4 AND spent_block_height=0
             ",
         )
         .bind(spent_block_height)
         .bind(singleton_launcher_id.to_vec())
         .bind(nonce as i64)
         .bind(slot_value_hash.to_vec())
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -298,7 +297,7 @@ impl Db {
         )
         .bind(asset_id.to_vec())
         .bind(slot_value_hash.to_vec())
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -315,7 +314,7 @@ impl Db {
             ",
         )
         .bind(asset_id.to_vec())
-        .fetch_optional(&mut self.transaction)
+        .fetch_optional(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -328,89 +327,76 @@ impl Db {
         )?))
     }
 
-    pub async fn get_catalog_neighbors(
+    pub async fn get_catalog_neighbors<SV>(
         &mut self,
         allocator: &mut Allocator,
-        launcher_id: Bytes32,
         asset_id: Bytes32,
-    ) -> Result<(Slot<CatalogSlotValue>, Slot<CatalogSlotValue>), CliError> {
-        // First byte > 0x7F means negative number in signed representation
-        let is_negative = asset_id.as_ref()[0] > 0x7F;
+        launcher_id: Bytes32,
+    ) -> Result<(Vec<Slot<SV>>, Vec<Slot<SV>>), CliError>
+    where
+        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+    {
+        let query = sqlx::query(
+            "
+            SELECT 'left' AS side, s.* 
+            FROM slots s
+            WHERE s.singleton_launcher_id = ?1
+              AND s.nonce = 0
+              AND s.spent_block_height = 0
+              AND s.slot_value_hash = (
+                  SELECT slot_value_hash 
+                  FROM catalog_indexed_slot_values 
+                  WHERE asset_id < ?2 
+                  ORDER BY asset_id DESC 
+                  LIMIT 1
+              )
+            UNION ALL
+            SELECT 'right' AS side, s.* 
+            FROM slots s
+            WHERE s.singleton_launcher_id = ?1
+              AND s.nonce = 0
+              AND s.spent_block_height = 0
+              AND s.slot_value_hash = (
+                  SELECT slot_value_hash 
+                  FROM catalog_indexed_slot_values 
+                  WHERE asset_id > ?2 
+                  ORDER BY asset_id ASC 
+                  LIMIT 1
+              )
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .bind(asset_id.to_vec());
 
-        // Get the previous (lower) neighbor
-        let mut lower_row = if is_negative {
-            sqlx::query(
-                "
-                SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
-                WHERE asset_id <= ?1 AND asset_id >= x'8000000000000000000000000000000000000000000000000000000000000000'
-                ORDER BY asset_id ASC
-                LIMIT 1
-                ",
-            )
-        } else {
-            sqlx::query(
-                "
-                SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
-                WHERE asset_id <= ?1 AND asset_id < x'8000000000000000000000000000000000000000000000000000000000000000'
-                ORDER BY asset_id DESC
-                LIMIT 1
-                ",
-            )
+        let rows = query.fetch_all(&self.pool).await.map_err(CliError::Sqlx)?;
+
+        let mut left_slots = Vec::new();
+        let mut right_slots = Vec::new();
+
+        for row in rows {
+            let side: String = row.get("side");
+            let slot = Self::row_to_slot(allocator, &row)?;
+            if side == "left" {
+                left_slots.push(slot);
+            } else if side == "right" {
+                right_slots.push(slot);
+            }
         }
-        .bind(asset_id.to_vec())
-        .fetch_optional(&mut self.transaction)
-        .await
-        .map_err(CliError::Sqlx)?;
 
-        if lower_row.is_none() {
-            lower_row = sqlx::query(
-                    "
-                    SELECT slot_value_hash, asset_id FROM catalog_indexed_slot_values 
-                    WHERE asset_id >= x'8000000000000000000000000000000000000000000000000000000000000000'
-                    ORDER BY asset_id DESC
-                    LIMIT 1
-                    ",
-                )
-            .fetch_optional(&mut self.transaction)
-            .await
-            .map_err(CliError::Sqlx)?;
-        }
-
-        let Some(lower_row) = lower_row else {
-            return Err(CliError::DbColumnParse());
-        };
-
-        let left_hash = column_to_bytes32(lower_row.get::<&[u8], _>("slot_value_hash"))?;
-
-        let left_slot = self
-            .get_unspent_slot::<CatalogSlotValue>(allocator, launcher_id, 0, left_hash)
-            .await?
-            .unwrap();
-
-        let right_value_hash = self
-            .get_catalog_indexed_slot_value(left_slot.info.value.neighbors.right_value)
-            .await?
-            .unwrap();
-
-        let right_slot = self
-            .get_unspent_slot::<CatalogSlotValue>(allocator, launcher_id, 0, right_value_hash)
-            .await?
-            .unwrap();
-
-        Ok((left_slot, right_slot))
+        Ok((left_slots, right_slots))
     }
 
-    pub async fn clear_spent_slots(
+    pub async fn delete_slots_spent_before(
         &mut self,
         spent_block_height_threshold: u32,
     ) -> Result<(), CliError> {
         sqlx::query(
             "
-            DELETE FROM slots WHERE spent_block_height IS NOT NULL AND spent_block_height < ?1
+            DELETE FROM slots WHERE spent_block_height>0 AND spent_block_height < ?1
             ",
         )
         .bind(spent_block_height_threshold)
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -427,24 +413,24 @@ impl Db {
             ",
         )
         .bind(launcher_id.to_vec())
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
         Ok(())
     }
 
-    pub async fn clear_singleton_coins(
+    pub async fn delete_singleton_coins_spent_before(
         &mut self,
         spent_block_height_threshold: u32,
     ) -> Result<(), CliError> {
         sqlx::query(
             "
-            DELETE FROM singleton_coins WHERE spent_block_height IS NOT NULL AND spent_block_height < ?1
+            DELETE FROM singleton_coins WHERE spent_block_height>0 AND spent_block_height < ?1
             ",
         )
         .bind(spent_block_height_threshold)
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -460,12 +446,12 @@ impl Db {
             "
             UPDATE singleton_coins 
             SET spent_block_height = ?1 
-            WHERE coin_id = ?2 AND spent_block_height IS NULL
+            WHERE coin_id = ?2 AND spent_block_height=0
             ",
         )
         .bind(coin_record.confirmed_block_index)
         .bind(coin_record.coin.parent_coin_info.to_vec())
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -473,7 +459,6 @@ impl Db {
             "
             INSERT INTO singleton_coins (launcher_id, coin_id, parent_coin_id, spent_block_height) 
             VALUES (?1, ?2, ?3, ?4)
-            ON CONFLICT(coin_id) DO UPDATE SET spent_block_height = excluded.spent_block_height
             ",
         )
         .bind(launcher_id.to_vec())
@@ -484,7 +469,7 @@ impl Db {
         } else {
             Some(coin_record.spent_block_index)
         })
-        .execute(&mut self.transaction)
+        .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -497,11 +482,11 @@ impl Db {
     ) -> Result<Option<(Bytes32, Bytes32)>, CliError> {
         let row = sqlx::query(
             "
-            SELECT coin_id, parent_coin_id FROM singleton_coins WHERE launcher_id = ?1 AND spent_block_height IS NULL LIMIT 1
+            SELECT coin_id, parent_coin_id FROM singleton_coins WHERE launcher_id = ?1 AND spent_block_height=0 LIMIT 1
             ",
         )
         .bind(launcher_id.to_vec())
-        .fetch_optional(&mut self.transaction)
+        .fetch_optional(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
@@ -513,12 +498,6 @@ impl Db {
         let parent_coin_id = column_to_bytes32(row.get::<&[u8], _>("parent_coin_id"))?;
 
         Ok(Some((coin_id, parent_coin_id)))
-    }
-}
-
-impl Drop for Db {
-    fn drop(&mut self) {
-        // tx will be rolled back
     }
 }
 

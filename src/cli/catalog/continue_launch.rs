@@ -517,7 +517,6 @@ pub async fn catalog_continue_launch(
         let (left_slot, right_slot) = db
             .get_catalog_neighbors(&mut ctx.allocator, constants.launcher_id, tail_hash)
             .await?;
-        db.finish_transaction().await?;
 
         let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);
 
