@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use super::{
-    catalog_continue_launch, catalog_initiate_launch, catalog_register,
+    catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
     catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_view,
 };
 
@@ -179,6 +179,13 @@ enum CatalogCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+
+    /// Listen for CATalog spends
+    Listen {
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -266,6 +273,7 @@ pub async fn run_cli() {
                 )
                 .await
             }
+            CatalogCliAction::Listen { testnet11 } => catalog_listen(testnet11).await,
         },
 
         Commands::Xchandles { action } => match action {

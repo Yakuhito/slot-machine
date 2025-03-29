@@ -440,7 +440,7 @@ impl Db {
     ) -> Result<(), CliError> {
         sqlx::query(
             "
-            DELETE FROM singleton_coins WHERE spent_block_height IS NOT NULL AND spent_block_height < ?2
+            DELETE FROM singleton_coins WHERE spent_block_height IS NOT NULL AND spent_block_height < ?1
             ",
         )
         .bind(spent_block_height_threshold)
