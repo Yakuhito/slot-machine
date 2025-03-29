@@ -45,7 +45,7 @@ pub async fn catalog_listen(testnet11: bool) -> Result<(), CliError> {
             }
         }
 
-        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
     }
 
     println!("Exiting...");

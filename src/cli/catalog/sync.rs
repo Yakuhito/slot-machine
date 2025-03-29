@@ -66,10 +66,10 @@ pub async fn sync_catalog(
             if let Some(ref prev_catalog) = catalog {
                 let new_slots = prev_catalog.get_new_slots_from_spend(ctx, solution_ptr)?;
 
-                for slot in new_slots {
+                for slot in new_slots.iter() {
                     let asset_id = slot.info.value.asset_id;
 
-                    let is_new_slot = if let Some(previous_value_hash) =
+                    if let Some(previous_value_hash) =
                         db.get_catalog_indexed_slot_value(asset_id).await?
                     {
                         db.mark_slot_as_spent(
@@ -79,20 +79,16 @@ pub async fn sync_catalog(
                             coin_record.spent_block_index,
                         )
                         .await?;
-
-                        previous_value_hash != slot.info.value_hash
-                    } else {
-                        true
-                    };
-
-                    if is_new_slot {
-                        db.save_slot(&mut ctx.allocator, slot, 0).await?;
-                        db.save_catalog_indexed_slot_value(
-                            slot.info.value.asset_id,
-                            slot.info.value_hash,
-                        )
-                        .await?;
                     }
+                }
+
+                for slot in new_slots {
+                    db.save_slot(&mut ctx.allocator, slot, 0).await?;
+                    db.save_catalog_indexed_slot_value(
+                        slot.info.value.asset_id,
+                        slot.info.value_hash,
+                    )
+                    .await?;
                 }
             }
         }
