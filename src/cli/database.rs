@@ -13,11 +13,6 @@ use std::time::Duration;
 use crate::{Slot, SlotInfo, SlotProof};
 
 use super::CliError;
-
-pub static CATALOG_LAUNCH_PAYMENT_ASSET_ID_KEY: &str = "catalog-launch_payment-asset-id";
-pub static CATALOG_LAST_UNSPENT_COIN: &str = "catalog_last-unspent-coin";
-pub static SLOTS_TABLE: &str = "slots";
-
 pub struct Db {
     pool: Pool<Sqlite>,
 }
@@ -32,27 +27,16 @@ impl Db {
 
         sqlx::query(
             "
-            CREATE TABLE IF NOT EXISTS key_value_store (
-                id INTEGER PRIMARY KEY,
-                key TEXT UNIQUE NOT NULL,
-                value TEXT NOT NULL
-            )
-            ",
-        )
-        .execute(&pool)
-        .await?;
-
-        sqlx::query(
-            "
             CREATE TABLE IF NOT EXISTS slots (
                 id INTEGER PRIMARY KEY,
                 singleton_launcher_id BLOB NOT NULL,
                 nonce INTEGER NOT NULL,
                 slot_value_hash BLOB NOT NULL,
+                spent_block_height INTEGER,
                 slot_value BLOB NOT NULL,
                 parent_parent_info BLOB NOT NULL,
                 parent_inner_puzzle_hash BLOB NOT NULL,
-                UNIQUE(singleton_launcher_id, nonce, slot_value_hash)
+                UNIQUE(singleton_launcher_id, nonce, slot_value_hash, spent_block_height)
             )
             ",
         )
@@ -73,55 +57,11 @@ impl Db {
         Ok(Self { pool })
     }
 
-    pub async fn save_key_value(&self, key: &str, value: &str) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            INSERT INTO key_value_store (key, value) 
-            VALUES (?1, ?2)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-            ",
-        )
-        .bind(key)
-        .bind(value)
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
-    }
-
-    pub async fn get_value_by_key(&self, key: &str) -> Result<Option<String>, CliError> {
-        let row = sqlx::query(
-            "
-            SELECT value FROM key_value_store WHERE key = ?1
-            ",
-        )
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(row.map(|r| r.get(0)))
-    }
-
-    pub async fn remove_key(&self, key: &str) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            DELETE FROM key_value_store WHERE key = ?1
-            ",
-        )
-        .bind(key)
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
-    }
-
     pub async fn save_slot<SV>(
         &self,
         allocator: &mut Allocator,
         slot: Slot<SV>,
+        spent_block_height: Option<u32>,
     ) -> Result<(), CliError>
     where
         SV: ToClvm<Allocator> + FromClvm<Allocator> + Copy,
@@ -136,20 +76,16 @@ impl Db {
         sqlx::query(
             "
             INSERT INTO slots (
-                singleton_launcher_id, nonce, slot_value_hash, slot_value, 
-                parent_parent_info, parent_inner_puzzle_hash
+                singleton_launcher_id, nonce, slot_value_hash, spent_block_height,
+                slot_value, parent_parent_info, parent_inner_puzzle_hash
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            ON CONFLICT(singleton_launcher_id, nonce, slot_value_hash) 
-            DO UPDATE SET 
-                slot_value = excluded.slot_value,
-                parent_parent_info = excluded.parent_parent_info,
-                parent_inner_puzzle_hash = excluded.parent_inner_puzzle_hash
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             ",
         )
         .bind(slot.info.launcher_id.to_vec())
         .bind(slot.info.nonce as i64)
         .bind(slot.info.value_hash.to_vec())
+        .bind(spent_block_height)
         .bind(slot_value_bytes)
         .bind(slot.proof.parent_parent_info.to_vec())
         .bind(slot.proof.parent_inner_puzzle_hash.to_vec())
@@ -189,6 +125,7 @@ impl Db {
         singleton_launcher_id: Bytes32,
         nonce: u64,
         slot_value_hash: Bytes32,
+        spent_block_height: Option<u32>,
     ) -> Result<Option<Slot<SV>>, CliError>
     where
         SV: FromClvm<Allocator> + Copy + ToTreeHash,
@@ -196,12 +133,13 @@ impl Db {
         let row = sqlx::query(
             "
             SELECT * FROM slots 
-            WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3
+            WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3 AND spent_block_height = ?4
             ",
         )
         .bind(singleton_launcher_id.to_vec())
         .bind(nonce as i64)
         .bind(slot_value_hash.to_vec())
+        .bind(spent_block_height)
         .fetch_optional(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
@@ -218,14 +156,16 @@ impl Db {
         allocator: &mut Allocator,
         singleton_launcher_id: Bytes32,
         nonce: u64,
+        spent_block_height: Option<u32>,
     ) -> Result<Vec<Slot<SV>>, CliError>
     where
         SV: FromClvm<Allocator> + Copy + ToTreeHash,
     {
         let rows =
-            sqlx::query("SELECT * FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2")
+            sqlx::query("SELECT * FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND spent_block_height = ?3")
                 .bind(singleton_launcher_id.to_vec())
                 .bind(nonce as i64)
+                .bind(spent_block_height)
                 .fetch_all(&self.pool)
                 .await
                 .map_err(CliError::Sqlx)?;
@@ -240,15 +180,17 @@ impl Db {
         singleton_launcher_id: Bytes32,
         nonce: u64,
         slot_value_hash: Bytes32,
+        spent_block_height: Option<u32>,
     ) -> Result<(), CliError> {
         sqlx::query(
             "
-            DELETE FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3
+            DELETE FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3 AND spent_block_height = ?4
             ",
         )
         .bind(singleton_launcher_id.to_vec())
         .bind(nonce as i64)
         .bind(slot_value_hash.to_vec())
+        .bind(spent_block_height)
         .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
@@ -279,6 +221,29 @@ impl Db {
             DELETE FROM catalog_indexed_slot_values
             ",
         )
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
+    pub async fn mark_slot_as_spent(
+        &self,
+        singleton_launcher_id: Bytes32,
+        nonce: u64,
+        slot_value_hash: Bytes32,
+        spent_block_height: u32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            UPDATE slots SET spent_block_height = ?1 WHERE singleton_launcher_id = ?2 AND nonce = ?3 AND slot_value_hash = ?4 AND spent_block_height IS NULL
+            ",
+        )
+        .bind(spent_block_height)
+        .bind(singleton_launcher_id.to_vec())
+        .bind(nonce as i64)
+        .bind(slot_value_hash.to_vec())
         .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
