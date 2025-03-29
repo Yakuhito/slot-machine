@@ -320,11 +320,12 @@ pub async fn catalog_register(
                 };
 
                 Some(
-                    db.get_unspent_slot::<CatalogSlotValue>(
+                    db.get_slot::<CatalogSlotValue>(
                         &mut ctx.allocator,
                         catalog_constants.launcher_id,
                         0,
                         slot_value_hash,
+                        0,
                     )
                     .await?
                     .unwrap(),

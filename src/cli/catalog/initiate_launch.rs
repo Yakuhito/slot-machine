@@ -172,8 +172,9 @@ pub async fn catalog_initiate_launch(
     if singleton_coin_maybe.is_some() {
         yes_no_prompt("Previous deployment found in db - do you wish to override?")?;
 
-        db.clear_slots_for_singleton(constants.launcher_id).await?;
-        db.clear_catalog_indexed_slot_values().await?;
+        db.delete_all_slots_for_singleton(constants.launcher_id)
+            .await?;
+        db.delete_all_catalog_indexed_slot_values().await?;
         db.delete_all_singleton_coins(constants.launcher_id).await?;
     }
 
@@ -293,7 +294,7 @@ pub async fn catalog_initiate_launch(
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
     for slot in slots {
-        db.save_slot(&mut ctx.allocator, slot, None).await?;
+        db.save_slot(&mut ctx.allocator, slot, 0).await?;
     }
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);

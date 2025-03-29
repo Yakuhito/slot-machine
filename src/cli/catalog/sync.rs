@@ -25,13 +25,14 @@ pub async fn sync_catalog(
         .get_last_unspent_singleton_coin(constants.launcher_id)
         .await?;
 
-    let mut last_coin_id: Bytes32 = if let Some((_coin_id, parent_coin_id)) = last_unspent_coin_info
-    {
-        parent_coin_id
-    } else {
-        constants.launcher_id
-    };
+    let last_spent_coin_id: Bytes32 =
+        if let Some((_coin_id, parent_coin_id)) = last_unspent_coin_info {
+            parent_coin_id
+        } else {
+            constants.launcher_id
+        };
 
+    let mut last_coin_id = last_spent_coin_id;
     let mut catalog: Option<CatalogRegistry> = None;
     loop {
         let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
@@ -41,8 +42,12 @@ pub async fn sync_catalog(
         if !coin_record.spent {
             break;
         }
-        db.save_singleton_coin(constants.launcher_id, coin_record)
-            .await?;
+
+        let skip_db_save = last_coin_id == last_spent_coin_id;
+        if !skip_db_save {
+            db.save_singleton_coin(constants.launcher_id, coin_record)
+                .await?;
+        }
 
         let puzzle_and_solution_resp = client
             .get_puzzle_and_solution(
@@ -57,35 +62,37 @@ pub async fn sync_catalog(
         let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
         let parent_puzzle = Puzzle::parse(&ctx.allocator, puzzle_ptr);
         let solution_ptr = ctx.alloc(&coin_spend.solution)?;
-        if let Some(ref prev_catalog) = catalog {
-            let new_slots = prev_catalog.get_new_slots_from_spend(ctx, solution_ptr)?;
+        if !skip_db_save {
+            if let Some(ref prev_catalog) = catalog {
+                let new_slots = prev_catalog.get_new_slots_from_spend(ctx, solution_ptr)?;
 
-            for slot in new_slots {
-                let asset_id = slot.info.value.asset_id;
+                for slot in new_slots {
+                    let asset_id = slot.info.value.asset_id;
 
-                let is_new_slot = if let Some(previous_value_hash) =
-                    db.get_catalog_indexed_slot_value(asset_id).await?
-                {
-                    db.mark_slot_as_spent(
-                        constants.launcher_id,
-                        0,
-                        previous_value_hash,
-                        coin_record.spent_block_index,
-                    )
-                    .await?;
+                    let is_new_slot = if let Some(previous_value_hash) =
+                        db.get_catalog_indexed_slot_value(asset_id).await?
+                    {
+                        db.mark_slot_as_spent(
+                            constants.launcher_id,
+                            0,
+                            previous_value_hash,
+                            coin_record.spent_block_index,
+                        )
+                        .await?;
 
-                    previous_value_hash != slot.info.value_hash
-                } else {
-                    true
-                };
+                        previous_value_hash != slot.info.value_hash
+                    } else {
+                        true
+                    };
 
-                if is_new_slot {
-                    db.save_slot(&mut ctx.allocator, slot, None).await?;
-                    db.save_catalog_indexed_slot_value(
-                        slot.info.value.asset_id,
-                        slot.info.value_hash,
-                    )
-                    .await?;
+                    if is_new_slot {
+                        db.save_slot(&mut ctx.allocator, slot, 0).await?;
+                        db.save_catalog_indexed_slot_value(
+                            slot.info.value.asset_id,
+                            slot.info.value_hash,
+                        )
+                        .await?;
+                    }
                 }
             }
         }
@@ -176,48 +183,50 @@ pub async fn sync_catalog(
             let left_slot_value = CatalogSlotValue::left_end(SLOT32_MAX_VALUE.into());
             let right_slot_value = CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into());
 
-            db.save_slot(
-                &mut ctx.allocator,
-                Slot::new(
-                    slot_proof,
-                    SlotInfo::from_value(constants.launcher_id, 0, left_slot_value),
-                ),
-                None,
-            )
-            .await?;
-            db.save_catalog_indexed_slot_value(
-                left_slot_value.asset_id,
-                left_slot_value.tree_hash().into(),
-            )
-            .await?;
+            if !skip_db_save {
+                db.save_slot(
+                    &mut ctx.allocator,
+                    Slot::new(
+                        slot_proof,
+                        SlotInfo::from_value(constants.launcher_id, 0, left_slot_value),
+                    ),
+                    0,
+                )
+                .await?;
+                db.save_catalog_indexed_slot_value(
+                    left_slot_value.asset_id,
+                    left_slot_value.tree_hash().into(),
+                )
+                .await?;
 
-            db.save_slot(
-                &mut ctx.allocator,
-                Slot::new(
-                    slot_proof,
-                    SlotInfo::from_value(constants.launcher_id, 0, right_slot_value),
-                ),
-                None,
-            )
-            .await?;
-            db.save_catalog_indexed_slot_value(
-                right_slot_value.asset_id,
-                right_slot_value.tree_hash().into(),
-            )
-            .await?;
+                db.save_slot(
+                    &mut ctx.allocator,
+                    Slot::new(
+                        slot_proof,
+                        SlotInfo::from_value(constants.launcher_id, 0, right_slot_value),
+                    ),
+                    0,
+                )
+                .await?;
+                db.save_catalog_indexed_slot_value(
+                    right_slot_value.asset_id,
+                    right_slot_value.tree_hash().into(),
+                )
+                .await?;
 
-            db.save_singleton_coin(
-                constants.launcher_id,
-                CoinRecord {
-                    coin: new_coin,
-                    coinbase: false,
-                    confirmed_block_index: coin_record.spent_block_index,
-                    spent: false,
-                    spent_block_index: 0,
-                    timestamp: 0,
-                },
-            )
-            .await?;
+                db.save_singleton_coin(
+                    constants.launcher_id,
+                    CoinRecord {
+                        coin: new_coin,
+                        coinbase: false,
+                        confirmed_block_index: coin_record.spent_block_index,
+                        spent: false,
+                        spent_block_index: 0,
+                        timestamp: 0,
+                    },
+                )
+                .await?;
+            }
 
             last_coin_id = new_catalog.coin.coin_id();
             catalog = Some(new_catalog);

@@ -332,7 +332,7 @@ impl Db {
         allocator: &mut Allocator,
         asset_id: Bytes32,
         launcher_id: Bytes32,
-    ) -> Result<(Vec<Slot<SV>>, Vec<Slot<SV>>), CliError>
+    ) -> Result<(Slot<SV>, Slot<SV>), CliError>
     where
         SV: FromClvm<Allocator> + Copy + ToTreeHash,
     {
@@ -383,7 +383,11 @@ impl Db {
             }
         }
 
-        Ok((left_slots, right_slots))
+        if left_slots.is_empty() || right_slots.is_empty() {
+            return Err(CliError::DbColumnNotFound());
+        }
+
+        Ok((left_slots[0], right_slots[0]))
     }
 
     pub async fn delete_slots_spent_before(
