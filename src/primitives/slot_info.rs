@@ -6,15 +6,15 @@ use chia::{
 };
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use hex_literal::hex;
-use num_bigint::BigInt;
 
-// the values below are for slots organized into a double-linked ordered list
-// the minimum possible value of an slot - this will be contained by one of the ends of the list
+// comparison is >s, not >
+// previous min was 0x8000000000000000000000000000000000000000000000000000000000000000
+// and previous max was 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 pub static SLOT32_MIN_VALUE: [u8; 32] =
-    hex!("8000000000000000000000000000000000000000000000000000000000000000");
+    hex!("0000000000000000000000000000000000000000000000000000000000000000");
 // the maximum possible value of a slot - will be contained by the other end of the list
 pub static SLOT32_MAX_VALUE: [u8; 32] =
-    hex!("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+    hex!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
@@ -101,10 +101,7 @@ impl CatalogSlotValue {
 
 impl Ord for CatalogSlotValue {
     fn cmp(&self, other: &Self) -> Ordering {
-        let self_num = BigInt::from_signed_bytes_be(&self.asset_id);
-        let other_num = BigInt::from_signed_bytes_be(&other.asset_id);
-
-        self_num.cmp(&other_num)
+        self.asset_id.cmp(&other.asset_id)
     }
 }
 
@@ -226,10 +223,7 @@ impl XchandlesSlotValue {
 
 impl Ord for XchandlesSlotValue {
     fn cmp(&self, other: &Self) -> Ordering {
-        let self_num = BigInt::from_signed_bytes_be(&self.handle_hash);
-        let other_num = BigInt::from_signed_bytes_be(&other.handle_hash);
-
-        self_num.cmp(&other_num)
+        self.handle_hash.cmp(&other.handle_hash)
     }
 }
 
