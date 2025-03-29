@@ -456,6 +456,42 @@ impl Db {
         Ok(())
     }
 
+    pub async fn delete_all_singleton_coins<'a>(
+        &self,
+        tx: &mut sqlx::Transaction<'a, Sqlite>,
+        launcher_id: Bytes32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM singleton_coins WHERE launcher_id = ?1
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .execute(&mut *tx)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
+    pub async fn clear_singleton_coins<'a>(
+        &self,
+        tx: &mut sqlx::Transaction<'a, Sqlite>,
+        spent_block_height_threshold: u32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM singleton_coins WHERE spent_block_height IS NOT NULL AND spent_block_height < ?2
+            ",
+        )
+        .bind(spent_block_height_threshold)
+        .execute(&mut *tx)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
     pub async fn save_singleton_coin<'a>(
         &self,
         tx: &mut sqlx::Transaction<'a, Sqlite>,
