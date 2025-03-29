@@ -330,8 +330,8 @@ impl Db {
     pub async fn get_catalog_neighbors<SV>(
         &mut self,
         allocator: &mut Allocator,
-        asset_id: Bytes32,
         launcher_id: Bytes32,
+        asset_id: Bytes32,
     ) -> Result<(Slot<SV>, Slot<SV>), CliError>
     where
         SV: FromClvm<Allocator> + Copy + ToTreeHash,
@@ -374,7 +374,6 @@ impl Db {
         let mut right_slots = Vec::new();
 
         for row in rows {
-            println!("row!");
             let side: String = row.get("side");
             let slot = Self::row_to_slot(allocator, &row)?;
             if side == "left" {
@@ -385,8 +384,6 @@ impl Db {
         }
 
         if left_slots.is_empty() || right_slots.is_empty() {
-            println!("left_slots: {:?}", left_slots.len());
-            println!("right_slots: {:?}", right_slots.len());
             return Err(CliError::DbColumnNotFound());
         }
 
@@ -471,11 +468,7 @@ impl Db {
         .bind(launcher_id.to_vec())
         .bind(coin_record.coin.coin_id().to_vec())
         .bind(coin_record.coin.parent_coin_info.to_vec())
-        .bind(if coin_record.spent_block_index == 0 {
-            None
-        } else {
-            Some(coin_record.spent_block_index)
-        })
+        .bind(coin_record.spent_block_index)
         .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
