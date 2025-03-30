@@ -1,8 +1,9 @@
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::extract::Query;
+use axum::debug_handler;
+use axum::extract::{Query, State};
 use axum::http::{HeaderValue, Method};
 use axum::response::{IntoResponse, Response};
 use axum::{http::StatusCode, routing::get, Json, Router};
@@ -41,18 +42,20 @@ struct CatalogNeighborResponse {
     right_parent_inner_puzzle_hash: String,
 }
 
+#[derive(Clone)]
 struct AppState {
-    db: Mutex<Db>,
+    db: Arc<futures::lock::Mutex<Db>>,
     testnet11: bool,
 }
 
 pub async fn catalog_listen(testnet11: bool) -> Result<(), CliError> {
     let db = Db::new(true).await?;
+    let db = Arc::new(futures::lock::Mutex::new(db));
 
-    let state = Arc::new(AppState {
-        db: Mutex::new(db),
+    let state = AppState {
+        db: Arc::clone(&db),
         testnet11,
-    });
+    };
 
     // API
     let api_state = state.clone();
@@ -64,7 +67,7 @@ pub async fn catalog_listen(testnet11: bool) -> Result<(), CliError> {
 
     // Updates
     loop {
-        match connect_websocket(state.clone()).await {
+        match connect_websocket(testnet11, Arc::clone(&db)).await {
             Ok(_resp) => (),
             Err(e) => {
                 println!("WebSocket error: {}", e);
@@ -75,7 +78,7 @@ pub async fn catalog_listen(testnet11: bool) -> Result<(), CliError> {
     }
 }
 
-async fn start_api_server(state: Arc<AppState>) -> Result<(), CliError> {
+async fn start_api_server(state: AppState) -> Result<(), CliError> {
     // API routes
     let app = Router::new()
         .route("/", get(health_check))
@@ -104,30 +107,31 @@ impl IntoResponse for CliError {
     fn into_response(self) -> Response {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error: {}", self.to_string()),
+            format!("Error: {}", self),
         )
             .into_response()
     }
 }
 
+#[debug_handler]
 async fn get_neighbors(
     Query(params): Query<CatalogNeighborsQuery>,
-    state: axum::extract::State<Mutex<AppState>>,
-) -> Result<(StatusCode, Json<CatalogNeighborResponse>), CliError> {
+    State(state): State<AppState>,
+) -> Result<Json<CatalogNeighborResponse>, CliError> {
     let asset_id = hex_string_to_bytes32(&params.asset_id)?;
 
     let mut allocator = Allocator::new();
 
     let (left, right) = {
-        let state = state.0.lock().unwrap();
-        let mut db = state.db.lock().unwrap();
+        let db = state.db.lock().await;
+
         db.get_catalog_neighbors::<CatalogSlotValue>(
             &mut allocator,
             CatalogRegistryConstants::get(state.testnet11).launcher_id,
             asset_id,
         )
-        .await?
-    };
+        .await
+    }?;
 
     let response = CatalogNeighborResponse {
         asset_id: params.asset_id.clone(),
@@ -142,16 +146,19 @@ async fn get_neighbors(
         ),
     };
 
-    Ok((StatusCode::OK, Json(response)))
+    Ok(Json(response))
 }
 
-async fn connect_websocket(state: Arc<AppState>) -> Result<(), CliError> {
+async fn connect_websocket(
+    testnet11: bool,
+    db: Arc<futures::lock::Mutex<Db>>,
+) -> Result<(), CliError> {
     println!("Syncing CATalog (initial)...");
-    let client = get_coinset_client(state.testnet11);
-    let constants = CatalogRegistryConstants::get(state.testnet11);
+    let client = get_coinset_client(testnet11);
+    let constants = CatalogRegistryConstants::get(testnet11);
 
     let mut catalog = {
-        let mut db = state.db.lock().unwrap();
+        let mut db = db.lock().await;
         let mut ctx = SpendContext::new();
 
         sync_catalog(&client, &mut db, &mut ctx, constants).await?
@@ -193,7 +200,7 @@ async fn connect_websocket(state: Arc<AppState>) -> Result<(), CliError> {
 
                                 catalog = {
                                     let mut ctx = SpendContext::new();
-                                    let mut db = state.db.lock().unwrap();
+                                    let mut db = db.lock().await;
                                     sync_catalog(&client, &mut db, &mut ctx, constants).await?
                                 };
                                 println!("synced :)")
@@ -212,7 +219,7 @@ async fn connect_websocket(state: Arc<AppState>) -> Result<(), CliError> {
                                 print!("Clearing cache (every 30m)... ");
                                 let cutoff = current_blockchain_state.peak.height - 128;
                                 {
-                                    let mut db = state.db.lock().unwrap();
+                                    let mut db = db.lock().await;
                                     db.delete_slots_spent_before(cutoff).await?;
                                     db.delete_singleton_coins_spent_before(cutoff).await?;
                                 }

@@ -330,7 +330,7 @@ impl Db {
     }
 
     pub async fn get_catalog_neighbors<SV>(
-        &mut self,
+        &self,
         allocator: &mut Allocator,
         launcher_id: Bytes32,
         asset_id: Bytes32,

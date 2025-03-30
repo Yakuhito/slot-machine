@@ -28,8 +28,9 @@ reqwest = { version = "0.12.15", features = ["json", "rustls-tls"] }
 dirs = "6.0.0"
 tokio-tungstenite ={ version = "0.26.2", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3.31"
-axum = "0.8.3"
-tower-http = "0.6.2"
+axum = { version = "0.8.3", features = ["macros"]}
+tower-http = { version = "0.6.2", features = ["cors"] }
+futures = "0.3.31"
 
 chia-wallet-sdk = { git="https://github.com/xch-dev/chia-wallet-sdk.git", rev="995bf77bfb076af4a73f26f54d65789f99e37b37", features=["offers"] }
 sage-api = { version = "0.9.5", git = "https://github.com/xch-dev/sage.git" }
