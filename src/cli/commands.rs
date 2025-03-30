@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
-    catalog_unroll_state_scheduler, catalog_verify_deployment,
+    catalog_unroll_state_scheduler, catalog_verify_deployment, dig_launch,
     multisig_broadcast_catalog_state_update, multisig_broadcast_rekey, multisig_launch,
     multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_verify_signature,
     multisig_view,
@@ -558,7 +558,21 @@ pub async fn run_cli() {
                 reserve_asset_id,
                 testnet11,
                 fee,
-            } => todo!(),
+            } => {
+                dig_launch(
+                    validator_launcher_id,
+                    validator_payout_address,
+                    epoch_seconds,
+                    max_seconds_offset,
+                    payout_threshold,
+                    validator_fee_bps,
+                    withdrawal_share_bps,
+                    reserve_asset_id,
+                    testnet11,
+                    fee,
+                )
+                .await
+            }
         },
     };
 

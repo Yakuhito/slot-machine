@@ -72,6 +72,31 @@ pub struct DigRewardDistributorConstants {
 }
 
 impl DigRewardDistributorConstants {
+    pub fn without_launcher_id(
+        validator_launcher_id: Bytes32,
+        validator_payout_puzzle_hash: Bytes32,
+        epoch_seconds: u64,
+        max_seconds_offset: u64,
+        payout_threshold: u64,
+        validator_fee_bps: u64,
+        withdrawal_share_bps: u64,
+        reserve_asset_id: Bytes32,
+    ) -> Self {
+        Self {
+            launcher_id: Bytes32::default(),
+            validator_launcher_id,
+            validator_payout_puzzle_hash,
+            epoch_seconds,
+            max_seconds_offset,
+            payout_threshold,
+            validator_fee_bps,
+            withdrawal_share_bps,
+            reserve_asset_id,
+            reserve_inner_puzzle_hash: Bytes32::default(),
+            reserve_full_puzzle_hash: Bytes32::default(),
+        }
+    }
+
     pub fn with_launcher_id(mut self, launcher_id: Bytes32) -> Self {
         self.launcher_id = launcher_id;
         self.reserve_inner_puzzle_hash =
@@ -81,25 +106,6 @@ impl DigRewardDistributorConstants {
             CatArgs::curry_tree_hash(self.reserve_asset_id, self.reserve_inner_puzzle_hash.into())
                 .into();
         self
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.launcher_id != Bytes32::default()
-            && self.validator_launcher_id != Bytes32::default()
-            && self.validator_payout_puzzle_hash != Bytes32::default()
-            && self.reserve_asset_id != Bytes32::default()
-            && self.reserve_inner_puzzle_hash
-                == P2DelegatedBySingletonLayerArgs::curry_tree_hash_with_launcher_id(
-                    self.launcher_id,
-                    0,
-                )
-                .into()
-            && self.reserve_full_puzzle_hash
-                == CatArgs::curry_tree_hash(
-                    self.reserve_asset_id,
-                    self.reserve_inner_puzzle_hash.into(),
-                )
-                .into()
     }
 }
 
