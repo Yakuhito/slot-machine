@@ -190,7 +190,10 @@ where
 
         if !coin_record.spent {
             if print_sync {
-                println!("Latest vault coin not spent.");
+                println!(
+                    "Latest vault coin {} not spent.",
+                    hex::encode(vault.coin.coin_id())
+                );
             }
             break;
         }
@@ -201,7 +204,16 @@ where
             .coin_solution
             .ok_or(CliError::CoinNotSpent(vault.coin.coin_id()))?;
 
+        if print_sync {
+            println!("Vault coin {} spent.", hex::encode(vault.coin.coin_id()));
+        }
         let Some(new_vault) = MedievalVault::from_parent_spend(ctx, vault_spend)? else {
+            if print_sync {
+                println!(
+                    "Vault coin {}spent, but could not be interpreted as a new vault :(",
+                    hex::encode(vault.coin.coin_id())
+                );
+            }
             break;
         };
 

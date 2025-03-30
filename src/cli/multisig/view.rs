@@ -2,8 +2,8 @@ use chia_wallet_sdk::SpendContext;
 use clvm_traits::{FromClvm, ToClvm};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, sync_multisig_singleton, CatalogRegistryState,
-    CliError, XchandlesRegistryState,
+    get_coinset_client, hex_string_to_bytes32, print_medieval_vault_configuration,
+    sync_multisig_singleton, CatalogRegistryState, CliError, XchandlesRegistryState,
 };
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub async fn multisig_view(launcher_id_str: String, testnet11: bool) -> Result<(
 
     println!("Viewing vault...");
 
-    let _ = sync_multisig_singleton(
+    if let (crate::MultisigSingleton::Vault(current_vault), _info) = sync_multisig_singleton(
         &cli,
         &mut ctx,
         launcher_id,
@@ -47,7 +47,12 @@ pub async fn multisig_view(launcher_id_str: String, testnet11: bool) -> Result<(
 
             Ok(())
         }),
-    ).await?;
+    ).await? {
+        println!("\nCurrent (latest) vault configuration:");
+        print_medieval_vault_configuration(current_vault.info.m, &current_vault.info.public_key_list)?;
+    } else {
+        println!("\nVault still in state scheduler phase.");
+    };
 
     Ok(())
 }
