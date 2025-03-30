@@ -74,6 +74,7 @@ pub async fn catalog_register(
     refund: bool,
     testnet11: bool,
     local: bool,
+    log: bool,
     payment_asset_id_str: String,
     payment_cat_amount_str: Option<String>,
     fee_str: String,
@@ -425,11 +426,13 @@ pub async fn catalog_register(
         let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
 
         println!("Submitting transaction...");
-        print_spend_bundle_to_file(
-            sb.coin_spends.clone(),
-            sb.aggregated_signature.clone(),
-            "sb.debug",
-        );
+        if log {
+            print_spend_bundle_to_file(
+                sb.coin_spends.clone(),
+                sb.aggregated_signature.clone(),
+                "sb.debug",
+            );
+        }
         let resp = cli.push_tx(sb).await?;
 
         println!("Transaction submitted; status='{}'", resp.status);

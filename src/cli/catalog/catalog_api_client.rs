@@ -73,12 +73,14 @@ impl CatalogApiClient {
         let neighbors_resp = response.json::<CatalogNeighborResponse>().await?;
 
         let left_asset_id = hex_string_to_bytes32(&neighbors_resp.left_asset_id)?;
-        let left_left_asset_id = hex_string_to_bytes32(&neighbors_resp.left_left_asset_id)?;
-        let left_value = CatalogSlotValue::new(left_asset_id, left_left_asset_id, asset_id);
-
         let right_asset_id = hex_string_to_bytes32(&neighbors_resp.right_asset_id)?;
+
+        let left_left_asset_id = hex_string_to_bytes32(&neighbors_resp.left_left_asset_id)?;
+        let left_value = CatalogSlotValue::new(left_asset_id, left_left_asset_id, right_asset_id);
+
         let right_right_asset_id = hex_string_to_bytes32(&neighbors_resp.right_right_asset_id)?;
-        let right_value = CatalogSlotValue::new(right_asset_id, asset_id, right_right_asset_id);
+        let right_value =
+            CatalogSlotValue::new(right_asset_id, left_asset_id, right_right_asset_id);
 
         let left_parent_parent_info =
             hex_string_to_bytes32(&neighbors_resp.left_parent_parent_info)?;

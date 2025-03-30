@@ -179,6 +179,10 @@ enum CatalogCliAction {
         #[arg(long, default_value_t = false)]
         local: bool,
 
+        /// Log the final transaction to a file (sb.debug)
+        #[arg(long, default_value_t = false)]
+        log: bool,
+
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
@@ -253,6 +257,7 @@ pub async fn run_cli() {
                 refund,
                 testnet11,
                 local,
+                log,
                 payment_asset_id,
                 payment_cat_amount,
                 fee,
@@ -273,6 +278,7 @@ pub async fn run_cli() {
                     refund,
                     testnet11,
                     local,
+                    log,
                     payment_asset_id,
                     payment_cat_amount,
                     fee,
