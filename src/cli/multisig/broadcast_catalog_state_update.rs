@@ -1,21 +1,14 @@
-use chia::bls::Signature;
 use chia::clvm_utils::ToTreeHash;
-use chia::protocol::{Bytes32, SpendBundle};
+use chia::protocol::Bytes32;
 use chia::puzzles::singleton::SingletonSolution;
-use chia_wallet_sdk::{
-    ChiaRpcClient, Layer, Offer, Spend, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
-};
+use chia_wallet_sdk::{Layer, Spend};
 use clvmr::NodePtr;
-use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, new_sk,
-    parse_amount, parse_one_sided_offer, print_medieval_vault_configuration, quick_sync_catalog,
-    spend_security_coin, sync_multisig_singleton, wait_for_coin, yes_no_prompt,
-    CatalogRegistryConstants, CatalogRegistryState, CliError, DefaultCatMakerArgs,
-    DelegatedStateAction, MedievalVault, MultisigSingleton, P2MOfNDelegateDirectArgs,
-    P2MOfNDelegateDirectSolution, SageClient, StateSchedulerHintedState,
-    StateSchedulerLayerSolution,
+    get_constants, hex_string_to_bytes32, multisig_broadcast_thing_finish,
+    multisig_broadcast_thing_start, parse_amount, quick_sync_catalog, CatalogRegistryConstants,
+    CatalogRegistryState, CliError, DefaultCatMakerArgs, DelegatedStateAction, MedievalVault,
+    P2MOfNDelegateDirectArgs, P2MOfNDelegateDirectSolution, StateSchedulerLayerSolution,
 };
 
 pub async fn multisig_broadcast_catalog_state_update(
@@ -26,46 +19,11 @@ pub async fn multisig_broadcast_catalog_state_update(
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
-    let signature_strs = signatures_str.split(',').collect::<Vec<_>>();
     let new_payment_asset_id = hex_string_to_bytes32(&new_payment_asset_id_str)?;
     let new_payment_asset_amount = parse_amount(&new_payment_asset_amount_str, true)?;
 
-    let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
-
-    println!("Syncing multisig...");
-    let client = get_coinset_client(testnet11);
-    let mut ctx = SpendContext::new();
-    let (MultisigSingleton::Vault(medieval_vault), _state_scheduler_info) =
-        sync_multisig_singleton::<StateSchedulerHintedState>(&client, &mut ctx, launcher_id, None)
-            .await?
-    else {
-        return Err(CliError::Custom(
-            "Multisig not in 'medieval vault' phase (not fully unrolled)".to_string(),
-        ));
-    };
-
-    println!("Current vault configuration:");
-    print_medieval_vault_configuration(
-        medieval_vault.info.m,
-        &medieval_vault.info.public_key_list,
-    )?;
-
-    let mut signatures = Vec::with_capacity(signature_strs.len());
-    let mut pubkeys = Vec::with_capacity(signature_strs.len());
-
-    for signature_str in signature_strs.into_iter() {
-        let parts = signature_str.split('-').collect::<Vec<_>>();
-        let index = parts[0].parse::<usize>()?;
-        let signature = hex_string_to_signature(parts[1])?;
-        signatures.push(signature);
-        pubkeys.push(medieval_vault.info.public_key_list[index]);
-    }
-
-    if signatures.len() != medieval_vault.info.m {
-        return Err(CliError::Custom(
-            "Number of signatures does not match the required number of signatures".to_string(),
-        ));
-    }
+    let (signature_from_signers, pubkeys, client, mut ctx, medieval_vault) =
+        multisig_broadcast_thing_start(signatures_str, launcher_id_str, testnet11).await?;
 
     println!("\nSyncing CATalog... ");
     let catalog_constants = CatalogRegistryConstants::get(testnet11);
@@ -101,43 +59,6 @@ pub async fn multisig_broadcast_catalog_state_update(
         "  Payment asset id: {}",
         hex::encode(new_state.cat_maker_puzzle_hash.to_bytes())
     );
-
-    let fee = parse_amount(&fee_str, false)?;
-
-    println!(
-        "A one-sided offer offering 1 mojo and {} XCH ({} mojos) as fee will be generated and broadcast.",
-        fee_str,
-        fee
-    );
-    println!("The resulting spend bundle will be automatically submitted to the mempool.");
-    yes_no_prompt("Are you COMPLETELY SURE you want to proceed?")?;
-
-    let sage = SageClient::new()?;
-    let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
-        .await?;
-
-    println!("Offer with id {} generated.", offer_resp.offer_id);
-
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let constants = get_constants(testnet11);
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
@@ -189,34 +110,13 @@ pub async fn multisig_broadcast_catalog_state_update(
     catalog.insert(inner_spend);
     let mut _new_catalog = catalog.finish_spend(&mut ctx)?;
 
-    let security_coin_sig = spend_security_coin(
+    multisig_broadcast_thing_finish(
+        client,
         &mut ctx,
-        offer.security_coin,
-        offer
-            .security_base_conditions
-            .assert_concurrent_spend(medieval_vault_coin_id),
-        &security_coin_sk,
-        if testnet11 {
-            &TESTNET11_CONSTANTS
-        } else {
-            &MAINNET_CONSTANTS
-        },
-    )?;
-
-    let vault_agg_sig = signatures
-        .iter()
-        .fold(Signature::default(), |acc, sig| acc + sig);
-    let sb = SpendBundle::new(
-        ctx.take(),
-        offer.aggregated_signature + &security_coin_sig + &vault_agg_sig,
-    );
-
-    println!("Submitting transaction...");
-    let resp = client.push_tx(sb).await?;
-
-    println!("Transaction submitted; status='{}'", resp.status);
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
-
-    Ok(())
+        signature_from_signers,
+        fee_str,
+        testnet11,
+        medieval_vault_coin_id,
+    )
+    .await
 }
