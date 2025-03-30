@@ -55,7 +55,8 @@ impl Reserveful for DigRewardDistributorState {
 }
 
 #[must_use]
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, ToClvm, FromClvm)]
+#[clvm(list)]
 pub struct DigRewardDistributorConstants {
     pub launcher_id: Bytes32,
     pub validator_launcher_id: Bytes32,
@@ -80,6 +81,25 @@ impl DigRewardDistributorConstants {
             CatArgs::curry_tree_hash(self.reserve_asset_id, self.reserve_inner_puzzle_hash.into())
                 .into();
         self
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.launcher_id != Bytes32::default()
+            && self.validator_launcher_id != Bytes32::default()
+            && self.validator_payout_puzzle_hash != Bytes32::default()
+            && self.reserve_asset_id != Bytes32::default()
+            && self.reserve_inner_puzzle_hash
+                == P2DelegatedBySingletonLayerArgs::curry_tree_hash_with_launcher_id(
+                    self.launcher_id,
+                    0,
+                )
+                .into()
+            && self.reserve_full_puzzle_hash
+                == CatArgs::curry_tree_hash(
+                    self.reserve_asset_id,
+                    self.reserve_inner_puzzle_hash.into(),
+                )
+                .into()
     }
 }
 
