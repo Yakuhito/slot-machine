@@ -72,7 +72,7 @@
           (sha256tree New_State)
         ) ; new inner ph
         1
-        HINT
+        (list HINT)
       )
       (add_message_to_reserve (parse_conditions Conditions () ()))
     )
