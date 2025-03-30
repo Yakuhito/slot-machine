@@ -1,9 +1,12 @@
-use chia_wallet_sdk::SpendContext;
+use chia::bls::sign;
+use chia::protocol::Bytes;
+use chia_wallet_sdk::{AggSig, AggSigConstants, AggSigKind, RequiredBlsSignature, SpendContext};
 
 use crate::{
     get_alias_map, get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_pubkey,
-    print_medieval_vault_configuration, sync_multisig_singleton, yes_no_prompt, CliError,
-    MedievalVault, MultisigSingleton, StateSchedulerHintedState,
+    hex_string_to_secret_key, print_medieval_vault_configuration, prompt_for_value,
+    sync_multisig_singleton, yes_no_prompt, CliError, MedievalVault, MultisigSingleton,
+    StateSchedulerHintedState,
 };
 
 pub async fn multisig_sign_rekey(
@@ -79,7 +82,27 @@ pub async fn multisig_sign_rekey(
     );
 
     if debug {
-        todo!("Todo: signing thing")
+        println!("DEBUG MODE");
+        let sk_str = prompt_for_value("Paste your secret key:")?;
+        let sk = hex_string_to_secret_key(&sk_str)?;
+        if sk.public_key() != my_pubkey {
+            return Err(CliError::Custom(
+                "Public key does not match the provided secret key".to_string(),
+            ));
+        }
+
+        let required_signature = RequiredBlsSignature::from_condition(
+            &medieval_vault.coin,
+            AggSig::new(
+                AggSigKind::Unsafe,
+                my_pubkey,
+                Bytes::new(delegated_puzzle_hash.to_vec()),
+            ),
+            &AggSigConstants::new(constants.agg_sig_amount_additional_data),
+        );
+
+        let signature = sign(&sk, required_signature.message());
+        println!("\nYour signature: {}", hex::encode(signature.to_bytes()));
     }
 
     Ok(())

@@ -53,6 +53,9 @@ pub enum CliError {
     #[error("invalid public key")]
     InvalidPublicKey(#[from] bls::Error),
 
+    #[error("invalid secret key")]
+    InvalidSecretKey(),
+
     #[error("invalid amount: must contain '.'")]
     InvalidAmount,
 
@@ -176,6 +179,11 @@ pub fn hex_string_to_bytes32(hex: &str) -> Result<Bytes32, CliError> {
 pub fn hex_string_to_pubkey(hex: &str) -> Result<PublicKey, CliError> {
     let bytes = <[u8; 48]>::from_hex(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
     PublicKey::from_bytes(&bytes).map_err(CliError::InvalidPublicKey)
+}
+
+pub fn hex_string_to_secret_key(hex: &str) -> Result<SecretKey, CliError> {
+    let bytes = <[u8; 32]>::from_hex(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
+    SecretKey::from_bytes(&bytes).map_err(|_| CliError::InvalidSecretKey())
 }
 
 pub fn hex_string_to_bytes(hex: &str) -> Result<Bytes, CliError> {
