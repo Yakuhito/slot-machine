@@ -4,7 +4,7 @@ use sage_api::{Amount, Assets, CatAmount, GetDerivations, MakeOffer};
 
 use crate::{
     get_coinset_client, get_constants, hex_string_to_bytes32, launch_dig_reward_distributor,
-    parse_amount, wait_for_coin, yes_no_prompt, CliError, DigRewardDistributorConstants,
+    parse_amount, wait_for_coin, yes_no_prompt, CliError, Db, DigRewardDistributorConstants,
     SageClient,
 };
 
@@ -102,6 +102,14 @@ pub async fn dig_launch(
         "Reward distributor launcher id (SAVE THIS): {}",
         hex::encode(reward_distributor.info.constants.launcher_id)
     );
+
+    let db = Db::new(false).await?;
+    db.save_reward_distributor_configuration(
+        &mut ctx.allocator,
+        reward_distributor.info.constants.launcher_id,
+        reward_distributor.info.constants,
+    )
+    .await?;
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);
 
