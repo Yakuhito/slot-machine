@@ -1,7 +1,7 @@
-use std::future::Future;
-
 use chia::bls::sign;
+use chia::bls::PublicKey;
 use chia::protocol::Bytes;
+use chia_wallet_sdk::CoinsetClient;
 use chia_wallet_sdk::{AggSig, AggSigConstants, AggSigKind, RequiredBlsSignature, SpendContext};
 use clvmr::NodePtr;
 
@@ -12,25 +12,12 @@ use crate::{
     StateSchedulerHintedState,
 };
 
-pub async fn multisig_sign_thing<P, F>(
-    print_summary_and_compute_delegated_puzzle_ptr: fn(
-        &mut SpendContext,
-        &MedievalVault,
-        &String,
-        bool,
-        P,
-    ) -> F,
-    params: P,
+pub async fn multisig_sign_thing_start(
     my_pubkey_str: String,
     launcher_id_str: String,
     testnet11: bool,
-    debug: bool,
-) -> Result<(), CliError>
-where
-    F: Future<Output = Result<NodePtr, CliError>>,
-{
+) -> Result<(PublicKey, SpendContext, CoinsetClient, MedievalVault), CliError> {
     let my_pubkey = hex_string_to_pubkey(&my_pubkey_str)?;
-
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
 
     println!("Syncing multisig...");
@@ -57,19 +44,22 @@ where
         medieval_vault.info.m,
         &medieval_vault.info.public_key_list,
     )?;
+    println!("Signing key: {}", my_alias);
 
-    let delegated_puzzle_ptr = print_summary_and_compute_delegated_puzzle_ptr(
-        &mut ctx,
-        &medieval_vault,
-        my_alias,
-        testnet11,
-        params,
-    )
-    .await?;
+    Ok((my_pubkey, ctx, client, medieval_vault))
+}
 
+pub async fn multisig_sign_thing_finish(
+    ctx: &mut SpendContext,
+    delegated_puzzle: NodePtr,
+    medieval_vault: &MedievalVault,
+    my_pubkey: PublicKey,
+    testnet11: bool,
+    debug: bool,
+) -> Result<(), CliError> {
     yes_no_prompt("Continue?")?;
 
-    let delegated_puzzle_hash = ctx.tree_hash(delegated_puzzle_ptr);
+    let delegated_puzzle_hash = ctx.tree_hash(delegated_puzzle);
 
     println!(
         "Delegated puzzle hash (secure - dependent on coin id & network):\n  {}",
