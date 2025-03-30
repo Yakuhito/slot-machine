@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
     catalog_unroll_state_scheduler, catalog_verify_deployment,
-    multisig_broadcast_catalog_state_update, multisig_broadcast_rekey,
+    multisig_broadcast_catalog_state_update, multisig_broadcast_rekey, multisig_launch,
     multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_verify_signature,
     multisig_view,
 };
@@ -49,6 +49,24 @@ enum MultisigCliAction {
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
+    },
+    /// Launch a standalone multisig (e.g., for a validator)
+    Launch {
+        /// Comma-separated list of price singleton pubkeys (no spaces)
+        #[arg(long)]
+        pubkeys: String,
+
+        /// Threshold required for price singleton spends (m from m-of-n)
+        #[arg(short)]
+        m: usize,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
     },
     /// Sign a rekey transaction for the vault
     SignRekey {
@@ -331,6 +349,12 @@ pub async fn run_cli() {
                 launcher_id,
                 testnet11,
             } => multisig_view(launcher_id, testnet11).await,
+            MultisigCliAction::Launch {
+                pubkeys,
+                m,
+                testnet11,
+                fee,
+            } => multisig_launch(pubkeys, m, testnet11, fee).await,
             MultisigCliAction::SignRekey {
                 new_pubkeys,
                 new_m,
