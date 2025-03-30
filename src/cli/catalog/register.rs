@@ -317,7 +317,7 @@ pub async fn catalog_register(
                 && payment_cat_amount == catalog.info.state.registration_price
             {
                 if local {
-                    let mut db = Db::new(true).await?;
+                    let db = Db::new(true).await?;
                     let Some(slot_value_hash) = db
                         .get_catalog_indexed_slot_value(registered_asset_id)
                         .await?

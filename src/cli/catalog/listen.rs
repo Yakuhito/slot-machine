@@ -226,7 +226,7 @@ async fn connect_websocket(
                                 print!("Clearing cache (every 30m)... ");
                                 let cutoff = current_blockchain_state.peak.height - 128;
                                 {
-                                    let mut db = db.lock().await;
+                                    let db = db.lock().await;
                                     db.delete_slots_spent_before(cutoff).await?;
                                     db.delete_singleton_coins_spent_before(cutoff).await?;
                                 }

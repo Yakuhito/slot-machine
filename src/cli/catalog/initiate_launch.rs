@@ -163,7 +163,7 @@ pub async fn catalog_initiate_launch(
     let client = get_coinset_client(testnet11);
 
     println!("Opening database...");
-    let mut db = Db::new(false).await?;
+    let db = Db::new(false).await?;
 
     let constants = CatalogRegistryConstants::get(testnet11);
     let singleton_coin_maybe = db

@@ -4,8 +4,6 @@ use clvmr::serde::node_from_bytes;
 
 use crate::{CatalogRegistry, CatalogRegistryConstants, CliError};
 
-const BATCH_SIZE: usize = 10;
-
 pub async fn quick_sync_catalog(
     client: &CoinsetClient,
     ctx: &mut SpendContext,
@@ -42,20 +40,17 @@ pub async fn quick_sync_catalog(
 
         let mut temp_ctx = SpendContext::new();
         let puzzle_ptr = node_from_bytes(&mut temp_ctx.allocator, &next_spend.puzzle_reveal)?;
-        let puzzle = Puzzle::parse(&mut temp_ctx.allocator, puzzle_ptr);
+        let puzzle = Puzzle::parse(&temp_ctx.allocator, puzzle_ptr);
         let solution_ptr = node_from_bytes(&mut temp_ctx.allocator, &next_spend.solution)?;
 
-        let catalog_maybe = if let Ok(resp) = CatalogRegistry::from_parent_spend(
+        let catalog_maybe = CatalogRegistry::from_parent_spend(
             &mut temp_ctx.allocator,
             next_spend.coin,
             puzzle,
             solution_ptr,
             constants,
-        ) {
-            resp
-        } else {
-            None
-        };
+        )
+        .unwrap_or_default();
         if catalog_maybe.is_some() {
             coin_spend = Some(next_spend);
             break;
@@ -64,7 +59,7 @@ pub async fn quick_sync_catalog(
 
     if let Some(coin_spend) = coin_spend {
         let puzzle_ptr = node_from_bytes(&mut ctx.allocator, &coin_spend.puzzle_reveal)?;
-        let puzzle = Puzzle::parse(&mut ctx.allocator, puzzle_ptr);
+        let puzzle = Puzzle::parse(&ctx.allocator, puzzle_ptr);
         let solution_ptr = node_from_bytes(&mut ctx.allocator, &coin_spend.solution)?;
 
         CatalogRegistry::from_parent_spend(

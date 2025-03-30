@@ -91,7 +91,7 @@ impl Db {
     }
 
     pub async fn save_slot<SV>(
-        &mut self,
+        &self,
         allocator: &mut Allocator,
         slot: Slot<SV>,
         spent_block_height: u32,
@@ -154,7 +154,7 @@ impl Db {
     }
 
     pub async fn get_slot<SV>(
-        &mut self,
+        &self,
         allocator: &mut Allocator,
         singleton_launcher_id: Bytes32,
         nonce: u64,
@@ -186,7 +186,7 @@ impl Db {
     }
 
     pub async fn get_slots<SV>(
-        &mut self,
+        &self,
         allocator: &mut Allocator,
         singleton_launcher_id: Bytes32,
         nonce: u64,
@@ -210,7 +210,7 @@ impl Db {
     }
 
     pub async fn remove_slot(
-        &mut self,
+        &self,
         singleton_launcher_id: Bytes32,
         nonce: u64,
         slot_value_hash: Bytes32,
@@ -233,7 +233,7 @@ impl Db {
     }
 
     pub async fn delete_all_slots_for_singleton(
-        &mut self,
+        &self,
         singleton_launcher_id: Bytes32,
     ) -> Result<(), CliError> {
         sqlx::query(
@@ -249,7 +249,7 @@ impl Db {
         Ok(())
     }
 
-    pub async fn delete_all_catalog_indexed_slot_values(&mut self) -> Result<(), CliError> {
+    pub async fn delete_all_catalog_indexed_slot_values(&self) -> Result<(), CliError> {
         sqlx::query(
             "
             DELETE FROM catalog_indexed_slot_values
@@ -263,7 +263,7 @@ impl Db {
     }
 
     pub async fn mark_slot_as_spent(
-        &mut self,
+        &self,
         singleton_launcher_id: Bytes32,
         nonce: u64,
         slot_value_hash: Bytes32,
@@ -286,7 +286,7 @@ impl Db {
     }
 
     pub async fn save_catalog_indexed_slot_value(
-        &mut self,
+        &self,
         asset_id: Bytes32,
         slot_value_hash: Bytes32,
     ) -> Result<(), CliError> {
@@ -307,7 +307,7 @@ impl Db {
     }
 
     pub async fn get_catalog_indexed_slot_value(
-        &mut self,
+        &self,
         asset_id: Bytes32,
     ) -> Result<Option<Bytes32>, CliError> {
         let row = sqlx::query(
@@ -393,7 +393,7 @@ impl Db {
     }
 
     pub async fn delete_slots_spent_before(
-        &mut self,
+        &self,
         spent_block_height_threshold: u32,
     ) -> Result<(), CliError> {
         sqlx::query(
@@ -409,10 +409,7 @@ impl Db {
         Ok(())
     }
 
-    pub async fn delete_all_singleton_coins(
-        &mut self,
-        launcher_id: Bytes32,
-    ) -> Result<(), CliError> {
+    pub async fn delete_all_singleton_coins(&self, launcher_id: Bytes32) -> Result<(), CliError> {
         sqlx::query(
             "
             DELETE FROM singleton_coins WHERE launcher_id = ?1
@@ -427,7 +424,7 @@ impl Db {
     }
 
     pub async fn delete_singleton_coins_spent_before(
-        &mut self,
+        &self,
         spent_block_height_threshold: u32,
     ) -> Result<(), CliError> {
         sqlx::query(
@@ -444,7 +441,7 @@ impl Db {
     }
 
     pub async fn save_singleton_coin(
-        &mut self,
+        &self,
         launcher_id: Bytes32,
         coin_record: CoinRecord,
     ) -> Result<(), CliError> {
@@ -480,7 +477,7 @@ impl Db {
     }
 
     pub async fn get_last_unspent_singleton_coin(
-        &mut self,
+        &self,
         launcher_id: Bytes32,
     ) -> Result<Option<(Bytes32, Bytes32)>, CliError> {
         let row = sqlx::query(
