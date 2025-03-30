@@ -2,7 +2,8 @@ use clap::{Parser, Subcommand};
 
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
-    catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_sign_rekey, multisig_view,
+    catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_broadcase_rekey,
+    multisig_sign_rekey, multisig_view,
 };
 
 #[derive(Parser)]
@@ -74,7 +75,31 @@ enum MultisigCliAction {
         debug: bool,
     },
     /// Broadcast a rekey transaction for the vault
-    BroadcastRekey,
+    BroadcastRekey {
+        /// New pubkeys for the vault (comma-separated list of hex strings)
+        #[arg(long)]
+        new_pubkeys: String,
+
+        /// New m (signature threshold) for the vault
+        #[arg(long)]
+        new_m: usize,
+
+        /// Collected m signatures (comma-separated list)
+        #[arg(long)]
+        sigs: String,
+
+        /// Vault (singleton) launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     // Todo: Sign CATalog/XCHandles state updates; perform update
 }
 
@@ -250,8 +275,16 @@ pub async fn run_cli() {
                 multisig_sign_rekey(new_pubkeys, new_m, my_pubkey, launcher_id, testnet11, debug)
                     .await
             }
-            MultisigCliAction::BroadcastRekey => {
-                todo!("not yet implemented");
+            MultisigCliAction::BroadcastRekey {
+                new_pubkeys,
+                new_m,
+                sigs,
+                launcher_id,
+                testnet11,
+                fee,
+            } => {
+                multisig_broadcase_rekey(new_pubkeys, new_m, sigs, launcher_id, testnet11, fee)
+                    .await
             }
         },
         Commands::Catalog { action } => match action {
