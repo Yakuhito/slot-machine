@@ -29,7 +29,8 @@ impl CatalogApiClient {
     }
 
     pub fn testnet() -> Self {
-        Self::new("https://testnet11-api.catalog.cat")
+        // Self::new("https://testnet11-api.catalog.cat")
+        Self::new("http://localhost:3000")
     }
 
     pub async fn health_check(&self) -> Result<(), CliError> {

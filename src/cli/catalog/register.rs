@@ -72,6 +72,7 @@ pub async fn catalog_register(
     recipient_address: Option<String>,
     refund: bool,
     testnet11: bool,
+    local: bool,
     payment_asset_id_str: String,
     payment_cat_amount_str: Option<String>,
     fee_str: String,
@@ -88,7 +89,6 @@ pub async fn catalog_register(
     let cli = get_coinset_client(testnet11);
     let catalog_constants = CatalogRegistryConstants::get(testnet11);
     let sage = SageClient::new()?;
-    let mut db = Db::new(true).await?;
 
     let fee = parse_amount(fee_str.clone(), false)?;
 
@@ -108,7 +108,12 @@ pub async fn catalog_register(
     let payment_asset_id = hex_string_to_bytes32(&payment_asset_id_str)?;
 
     print!("First, let's sync CATalog... ");
-    let mut catalog = sync_catalog(&cli, &mut db, &mut ctx, catalog_constants).await?;
+    if local {
+        let mut db = Db::new(false).await?;
+        sync_catalog(&cli, &mut db, &mut ctx, catalog_constants).await?
+    } esle {
+        quick_sync_catalog(&cli, &mut ctx, catalog_constants).await?
+    }
     println!("done.");
 
     let recipient_address = if let Some(provided_recipient_address) = recipient_address {

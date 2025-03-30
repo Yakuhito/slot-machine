@@ -175,6 +175,10 @@ enum CatalogCliAction {
         #[arg(long, default_value_t = false)]
         testnet11: bool,
 
+        /// Use local database instead of CATalog API
+        #[arg(long, default_value_t = false)]
+        local: bool,
+
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
@@ -248,6 +252,7 @@ pub async fn run_cli() {
                 recipient,
                 refund,
                 testnet11,
+                local,
                 payment_asset_id,
                 payment_cat_amount,
                 fee,
@@ -267,6 +272,7 @@ pub async fn run_cli() {
                     recipient,
                     refund,
                     testnet11,
+                    local,
                     payment_asset_id,
                     payment_cat_amount,
                     fee,
