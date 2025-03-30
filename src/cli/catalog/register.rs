@@ -92,7 +92,7 @@ pub async fn catalog_register(
     let catalog_constants = CatalogRegistryConstants::get(testnet11);
     let sage = SageClient::new()?;
 
-    let fee = parse_amount(fee_str.clone(), false)?;
+    let fee = parse_amount(&fee_str, false)?;
 
     let initial_metadata = initial_metadata_from_arguments(
         ticker,
@@ -143,7 +143,7 @@ pub async fn catalog_register(
 
     let mut payment_cat_amount = catalog.info.state.registration_price;
     if let Some(payment_cat_amount_str) = payment_cat_amount_str {
-        let parsed_payment_cat_amount = parse_amount(payment_cat_amount_str, true)?;
+        let parsed_payment_cat_amount = parse_amount(&payment_cat_amount_str, true)?;
         if parsed_payment_cat_amount != payment_cat_amount {
             if !refund {
                 yes_no_prompt("Payment CAT amount is different from the specified registration price. Registration will likely fail. Continue at your own risk?")?;

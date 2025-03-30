@@ -44,7 +44,7 @@ pub async fn catalog_unroll_state_scheduler(
     let mut catalog = sync_catalog(&cli, &mut db, &mut ctx, constants).await?;
 
     let sage = SageClient::new()?;
-    let fee = parse_amount(fee_str.clone(), false)?;
+    let fee = parse_amount(&fee_str, false)?;
 
     let (required_height, new_state) =
         state_scheduler.info.state_schedule[state_scheduler.info.generation];

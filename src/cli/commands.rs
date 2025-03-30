@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
     catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_broadcast_rekey,
-    multisig_sign_rekey, multisig_view,
+    multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_view,
 };
 
 #[derive(Parser)]
@@ -100,7 +100,32 @@ enum MultisigCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
-    // Todo: Sign CATalog/XCHandles state updates; perform update
+    /// Sign a CATalog state update transaction
+    SignCatalogStateUpdate {
+        /// New payment asset id
+        #[arg(long)]
+        new_payment_asset_id: String,
+
+        /// New payment asset amount
+        #[arg(long)]
+        new_payment_asset_amount: String,
+
+        /// Pubkey to sign with (hex string)
+        #[arg(long)]
+        my_pubkey: String,
+
+        /// Vault (singleton) launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Use debug signing method (pk prompt)
+        #[arg(long, default_value_t = false)]
+        debug: bool,
+    },
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -285,6 +310,24 @@ pub async fn run_cli() {
             } => {
                 multisig_broadcast_rekey(new_pubkeys, new_m, sigs, launcher_id, testnet11, fee)
                     .await
+            }
+            MultisigCliAction::SignCatalogStateUpdate {
+                new_payment_asset_id,
+                new_payment_asset_amount,
+                my_pubkey,
+                launcher_id,
+                testnet11,
+                debug,
+            } => {
+                multisig_sign_catalog_state_update(
+                    new_payment_asset_id,
+                    new_payment_asset_amount,
+                    my_pubkey,
+                    launcher_id,
+                    testnet11,
+                    debug,
+                )
+                .await
             }
         },
         Commands::Catalog { action } => match action {

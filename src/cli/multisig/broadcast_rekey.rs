@@ -71,7 +71,7 @@ pub async fn multisig_broadcast_rekey(
     println!("\nNew configuration:");
     print_medieval_vault_configuration(new_m, &new_pubkeys)?;
 
-    let fee = parse_amount(fee_str.clone(), false)?;
+    let fee = parse_amount(&fee_str, false)?;
 
     println!(
         "A one-sided offer offering 1 mojo and {} XCH ({} mojos) as fee will be generated and broadcast.",

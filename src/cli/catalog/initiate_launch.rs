@@ -116,7 +116,7 @@ pub async fn catalog_initiate_launch(
         pubkeys.push(pubkey);
     }
 
-    let fee = parse_amount(fee_str.clone(), false)?;
+    let fee = parse_amount(&fee_str, false)?;
 
     println!("First things first, this multisig will have control over the price singleton once the state schedule is over:");
     print_medieval_vault_configuration(m, &pubkeys)?;

@@ -116,7 +116,7 @@ pub fn prompt_for_value(prompt: &str) -> Result<String, CliError> {
     Ok(input)
 }
 
-pub fn parse_amount(amount: String, is_cat: bool) -> Result<u64, CliError> {
+pub fn parse_amount(amount: &str, is_cat: bool) -> Result<u64, CliError> {
     if !amount.contains(".") {
         eprintln!("Amount must contain '.' to make sure you aren't providing mojos :)");
         return Err(CliError::InvalidAmount);
@@ -355,8 +355,8 @@ mod tests {
 
     #[test]
     fn test_cli_parse_amount() -> anyhow::Result<()> {
-        assert_eq!(parse_amount("1.01".to_string(), true)?, 1010);
-        assert_eq!(parse_amount("1.01".to_string(), false)?, 1_010_000_000_000);
+        assert_eq!(parse_amount(&"1.01".to_string(), true)?, 1010);
+        assert_eq!(parse_amount(&"1.01".to_string(), false)?, 1_010_000_000_000);
 
         Ok(())
     }

@@ -123,7 +123,7 @@ pub async fn catalog_continue_launch(
     let payment_asset_id = Bytes32::new(hex_string_to_bytes32(&payment_asset_id_str)?.into());
 
     let sage = SageClient::new()?;
-    let fee = parse_amount(fee_str.clone(), false)?;
+    let fee = parse_amount(&fee_str, false)?;
 
     if i == 0 {
         println!("No CATs registered yet - looking for precommitment coins...");

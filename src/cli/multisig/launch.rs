@@ -25,7 +25,7 @@ pub async fn multisig_launch(
         pubkeys.push(pubkey);
     }
 
-    let fee = parse_amount(fee_str.clone(), false)?;
+    let fee = parse_amount(&fee_str, false)?;
 
     println!("You're about to create a new multisig with the following settings:");
     print_medieval_vault_configuration(m, &pubkeys)?;
