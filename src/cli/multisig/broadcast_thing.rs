@@ -60,6 +60,7 @@ pub async fn multisig_broadcast_thing_start(
         medieval_vault.info.m,
         &medieval_vault.info.public_key_list,
     )?;
+    println!("  Coin id: {}", hex::encode(medieval_vault.coin.coin_id()));
 
     if signatures.len() != medieval_vault.info.m {
         return Err(CliError::Custom(

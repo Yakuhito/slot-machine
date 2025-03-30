@@ -44,7 +44,8 @@ pub async fn multisig_sign_thing_start(
         medieval_vault.info.m,
         &medieval_vault.info.public_key_list,
     )?;
-    println!("Signing key: {}", my_alias);
+    println!("  Signing key: {}", my_alias);
+    println!("  Coin id: {}", hex::encode(medieval_vault.coin.coin_id()));
 
     Ok((my_pubkey, ctx, client, medieval_vault))
 }
