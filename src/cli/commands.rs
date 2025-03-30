@@ -36,6 +36,11 @@ enum Commands {
         #[command(subcommand)]
         action: MultisigCliAction,
     },
+    /// Interact with DIG Reward Distributors
+    Dig {
+        #[command(subcommand)]
+        action: DigCliAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -340,6 +345,52 @@ enum XchandlesCliAction {
     VerifyDeployment,
 }
 
+#[derive(Subcommand)]
+enum DigCliAction {
+    /// Launches a new DIG Reward Distributor deployment
+    Launch {
+        /// Validator singleton launcher id
+        #[arg(long)]
+        validator_launcher_id: String,
+
+        /// Validator payout address
+        #[arg(long)]
+        validator_payout_address: String,
+
+        /// Seconds in an epoch
+        #[arg(long, default_value = "604800")]
+        epoch_seconds: u64,
+
+        /// Maximum # seconds the distributor can be 'tricked' into not paying (lower invalidates transactions faster)
+        #[arg(long, default_value = "600")]
+        max_seconds_offset: u64,
+
+        /// Payout threshold (in the reward token)
+        #[arg(long, default_value = "0.1")]
+        payout_threshold: u64,
+
+        /// Validator fee (in basis points)
+        #[arg(long, default_value = "700")]
+        validator_fee_bps: u64,
+
+        /// Withdrawal share (how much of a clawed back commitment the recipient gets back)
+        #[arg(long, default_value = "9000")]
+        withdrawal_share_bps: u64,
+
+        /// Reserve (reward token) asset id
+        #[arg(long)]
+        reserve_asset_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+}
+
 pub async fn run_cli() {
     let args = Cli::parse();
 
@@ -484,7 +535,6 @@ pub async fn run_cli() {
             }
             CatalogCliAction::Listen { testnet11 } => catalog_listen(testnet11).await,
         },
-
         Commands::Xchandles { action } => match action {
             XchandlesCliAction::InitiateLaunch => {
                 todo!("not yet implemented");
@@ -495,6 +545,20 @@ pub async fn run_cli() {
             XchandlesCliAction::VerifyDeployment => {
                 todo!("not yet implemented");
             }
+        },
+        Commands::Dig { action } => match action {
+            DigCliAction::Launch {
+                validator_launcher_id,
+                validator_payout_address,
+                epoch_seconds,
+                max_seconds_offset,
+                payout_threshold,
+                validator_fee_bps,
+                withdrawal_share_bps,
+                reserve_asset_id,
+                testnet11,
+                fee,
+            } => todo!(),
         },
     };
 
