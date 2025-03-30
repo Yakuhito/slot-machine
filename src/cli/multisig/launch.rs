@@ -72,7 +72,7 @@ pub async fn multisig_launch(
         public_key_list: pubkeys.clone(),
     };
     println!(
-        "Vault launcher id: {}",
+        "Multisig (medieval launch) launcher id (SAVE THIS): {}",
         hex::encode(launcher_coin.coin_id().to_bytes())
     );
 
@@ -98,7 +98,7 @@ pub async fn multisig_launch(
 
     println!("Transaction submitted; status='{}'", resp.status);
 
-    wait_for_coin(&client, launcher_coin.coin_id(), true).await?;
+    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())

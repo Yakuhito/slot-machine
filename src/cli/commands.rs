@@ -57,7 +57,7 @@ enum MultisigCliAction {
         pubkeys: String,
 
         /// Threshold required for price singleton spends (m from m-of-n)
-        #[arg(short)]
+        #[arg(long)]
         m: usize,
 
         /// Use testnet11
