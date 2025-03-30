@@ -29,9 +29,9 @@ pub async fn multisig_launch(
 
     println!("You're about to create a new multisig with the following settings:");
     print_medieval_vault_configuration(m, &pubkeys)?;
-    println!("  Fee: {} XCH ({} mojos)", fee_str, fee);
     println!("  Testnet: {}", testnet11);
 
+    println!("A one-sided offer offering 1 mojo and {} XCH ({} mojos) as fee will be generated and used to launch the multisig.", fee_str, fee);
     yes_no_prompt("Continue?")?;
 
     let client = SageClient::new()?;

@@ -1,25 +1,18 @@
+use super::ClientError;
 use chia::{
     bls::{self, PublicKey, SecretKey, Signature},
     consensus::consensus_constants::ConsensusConstants,
-    protocol::{Bytes, Bytes32, Coin, CoinSpend, Program},
-    puzzles::standard::StandardArgs,
-    traits::Streamable,
+    protocol::{Bytes, Bytes32},
 };
 use chia_wallet_sdk::{
-    encode_address, ChiaRpcClient, CoinsetClient, DriverError, OfferError, SpendContext,
-    MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    ChiaRpcClient, CoinsetClient, DriverError, OfferError, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
 };
 use hex::FromHex;
-use sage_api::{Amount, CoinJson, CoinSpendJson, SendXch, SignCoinSpends};
 use std::{
     io::{self, Write},
     num::ParseIntError,
 };
 use thiserror::Error;
-
-use crate::new_sk;
-
-use super::{ClientError, SageClient};
 
 #[derive(Debug, Error)]
 pub enum CliError {
@@ -191,141 +184,6 @@ pub fn hex_string_to_signature(hex: &str) -> Result<Signature, CliError> {
 pub fn hex_string_to_bytes(hex: &str) -> Result<Bytes, CliError> {
     let bytes = hex::decode(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
     Ok(Bytes::from(bytes))
-}
-
-pub fn json_to_coin_spend(json: CoinSpendJson) -> Result<CoinSpend, CliError> {
-    let coin = Coin::new(
-        hex_string_to_bytes32(&json.coin.parent_coin_info)?,
-        hex_string_to_bytes32(&json.coin.puzzle_hash)?,
-        json.coin.amount.to_u64().ok_or(CliError::Custom(
-            "response coin amount is too large".to_string(),
-        ))?,
-    );
-
-    let puzzle_reveal = hex_string_to_bytes(&json.puzzle_reveal)?;
-    let solution = hex_string_to_bytes(&json.solution)?;
-
-    Ok(CoinSpend::new(
-        coin,
-        Program::from_bytes(&puzzle_reveal).map_err(|_| {
-            CliError::Custom("could not load puzzle reveal string to program".to_string())
-        })?,
-        Program::from_bytes(&solution).map_err(|_| {
-            CliError::Custom("could not load solution string to program".to_string())
-        })?,
-    ))
-}
-
-pub async fn get_xch_coin(
-    client: &SageClient,
-    ctx: &mut SpendContext,
-    amount: u64,
-    fee: u64,
-    testnet11: bool,
-) -> Result<(SecretKey, Coin), CliError> {
-    println!("Getting source XCH coin...");
-
-    let sk = new_sk()?;
-
-    let target_puzzle_hash = StandardArgs::curry_tree_hash(sk.public_key());
-
-    let target_address = encode_address(target_puzzle_hash.into(), &get_prefix(testnet11))
-        .map_err(CliError::Bech32)?;
-    let response = client
-        .send_xch(SendXch {
-            address: target_address.clone(),
-            amount: Amount::Number(amount),
-            fee: Amount::Number(fee),
-            memos: vec![],
-            auto_submit: false,
-        })
-        .await?;
-
-    response
-        .coin_spends
-        .into_iter()
-        .map(|json| {
-            ctx.insert(json_to_coin_spend(json)?);
-            Ok::<(), CliError>(())
-        })
-        .collect::<Result<Vec<()>, _>>()?;
-
-    let mut new_coin: Option<Coin> = None;
-
-    for input in response.summary.inputs {
-        for output in input.outputs {
-            if output.address == target_address && output.amount == Amount::Number(amount) {
-                new_coin = Some(Coin::new(
-                    hex_string_to_bytes32(&input.coin_id)?,
-                    target_puzzle_hash.into(),
-                    amount,
-                ));
-                break;
-            }
-        }
-
-        if new_coin.is_some() {
-            break;
-        }
-    }
-
-    let Some(new_coin) = new_coin else {
-        return Err(CliError::Custom(
-            "could not identify new coin in Sage RPC response".to_string(),
-        ));
-    };
-    Ok((sk, new_coin))
-}
-
-fn bytes_to_json(bytes: &[u8]) -> String {
-    format!("0x{}", hex::encode(bytes))
-}
-
-fn coin_to_json(coin: &Coin) -> CoinJson {
-    CoinJson {
-        parent_coin_info: bytes_to_json(&coin.parent_coin_info.to_bytes()),
-        puzzle_hash: bytes_to_json(&coin.puzzle_hash.to_bytes()),
-        amount: Amount::Number(coin.amount),
-    }
-}
-
-fn coin_spend_to_json(cs: &CoinSpend) -> Result<CoinSpendJson, CliError> {
-    Ok(CoinSpendJson {
-        coin: coin_to_json(&cs.coin),
-        puzzle_reveal: bytes_to_json(
-            &cs.puzzle_reveal
-                .to_bytes()
-                .map_err(|_| CliError::Custom("could not get puzzle reveal bytes".to_string()))?,
-        ),
-        solution: bytes_to_json(
-            &cs.solution
-                .to_bytes()
-                .map_err(|_| CliError::Custom("could not get solution bytes".to_string()))?,
-        ),
-    })
-}
-
-pub fn signature_from_json(json: &str) -> Result<Signature, CliError> {
-    let bytes = <[u8; 96]>::from_hex(json.replace("0x", "")).map_err(CliError::ParseHex)?;
-    Signature::from_bytes(&bytes).map_err(CliError::InvalidPublicKey)
-}
-
-pub async fn partial_sign(
-    client: &SageClient,
-    coin_spends: &[CoinSpend],
-) -> Result<Signature, CliError> {
-    let response = client
-        .sign_coin_spends(SignCoinSpends {
-            coin_spends: coin_spends
-                .iter()
-                .map(coin_spend_to_json)
-                .collect::<Result<Vec<_>, _>>()?,
-            auto_submit: false,
-            partial: true,
-        })
-        .await?;
-
-    signature_from_json(&response.spend_bundle.aggregated_signature)
 }
 
 #[allow(clippy::nonminimal_bool)]
