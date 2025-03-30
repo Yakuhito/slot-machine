@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
-    catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_view,
+    catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_sign_rekey, multisig_view,
 };
 
 #[derive(Parser)]
@@ -48,7 +48,31 @@ enum MultisigCliAction {
         testnet11: bool,
     },
     /// Sign a rekey transaction for the vault
-    SignRekey,
+    SignRekey {
+        /// New pubkeys for the vault (comma-separated list of hex strings)
+        #[arg(long)]
+        new_pubkeys: String,
+
+        /// New m (signature threshold) for the vault
+        #[arg(long)]
+        new_m: usize,
+
+        /// Pubkey to sign with (hex string)
+        #[arg(long)]
+        my_pubkey: String,
+
+        /// Vault (singleton) launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Use debug signing method (pk prompt)
+        #[arg(long, default_value_t = false)]
+        debug: bool,
+    },
     /// Broadcast a rekey transaction for the vault
     BroadcastRekey,
     // Todo: Sign CATalog/XCHandles state updates; perform update
@@ -215,8 +239,16 @@ pub async fn run_cli() {
                 launcher_id,
                 testnet11,
             } => multisig_view(launcher_id, testnet11).await,
-            MultisigCliAction::SignRekey => {
-                todo!("not yet implemented");
+            MultisigCliAction::SignRekey {
+                new_pubkeys,
+                new_m,
+                my_pubkey,
+                launcher_id,
+                testnet11,
+                debug,
+            } => {
+                multisig_sign_rekey(new_pubkeys, new_m, my_pubkey, launcher_id, testnet11, debug)
+                    .await
             }
             MultisigCliAction::BroadcastRekey => {
                 todo!("not yet implemented");
