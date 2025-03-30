@@ -1,9 +1,11 @@
 use chia::{
     bls::PublicKey,
+    clvm_utils::{CurriedProgram, ToTreeHash},
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
         singleton::{
-            LauncherSolution, SingletonArgs, SingletonSolution, SINGLETON_LAUNCHER_PUZZLE_HASH,
+            LauncherSolution, SingletonArgs, SingletonSolution, SingletonStruct,
+            SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH,
         },
         EveProof, LineageProof, Proof,
     },
@@ -14,7 +16,10 @@ use chia_wallet_sdk::{
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::NodePtr;
 
-use crate::{MOfNLayer, P2MOfNDelegateDirectArgs, P2MOfNDelegateDirectSolution};
+use crate::{
+    MOfNLayer, P2MOfNDelegateDirectArgs, P2MOfNDelegateDirectSolution, SpendContextExt,
+    StateSchedulerLayerArgs,
+};
 
 use super::{MedievalVaultHint, MedievalVaultInfo};
 
@@ -243,6 +248,38 @@ impl MedievalVault {
             coin_id,
             genesis_challenge
         )))
+    }
+
+    pub fn delegated_puzzle_for_catalog_state_update(
+        ctx: &mut SpendContext,
+        new_state_hash: Bytes32,
+        catalog_launcher_id: Bytes32,
+        my_coin: Coin,
+        my_launcher_id: Bytes32,
+        genesis_challenge: Bytes32,
+    ) -> Result<NodePtr, DriverError> {
+        let hint = ctx.hint(my_launcher_id)?;
+        let conditions =
+            Conditions::new().create_coin(my_coin.puzzle_hash, my_coin.amount, Some(hint));
+        let genesis_challenge = ctx.alloc(&genesis_challenge)?;
+
+        let innermost_delegated_puzzle_ptr = ctx.alloc(&clvm_quote!(
+            Self::delegated_conditions(conditions, my_coin.coin_id(), genesis_challenge)
+        ))?;
+
+        CurriedProgram {
+            program: ctx.state_scheduler_puzzle()?,
+            args: StateSchedulerLayerArgs::<Bytes32, NodePtr> {
+                singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+                receiver_singleton_struct_hash: SingletonStruct::new(catalog_launcher_id)
+                    .tree_hash()
+                    .into(),
+                message: new_state_hash,
+                inner_puzzle: innermost_delegated_puzzle_ptr,
+            },
+        }
+        .to_clvm(&mut ctx.allocator)
+        .map_err(DriverError::ToClvm)
     }
 }
 
