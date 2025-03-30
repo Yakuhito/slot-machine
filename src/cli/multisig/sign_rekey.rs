@@ -1,16 +1,19 @@
-use chia::{bls::PublicKey, consensus::consensus_constants::ConsensusConstants};
+use chia::bls::PublicKey;
 use chia_wallet_sdk::SpendContext;
 use clvmr::NodePtr;
 
-use crate::{hex_string_to_pubkey, print_medieval_vault_configuration, CliError, MedievalVault};
+use crate::{
+    get_constants, hex_string_to_pubkey, print_medieval_vault_configuration, CliError,
+    MedievalVault,
+};
 
 use super::multisig_sign_thing;
 
-fn summary_and_delegated_puzzle_for_rekey(
+async fn summary_and_delegated_puzzle_for_rekey(
     ctx: &mut SpendContext,
     medieval_vault: &MedievalVault,
     my_alias: &String,
-    constants: &ConsensusConstants,
+    testnet11: bool,
     (new_pubkeys, new_m): (Vec<PublicKey>, usize),
 ) -> Result<NodePtr, CliError> {
     println!("\nNew configuration:");
@@ -25,7 +28,7 @@ fn summary_and_delegated_puzzle_for_rekey(
         new_m,
         new_pubkeys,
         medieval_vault.coin.coin_id(),
-        constants.genesis_challenge,
+        get_constants(testnet11).genesis_challenge,
     )
     .map_err(CliError::Driver)
 }
