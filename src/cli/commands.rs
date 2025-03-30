@@ -357,6 +357,14 @@ enum DigCliAction {
         #[arg(long)]
         validator_payout_address: String,
 
+        /// First epoch start height
+        #[arg(long)]
+        first_epoch_start_height: u64,
+
+        /// Reserve (reward token) asset id
+        #[arg(long)]
+        reserve_asset_id: String,
+
         /// Seconds in an epoch
         #[arg(long, default_value = "604800")]
         epoch_seconds: u64,
@@ -376,10 +384,6 @@ enum DigCliAction {
         /// Withdrawal share (how much of a clawed back commitment the recipient gets back)
         #[arg(long, default_value = "9000")]
         withdrawal_share_bps: u64,
-
-        /// Reserve (reward token) asset id
-        #[arg(long)]
-        reserve_asset_id: String,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -550,6 +554,7 @@ pub async fn run_cli() {
             DigCliAction::Launch {
                 validator_launcher_id,
                 validator_payout_address,
+                first_epoch_start_height,
                 epoch_seconds,
                 max_seconds_offset,
                 payout_threshold,
@@ -562,6 +567,7 @@ pub async fn run_cli() {
                 dig_launch(
                     validator_launcher_id,
                     validator_payout_address,
+                    first_epoch_start_height,
                     epoch_seconds,
                     max_seconds_offset,
                     payout_threshold,

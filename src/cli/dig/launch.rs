@@ -1,15 +1,18 @@
 use chia::protocol::{Bytes32, SpendBundle};
-use chia_wallet_sdk::{decode_address, ChiaRpcClient, SpendContext};
+use chia_wallet_sdk::{decode_address, ChiaRpcClient, Offer, SpendContext};
 use sage_api::{Amount, Assets, CatAmount, GetDerivations, MakeOffer};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, parse_amount, wait_for_coin, yes_no_prompt, CliError, DigRewardDistributorConstants, SageClient
+    get_coinset_client, get_constants, hex_string_to_bytes32, launch_dig_reward_distributor,
+    parse_amount, wait_for_coin, yes_no_prompt, CliError, DigRewardDistributorConstants,
+    SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]
 pub async fn dig_launch(
     validator_launcher_id_str: String,
     validator_payout_address_str: String,
+    first_epoch_start_height: u64,
     epoch_seconds: u64,
     max_seconds_offset: u64,
     payout_threshold: u64,
@@ -28,17 +31,6 @@ pub async fn dig_launch(
         return Err(CliError::Custom("really? that big of a fee?".to_string()));
     }
 
-    let constants = DigRewardDistributorConstants::without_launcher_id(
-        validator_launcher_id,
-        validator_payout_puzzle_hash,
-        epoch_seconds,
-        max_seconds_offset,
-        payout_threshold,
-        validator_fee_bps,
-        withdrawal_share_bps,
-        reserve_asset_id,
-    );
-
     println!("A one-sided offerwill be needed for launch. It will contain:");
     println!("  1 mojo to create the distributor");
     println!("  1 reward CATs to create the reserve");
@@ -55,8 +47,8 @@ pub async fn dig_launch(
             limit: 1,
         })
         .await?;
-    let user_address = derivation_resp.derivations[0].address;
-    let user_puzzle_hash = Bytes32::new(decode_address(&user_address)?.0);
+    let user_address = &derivation_resp.derivations[0].address;
+    let user_puzzle_hash = Bytes32::new(decode_address(user_address)?.0);
     println!(
         "CAT will be returned to the active wallet (address: {})",
         user_address
@@ -90,13 +82,26 @@ pub async fn dig_launch(
     let (sig, _sk, reward_distributor, _slot) = launch_dig_reward_distributor(
         &mut ctx,
         Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
-        todo!,
-        get_additional_info_for_launch,
+        first_epoch_start_height,
+        user_puzzle_hash,
+        DigRewardDistributorConstants::without_launcher_id(
+            validator_launcher_id,
+            validator_payout_puzzle_hash,
+            epoch_seconds,
+            max_seconds_offset,
+            payout_threshold,
+            validator_fee_bps,
+            withdrawal_share_bps,
+            reserve_asset_id,
+        ),
         get_constants(testnet11),
     )
     .map_err(CliError::Driver)?;
 
-    println!("Reward distributor launcher id (SAVE THIS): {}", hex::encode(reward_distributor.info.constants.launcher_id));
+    println!(
+        "Reward distributor launcher id (SAVE THIS): {}",
+        hex::encode(reward_distributor.info.constants.launcher_id)
+    );
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);
 

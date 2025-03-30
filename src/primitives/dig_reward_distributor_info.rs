@@ -72,6 +72,7 @@ pub struct DigRewardDistributorConstants {
 }
 
 impl DigRewardDistributorConstants {
+    #[allow(clippy::too_many_arguments)]
     pub fn without_launcher_id(
         validator_launcher_id: Bytes32,
         validator_payout_puzzle_hash: Bytes32,

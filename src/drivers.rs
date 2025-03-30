@@ -671,6 +671,7 @@ pub fn launch_dig_reward_distributor(
     ctx: &mut SpendContext,
     offer: Offer,
     first_epoch_start: u64,
+    cat_refund_puzzle_hash: Bytes32,
     constants: DigRewardDistributorConstants,
     consensus_constants: &ConsensusConstants,
 ) -> Result<
@@ -689,7 +690,7 @@ pub fn launch_dig_reward_distributor(
         ctx,
         offer.clone(),
         security_coin_sk.public_key(),
-        Some(Bytes32::default()),
+        Some(cat_refund_puzzle_hash),
         true,
     )?;
     let launcher = Launcher::new(mock_offer.security_coin.coin_id(), 1);
@@ -2383,6 +2384,7 @@ mod tests {
             ctx,
             offer,
             first_epoch_start,
+            Bytes32::default(),
             constants,
             &TESTNET11_CONSTANTS,
         )?;
