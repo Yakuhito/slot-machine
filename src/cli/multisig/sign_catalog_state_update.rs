@@ -1,12 +1,13 @@
-use chia::bls::sign;
-use chia::protocol::Bytes;
+use chia::protocol::{Bytes, Bytes32};
+use chia::{bls::sign, clvm_utils::ToTreeHash};
 use chia_wallet_sdk::{AggSig, AggSigConstants, AggSigKind, RequiredBlsSignature, SpendContext};
 use clvmr::serde::node_to_bytes;
 
 use crate::{
     get_alias_map, get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_pubkey,
     hex_string_to_secret_key, parse_amount, print_medieval_vault_configuration, prompt_for_value,
-    sync_multisig_singleton, yes_no_prompt, CliError, MedievalVault, MultisigSingleton,
+    quick_sync_catalog, sync_multisig_singleton, yes_no_prompt, CatalogRegistryConstants,
+    CatalogRegistryState, CliError, DefaultCatMakerArgs, MedievalVault, MultisigSingleton,
     StateSchedulerHintedState,
 };
 
@@ -20,7 +21,7 @@ pub async fn multisig_sign_catalog_state_update(
 ) -> Result<(), CliError> {
     let my_pubkey = hex_string_to_pubkey(&my_pubkey_str)?;
     let new_payment_asset_id = hex_string_to_bytes32(&new_payment_asset_id_str)?;
-    let new_payment_asset_amount = parse_amount(new_payment_asset_amount_str, true)?;
+    let new_payment_asset_amount = parse_amount(&new_payment_asset_amount_str, true)?;
 
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
 
@@ -49,8 +50,40 @@ pub async fn multisig_sign_catalog_state_update(
         &medieval_vault.info.public_key_list,
     )?;
 
-    println!("\nYou'll update the CATalog state to:");
-    println!("  Payment asset id: {}", new_payment_asset_id);
+    println!("\nSyncing CATalog... ");
+    let catalog_constants = CatalogRegistryConstants::get(testnet11);
+    let catalog = quick_sync_catalog(&client, &mut ctx, catalog_constants).await?;
+    println!("Done!");
+
+    println!("Current CATalog state:");
+    println!(
+        "  CAT Maker: {}",
+        hex::encode(catalog.info.state.cat_maker_puzzle_hash.to_bytes())
+    );
+    println!(
+        "  Registration price (mojos): {}",
+        catalog.info.state.registration_price
+    );
+    println!("You'll update the CATalog state to:");
+
+    let new_cat_maker_puzzle_hash: Bytes32 =
+        DefaultCatMakerArgs::curry_tree_hash(new_payment_asset_id.tree_hash().into()).into();
+    let new_state = CatalogRegistryState {
+        cat_maker_puzzle_hash: new_cat_maker_puzzle_hash,
+        registration_price: new_payment_asset_amount,
+    };
+    println!(
+        "  CAT Maker: {}",
+        hex::encode(new_state.cat_maker_puzzle_hash.to_bytes())
+    );
+    println!(
+        "  Registration price (mojos): {}",
+        new_state.registration_price
+    );
+    println!(
+        "  Payment asset id: {}",
+        hex::encode(new_state.cat_maker_puzzle_hash.to_bytes())
+    );
 
     println!("\nYou'll sign this CATALOG STATE UPDATE with the following pubkey:");
     println!("  {}", my_alias);
@@ -58,12 +91,12 @@ pub async fn multisig_sign_catalog_state_update(
     yes_no_prompt("Continue?")?;
 
     let constants = get_constants(testnet11);
-    let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_rekey(
+    let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_catalog_state_update(
         &mut ctx,
-        launcher_id,
-        new_m,
-        new_pubkeys,
-        medieval_vault.coin.coin_id(),
+        new_state.tree_hash().into(),
+        catalog_constants.launcher_id,
+        medieval_vault.coin,
+        medieval_vault.info.launcher_id,
         constants.genesis_challenge,
     )?;
     let delegated_puzzle_hash = ctx.tree_hash(delegated_puzzle_ptr);
