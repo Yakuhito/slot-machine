@@ -39,7 +39,7 @@ pub async fn catalog_unroll_state_scheduler(
         ));
     };
 
-    let mut db = Db::new().await?;
+    let mut db = Db::new(false).await?;
 
     let mut catalog = sync_catalog(&cli, &mut db, &mut ctx, constants).await?;
 

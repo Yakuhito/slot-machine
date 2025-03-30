@@ -19,71 +19,73 @@ pub struct Db {
 }
 
 impl Db {
-    pub async fn new() -> Result<Self, CliError> {
+    pub async fn new(skip_create_tables: bool) -> Result<Self, CliError> {
         let pool = SqlitePoolOptions::new()
             .idle_timeout(Duration::from_secs(5))
             .acquire_timeout(Duration::from_secs(5))
             .connect("sqlite://data.db?mode=rwc")
             .await?;
 
-        sqlx::query(
-            "
-            CREATE TABLE IF NOT EXISTS slots (
-                singleton_launcher_id BLOB NOT NULL,
-                nonce INTEGER NOT NULL,
-                slot_value_hash BLOB NOT NULL,
-                spent_block_height INTEGER NOT NULL,
-                slot_value BLOB NOT NULL,
-                parent_parent_info BLOB NOT NULL,
-                parent_inner_puzzle_hash BLOB NOT NULL,
-                PRIMARY KEY (singleton_launcher_id, nonce, slot_value_hash, parent_parent_info)
+        if !skip_create_tables {
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS slots (
+                    singleton_launcher_id BLOB NOT NULL,
+                    nonce INTEGER NOT NULL,
+                    slot_value_hash BLOB NOT NULL,
+                    spent_block_height INTEGER NOT NULL,
+                    slot_value BLOB NOT NULL,
+                    parent_parent_info BLOB NOT NULL,
+                    parent_inner_puzzle_hash BLOB NOT NULL,
+                    PRIMARY KEY (singleton_launcher_id, nonce, slot_value_hash, parent_parent_info)
+                )
+                ",
             )
-            ",
-        )
-        .execute(&pool)
-        .await?;
+            .execute(&pool)
+            .await?;
 
-        sqlx::query(
-            "
-            CREATE TABLE IF NOT EXISTS catalog_indexed_slot_values (
-                asset_id BLOB PRIMARY KEY,
-                slot_value_hash BLOB NOT NULL
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS catalog_indexed_slot_values (
+                    asset_id BLOB PRIMARY KEY,
+                    slot_value_hash BLOB NOT NULL
+                )
+                ",
             )
-            ",
-        )
-        .execute(&pool)
-        .await?;
+            .execute(&pool)
+            .await?;
 
-        sqlx::query(
-            "
-            CREATE TABLE IF NOT EXISTS singleton_coins (
-                launcher_id BLOB NOT NULL,
-                coin_id BLOB NOT NULL PRIMARY KEY,
-                parent_coin_id BLOB,
-                spent_block_height NOT NULL
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS singleton_coins (
+                    launcher_id BLOB NOT NULL,
+                    coin_id BLOB NOT NULL PRIMARY KEY,
+                    parent_coin_id BLOB,
+                    spent_block_height NOT NULL
+                )
+                ",
             )
-            ",
-        )
-        .execute(&pool)
-        .await?;
+            .execute(&pool)
+            .await?;
 
-        sqlx::query(
-            "
-            CREATE INDEX IF NOT EXISTS idx_singleton_coins_launcher_spent 
-            ON singleton_coins(launcher_id, spent_block_height)
-            ",
-        )
-        .execute(&pool)
-        .await?;
+            sqlx::query(
+                "
+                CREATE INDEX IF NOT EXISTS idx_singleton_coins_launcher_spent 
+                ON singleton_coins(launcher_id, spent_block_height)
+                ",
+            )
+            .execute(&pool)
+            .await?;
 
-        sqlx::query(
-            "
-            CREATE INDEX IF NOT EXISTS idx_slots_neighbors 
-            ON slots(singleton_launcher_id, nonce, spent_block_height, slot_value_hash)
-            ",
-        )
-        .execute(&pool)
-        .await?;
+            sqlx::query(
+                "
+                CREATE INDEX IF NOT EXISTS idx_slots_neighbors 
+                ON slots(singleton_launcher_id, nonce, spent_block_height, slot_value_hash)
+                ",
+            )
+            .execute(&pool)
+            .await?;
+        }
 
         Ok(Self { pool })
     }

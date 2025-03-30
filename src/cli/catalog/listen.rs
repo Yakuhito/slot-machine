@@ -28,7 +28,7 @@ pub async fn catalog_listen(testnet11: bool) -> Result<(), CliError> {
 
 async fn connect_websocket(testnet11: bool) -> Result<(), CliError> {
     let client = get_coinset_client(testnet11);
-    let mut db = Db::new().await?;
+    let mut db = Db::new(true).await?;
     let mut ctx = SpendContext::new();
     let constants = CatalogRegistryConstants::get(testnet11);
 

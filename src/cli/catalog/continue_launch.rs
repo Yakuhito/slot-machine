@@ -88,7 +88,7 @@ pub async fn catalog_continue_launch(
     };
 
     println!("Opening database...");
-    let mut db = Db::new().await?;
+    let mut db = Db::new(false).await?;
 
     let constants = CatalogRegistryConstants::get(testnet11);
     if constants.price_singleton_launcher_id == Bytes32::default()
