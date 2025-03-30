@@ -4,7 +4,8 @@ use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
     catalog_unroll_state_scheduler, catalog_verify_deployment,
     multisig_broadcast_catalog_state_update, multisig_broadcast_rekey,
-    multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_view,
+    multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_verify_signature,
+    multisig_view,
 };
 
 #[derive(Parser)]
@@ -100,6 +101,20 @@ enum MultisigCliAction {
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
+    },
+    /// Verify a signature
+    VerifySignature {
+        /// Raw message (hex string - delegated puzzle hash)
+        #[arg(long)]
+        raw_message: String,
+
+        /// Signature (hex string)
+        #[arg(long)]
+        signature: String,
+
+        /// Public key of signer (hex string)
+        #[arg(long)]
+        pubkey: String,
     },
     /// Sign a CATalog state update transaction
     SignCatalogStateUpdate {
@@ -338,6 +353,11 @@ pub async fn run_cli() {
                 multisig_broadcast_rekey(new_pubkeys, new_m, sigs, launcher_id, testnet11, fee)
                     .await
             }
+            MultisigCliAction::VerifySignature {
+                raw_message,
+                signature,
+                pubkey,
+            } => multisig_verify_signature(raw_message, signature, pubkey).await,
             MultisigCliAction::SignCatalogStateUpdate {
                 new_payment_asset_id,
                 new_payment_asset_amount,
