@@ -2,7 +2,8 @@ use clap::{Parser, Subcommand};
 
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
-    catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_broadcast_rekey,
+    catalog_unroll_state_scheduler, catalog_verify_deployment,
+    multisig_broadcast_catalog_state_update, multisig_broadcast_rekey,
     multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_view,
 };
 
@@ -125,6 +126,32 @@ enum MultisigCliAction {
         /// Use debug signing method (pk prompt)
         #[arg(long, default_value_t = false)]
         debug: bool,
+    },
+    /// Broadcast a CATalog state update transaction
+    BroadcastCatalogStateUpdate {
+        /// New payment asset id
+        #[arg(long)]
+        new_payment_asset_id: String,
+
+        /// New payment asset amount
+        #[arg(long)]
+        new_payment_asset_amount: String,
+
+        /// Collected m signatures (comma-separated list)
+        #[arg(long)]
+        sigs: String,
+
+        /// Vault (singleton) launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
     },
 }
 
@@ -326,6 +353,24 @@ pub async fn run_cli() {
                     launcher_id,
                     testnet11,
                     debug,
+                )
+                .await
+            }
+            MultisigCliAction::BroadcastCatalogStateUpdate {
+                new_payment_asset_id,
+                new_payment_asset_amount,
+                sigs,
+                launcher_id,
+                testnet11,
+                fee,
+            } => {
+                multisig_broadcast_catalog_state_update(
+                    new_payment_asset_id,
+                    new_payment_asset_amount,
+                    launcher_id,
+                    sigs,
+                    testnet11,
+                    fee,
                 )
                 .await
             }

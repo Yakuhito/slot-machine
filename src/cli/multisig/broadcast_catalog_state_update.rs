@@ -12,9 +12,10 @@ use crate::{
     get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, new_sk,
     parse_amount, parse_one_sided_offer, print_medieval_vault_configuration, quick_sync_catalog,
     spend_security_coin, sync_multisig_singleton, wait_for_coin, yes_no_prompt,
-    CatalogRegistryConstants, CatalogRegistryState, CliError, DefaultCatMakerArgs, MedievalVault,
-    MultisigSingleton, P2MOfNDelegateDirectArgs, P2MOfNDelegateDirectSolution, SageClient,
-    StateSchedulerHintedState, StateSchedulerLayerSolution,
+    CatalogRegistryConstants, CatalogRegistryState, CliError, DefaultCatMakerArgs,
+    DelegatedStateAction, MedievalVault, MultisigSingleton, P2MOfNDelegateDirectArgs,
+    P2MOfNDelegateDirectSolution, SageClient, StateSchedulerHintedState,
+    StateSchedulerLayerSolution,
 };
 
 pub async fn multisig_broadcast_catalog_state_update(
@@ -68,7 +69,7 @@ pub async fn multisig_broadcast_catalog_state_update(
 
     println!("\nSyncing CATalog... ");
     let catalog_constants = CatalogRegistryConstants::get(testnet11);
-    let catalog = quick_sync_catalog(&client, &mut ctx, catalog_constants).await?;
+    let mut catalog = quick_sync_catalog(&client, &mut ctx, catalog_constants).await?;
     println!("Done!");
 
     println!("Current CATalog state:");
@@ -140,6 +141,7 @@ pub async fn multisig_broadcast_catalog_state_update(
 
     let constants = get_constants(testnet11);
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
+    let medieval_vault_inner_ph = medieval_vault.info.inner_puzzle_hash();
 
     let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_catalog_state_update(
         &mut ctx,
@@ -177,6 +179,15 @@ pub async fn multisig_broadcast_catalog_state_update(
         medieval_vault.coin,
         Spend::new(medieval_vault_puzzle, medieval_vault_solution),
     )?;
+
+    let (_conds, inner_spend) = catalog.new_action::<DelegatedStateAction>().spend(
+        &mut ctx,
+        catalog.coin,
+        new_state,
+        medieval_vault_inner_ph.into(),
+    )?;
+    catalog.insert(inner_spend);
+    let mut _new_catalog = catalog.finish_spend(&mut ctx)?;
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
