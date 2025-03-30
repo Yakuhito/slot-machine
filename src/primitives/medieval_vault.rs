@@ -220,8 +220,6 @@ impl MedievalVault {
         genesis_challenge: Bytes32,
     ) -> Result<NodePtr, DriverError> {
         let new_info = MedievalVaultInfo::new(launcher_id, new_m, new_pubkeys);
-        let new_info = new_info.to_hint();
-        let memos = ctx.alloc(&new_info)?;
 
         let memos = ctx.alloc(&new_info.to_hint())?;
         let conditions = Conditions::new().create_coin(
@@ -229,11 +227,12 @@ impl MedievalVault {
             1,
             Some(Memos::new(memos)),
         );
+        let genesis_challenge = ctx.alloc(&genesis_challenge)?;
 
         ctx.alloc(&clvm_quote!(Self::delegated_conditions(
             conditions,
             coin_id,
-            ctx.alloc(&genesis_challenge)?
+            genesis_challenge
         )))
     }
 }
