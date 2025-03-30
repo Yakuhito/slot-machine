@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use chia_wallet_sdk::{ChiaRpcClient, SpendContext};
 use futures_util::StreamExt;
 use serde::Deserialize;
@@ -43,13 +45,18 @@ async fn connect_websocket(testnet11: bool) -> Result<(), CliError> {
     println!("WebSocket connected");
 
     let (mut _write, mut read) = ws_stream.split();
+    let mut last_clear_time = SystemTime::now();
 
     while let Some(message) = read.next().await {
         match message {
             Ok(Message::Text(text)) => match serde_json::from_str::<WebSocketMessage>(&text) {
                 Ok(msg) => {
                     if msg.message_type == "peak" {
-                        println!("Received new peak");
+                        let now = SystemTime::now();
+                        println!(
+                            "[{}] Received new peak",
+                            now.duration_since(UNIX_EPOCH).unwrap().as_secs()
+                        );
 
                         let coin_resp = client
                             .get_coin_record_by_name(catalog.coin.coin_id())
@@ -70,6 +77,20 @@ async fn connect_websocket(testnet11: bool) -> Result<(), CliError> {
                             return Err(CliError::Custom(
                                 "Weird - coin record not found after peak update.".to_string(),
                             ));
+                        }
+
+                        if last_clear_time.elapsed().unwrap().as_secs() > 60 * 30 {
+                            // 30 minutes in seconds
+                            if let Some(current_blockchain_state) =
+                                client.get_blockchain_state().await?.blockchain_state
+                            {
+                                print!("Clearing cache (every 30m)... ");
+                                let cutoff = current_blockchain_state.peak.height - 128;
+                                db.delete_slots_spent_before(cutoff).await?;
+                                db.delete_singleton_coins_spent_before(cutoff).await?;
+                                println!("done :)");
+                                last_clear_time = now;
+                            }
                         }
                     }
                 }
