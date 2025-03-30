@@ -1,7 +1,6 @@
 use crate::{
     get_constants, hex_string_to_pubkey, multisig_broadcast_thing_finish,
-    multisig_broadcast_thing_start, parse_amount, print_medieval_vault_configuration,
-    yes_no_prompt, CliError, MedievalVault,
+    multisig_broadcast_thing_start, print_medieval_vault_configuration, CliError, MedievalVault,
 };
 
 pub async fn multisig_broadcast_rekey(
@@ -28,16 +27,6 @@ pub async fn multisig_broadcast_rekey(
 
     println!("\nNew configuration:");
     print_medieval_vault_configuration(new_m, &new_pubkeys)?;
-
-    let fee = parse_amount(&fee_str, false)?;
-
-    println!(
-        "A one-sided offer offering 1 mojo and {} XCH ({} mojos) as fee will be generated and broadcast.",
-        fee_str,
-        fee
-    );
-    println!("The resulting spend bundle will be automatically submitted to the mempool.");
-    yes_no_prompt("Are you COMPLETELY SURE you want to proceed?")?;
 
     let conditions = MedievalVault::rekey_create_coin_unsafe(
         &mut ctx,

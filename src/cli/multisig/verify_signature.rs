@@ -10,7 +10,7 @@ pub async fn multisig_verify_signature(
     let raw_message = hex_string_to_bytes32(&raw_message_str)?;
     let pubkey = hex_string_to_pubkey(&pubkey_str)?;
 
-    let signature = hex_string_to_bytes(if signature_str.len() != 96 {
+    let signature = hex_string_to_bytes(if signature_str.len() != 96 * 2 {
         signature_str.split("-").last().unwrap()
     } else {
         &signature_str

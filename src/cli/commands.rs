@@ -357,7 +357,7 @@ pub async fn run_cli() {
                 raw_message,
                 signature,
                 pubkey,
-            } => multisig_verify_signature(raw_message, signature, pubkey).await,
+            } => multisig_verify_signature(raw_message, pubkey, signature).await,
             MultisigCliAction::SignCatalogStateUpdate {
                 new_payment_asset_id,
                 new_payment_asset_amount,
