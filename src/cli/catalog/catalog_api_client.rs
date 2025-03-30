@@ -33,6 +33,14 @@ impl CatalogApiClient {
         Self::new("http://localhost:3000")
     }
 
+    pub fn get(testnet11: bool) -> Self {
+        if testnet11 {
+            Self::testnet()
+        } else {
+            Self::mainnet()
+        }
+    }
+
     pub async fn health_check(&self) -> Result<(), CliError> {
         let response = self
             .client

@@ -12,10 +12,11 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer, SendCat};
 
 use crate::{
     get_coinset_client, get_constants, get_prefix, hex_string_to_bytes, hex_string_to_bytes32,
-    new_sk, parse_amount, parse_one_sided_offer, print_spend_bundle_to_file, spend_security_coin,
-    sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
-    CatalogRefundAction, CatalogRegisterAction, CatalogRegistryConstants, CatalogSlotValue,
-    CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
+    new_sk, parse_amount, parse_one_sided_offer, print_spend_bundle_to_file, quick_sync_catalog,
+    spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata,
+    CatalogApiClient, CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction,
+    CatalogRegistryConstants, CatalogSlotValue, CliError, Db, DefaultCatMakerArgs, PrecommitCoin,
+    PrecommitLayer, SageClient, Slot,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -108,12 +109,12 @@ pub async fn catalog_register(
     let payment_asset_id = hex_string_to_bytes32(&payment_asset_id_str)?;
 
     print!("First, let's sync CATalog... ");
-    if local {
+    let mut catalog = if local {
         let mut db = Db::new(false).await?;
         sync_catalog(&cli, &mut db, &mut ctx, catalog_constants).await?
-    } esle {
+    } else {
         quick_sync_catalog(&cli, &mut ctx, catalog_constants).await?
-    }
+    };
     println!("done.");
 
     let recipient_address = if let Some(provided_recipient_address) = recipient_address {
@@ -315,26 +316,49 @@ pub async fn catalog_register(
                 .into()
                 && payment_cat_amount == catalog.info.state.registration_price
             {
-                let Some(slot_value_hash) = db
-                    .get_catalog_indexed_slot_value(registered_asset_id)
-                    .await?
-                else {
-                    return Err(CliError::Custom(
+                if local {
+                    let mut db = Db::new(true).await?;
+                    let Some(slot_value_hash) = db
+                        .get_catalog_indexed_slot_value(registered_asset_id)
+                        .await?
+                    else {
+                        return Err(CliError::Custom(
                                 "Refund not available - precommit uses right CAT & amount & tries to register a new CAT".to_string(),
                             ));
-                };
+                    };
 
-                Some(
-                    db.get_slot::<CatalogSlotValue>(
-                        &mut ctx.allocator,
-                        catalog_constants.launcher_id,
-                        0,
-                        slot_value_hash,
-                        0,
+                    Some(
+                        db.get_slot::<CatalogSlotValue>(
+                            &mut ctx.allocator,
+                            catalog_constants.launcher_id,
+                            0,
+                            slot_value_hash,
+                            0,
+                        )
+                        .await?
+                        .unwrap(),
                     )
-                    .await?
-                    .unwrap(),
-                )
+                } else {
+                    let mut registered_asset_id_minus_one = registered_asset_id.to_bytes();
+                    let mut index = 31;
+                    while registered_asset_id_minus_one[index] == 0 {
+                        index -= 1;
+                    }
+                    registered_asset_id_minus_one[index] -= 1;
+                    let registered_asset_id_minus_one =
+                        Bytes32::from(registered_asset_id_minus_one);
+
+                    let catalog_api_client = CatalogApiClient::get(testnet11);
+                    let (_left, right) = catalog_api_client
+                        .get_neighbors(catalog_constants.launcher_id, registered_asset_id_minus_one)
+                        .await?;
+
+                    if right.info.value.asset_id == registered_asset_id {
+                        Some(right)
+                    } else {
+                        None
+                    }
+                }
             } else {
                 None
             };
@@ -355,13 +379,21 @@ pub async fn catalog_register(
                 )?
                 .reserve_fee(1)
         } else {
-            let (left_slot, right_slot) = db
-                .get_catalog_neighbors(
+            let (left_slot, right_slot) = if local {
+                let db = Db::new(true).await?;
+                db.get_catalog_neighbors(
                     &mut ctx.allocator,
                     catalog_constants.launcher_id,
                     registered_asset_id,
                 )
-                .await?;
+                .await?
+            } else {
+                let catalog_api_client = CatalogApiClient::get(testnet11);
+
+                catalog_api_client
+                    .get_neighbors(catalog_constants.launcher_id, registered_asset_id)
+                    .await?
+            };
 
             catalog
                 .new_action::<CatalogRegisterAction>()
