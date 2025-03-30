@@ -355,8 +355,8 @@ mod tests {
 
     #[test]
     fn test_cli_parse_amount() -> anyhow::Result<()> {
-        assert_eq!(parse_amount(&"1.01".to_string(), true)?, 1010);
-        assert_eq!(parse_amount(&"1.01".to_string(), false)?, 1_010_000_000_000);
+        assert_eq!(parse_amount("1.01", true)?, 1010);
+        assert_eq!(parse_amount("1.01", false)?, 1_010_000_000_000);
 
         Ok(())
     }
