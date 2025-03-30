@@ -255,12 +255,15 @@ impl MedievalVault {
         new_state_hash: Bytes32,
         catalog_launcher_id: Bytes32,
         my_coin: Coin,
-        my_launcher_id: Bytes32,
+        my_info: &MedievalVaultInfo,
         genesis_challenge: Bytes32,
     ) -> Result<NodePtr, DriverError> {
-        let hint = ctx.hint(my_launcher_id)?;
-        let conditions =
-            Conditions::new().create_coin(my_coin.puzzle_hash, my_coin.amount, Some(hint));
+        let hint = ctx.hint(my_info.launcher_id)?;
+        let conditions = Conditions::new().create_coin(
+            my_info.inner_puzzle_hash().into(),
+            my_coin.amount,
+            Some(hint),
+        );
         let genesis_challenge = ctx.alloc(&genesis_challenge)?;
 
         let innermost_delegated_puzzle_ptr = ctx.alloc(&clvm_quote!(

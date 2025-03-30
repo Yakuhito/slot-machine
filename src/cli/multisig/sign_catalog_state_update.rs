@@ -96,7 +96,7 @@ pub async fn multisig_sign_catalog_state_update(
         new_state.tree_hash().into(),
         catalog_constants.launcher_id,
         medieval_vault.coin,
-        medieval_vault.info.launcher_id,
+        &medieval_vault.info,
         constants.genesis_challenge,
     )?;
     let delegated_puzzle_hash = ctx.tree_hash(delegated_puzzle_ptr);
