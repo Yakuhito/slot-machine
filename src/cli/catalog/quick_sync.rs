@@ -21,11 +21,14 @@ pub async fn quick_sync_catalog(
     let mut coin_spend: Option<CoinSpend> = None;
     loop {
         let Some(next_coin_record) = records.next() else {
+            println!("No more record :("); // todo: debug
             break;
         };
         if next_coin_record.spent_block_index > 0 {
+            println!("Skipping spent record"); // todo: debug
             continue;
         }
+        println!("Processing record"); // todo: debug
 
         let next_spend = client
             .get_puzzle_and_solution(

@@ -41,7 +41,7 @@
             (sha256tree New_State)
           ) ; new inner ph
           1
-          HINT
+          (list HINT)
         )
         (flatten_list Conditions)
     )
