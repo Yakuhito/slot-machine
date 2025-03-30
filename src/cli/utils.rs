@@ -1,5 +1,5 @@
 use chia::{
-    bls::{self, SecretKey, Signature},
+    bls::{self, PublicKey, SecretKey, Signature},
     consensus::consensus_constants::ConsensusConstants,
     protocol::{Bytes, Bytes32, Coin, CoinSpend, Program},
     puzzles::standard::StandardArgs,
@@ -171,6 +171,11 @@ pub fn get_coinset_client(testnet11: bool) -> CoinsetClient {
 pub fn hex_string_to_bytes32(hex: &str) -> Result<Bytes32, CliError> {
     let bytes = <[u8; 32]>::from_hex(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
     Ok(Bytes32::from(bytes))
+}
+
+pub fn hex_string_to_pubkey(hex: &str) -> Result<PublicKey, CliError> {
+    let bytes = <[u8; 48]>::from_hex(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
+    PublicKey::from_bytes(&bytes).map_err(CliError::InvalidPublicKey)
 }
 
 pub fn hex_string_to_bytes(hex: &str) -> Result<Bytes, CliError> {

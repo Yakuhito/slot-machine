@@ -9,7 +9,7 @@ use chia::{
     },
 };
 use chia_wallet_sdk::{
-    Condition, Conditions, DriverError, Layer, Puzzle, SingletonLayer, Spend, SpendContext,
+    Condition, Conditions, DriverError, Layer, Memos, Puzzle, SingletonLayer, Spend, SpendContext,
 };
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::NodePtr;
@@ -209,6 +209,32 @@ impl MedievalVault {
         ctx.spend(coin, Spend::new(puzzle, solution))?;
 
         Ok(())
+    }
+
+    pub fn delegated_puzzle_for_rekey(
+        ctx: &mut SpendContext,
+        launcher_id: Bytes32,
+        new_m: usize,
+        new_pubkeys: Vec<PublicKey>,
+        coin_id: Bytes32,
+        genesis_challenge: Bytes32,
+    ) -> Result<NodePtr, DriverError> {
+        let new_info = MedievalVaultInfo::new(launcher_id, new_m, new_pubkeys);
+        let new_info = new_info.to_hint();
+        let memos = ctx.alloc(&new_info)?;
+
+        let memos = ctx.alloc(&new_info.to_hint())?;
+        let conditions = Conditions::new().create_coin(
+            new_info.inner_puzzle_hash().into(),
+            1,
+            Some(Memos::new(memos)),
+        );
+
+        ctx.alloc(&clvm_quote!(Self::delegated_conditions(
+            conditions,
+            coin_id,
+            ctx.alloc(&genesis_challenge)?
+        )))
     }
 }
 
