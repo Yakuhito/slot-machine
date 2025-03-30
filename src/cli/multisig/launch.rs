@@ -1,9 +1,10 @@
 use chia::{bls::PublicKey, protocol::SpendBundle};
-use chia_wallet_sdk::{ChiaRpcClient, Launcher, SpendContext, SpendWithConditions, StandardLayer};
+use chia_wallet_sdk::{ChiaRpcClient, Launcher, Offer, SpendContext};
+use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, get_xch_coin, parse_amount, partial_sign,
-    print_medieval_vault_configuration, sign_standard_transaction, wait_for_coin, yes_no_prompt,
+    get_coinset_client, get_constants, new_sk, parse_amount, parse_one_sided_offer,
+    print_medieval_vault_configuration, spend_security_coin, wait_for_coin, yes_no_prompt,
     CliError, MedievalVaultHint, P2MOfNDelegateDirectArgs, SageClient,
 };
 
@@ -34,12 +35,36 @@ pub async fn multisig_launch(
     println!("A one-sided offer offering 1 mojo and {} XCH ({} mojos) as fee will be generated and used to launch the multisig.", fee_str, fee);
     yes_no_prompt("Continue?")?;
 
-    let client = SageClient::new()?;
+    let sage = SageClient::new()?;
     let mut ctx = SpendContext::new();
 
-    let (sk, coin) = get_xch_coin(&client, &mut ctx, 1, fee, testnet11).await?;
+    let offer_resp = sage
+        .make_offer(MakeOffer {
+            requested_assets: Assets {
+                xch: Amount::u64(0),
+                cats: vec![],
+                nfts: vec![],
+            },
+            offered_assets: Assets {
+                xch: Amount::u64(1),
+                cats: vec![],
+                nfts: vec![],
+            },
+            fee: Amount::u64(fee),
+            receive_address: None,
+            expires_at_second: None,
+            auto_import: false,
+        })
+        .await?;
 
-    let launcher = Launcher::new(coin.coin_id(), 1);
+    println!("Offer with id {} generated.", offer_resp.offer_id);
+
+    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
+    let security_coin_sk = new_sk()?;
+    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
+    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+
+    let launcher = Launcher::new(offer.security_coin.coin_id(), 1);
     let launcher_coin = launcher.coin();
     let launch_hints = MedievalVaultHint {
         my_launcher_id: launcher_coin.coin_id(),
@@ -57,44 +82,24 @@ pub async fn multisig_launch(
         launch_hints,
     )?;
 
-    let coin_spend =
-        StandardLayer::new(sk.public_key()).spend_with_conditions(&mut ctx, create_conditions)?;
-    ctx.spend(coin, coin_spend)?;
-
-    let coin_spends = ctx.take();
-    let mut sig = partial_sign(&client, &coin_spends).await?;
-
-    sig.aggregate(&sign_standard_transaction(
+    let security_coin_sig = spend_security_coin(
         &mut ctx,
-        coin,
-        coin_spend,
-        &sk,
+        offer.security_coin,
+        offer.security_base_conditions.extend(create_conditions),
+        &security_coin_sk,
         get_constants(testnet11),
-    )?);
+    )?;
 
-    let spend_bundle = SpendBundle::new(coin_spends, sig);
+    let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
 
-    println!("Submitting spend bundle...");
-    let cli = get_coinset_client(testnet11);
-    let response = cli.push_tx(spend_bundle).await.map_err(CliError::Reqwest)?;
-    if !response.success {
-        eprintln!(
-            "Failed to submit spend bundle: {}",
-            response.error.unwrap_or("Unknown error".to_string())
-        );
-        return Err(CliError::Custom(
-            "Failed to submit spend bundle".to_string(),
-        ));
-    }
-    println!("Spend bundle successfully included in mempool :)");
+    println!("Submitting transaction...");
+    let client = get_coinset_client(testnet11);
+    let resp = client.push_tx(sb).await?;
 
-    wait_for_coin(&cli, coin.coin_id(), true).await?;
+    println!("Transaction submitted; status='{}'", resp.status);
 
-    println!("Vault successfully created!");
-    println!(
-        "As a reminder, the vault launcher id is: {}",
-        hex::encode(launcher_coin.coin_id().to_bytes())
-    );
+    wait_for_coin(&client, launcher_coin.coin_id(), true).await?;
+    println!("Confirmed!");
 
     Ok(())
 }
