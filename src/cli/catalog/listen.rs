@@ -2,15 +2,21 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::{extract::Query, http::StatusCode, response::Json, routing::get, Router};
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
+use axum::extract::Query;
+use axum::http::{HeaderValue, Method};
+use axum::response::{IntoResponse, Response};
+use axum::{http::StatusCode, routing::get, Json, Router};
 use chia_wallet_sdk::{ChiaRpcClient, SpendContext};
 use clvmr::Allocator;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use tower_http::cors::CorsLayer;
 
-use crate::{get_coinset_client, sync_catalog, CatalogRegistryConstants, CliError, Db, Slot};
+use crate::{
+    get_coinset_client, hex_string_to_bytes32, sync_catalog, CatalogRegistryConstants,
+    CatalogSlotValue, CliError, Db,
+};
 
 #[derive(Debug, Deserialize)]
 struct WebSocketMessage {
@@ -42,8 +48,6 @@ struct AppState {
 
 pub async fn catalog_listen(testnet11: bool) -> Result<(), CliError> {
     let db = Db::new(true).await?;
-    let constants = CatalogRegistryConstants::get(testnet11);
-    let allocator = Allocator::new();
 
     let state = Arc::new(AppState {
         db: Mutex::new(db),
@@ -76,54 +80,59 @@ async fn start_api_server(state: Arc<AppState>) -> Result<(), CliError> {
     let app = Router::new()
         .route("/", get(health_check))
         .route("/neighbors", get(get_neighbors))
+        .layer(
+            CorsLayer::new()
+                .allow_origin("*".parse::<HeaderValue>().unwrap())
+                .allow_methods([Method::GET, Method::OPTIONS, Method::POST]),
+        )
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("API server listening on {}", addr);
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .map_err(|e| CliError::Custom(format!("API server error: {}", e)))
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+
+    Ok(())
 }
 
 async fn health_check() -> StatusCode {
     StatusCode::OK
 }
 
+impl IntoResponse for CliError {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error: {}", self.to_string()),
+        )
+            .into_response()
+    }
+}
+
 async fn get_neighbors(
     Query(params): Query<CatalogNeighborsQuery>,
-    state: axum::extract::State<Mutex<Db>>,
-) -> Result<Json<CatalogNeighborResponse>, (StatusCode, String)> {
-    let asset_id_bytes = hex::decode(&params.asset_id)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid asset_id: {}", e)))?;
-    let asset_id = Bytes32::new(asset_id_bytes.try_into().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "Asset ID must be 32 bytes".to_string(),
-        )
-    })?);
+    state: axum::extract::State<Mutex<AppState>>,
+) -> Result<(StatusCode, Json<CatalogNeighborResponse>), CliError> {
+    let asset_id = hex_string_to_bytes32(&params.asset_id)?;
 
     let mut allocator = Allocator::new();
 
-    let (left, right) = db
-        .get_catalog_neighbors::<CatalogSlotValue>(
+    let (left, right) = {
+        let state = state.0.lock().unwrap();
+        let mut db = state.db.lock().unwrap();
+        db.get_catalog_neighbors::<CatalogSlotValue>(
             &mut allocator,
-            CatalogRegistryConstants::get(testnet11).launcher_id,
+            CatalogRegistryConstants::get(state.testnet11).launcher_id,
             asset_id,
         )
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get neighbors: {}", e),
-            )
-        })?;
+        .await?
+    };
 
     let response = CatalogNeighborResponse {
         asset_id: params.asset_id.clone(),
-        left_left_asset_id: hex::encode(left.info.value.left_value.to_bytes()),
-        right_right_asset_id: hex::encode(right.info.value.right_value.to_bytes()),
+        left_left_asset_id: hex::encode(left.info.value.neighbors.left_value.to_bytes()),
+        right_right_asset_id: hex::encode(right.info.value.neighbors.right_value.to_bytes()),
 
         left_parent_parent_info: hex::encode(left.proof.parent_parent_info.to_bytes()),
         left_parent_inner_puzzle_hash: hex::encode(left.proof.parent_inner_puzzle_hash.to_bytes()),
@@ -133,17 +142,19 @@ async fn get_neighbors(
         ),
     };
 
-    Ok(Json(response))
+    Ok((StatusCode::OK, Json(response)))
 }
 
 async fn connect_websocket(state: Arc<AppState>) -> Result<(), CliError> {
     println!("Syncing CATalog (initial)...");
     let client = get_coinset_client(state.testnet11);
+    let constants = CatalogRegistryConstants::get(state.testnet11);
+
     let mut catalog = {
         let mut db = state.db.lock().unwrap();
         let mut ctx = SpendContext::new();
 
-        sync_catalog(&client, &mut db, &mut ctx, state.constants).await?;
+        sync_catalog(&client, &mut db, &mut ctx, constants).await?
     };
 
     let ws_url = format!("{}/ws", client.base_url().replace("https://", "wss://"));
@@ -183,8 +194,7 @@ async fn connect_websocket(state: Arc<AppState>) -> Result<(), CliError> {
                                 catalog = {
                                     let mut ctx = SpendContext::new();
                                     let mut db = state.db.lock().unwrap();
-                                    sync_catalog(&client, &mut db, &mut ctx, state.constants)
-                                        .await?;
+                                    sync_catalog(&client, &mut db, &mut ctx, constants).await?
                                 };
                                 println!("synced :)")
                             }
