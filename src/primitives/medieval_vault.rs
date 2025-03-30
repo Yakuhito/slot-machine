@@ -211,6 +211,22 @@ impl MedievalVault {
         Ok(())
     }
 
+    pub fn rekey_create_coin_unsafe(
+        ctx: &mut SpendContext,
+        launcher_id: Bytes32,
+        new_m: usize,
+        new_pubkeys: Vec<PublicKey>,
+    ) -> Result<Conditions, DriverError> {
+        let new_info = MedievalVaultInfo::new(launcher_id, new_m, new_pubkeys);
+
+        let memos = ctx.alloc(&new_info.to_hint())?;
+        Ok(Conditions::new().create_coin(
+            new_info.inner_puzzle_hash().into(),
+            1,
+            Some(Memos::new(memos)),
+        ))
+    }
+
     pub fn delegated_puzzle_for_rekey(
         ctx: &mut SpendContext,
         launcher_id: Bytes32,
@@ -219,15 +235,8 @@ impl MedievalVault {
         coin_id: Bytes32,
         genesis_challenge: Bytes32,
     ) -> Result<NodePtr, DriverError> {
-        let new_info = MedievalVaultInfo::new(launcher_id, new_m, new_pubkeys);
-
-        let memos = ctx.alloc(&new_info.to_hint())?;
-        let conditions = Conditions::new().create_coin(
-            new_info.inner_puzzle_hash().into(),
-            1,
-            Some(Memos::new(memos)),
-        );
         let genesis_challenge = ctx.alloc(&genesis_challenge)?;
+        let conditions = Self::rekey_create_coin_unsafe(ctx, launcher_id, new_m, new_pubkeys)?;
 
         ctx.alloc(&clvm_quote!(Self::delegated_conditions(
             conditions,

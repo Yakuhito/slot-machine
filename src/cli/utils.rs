@@ -50,11 +50,8 @@ pub enum CliError {
     #[error("couldn't parse hex: {0}")]
     ParseHex(#[from] hex::FromHexError),
 
-    #[error("invalid public key")]
+    #[error("invalid public key (or other BLS object): {0}")]
     InvalidPublicKey(#[from] bls::Error),
-
-    #[error("invalid secret key")]
-    InvalidSecretKey(),
 
     #[error("invalid amount: must contain '.'")]
     InvalidAmount,
@@ -183,7 +180,12 @@ pub fn hex_string_to_pubkey(hex: &str) -> Result<PublicKey, CliError> {
 
 pub fn hex_string_to_secret_key(hex: &str) -> Result<SecretKey, CliError> {
     let bytes = <[u8; 32]>::from_hex(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
-    SecretKey::from_bytes(&bytes).map_err(|_| CliError::InvalidSecretKey())
+    SecretKey::from_bytes(&bytes).map_err(CliError::InvalidPublicKey)
+}
+
+pub fn hex_string_to_signature(hex: &str) -> Result<Signature, CliError> {
+    let bytes = <[u8; 96]>::from_hex(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
+    Signature::from_bytes(&bytes).map_err(CliError::InvalidPublicKey)
 }
 
 pub fn hex_string_to_bytes(hex: &str) -> Result<Bytes, CliError> {
