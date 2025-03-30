@@ -10,7 +10,7 @@ use crate::{
     StateSchedulerHintedState,
 };
 
-pub async fn multisig_broadcase_rekey(
+pub async fn multisig_broadcast_rekey(
     new_pubkeys_str: String,
     new_m: usize,
     signatures_str: String,
@@ -30,16 +30,6 @@ pub async fn multisig_broadcase_rekey(
     }
 
     let signature_strs = signatures_str.split(',').collect::<Vec<_>>();
-    let mut signatures = Vec::with_capacity(signature_strs.len());
-    let mut pubkeys = Vec::with_capacity(signature_strs.len());
-
-    for signature_str in signature_strs.into_iter() {
-        let parts = signature_str.split('-').collect::<Vec<_>>();
-        let index = parts[0].parse::<usize>()?;
-        let signature = hex_string_to_signature(parts[1])?;
-        signatures.push(signature);
-        pubkeys.push(new_pubkeys[index]);
-    }
 
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
 
@@ -54,6 +44,17 @@ pub async fn multisig_broadcase_rekey(
             "Multisig not in 'medieval vault' phase (not fully unrolled)".to_string(),
         ));
     };
+
+    let mut signatures = Vec::with_capacity(signature_strs.len());
+    let mut pubkeys = Vec::with_capacity(signature_strs.len());
+
+    for signature_str in signature_strs.into_iter() {
+        let parts = signature_str.split('-').collect::<Vec<_>>();
+        let index = parts[0].parse::<usize>()?;
+        let signature = hex_string_to_signature(parts[1])?;
+        signatures.push(signature);
+        pubkeys.push(medieval_vault.info.public_key_list[index]);
+    }
 
     println!("Current vault configuration:");
     print_medieval_vault_configuration(

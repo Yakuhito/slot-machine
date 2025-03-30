@@ -2,14 +2,14 @@ use clap::{Parser, Subcommand};
 
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
-    catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_broadcase_rekey,
+    catalog_unroll_state_scheduler, catalog_verify_deployment, multisig_broadcast_rekey,
     multisig_sign_rekey, multisig_view,
 };
 
 #[derive(Parser)]
 #[command(
     name = "Slot Machine CLI",
-    about = "A CLI for interacting with the first two dApps using the slot primitive, CATalog and CNS"
+    about = "A CLI for interacting with the first dApps that use the slot primitive: CATalog, CNS, and the DIG Reward Distributor"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -283,7 +283,7 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => {
-                multisig_broadcase_rekey(new_pubkeys, new_m, sigs, launcher_id, testnet11, fee)
+                multisig_broadcast_rekey(new_pubkeys, new_m, sigs, launcher_id, testnet11, fee)
                     .await
             }
         },
