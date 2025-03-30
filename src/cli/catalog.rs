@@ -1,3 +1,4 @@
+mod catalog_api_client;
 mod continue_launch;
 mod initiate_launch;
 mod listen;
@@ -6,6 +7,7 @@ mod sync;
 mod unroll_state_scheduler;
 mod verify_deployment;
 
+pub use catalog_api_client::*;
 pub use continue_launch::*;
 pub use initiate_launch::*;
 pub use listen::*;

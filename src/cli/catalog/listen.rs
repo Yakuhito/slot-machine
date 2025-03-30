@@ -30,16 +30,19 @@ struct CatalogNeighborsQuery {
     asset_id: String,
 }
 
-#[derive(Debug, Serialize)]
-struct CatalogNeighborResponse {
-    asset_id: String,
-    left_left_asset_id: String,
-    right_right_asset_id: String,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CatalogNeighborResponse {
+    pub asset_id: String,
+    pub left_asset_id: String,
+    pub right_asset_id: String,
 
-    left_parent_parent_info: String,
-    left_parent_inner_puzzle_hash: String,
-    right_parent_parent_info: String,
-    right_parent_inner_puzzle_hash: String,
+    pub left_left_asset_id: String,
+    pub right_right_asset_id: String,
+
+    pub left_parent_parent_info: String,
+    pub left_parent_inner_puzzle_hash: String,
+    pub right_parent_parent_info: String,
+    pub right_parent_inner_puzzle_hash: String,
 }
 
 #[derive(Clone)]
@@ -135,6 +138,10 @@ async fn get_neighbors(
 
     let response = CatalogNeighborResponse {
         asset_id: params.asset_id.clone(),
+
+        left_asset_id: hex::encode(left.info.value.asset_id.to_bytes()),
+        right_asset_id: hex::encode(right.info.value.asset_id.to_bytes()),
+
         left_left_asset_id: hex::encode(left.info.value.neighbors.left_value.to_bytes()),
         right_right_asset_id: hex::encode(right.info.value.neighbors.right_value.to_bytes()),
 
