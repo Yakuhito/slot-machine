@@ -1,5 +1,5 @@
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
-use chia_wallet_sdk::CoinRecord;
+use chia_wallet_sdk::{CoinRecord, DriverError};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{
     serde::{node_from_bytes, node_to_bytes},
@@ -11,7 +11,7 @@ use sqlx::{
 };
 use std::time::Duration;
 
-use crate::{Slot, SlotInfo, SlotProof};
+use crate::{DigRewardDistributorConstants, Slot, SlotInfo, SlotProof};
 
 use super::CliError;
 pub struct Db {
@@ -81,6 +81,17 @@ impl Db {
                 "
                 CREATE INDEX IF NOT EXISTS idx_slots_neighbors 
                 ON slots(singleton_launcher_id, nonce, spent_block_height, slot_value_hash)
+                ",
+            )
+            .execute(&pool)
+            .await?;
+
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS reward_distributor_configurations (
+                    launcher_id BLOB PRIMARY KEY,
+                    constants BLOB NOT NULL
+                )
                 ",
             )
             .execute(&pool)
@@ -498,6 +509,55 @@ impl Db {
         let parent_coin_id = column_to_bytes32(row.get::<&[u8], _>("parent_coin_id"))?;
 
         Ok(Some((coin_id, parent_coin_id)))
+    }
+
+    pub async fn save_reward_distributor_configuration(
+        &self,
+        allocator: &mut Allocator,
+        launcher_id: Bytes32,
+        constants: DigRewardDistributorConstants,
+    ) -> Result<(), CliError> {
+        let constants_ptr = constants.to_clvm(allocator).map_err(DriverError::ToClvm)?;
+        let constants_bytes = node_to_bytes(allocator, constants_ptr)?;
+
+        sqlx::query(
+            "
+            INSERT INTO reward_distributor_configurations (launcher_id, constants) VALUES (?1, ?2)
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .bind(constants_bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
+    pub async fn get_reward_distributor_configuration(
+        &self,
+        allocator: &mut Allocator,
+        launcher_id: Bytes32,
+    ) -> Result<Option<DigRewardDistributorConstants>, CliError> {
+        let row = sqlx::query(
+            "
+            SELECT constants FROM reward_distributor_configurations WHERE launcher_id = ?1
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let constants = node_from_bytes(allocator, row.get::<&[u8], _>("constants"))?;
+        let constants = DigRewardDistributorConstants::from_clvm(allocator, constants)
+            .map_err(DriverError::FromClvm)?;
+
+        Ok(Some(constants))
     }
 }
 
