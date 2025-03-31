@@ -43,6 +43,7 @@ impl DigCommitIncentivesAction {
         .map_err(DriverError::ToClvm)
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn get_slot_values_from_solution(
         &self,
         ctx: &SpendContext,
