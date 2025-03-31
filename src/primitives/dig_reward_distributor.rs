@@ -17,9 +17,20 @@ use crate::{
 };
 
 use super::{
-    CatalogSlotValue, DigCommitmentSlotValue, DigMirrorSlotValue, DigRewardDistributorConstants,
+    DigCommitmentSlotValue, DigMirrorSlotValue, DigRewardDistributorConstants,
     DigRewardDistributorInfo, DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce, Reserve,
 };
+
+#[derive(Debug, Clone, Default)]
+pub struct DigPendingItems {
+    pub pending_actions: Vec<Spend>,
+
+    pub pending_spent_slots: Vec<(DigSlotNonce, Bytes32)>, // (nonce, value hash)
+
+    pub pending_reward_slot_values: Vec<DigRewardSlotValue>,
+    pub pending_commitment_slot_values: Vec<DigCommitmentSlotValue>,
+    pub pending_mirror_slot_values: Vec<DigMirrorSlotValue>,
+}
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -29,11 +40,7 @@ pub struct DigRewardDistributor {
     pub info: DigRewardDistributorInfo,
     pub reserve: Reserve,
 
-    pub pending_actions: Vec<Spend>,
-    pub pending_spent_slots: Vec<(DigSlotNonce, Bytes32)>, // (nonce, value hash)
-    pub pending_reward_slot_values: Vec<DigRewardSlotValue>,
-    pub pending_commitment_slot_values: Vec<DigCommitmentSlotValue>,
-    pub pending_mirror_slot_values: Vec<DigMirrorSlotValue>,
+    pub pending_items: DigPendingItems,
 }
 
 impl DigRewardDistributor {
@@ -43,11 +50,7 @@ impl DigRewardDistributor {
             proof,
             info,
             reserve,
-            pending_actions: Vec::new(),
-            pending_spent_slots: Vec::new(),
-            pending_reward_slot_values: Vec::new(),
-            pending_commitment_slot_values: Vec::new(),
-            pending_mirror_slot_values: Vec::new(),
+            pending_items: DigPendingItems::default(),
         }
     }
 }
@@ -116,11 +119,7 @@ impl DigRewardDistributor {
             proof,
             info: new_info,
             reserve,
-            pending_actions: Vec::new(),
-            pending_spent_slots: Vec::new(),
-            pending_reward_slot_values: Vec::new(),
-            pending_commitment_slot_values: Vec::new(),
-            pending_mirror_slot_values: Vec::new(),
+            pending_items: DigPendingItems::default(),
         }))
     }
 }
@@ -141,6 +140,7 @@ impl DigRewardDistributor {
         let puzzle = layers.construct_puzzle(ctx)?;
 
         let action_puzzle_hashes = self
+            .pending_items
             .pending_actions
             .iter()
             .map(|a| ctx.tree_hash(a.puzzle).into())
@@ -166,7 +166,7 @@ impl DigRewardDistributor {
                         .ok_or(DriverError::Custom(
                             "Couldn't build proofs for one or more actions".to_string(),
                         ))?,
-                    action_spends: self.pending_actions,
+                    action_spends: self.pending_items.pending_actions,
                     finalizer_solution,
                 },
             },
@@ -200,11 +200,11 @@ impl DigRewardDistributor {
     }
 
     pub fn insert(&mut self, action_spend: Spend) {
-        self.pending_actions.push(action_spend);
+        self.pending_items.pending_actions.push(action_spend);
     }
 
     pub fn insert_multiple(&mut self, action_spends: Vec<Spend>) {
-        self.pending_actions.extend(action_spends);
+        self.pending_items.pending_actions.extend(action_spends);
     }
 
     pub fn new_action<A>(&self) -> A
@@ -248,7 +248,7 @@ impl DigRewardDistributor {
     ) -> Result<DigRewardDistributorState, DriverError> {
         let mut state = self.info.state;
 
-        for action in self.pending_actions.iter() {
+        for action in self.pending_items.pending_actions.iter() {
             let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
 
             let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
@@ -259,17 +259,18 @@ impl DigRewardDistributor {
         Ok(state)
     }
 
-    pub fn get_new_slots_from_spend(
+    pub fn get_pending_items_from_spend(
         &self,
         ctx: &mut SpendContext,
         solution: NodePtr,
-    ) -> Result<Vec<Slot<CatalogSlotValue>>, DriverError> {
+    ) -> Result<DigPendingItems, DriverError> {
         let solution =
             SingletonSolution::<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>::from_clvm(
                 &ctx.allocator,
                 solution,
             )?;
 
+        let mut actions: Vec<Spend> = vec![];
         let mut reward_slot_values: Vec<DigRewardSlotValue> = vec![];
         let mut commitment_slot_values: Vec<DigCommitmentSlotValue> = vec![];
         let mut mirror_slot_values: Vec<DigMirrorSlotValue> = vec![];
@@ -297,6 +298,11 @@ impl DigRewardDistributor {
 
         let mut current_state = self.info.state;
         for raw_action in solution.inner_solution.actions {
+            actions.push(Spend::new(
+                raw_action.action_puzzle_reveal,
+                raw_action.action_solution,
+            ));
+
             let actual_solution = clvm_list!(current_state, raw_action.action_solution)
                 .to_clvm(&mut ctx.allocator)?;
 
@@ -361,15 +367,12 @@ impl DigRewardDistributor {
             }
         }
 
-        // Ok(self.created_slot_values_to_slots(slot_infos))
-        todo!("return the slots");
+        Ok(DigPendingItems {
+            pending_actions: actions,
+            pending_spent_slots: spent_slots,
+            pending_reward_slot_values: reward_slot_values,
+            pending_commitment_slot_values: commitment_slot_values,
+            pending_mirror_slot_values: mirror_slot_values,
+        })
     }
 }
-
-// pub fn add_pending_slots(&mut self, slots: Vec<Slot<CatalogSlotValue>>) {
-//     for slot in slots {
-//         self.pending_slots
-//             .retain(|s| s.info.value.asset_id != slot.info.value.asset_id);
-//         self.pending_slots.push(slot);
-//     }
-// }
