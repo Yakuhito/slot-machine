@@ -2,12 +2,13 @@ use chia::{
     clvm_utils::{tree_hash, ToTreeHash},
     protocol::{Bytes32, Coin},
     puzzles::{
-        singleton::{LauncherSolution, SingletonArgs},
+        cat::CatArgs,
+        singleton::{LauncherSolution, SingletonArgs, SingletonStruct},
         LineageProof, Proof,
     },
 };
 use chia_wallet_sdk::{
-    ChiaRpcClient, CoinsetClient, Condition, Conditions, DriverError, Layer, Puzzle,
+    CatLayer, ChiaRpcClient, CoinsetClient, Condition, Conditions, DriverError, Layer, Puzzle,
     SingletonLayer, SpendContext,
 };
 use clvm_traits::FromClvm;
@@ -15,7 +16,8 @@ use clvmr::NodePtr;
 
 use crate::{
     CliError, Db, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorInfo,
-    DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce, Slot, SlotInfo, SlotProof,
+    DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce, P2DelegatedBySingletonLayerArgs,
+    Reserve, Slot, SlotInfo, SlotProof,
 };
 
 pub async fn sync_distributor(
@@ -60,10 +62,7 @@ pub async fn sync_distributor(
             return Err(CliError::CoinNotSpent(launcher_id));
         };
 
-        let launcher_puzzle_ptr = ctx.alloc(&launcher_coin_spend.puzzle_reveal)?;
-        let launcher_puzzle = Puzzle::parse(&ctx.allocator, launcher_puzzle_ptr);
         let launcher_solution_ptr = ctx.alloc(&launcher_coin_spend.solution)?;
-
         let launcher_solution =
             LauncherSolution::<(u64, DigRewardDistributorConstants)>::from_clvm(
                 &ctx.allocator,
@@ -132,6 +131,9 @@ pub async fn sync_distributor(
             parent_inner_puzzle_hash: eve_coin_inner_puzzle_hash.into(),
             parent_amount: distributor_eve_coin.amount,
         };
+        let reserve =
+            find_unspent_reserve(ctx, client, launcher_id, constants.reserve_asset_id, 0, 0)
+                .await?;
         let new_distributor = DigRewardDistributor::new(
             new_coin,
             Proof::Lineage(lineage_proof),
@@ -307,4 +309,68 @@ pub async fn sync_distributor(
     } else {
         Err(CliError::CoinNotFound(last_coin_id))
     }
+}
+
+pub async fn find_unspent_reserve(
+    ctx: &mut SpendContext,
+    client: &CoinsetClient,
+    launcher_id: Bytes32,
+    asset_id: Bytes32,
+    nonce: u64,
+    amount: u64,
+) -> Result<Reserve, CliError> {
+    let controller_singleton_struct_hash = SingletonStruct::new(launcher_id).tree_hash().into();
+    let inner_puzzle_hash =
+        P2DelegatedBySingletonLayerArgs::curry_tree_hash(controller_singleton_struct_hash, nonce);
+    let puzzle_hash: Bytes32 = CatArgs::curry_tree_hash(asset_id, inner_puzzle_hash).into();
+
+    let Some(coin_records) = client
+        .get_coin_records_by_puzzle_hash(puzzle_hash, None, None, Some(false))
+        .await?
+        .coin_records
+    else {
+        return Err(CliError::CoinNotFound(puzzle_hash));
+    };
+
+    let Some(reserve_coin_record) = coin_records.iter().find(|coin_record| {
+        coin_record.coin.amount == amount
+            && !coin_record.spent
+            && coin_record.coin.puzzle_hash == puzzle_hash
+    }) else {
+        return Err(CliError::CoinNotFound(puzzle_hash));
+    };
+
+    let Some(parent_spend) = client
+        .get_puzzle_and_solution(
+            reserve_coin_record.coin.parent_coin_info,
+            Some(reserve_coin_record.confirmed_block_index),
+        )
+        .await?
+        .coin_solution
+    else {
+        return Err(CliError::CoinNotSpent(
+            reserve_coin_record.coin.parent_coin_info,
+        ));
+    };
+
+    let parent_puzzle_ptr = ctx.alloc(&parent_spend.puzzle_reveal)?;
+    let parent_puzzle = Puzzle::parse(&ctx.allocator, parent_puzzle_ptr);
+    let Some(parent_cat) = CatLayer::<NodePtr>::parse_puzzle(&ctx.allocator, parent_puzzle)? else {
+        return Err(CliError::Custom("Parent is not a CAT".to_string()));
+    };
+
+    let proof = LineageProof {
+        parent_parent_coin_info: parent_spend.coin.parent_coin_info,
+        parent_inner_puzzle_hash: ctx.tree_hash(parent_cat.inner_puzzle).into(),
+        parent_amount: parent_spend.coin.amount,
+    };
+
+    Ok(Reserve {
+        coin: reserve_coin_record.coin,
+        asset_id,
+        proof,
+        inner_puzzle_hash: inner_puzzle_hash.into(),
+        controller_singleton_struct_hash,
+        nonce,
+    })
 }
