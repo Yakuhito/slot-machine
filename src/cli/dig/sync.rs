@@ -1,16 +1,22 @@
 use chia::{
     clvm_utils::{tree_hash, ToTreeHash},
     protocol::{Bytes32, Coin},
-    puzzles::{singleton::LauncherSolution, LineageProof, Proof},
+    puzzles::{
+        singleton::{LauncherSolution, SingletonArgs},
+        LineageProof, Proof,
+    },
 };
 use chia_wallet_sdk::{
-    ChiaRpcClient, CoinRecord, CoinsetClient, Condition, Conditions, DriverError, Layer, Puzzle,
+    ChiaRpcClient, CoinsetClient, Condition, Conditions, DriverError, Layer, Puzzle,
     SingletonLayer, SpendContext,
 };
 use clvm_traits::FromClvm;
 use clvmr::NodePtr;
 
-use crate::{CliError, Db, DigRewardDistributor, DigSlotNonce};
+use crate::{
+    CliError, Db, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorInfo,
+    DigRewardDistributorState, DigSlotNonce, SlotProof,
+};
 
 pub async fn sync_distributor(
     client: &CoinsetClient,
@@ -32,29 +38,65 @@ pub async fn sync_distributor(
 
         (last_spent_coin_id_from_db, constants_from_db)
     } else {
-        let solution = LauncherSolution::<NodePtr>::from_clvm(&ctx.allocator, solution_ptr)
-            .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
-        let catalog_eve_coin = Coin::new(constants.launcher_id, solution.singleton_puzzle_hash, 1);
-        let catalog_eve_coin_id = catalog_eve_coin.coin_id();
+        let Some(launcher_coin_record) = client
+            .get_coin_record_by_name(launcher_id)
+            .await?
+            .coin_record
+        else {
+            return Err(CliError::CoinNotFound(launcher_id));
+        };
+        if !launcher_coin_record.spent {
+            return Err(CliError::CoinNotSpent(launcher_id));
+        }
 
-        let eve_coin_puzzle_and_solution_resp = client
-            .get_puzzle_and_solution(catalog_eve_coin_id, Some(coin_record.confirmed_block_index))
-            .await?;
-        let Some(eve_coin_spend) = eve_coin_puzzle_and_solution_resp.coin_solution else {
-            break;
+        let Some(launcher_coin_spend) = client
+            .get_puzzle_and_solution(
+                launcher_coin_record.coin.coin_id(),
+                Some(launcher_coin_record.spent_block_index),
+            )
+            .await?
+            .coin_solution
+        else {
+            return Err(CliError::CoinNotSpent(launcher_id));
         };
 
-        let eve_coin_puzzle_ptr = ctx.alloc(&eve_coin_spend.puzzle_reveal)?;
+        let launcher_puzzle_ptr = ctx.alloc(&launcher_coin_spend.puzzle_reveal)?;
+        let launcher_puzzle = Puzzle::parse(&ctx.allocator, launcher_puzzle_ptr);
+        let launcher_solution_ptr = ctx.alloc(&launcher_coin_spend.solution)?;
+
+        let launcher_solution =
+            LauncherSolution::<(u64, DigRewardDistributorConstants)>::from_clvm(
+                &ctx.allocator,
+                launcher_solution_ptr,
+            )
+            .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+
+        let distributor_eve_coin =
+            Coin::new(launcher_id, launcher_solution.singleton_puzzle_hash, 1);
+        let distributor_eve_coin_id = distributor_eve_coin.coin_id();
+
+        let Some(distributor_eve_coin_spend) = client
+            .get_puzzle_and_solution(
+                distributor_eve_coin_id,
+                Some(launcher_coin_record.spent_block_index),
+            )
+            .await?
+            .coin_solution
+        else {
+            return Err(CliError::CoinNotSpent(distributor_eve_coin_id));
+        };
+
+        let eve_coin_puzzle_ptr = ctx.alloc(&distributor_eve_coin_spend.puzzle_reveal)?;
         let eve_coin_puzzle = Puzzle::parse(&ctx.allocator, eve_coin_puzzle_ptr);
         let Some(eve_coin_puzzle) =
             SingletonLayer::<NodePtr>::parse_puzzle(&ctx.allocator, eve_coin_puzzle)?
         else {
-            break;
+            return Err(CliError::Custom("Eve coin not a singleton".to_string()));
         };
 
-        let eve_coin_inner_puzzle_hah = tree_hash(&ctx.allocator, eve_coin_puzzle.inner_puzzle);
+        let eve_coin_inner_puzzle_hash = tree_hash(&ctx.allocator, eve_coin_puzzle.inner_puzzle);
 
-        let eve_coin_solution_ptr = ctx.alloc(&eve_coin_spend.solution)?;
+        let eve_coin_solution_ptr = ctx.alloc(&distributor_eve_coin_spend.solution)?;
         let eve_coin_output = ctx.run(eve_coin_puzzle_ptr, eve_coin_solution_ptr)?;
         let eve_coin_output = ctx.extract::<Conditions<NodePtr>>(eve_coin_output)?;
 
@@ -66,34 +108,45 @@ pub async fn sync_distributor(
                 false
             }
         }) else {
-            break;
+            return Err(CliError::Custom(
+                "Eve coin did not create a coin".to_string(),
+            ));
         };
 
-        let (decoded_launcher_id, (_decoded_asset_id, (initial_state, ()))) =
-            <(Bytes32, (Bytes32, (CatalogRegistryState, ())))>::from_clvm(
-                &ctx.allocator,
-                odd_create_coin.memos.unwrap().value,
-            )
-            .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
-        if decoded_launcher_id != constants.launcher_id {
-            break;
+        let initial_state = DigRewardDistributorState::initial(launcher_solution.key_value_list.0);
+        let constants = launcher_solution.key_value_list.1;
+        if constants != constants.with_launcher_id(launcher_id) {
+            return Err(CliError::Custom(
+                "Distributor constants invalid".to_string(),
+            ));
         }
 
         let new_coin = Coin::new(
-            catalog_eve_coin_id,
+            distributor_eve_coin_id,
             odd_create_coin.puzzle_hash,
             odd_create_coin.amount,
         );
         let lineage_proof = LineageProof {
-            parent_parent_coin_info: eve_coin_spend.coin.parent_coin_info,
-            parent_inner_puzzle_hash: eve_coin_inner_puzzle_hah.into(),
-            parent_amount: eve_coin_spend.coin.amount,
+            parent_parent_coin_info: distributor_eve_coin.parent_coin_info,
+            parent_inner_puzzle_hash: eve_coin_inner_puzzle_hash.into(),
+            parent_amount: distributor_eve_coin.amount,
         };
-        let new_catalog = CatalogRegistry::new(
+        let new_distributor = DigRewardDistributor::new(
             new_coin,
             Proof::Lineage(lineage_proof),
-            CatalogRegistryInfo::new(initial_state, constants),
+            DigRewardDistributorInfo::new(initial_state, constants),
+            reserve,
         );
+
+        if SingletonArgs::curry_tree_hash(
+            constants.launcher_id,
+            new_distributor.info.inner_puzzle_hash(),
+        ) != new_distributor.coin.puzzle_hash.into()
+        {
+            return Err(CliError::Custom(
+                "Distributor singleton puzzle hash mismatch".to_string(),
+            ));
+        }
 
         let slot_proof = SlotProof {
             parent_parent_info: lineage_proof.parent_parent_coin_info,
@@ -117,36 +170,21 @@ pub async fn sync_distributor(
         )
         .await?;
 
-        db.save_slot(
-            &mut ctx.allocator,
-            Slot::new(
-                slot_proof,
-                SlotInfo::from_value(constants.launcher_id, 0, right_slot_value),
-            ),
-            0,
-        )
-        .await?;
-        db.save_catalog_indexed_slot_value(
-            right_slot_value.asset_id,
-            right_slot_value.tree_hash().into(),
-        )
-        .await?;
+        let Some(distributor_record) = client
+            .get_coin_record_by_name(new_distributor.coin.coin_id())
+            .await?
+            .coin_record
+        else {
+            return Err(CliError::CoinNotFound(new_distributor.coin.coin_id()));
+        };
+        if !distributor_record.spent {
+            return Ok(new_distributor);
+        }
 
-        db.save_singleton_coin(
-            constants.launcher_id,
-            CoinRecord {
-                coin: new_coin,
-                coinbase: false,
-                confirmed_block_index: coin_record.spent_block_index,
-                spent: false,
-                spent_block_index: 0,
-                timestamp: 0,
-            },
+        (
+            new_distributor.coin.coin_id(),
+            new_distributor.info.constants,
         )
-        .await?;
-
-        last_coin_id = new_catalog.coin.coin_id();
-        catalog = Some(new_catalog);
     };
 
     let mut last_coin_id = last_spent_coin_id;

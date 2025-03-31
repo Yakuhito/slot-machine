@@ -44,6 +44,23 @@ pub struct DigRewardDistributorState {
     pub round_time_info: RoundTimeInfo,
 }
 
+impl DigRewardDistributorState {
+    pub fn initial(first_epoch_start: u64) -> Self {
+        Self {
+            total_reserves: 0,
+            active_shares: 0,
+            round_reward_info: RoundRewardInfo {
+                cumulative_payout: 0,
+                remaining_rewards: 0,
+            },
+            round_time_info: RoundTimeInfo {
+                last_update: first_epoch_start,
+                epoch_end: first_epoch_start,
+            },
+        }
+    }
+}
+
 impl Reserveful for DigRewardDistributorState {
     fn reserve_amount(&self, index: u64) -> u64 {
         if index == 0 {

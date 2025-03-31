@@ -27,9 +27,9 @@ use crate::{
     CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
     CatalogSlotValue, DefaultCatMakerArgs, DigRewardDistributor, DigRewardDistributorConstants,
     DigRewardDistributorInfo, DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce,
-    P2DelegatedBySingletonLayerArgs, Reserve, RoundRewardInfo, RoundTimeInfo, Slot, SlotInfo,
-    SlotProof, XchandlesConstants, XchandlesRegistry, XchandlesRegistryInfo,
-    XchandlesRegistryState, XchandlesSlotValue, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+    P2DelegatedBySingletonLayerArgs, Reserve, Slot, SlotInfo, SlotProof, XchandlesConstants,
+    XchandlesRegistry, XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue,
+    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
 };
 
 pub struct SecuredOneSidedOffer {
@@ -715,20 +715,10 @@ pub fn launch_dig_reward_distributor(
 
     // Spend intermediary coin and create registry
     let target_info = DigRewardDistributorInfo::new(
-        DigRewardDistributorState {
-            total_reserves: 0,
-            active_shares: 0,
-            round_reward_info: RoundRewardInfo {
-                cumulative_payout: 0,
-                remaining_rewards: 0,
-            },
-            round_time_info: RoundTimeInfo {
-                last_update: first_epoch_start,
-                epoch_end: first_epoch_start,
-            },
-        },
+        DigRewardDistributorState::initial(first_epoch_start),
         constants.with_launcher_id(launcher_id),
     );
+
     let target_inner_puzzle_hash = target_info.clone().inner_puzzle_hash();
 
     let slot_value = DigRewardSlotValue {
