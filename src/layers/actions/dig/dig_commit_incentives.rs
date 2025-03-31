@@ -48,7 +48,14 @@ impl DigCommitIncentivesAction {
         ctx: &SpendContext,
         epoch_seconds: u64,
         solution: NodePtr,
-    ) -> Result<(DigCommitmentSlotValue, Vec<DigRewardSlotValue>), DriverError> {
+    ) -> Result<
+        (
+            DigCommitmentSlotValue,
+            Vec<DigRewardSlotValue>,
+            (DigSlotNonce, Bytes32), // spent slot
+        ),
+        DriverError,
+    > {
         let solution = DigCommitIncentivesActionSolution::from_clvm(&ctx.allocator, solution)?;
 
         let commitment_slot_value = DigCommitmentSlotValue {
@@ -90,7 +97,18 @@ impl DigCommitIncentivesAction {
             }
         }
 
-        Ok((commitment_slot_value, reward_slot_values))
+        let spent_slot = (
+            DigSlotNonce::REWARD,
+            DigRewardSlotValue {
+                epoch_start: solution.slot_epoch_time,
+                next_epoch_initialized: solution.slot_next_epoch_initialized,
+                rewards: solution.slot_total_rewards,
+            }
+            .tree_hash()
+            .into(),
+        );
+
+        Ok((commitment_slot_value, reward_slot_values, spent_slot))
     }
 
     #[allow(clippy::type_complexity)]
@@ -136,11 +154,12 @@ impl DigCommitIncentivesAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let (_commitment_slot_value, reward_slot_values) = self.get_slot_values_from_solution(
-            ctx,
-            distributor.info.constants.epoch_seconds,
-            action_solution,
-        )?;
+        let (_commitment_slot_value, reward_slot_values, _spent) = self
+            .get_slot_values_from_solution(
+                ctx,
+                distributor.info.constants.epoch_seconds,
+                action_solution,
+            )?;
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(

@@ -30,6 +30,10 @@ pub struct DigRewardDistributor {
     pub reserve: Reserve,
 
     pub pending_actions: Vec<Spend>,
+    pub pending_spent_slots: Vec<(DigSlotNonce, Bytes32)>, // (nonce, value hash)
+    pub pending_reward_slot_values: Vec<DigRewardSlotValue>,
+    pub pending_commitment_slot_values: Vec<DigCommitmentSlotValue>,
+    pub pending_mirror_slot_values: Vec<DigMirrorSlotValue>,
 }
 
 impl DigRewardDistributor {
@@ -40,6 +44,10 @@ impl DigRewardDistributor {
             info,
             reserve,
             pending_actions: Vec::new(),
+            pending_spent_slots: Vec::new(),
+            pending_reward_slot_values: Vec::new(),
+            pending_commitment_slot_values: Vec::new(),
+            pending_mirror_slot_values: Vec::new(),
         }
     }
 }
@@ -109,6 +117,10 @@ impl DigRewardDistributor {
             info: new_info,
             reserve,
             pending_actions: Vec::new(),
+            pending_spent_slots: Vec::new(),
+            pending_reward_slot_values: Vec::new(),
+            pending_commitment_slot_values: Vec::new(),
+            pending_mirror_slot_values: Vec::new(),
         }))
     }
 }
@@ -261,6 +273,7 @@ impl DigRewardDistributor {
         let mut reward_slot_values: Vec<DigRewardSlotValue> = vec![];
         let mut commitment_slot_values: Vec<DigCommitmentSlotValue> = vec![];
         let mut mirror_slot_values: Vec<DigMirrorSlotValue> = vec![];
+        let mut spent_slots: Vec<(DigSlotNonce, Bytes32)> = vec![];
 
         let new_epoch_action = DigNewEpochAction::from_constants(&self.info.constants);
         let new_epoch_hash = new_epoch_action.tree_hash();
@@ -293,14 +306,16 @@ impl DigRewardDistributor {
                     );
                 }
                 commit_incentives_hash => {
-                    let (comm, rews) = commit_incentives_action.get_slot_values_from_solution(
-                        ctx,
-                        self.info.constants.epoch_seconds,
-                        raw_action.action_solution,
-                    )?;
+                    let (comm, rews, spent_slot) = commit_incentives_action
+                        .get_slot_values_from_solution(
+                            ctx,
+                            self.info.constants.epoch_seconds,
+                            raw_action.action_solution,
+                        )?;
 
                     commitment_slot_values.push(comm);
                     reward_slot_values.extend(rews);
+                    spent_slots.push(spent_slot);
                 }
                 add_mirror_hash => {
                     mirror_slot_values.push(add_mirror_action.get_slot_value_from_solution(
