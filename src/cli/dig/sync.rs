@@ -78,6 +78,11 @@ pub async fn sync_distributor(
                         coin_record.spent_block_index,
                     )
                     .await?;
+
+                    db.delete_dig_indexed_slot_values_by_epoch_start_using_value_hash(value_hash)
+                        .await?;
+                    db.delete_dig_indexed_slot_values_by_puzzle_hash_using_value_hash(value_hash)
+                        .await?;
                 }
 
                 for slot in prev_distributor.created_slot_values_to_slots(
