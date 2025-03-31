@@ -313,10 +313,11 @@ impl DigRewardDistributor {
             let raw_action_hash = tree_hash(&ctx.allocator, raw_action.action_puzzle_reveal);
 
             if raw_action_hash == new_epoch_hash {
-                reward_slot_values.push(
-                    new_epoch_action
-                        .get_slot_value_from_solution(ctx, raw_action.action_solution)?,
-                );
+                let (rew, spent) = new_epoch_action
+                    .get_slot_value_from_solution(ctx, raw_action.action_solution)?;
+
+                reward_slot_values.push(rew);
+                spent_slots.push(spent);
             } else if raw_action_hash == commit_incentives_hash {
                 let (comm, rews, spent_slot) = commit_incentives_action
                     .get_slot_values_from_solution(
@@ -335,24 +336,28 @@ impl DigRewardDistributor {
                     raw_action.action_solution,
                 )?);
             } else if raw_action_hash == remove_mirror_hash {
-                todo!("Mark mirror slot as removed")
+                spent_slots.push(
+                    remove_mirror_action
+                        .get_spent_slot_value_from_solution(ctx, raw_action.action_solution)?,
+                );
             } else if raw_action_hash == withdraw_incentives_hash {
-                let reward_slot = withdraw_incentives_action.get_slot_value_from_solution(
+                let (rew, spnt) = withdraw_incentives_action.get_slot_value_from_solution(
                     ctx,
                     &self.info.constants,
                     raw_action.action_solution,
                 )?;
 
-                reward_slot_values.push(reward_slot);
-                todo!("Withdraw incentives also spends the commitment slot")
+                reward_slot_values.push(rew);
+                spent_slots.extend(spnt);
             } else if raw_action_hash == initiate_payout_hash {
-                let mirror_slot = initiate_payout_action.get_slot_value_from_solution(
+                let (mirr, spent) = initiate_payout_action.get_slot_value_from_solution(
                     ctx,
                     &current_state,
                     raw_action.action_solution,
                 )?;
 
-                mirror_slot_values.push(mirror_slot);
+                mirror_slot_values.push(mirr);
+                spent_slots.push(spent);
             }
         }
 

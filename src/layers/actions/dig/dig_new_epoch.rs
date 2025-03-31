@@ -64,14 +64,18 @@ impl DigNewEpochAction {
         &self,
         ctx: &SpendContext,
         solution: NodePtr,
-    ) -> Result<DigRewardSlotValue, DriverError> {
+    ) -> Result<(DigRewardSlotValue, (DigSlotNonce, Bytes32)), DriverError> {
         let solution = DigNewEpochActionSolution::from_clvm(&ctx.allocator, solution)?;
 
-        Ok(DigRewardSlotValue {
+        let slot_valie = DigRewardSlotValue {
             epoch_start: solution.slot_epoch_time,
             next_epoch_initialized: solution.slot_next_epoch_initialized,
             rewards: solution.slot_total_rewards,
-        })
+        };
+        Ok((
+            slot_valie,
+            (DigSlotNonce::REWARD, slot_valie.tree_hash().into()),
+        ))
     }
 
     pub fn spend(
@@ -111,7 +115,7 @@ impl DigNewEpochAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_value = self.get_slot_value_from_solution(ctx, action_solution)?;
+        let slot_value = self.get_slot_value_from_solution(ctx, action_solution)?.0;
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             new_epoch_conditions,

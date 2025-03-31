@@ -54,15 +54,39 @@ impl DigWithdrawIncentivesAction {
         ctx: &SpendContext,
         my_constants: &DigRewardDistributorConstants,
         solution: NodePtr,
-    ) -> Result<DigRewardSlotValue, DriverError> {
+    ) -> Result<(DigRewardSlotValue, [(DigSlotNonce, Bytes32); 2]), DriverError> {
         let solution = DigWithdrawIncentivesActionSolution::from_clvm(&ctx.allocator, solution)?;
         let withdrawal_share = solution.committed_value * my_constants.withdrawal_share_bps / 10000;
 
-        Ok(DigRewardSlotValue {
+        let old_reward_slot_value = DigRewardSlotValue {
+            epoch_start: solution.reward_slot_epoch_time,
+            next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
+            rewards: solution.reward_slot_total_rewards,
+        };
+        let new_reward_slot_value = DigRewardSlotValue {
             epoch_start: solution.reward_slot_epoch_time,
             next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
             rewards: solution.reward_slot_total_rewards - withdrawal_share,
-        })
+        };
+        let commitment_slot_value = DigCommitmentSlotValue {
+            epoch_start: solution.reward_slot_epoch_time,
+            clawback_ph: solution.clawback_ph,
+            rewards: solution.committed_value,
+        };
+
+        Ok((
+            new_reward_slot_value,
+            [
+                (
+                    DigSlotNonce::REWARD,
+                    old_reward_slot_value.tree_hash().into(),
+                ),
+                (
+                    DigSlotNonce::COMMITMENT,
+                    commitment_slot_value.tree_hash().into(),
+                ),
+            ],
+        ))
     }
 
     pub fn spend(
@@ -103,8 +127,9 @@ impl DigWithdrawIncentivesAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_value =
-            self.get_slot_value_from_solution(ctx, &distributor.info.constants, action_solution)?;
+        let slot_value = self
+            .get_slot_value_from_solution(ctx, &distributor.info.constants, action_solution)?
+            .0;
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             withdraw_incentives_conditions,

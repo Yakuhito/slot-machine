@@ -62,14 +62,23 @@ impl DigInitiatePayoutAction {
         ctx: &SpendContext,
         my_state: &DigRewardDistributorState,
         solution: NodePtr,
-    ) -> Result<DigMirrorSlotValue, DriverError> {
+    ) -> Result<(DigMirrorSlotValue, (DigSlotNonce, Bytes32)), DriverError> {
         let solution = DigInitiatePayoutActionSolution::from_clvm(&ctx.allocator, solution)?;
 
-        Ok(DigMirrorSlotValue {
+        let new_slot = DigMirrorSlotValue {
             payout_puzzle_hash: solution.mirror_payout_puzzle_hash,
             initial_cumulative_payout: my_state.round_reward_info.cumulative_payout,
             shares: solution.mirror_shares,
-        })
+        };
+        let old_slot = DigMirrorSlotValue {
+            payout_puzzle_hash: solution.mirror_payout_puzzle_hash,
+            initial_cumulative_payout: solution.mirror_initial_cumulative_payout,
+            shares: solution.mirror_shares,
+        };
+        Ok((
+            new_slot,
+            (DigSlotNonce::MIRROR, old_slot.tree_hash().into()),
+        ))
     }
 
     pub fn spend(
@@ -113,7 +122,9 @@ impl DigInitiatePayoutAction {
         .to_clvm(&mut ctx.allocator)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_value = self.get_slot_value_from_solution(ctx, &my_state, action_solution)?;
+        let slot_value = self
+            .get_slot_value_from_solution(ctx, &my_state, action_solution)?
+            .0;
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(
