@@ -15,7 +15,7 @@ use clvmr::NodePtr;
 
 use crate::{
     CliError, Db, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorInfo,
-    DigRewardDistributorState, DigSlotNonce, SlotProof,
+    DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce, Slot, SlotInfo, SlotProof,
 };
 
 pub async fn sync_distributor(
@@ -113,7 +113,8 @@ pub async fn sync_distributor(
             ));
         };
 
-        let initial_state = DigRewardDistributorState::initial(launcher_solution.key_value_list.0);
+        let first_epoch_start = launcher_solution.key_value_list.0;
+        let initial_state = DigRewardDistributorState::initial(first_epoch_start);
         let constants = launcher_solution.key_value_list.1;
         if constants != constants.with_launcher_id(launcher_id) {
             return Err(CliError::Custom(
@@ -152,21 +153,28 @@ pub async fn sync_distributor(
             parent_parent_info: lineage_proof.parent_parent_coin_info,
             parent_inner_puzzle_hash: lineage_proof.parent_inner_puzzle_hash,
         };
-        let left_slot_value = CatalogSlotValue::left_end(SLOT32_MAX_VALUE.into());
-        let right_slot_value = CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into());
+        let slot_value = DigRewardSlotValue {
+            epoch_start: first_epoch_start,
+            next_epoch_initialized: false,
+            rewards: 0,
+        };
 
         db.save_slot(
             &mut ctx.allocator,
             Slot::new(
                 slot_proof,
-                SlotInfo::from_value(constants.launcher_id, 0, left_slot_value),
+                SlotInfo::from_value(
+                    constants.launcher_id,
+                    DigSlotNonce::REWARD.to_u64(),
+                    slot_value,
+                ),
             ),
             0,
         )
         .await?;
-        db.save_catalog_indexed_slot_value(
-            left_slot_value.asset_id,
-            left_slot_value.tree_hash().into(),
+        db.save_dig_indexed_slot_value_by_epoch_start(
+            slot_value.epoch_start,
+            slot_value.tree_hash().into(),
         )
         .await?;
 
