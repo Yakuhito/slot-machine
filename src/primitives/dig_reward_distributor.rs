@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::ToTreeHash,
+    clvm_utils::{tree_hash, ToTreeHash},
     protocol::{Bytes32, Coin},
     puzzles::{
         singleton::{SingletonSolution, SingletonStruct},
@@ -11,13 +11,14 @@ use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    Action, ActionLayer, ActionLayerSolution, RawActionLayerSolution, Registry,
-    ReserveFinalizerSolution, Slot, SlotInfo, SlotProof,
+    Action, ActionLayer, ActionLayerSolution, DigAddMirrorAction, DigCommitIncentivesAction,
+    DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction, DigWithdrawIncentivesAction,
+    RawActionLayerSolution, Registry, ReserveFinalizerSolution, Slot, SlotInfo, SlotProof,
 };
 
 use super::{
-    DigRewardDistributorConstants, DigRewardDistributorInfo, DigRewardDistributorState,
-    DigSlotNonce, Reserve,
+    CatalogSlotValue, DigCommitmentSlotValue, DigMirrorSlotValue, DigRewardDistributorConstants,
+    DigRewardDistributorInfo, DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce, Reserve,
 };
 
 #[derive(Debug, Clone)]
@@ -245,4 +246,104 @@ impl DigRewardDistributor {
 
         Ok(state)
     }
+
+    pub fn get_new_slots_from_spend(
+        &self,
+        ctx: &mut SpendContext,
+        solution: NodePtr,
+    ) -> Result<Vec<Slot<CatalogSlotValue>>, DriverError> {
+        let solution =
+            SingletonSolution::<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>::from_clvm(
+                &ctx.allocator,
+                solution,
+            )?;
+
+        let mut reward_slot_values: Vec<DigRewardSlotValue> = vec![];
+        let mut commitment_slot_values: Vec<DigCommitmentSlotValue> = vec![];
+        let mut mirror_slot_values: Vec<DigMirrorSlotValue> = vec![];
+
+        let new_epoch_action = DigNewEpochAction::from_constants(&self.info.constants);
+        let new_epoch_hash = new_epoch_action.tree_hash();
+
+        let commit_incentives_action =
+            DigCommitIncentivesAction::from_constants(&self.info.constants);
+        let commit_incentives_hash = commit_incentives_action.tree_hash();
+
+        let add_mirror_action = DigAddMirrorAction::from_constants(&self.info.constants);
+        let add_mirror_hash = add_mirror_action.tree_hash();
+
+        let remove_mirror_action = DigRemoveMirrorAction::from_constants(&self.info.constants);
+        let remove_mirror_hash = remove_mirror_action.tree_hash();
+
+        let withdraw_incentives_action =
+            DigWithdrawIncentivesAction::from_constants(&self.info.constants);
+        let withdraw_incentives_hash = withdraw_incentives_action.tree_hash();
+
+        let initiate_payout_action = DigInitiatePayoutAction::from_constants(&self.info.constants);
+        let initiate_payout_hash = initiate_payout_action.tree_hash();
+
+        for raw_action in solution.inner_solution.actions {
+            let raw_action_hash = tree_hash(&ctx.allocator, raw_action.action_puzzle_reveal);
+
+            match raw_action_hash {
+                new_epoch_hash => {
+                    reward_slot_values.push(
+                        new_epoch_action
+                            .get_slot_value_from_solution(ctx, raw_action.action_solution)?,
+                    );
+                }
+                commit_incentives_hash => {
+                    let (comm, rews) = commit_incentives_action.get_slot_values_from_solution(
+                        ctx,
+                        self.info.constants.epoch_seconds,
+                        raw_action.action_solution,
+                    )?;
+
+                    commitment_slot_values.push(comm);
+                    reward_slot_values.extend(rews);
+                }
+                add_mirror_hash => {
+                    mirror_slot_values.push(add_mirror_action.get_slot_value_from_solution(
+                        ctx,
+                        current_state,
+                        raw_action.action_solution,
+                    )?);
+                }
+                remove_mirror_hash => {
+                    todo!("Mark mirror slot as removed")
+                }
+                withdraw_incentives_hash => {
+                    let reward_slot = withdraw_incentives_action.get_slot_value_from_solution(
+                        ctx,
+                        &self.info.constants,
+                        raw_action.action_solution,
+                    )?;
+
+                    reward_slot_values.push(reward_slot);
+                    todo!("Withdraw incentives also spends the commitment slot")
+                }
+                initiate_payout_hash => {
+                    let mirror_slot = initiate_payout_action.get_slot_value_from_solution(
+                        ctx,
+                        current_state,
+                        raw_action.action_solution,
+                    )?;
+
+                    mirror_slot_values.push(mirror_slot);
+                }
+                _ => {}
+            }
+        }
+
+        // Ok(self.created_slot_values_to_slots(slot_infos))
+        todo!("return the slots")
+    }
+
+    // pub fn add_pending_slots(&mut self, slots: Vec<Slot<CatalogSlotValue>>) {
+    //     for slot in slots {
+    //         self.pending_slots
+    //             .retain(|s| s.info.value.asset_id != slot.info.value.asset_id);
+    //         self.pending_slots.push(slot);
+    //     }
+    // }
 }

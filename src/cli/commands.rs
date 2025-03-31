@@ -375,7 +375,7 @@ enum DigCliAction {
 
         /// Payout threshold (in the reward token)
         #[arg(long, default_value = "0.1")]
-        payout_threshold: u64,
+        payout_threshold: String,
 
         /// Validator fee (in basis points)
         #[arg(long, default_value = "700")]

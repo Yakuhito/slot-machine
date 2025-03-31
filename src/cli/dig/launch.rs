@@ -15,7 +15,7 @@ pub async fn dig_launch(
     first_epoch_start_height: u64,
     epoch_seconds: u64,
     max_seconds_offset: u64,
-    payout_threshold: u64,
+    payout_threshold_str: String,
     validator_fee_bps: u64,
     withdrawal_share_bps: u64,
     reserve_asset_id_str: String,
@@ -27,6 +27,7 @@ pub async fn dig_launch(
         Bytes32::new(decode_address(&validator_payout_address_str)?.0);
     let reserve_asset_id = hex_string_to_bytes32(&reserve_asset_id_str)?;
     let fee = parse_amount(&fee_str, false)?;
+    let payout_threshold = parse_amount(&payout_threshold_str, true)?;
     if validator_fee_bps > 2500 || withdrawal_share_bps < 5000 {
         return Err(CliError::Custom("really? that big of a fee?".to_string()));
     }
