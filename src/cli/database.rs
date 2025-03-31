@@ -96,6 +96,17 @@ impl Db {
             )
             .execute(&pool)
             .await?;
+
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS catalog_indexed_slot_values (
+                    asset_id BLOB PRIMARY KEY,
+                    slot_value_hash BLOB NOT NULL
+                )
+                ",
+            )
+            .execute(&pool)
+            .await?;
         }
 
         Ok(Self { pool })

@@ -758,10 +758,11 @@ pub fn launch_dig_reward_distributor(
         parent_amount: launcher_coin.amount,
     });
 
-    let (launch_conditions, eve_coin) =
-        launcher
-            .with_singleton_amount(1)
-            .spend(ctx, eve_singleton_inner_puzzle_hash.into(), ())?;
+    let (launch_conditions, eve_coin) = launcher.with_singleton_amount(1).spend(
+        ctx,
+        eve_singleton_inner_puzzle_hash.into(),
+        (first_epoch_start, target_info.constants),
+    )?;
     security_coin_conditions = security_coin_conditions.extend(launch_conditions);
 
     let eve_coin_solution = SingletonSolution {
