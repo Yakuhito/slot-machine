@@ -5,10 +5,11 @@ use chia_wallet_sdk::{Layer, Spend};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    get_constants, get_last_onchain_timestamp, hex_string_to_bytes32,
-    multisig_broadcast_thing_finish, multisig_broadcast_thing_start, sync_distributor, CliError,
-    Db, DigAddMirrorAction, DigRemoveMirrorAction, DigSyncAction, MedievalVault,
-    P2MOfNDelegateDirectArgs, P2MOfNDelegateDirectSolution, StateSchedulerLayerSolution,
+    find_mirror_slot_for_puzzle_hash, get_constants, get_last_onchain_timestamp,
+    hex_string_to_bytes32, multisig_broadcast_thing_finish, multisig_broadcast_thing_start,
+    sync_distributor, CliError, Db, DigAddMirrorAction, DigRemoveMirrorAction, DigSyncAction,
+    MedievalVault, P2MOfNDelegateDirectArgs, P2MOfNDelegateDirectSolution,
+    StateSchedulerLayerSolution,
 };
 
 pub async fn dig_broadcast_mirror_update(
@@ -57,7 +58,7 @@ pub async fn dig_broadcast_mirror_update(
         }
 
         println!("Will also sync reward distributor to {}", update_time);
-        reward_distributor.new_action::<DigSyncAction>().spend(
+        let _conds = reward_distributor.new_action::<DigSyncAction>().spend(
             &mut ctx,
             &mut reward_distributor,
             update_time,
@@ -128,7 +129,16 @@ pub async fn dig_broadcast_mirror_update(
 
     if remove_mirror {
         println!("Finding mirror slot...");
-        let mirror_slot = todo!
+        let mirror_slot = find_mirror_slot_for_puzzle_hash(
+            &mut ctx,
+            &db,
+            launcher_id,
+            mirror_payout_puzzle_hash,
+            Some(mirror_shares),
+        )
+        .await?
+        .ok_or(CliError::Custom("Could not find mirror slot".to_string()))?;
+
         let (_conds, last_payment_amount) = reward_distributor
             .new_action::<DigRemoveMirrorAction>()
             .spend(

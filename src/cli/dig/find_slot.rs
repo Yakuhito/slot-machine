@@ -1,7 +1,10 @@
 use chia::protocol::Bytes32;
 use chia_wallet_sdk::SpendContext;
 
-use crate::{CliError, Db, DigCommitmentSlotValue, DigRewardSlotValue, DigSlotNonce, Slot};
+use crate::{
+    CliError, Db, DigCommitmentSlotValue, DigMirrorSlotValue, DigRewardSlotValue, DigSlotNonce,
+    Slot,
+};
 
 pub async fn find_reward_slot_for_epoch(
     ctx: &mut SpendContext,
@@ -85,6 +88,40 @@ pub async fn find_commitment_slot_for_puzzle_hash(
         }
 
         slot = Some(commitment_slot);
+        break;
+    }
+
+    Ok(slot)
+}
+
+pub async fn find_mirror_slot_for_puzzle_hash(
+    ctx: &mut SpendContext,
+    db: &Db,
+    launcher_id: Bytes32,
+    mirror_payout_puzzle_hash: Bytes32,
+    mirror_shares: Option<u64>,
+) -> Result<Option<Slot<DigMirrorSlotValue>>, CliError> {
+    let nonce = DigSlotNonce::MIRROR.to_u64();
+    let value_hashes = db
+        .get_dig_indexed_slot_values_by_puzzle_hash(mirror_payout_puzzle_hash, nonce)
+        .await?;
+
+    let mut slot = None;
+    for value_hash in value_hashes {
+        let Some(mirror_slot) = db
+            .get_slot::<DigMirrorSlotValue>(&mut ctx.allocator, launcher_id, nonce, value_hash, 0)
+            .await?
+        else {
+            continue;
+        };
+
+        if let Some(mirror_shares) = mirror_shares {
+            if mirror_slot.info.value.shares != mirror_shares {
+                continue;
+            }
+        }
+
+        slot = Some(mirror_slot);
         break;
     }
 
