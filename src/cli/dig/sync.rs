@@ -22,7 +22,7 @@ use crate::{
 
 pub async fn sync_distributor(
     client: &CoinsetClient,
-    db: &mut Db,
+    db: &Db,
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
 ) -> Result<DigRewardDistributor, CliError> {

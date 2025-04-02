@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
-    catalog_unroll_state_scheduler, catalog_verify_deployment, dig_launch,
+    catalog_unroll_state_scheduler, catalog_verify_deployment, dig_commit_rewards, dig_launch,
     multisig_broadcast_catalog_state_update, multisig_broadcast_rekey, multisig_launch,
     multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_verify_signature,
     multisig_view,
@@ -393,6 +393,28 @@ enum DigCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+    /// Commits rewards to a future epoch
+    CommitRewards {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Rewards to commit (in CATs)
+        #[arg(long)]
+        reward_amount: String,
+
+        /// Address that will be able to claw back the rewards
+        #[arg(long)]
+        clawback_address: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
 }
 
 pub async fn run_cli() {
@@ -578,6 +600,16 @@ pub async fn run_cli() {
                     fee,
                 )
                 .await
+            }
+            DigCliAction::CommitRewards {
+                launcher_id,
+                reward_amount,
+                clawback_address,
+                testnet11,
+                fee,
+            } => {
+                dig_commit_rewards(launcher_id, reward_amount, clawback_address, testnet11, fee)
+                    .await
             }
         },
     };
