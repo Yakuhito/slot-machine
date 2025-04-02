@@ -14,7 +14,7 @@ use chia_wallet_sdk::{
     Condition, Conditions, DriverError, Layer, Memos, Puzzle, SingletonLayer, Spend, SpendContext,
 };
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
-use clvmr::NodePtr;
+use clvmr::{Allocator, NodePtr};
 
 use crate::{
     MOfNLayer, P2MOfNDelegateDirectArgs, P2MOfNDelegateDirectSolution, SpendContextExt,
@@ -250,14 +250,17 @@ impl MedievalVault {
         )))
     }
 
-    pub fn delegated_puzzle_for_catalog_state_update(
+    pub fn delegated_puzzle_for_flexible_send_message<M>(
         ctx: &mut SpendContext,
-        new_state_hash: Bytes32,
-        catalog_launcher_id: Bytes32,
+        message: M,
+        receiver_launcher_id: Bytes32,
         my_coin: Coin,
         my_info: &MedievalVaultInfo,
         genesis_challenge: Bytes32,
-    ) -> Result<NodePtr, DriverError> {
+    ) -> Result<NodePtr, DriverError>
+    where
+        M: ToClvm<Allocator>,
+    {
         let hint = ctx.hint(my_info.launcher_id)?;
         let conditions = Conditions::new().create_coin(
             my_info.inner_puzzle_hash().into(),
@@ -272,12 +275,12 @@ impl MedievalVault {
 
         CurriedProgram {
             program: ctx.state_scheduler_puzzle()?,
-            args: StateSchedulerLayerArgs::<Bytes32, NodePtr> {
+            args: StateSchedulerLayerArgs::<M, NodePtr> {
                 singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
-                receiver_singleton_struct_hash: SingletonStruct::new(catalog_launcher_id)
+                receiver_singleton_struct_hash: SingletonStruct::new(receiver_launcher_id)
                     .tree_hash()
                     .into(),
-                message: new_state_hash,
+                message,
                 inner_puzzle: innermost_delegated_puzzle_ptr,
             },
         }

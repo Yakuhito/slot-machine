@@ -1,4 +1,4 @@
-use chia::clvm_utils::ToTreeHash;
+use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
 
 use crate::{
     get_constants, hex_string_to_bytes32, multisig_sign_thing_finish, multisig_sign_thing_start,
@@ -56,7 +56,7 @@ pub async fn multisig_sign_catalog_state_update(
         hex::encode(new_payment_asset_id.to_bytes())
     );
 
-    let delegated_puzzle = MedievalVault::delegated_puzzle_for_catalog_state_update(
+    let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes32>(
         &mut ctx,
         new_state.tree_hash().into(),
         catalog_constants.launcher_id,

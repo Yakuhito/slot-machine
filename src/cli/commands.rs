@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
     catalog_unroll_state_scheduler, catalog_verify_deployment, dig_clawback_rewards,
-    dig_commit_rewards, dig_launch, dig_new_epoch, dig_sync,
+    dig_commit_rewards, dig_launch, dig_new_epoch, dig_sign_mirror_update, dig_sync,
     multisig_broadcast_catalog_state_update, multisig_broadcast_rekey, multisig_launch,
     multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_verify_signature,
     multisig_view,
@@ -478,6 +478,36 @@ enum DigCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+    /// Signs a mirror update action
+    SignMirrorUpdate {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Mirror payout puzzle hash
+        #[arg(long)]
+        mirror_payout_puzzle_hash: String,
+
+        /// Mirror shares
+        #[arg(long, default_value = "1")]
+        mirror_shares: u64,
+
+        /// Pubkey to sign with (hex string)
+        #[arg(long)]
+        my_pubkey: String,
+
+        /// Remove mirror (if not provided, mirror will be added)
+        #[arg(long, default_value_t = false)]
+        remove_mirror: bool,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Use debug signing method (pk prompt)
+        #[arg(long, default_value_t = false)]
+        debug: bool,
+    },
 }
 
 pub async fn run_cli() {
@@ -711,6 +741,26 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => dig_new_epoch(launcher_id, testnet11, fee).await,
+            DigCliAction::SignMirrorUpdate {
+                launcher_id,
+                mirror_payout_puzzle_hash,
+                mirror_shares,
+                my_pubkey,
+                remove_mirror,
+                testnet11,
+                debug,
+            } => {
+                dig_sign_mirror_update(
+                    launcher_id,
+                    mirror_payout_puzzle_hash,
+                    mirror_shares,
+                    my_pubkey,
+                    remove_mirror,
+                    testnet11,
+                    debug,
+                )
+                .await
+            }
         },
     };
 

@@ -64,7 +64,7 @@ pub async fn multisig_broadcast_catalog_state_update(
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
     let medieval_vault_inner_ph = medieval_vault.info.inner_puzzle_hash();
 
-    let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_catalog_state_update(
+    let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes32>(
         &mut ctx,
         new_state.tree_hash().into(),
         catalog_constants.launcher_id,
