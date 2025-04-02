@@ -83,10 +83,16 @@ impl DigNewEpochAction {
         ctx: &mut SpendContext,
         distributor: &mut DigRewardDistributor,
         reward_slot: Slot<DigRewardSlotValue>,
-        epoch_total_rewards: u64,
     ) -> Result<(Conditions, Slot<DigRewardSlotValue>, u64), DriverError> {
         // also returns validator fee
         let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
+
+        let epoch_total_rewards =
+            if my_state.round_time_info.epoch_end == reward_slot.info.value.epoch_start {
+                reward_slot.info.value.rewards
+            } else {
+                0
+            };
         let valdiator_fee =
             epoch_total_rewards * distributor.info.constants.validator_fee_bps / 10000;
 

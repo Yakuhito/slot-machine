@@ -2609,7 +2609,7 @@ mod tests {
                 ctx,
                 &mut registry,
                 first_epoch_incentives_slot,
-                first_epoch_incentives_slot.info.value.rewards,
+                // first_epoch_incentives_slot.info.value.rewards,
             )?;
         let payout_coin_id = reserve_cat
             .wrapped_child(constants.validator_payout_puzzle_hash, validator_fee)
@@ -2840,11 +2840,11 @@ mod tests {
                     ctx,
                     &mut registry,
                     reward_slot,
-                    if epoch <= 4 {
-                        reward_slot.info.value.rewards
-                    } else {
-                        0
-                    },
+                    // if epoch <= 4 {
+                    //     reward_slot.info.value.rewards
+                    // } else {
+                    //     0
+                    // },
                 )?;
             incentive_slots
                 .retain(|s| s.info.value.epoch_start != new_reward_slot.info.value.epoch_start);
@@ -2926,7 +2926,7 @@ mod tests {
                     ctx,
                     &mut registry,
                     reward_slot,
-                    reward_slot.info.value.rewards,
+                    // reward_slot.info.value.rewards,
                 )?;
             incentive_slots
                 .retain(|s| s.info.value.epoch_start != new_reward_slot.info.value.epoch_start);
