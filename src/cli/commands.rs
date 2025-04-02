@@ -403,6 +403,10 @@ enum DigCliAction {
         #[arg(long)]
         reward_amount: String,
 
+        /// Epoch start timestamp
+        #[arg(long)]
+        epoch_start: u64,
+
         /// Address that will be able to claw back the rewards
         #[arg(long)]
         clawback_address: String,
@@ -604,12 +608,20 @@ pub async fn run_cli() {
             DigCliAction::CommitRewards {
                 launcher_id,
                 reward_amount,
+                epoch_start,
                 clawback_address,
                 testnet11,
                 fee,
             } => {
-                dig_commit_rewards(launcher_id, reward_amount, clawback_address, testnet11, fee)
-                    .await
+                dig_commit_rewards(
+                    launcher_id,
+                    reward_amount,
+                    epoch_start,
+                    clawback_address,
+                    testnet11,
+                    fee,
+                )
+                .await
             }
         },
     };

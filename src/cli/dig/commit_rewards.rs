@@ -6,12 +6,13 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 use crate::{
     get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
     parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
-    CliError, Db, DigCommitIncentivesAction, SageClient,
+    CliError, Db, DigCommitIncentivesAction, DigRewardSlotValue, DigSlotNonce, SageClient,
 };
 
 pub async fn dig_commit_rewards(
     launcher_id_str: String,
     reward_amount_str: String,
+    epoch_start: u64,
     clawback_address: String,
     testnet11: bool,
     fee_str: String,
@@ -24,7 +25,7 @@ pub async fn dig_commit_rewards(
     let client = get_coinset_client(testnet11);
     let db = Db::new(false).await?;
     let mut ctx = SpendContext::new();
-    let distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;
+    let mut distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;
 
     println!("A one-sided offer will be created. It will contain:");
     println!(
@@ -74,6 +75,34 @@ pub async fn dig_commit_rewards(
         false,
     )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+
+    let mut next_slot_epoch = epoch_start;
+    let mut reward_slot_value_hash = None;
+
+    let mut n = 0;
+    while reward_slot_value_hash.is_none() && n <= 52 {
+        reward_slot_value_hash = db
+            .get_dig_indexed_slot_value_by_epoch_start(next_slot_epoch)
+            .await?;
+        next_slot_epoch -= distributor.info.constants.epoch_seconds;
+        n += 1;
+    }
+
+    let reward_slot_value_hash = reward_slot_value_hash.ok_or(CliError::Custom(
+        "Reward slot value hash could not be found".to_string(),
+    ))?;
+    let reward_slot = db
+        .get_slot::<DigRewardSlotValue>(
+            &mut ctx.allocator,
+            launcher_id,
+            DigSlotNonce::REWARD.to_u64(),
+            reward_slot_value_hash,
+            0,
+        )
+        .await?
+        .ok_or(CliError::Custom(
+            "Reward slot could not be found".to_string(),
+        ))?;
 
     let (sec_conds, _slot1, _slot2) = distributor
         .new_action::<DigCommitIncentivesAction>()
