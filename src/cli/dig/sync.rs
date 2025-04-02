@@ -3,9 +3,9 @@ use chia_wallet_sdk::{ChiaRpcClient, Offer, SpendContext};
 use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
-    CliError, Db, DigSyncAction, SageClient,
+    get_coinset_client, get_constants, get_last_onchain_timestamp, hex_string_to_bytes32, new_sk,
+    parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
+    yes_no_prompt, CliError, Db, DigSyncAction, SageClient,
 };
 
 pub async fn dig_sync(
@@ -25,39 +25,7 @@ pub async fn dig_sync(
     let mut update_time = if let Some(update_time) = update_time {
         update_time
     } else {
-        println!("Fetching latest transaction block timestamp...");
-        let blockchain_state = client
-            .get_blockchain_state()
-            .await?
-            .blockchain_state
-            .ok_or(CliError::Custom(
-                "Could not fetch blockchain state".to_string(),
-            ))?;
-
-        if let Some(t) = blockchain_state.peak.timestamp {
-            t
-        } else {
-            let mut height = blockchain_state.peak.height - 1;
-            let mut block;
-            loop {
-                println!("Fetching block record #{}...", height);
-                block = client
-                    .get_block_record_by_height(height)
-                    .await?
-                    .block_record
-                    .ok_or(CliError::Custom(format!(
-                        "Could not fetch block record #{}",
-                        height
-                    )))?;
-
-                if block.timestamp.is_some() {
-                    break;
-                }
-                height -= 1;
-            }
-
-            block.timestamp.unwrap()
-        }
+        get_last_onchain_timestamp(&client).await?
     };
 
     let mut distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;

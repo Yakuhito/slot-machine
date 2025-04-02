@@ -236,6 +236,42 @@ pub async fn get_coin_public_key(
     ))
 }
 
+pub async fn get_last_onchain_timestamp(client: &CoinsetClient) -> Result<u64, CliError> {
+    println!("Fetching latest transaction block timestamp...");
+    let blockchain_state = client
+        .get_blockchain_state()
+        .await?
+        .blockchain_state
+        .ok_or(CliError::Custom(
+            "Could not fetch blockchain state".to_string(),
+        ))?;
+
+    if let Some(t) = blockchain_state.peak.timestamp {
+        Ok(t)
+    } else {
+        let mut height = blockchain_state.peak.height - 1;
+        let mut block;
+        loop {
+            println!("Fetching block record #{}...", height);
+            block = client
+                .get_block_record_by_height(height)
+                .await?
+                .block_record
+                .ok_or(CliError::Custom(format!(
+                    "Could not fetch block record #{}",
+                    height
+                )))?;
+
+            if block.timestamp.is_some() {
+                break;
+            }
+            height -= 1;
+        }
+
+        Ok(block.timestamp.unwrap())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

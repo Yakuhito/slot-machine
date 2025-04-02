@@ -1,3 +1,4 @@
+mod broadcast_mirror_update;
 mod clawback_rewards;
 mod commit_rewards;
 mod find_slot;
@@ -7,6 +8,7 @@ mod sign_mirror_update;
 mod sync;
 mod sync_distributor;
 
+pub use broadcast_mirror_update::*;
 pub use clawback_rewards::*;
 pub use commit_rewards::*;
 pub use find_slot::*;
