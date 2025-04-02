@@ -1,10 +1,10 @@
 use chia::protocol::Bytes32;
 use chia_wallet_sdk::{decode_address, SpendContext};
-use sage_api::{Amount, Assets, CatAmount, MakeOffer};
+use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, parse_amount, sync_distributor, yes_no_prompt,
-    CliError, Db, DigRewardSlotValue, DigSlotNonce, SageClient,
+    find_commitment_slot_for_puzzle_hash, find_reward_slot_for_epoch, get_coinset_client,
+    hex_string_to_bytes32, parse_amount, sync_distributor, yes_no_prompt, CliError, Db, SageClient,
 };
 
 pub async fn dig_clawback_rewards(
@@ -29,24 +29,26 @@ pub async fn dig_clawback_rewards(
 
     println!("Fetching slots...");
     let clawback_ph = Bytes32::new(decode_address(&clawback_address)?.0);
-    let value_hashes = db
-        .get_dig_indexed_slot_values_by_puzzle_hash(clawback_ph)
-        .await?;
-    let mut slot = None;
-    for value_hash in value_hashes {
-        let reward_slot = db
-            .get_slot::<DigRewardSlotValue>(
-                &mut ctx.allocator,
-                launcher_id,
-                DigSlotNonce::COMMITMENT.to_u64(),
-                reward_slot_value_hash,
-                0,
-            )
-            .await?
-            .ok_or(CliError::Custom(
-                "Reward slot could not be found".to_string(),
-            ))?;
-    }
+    let commitment_slot = find_commitment_slot_for_puzzle_hash(
+        &mut ctx,
+        &db,
+        launcher_id,
+        clawback_ph,
+        epoch_start,
+        reward_amount,
+    )
+    .await?
+    .ok_or(CliError::Custom(
+        "Commitment slot could not be found".to_string(),
+    ))?;
+    let reward_slot = find_reward_slot_for_epoch(
+        &mut ctx,
+        &db,
+        launcher_id,
+        commitment_slot.info.value.epoch_start,
+        distributor.info.constants.epoch_seconds,
+    )
+    .await?;
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  1 mojo",);
@@ -66,10 +68,7 @@ pub async fn dig_clawback_rewards(
             },
             offered_assets: Assets {
                 xch: Amount::u64(1),
-                cats: vec![CatAmount {
-                    asset_id: hex::encode(distributor.info.constants.reserve_asset_id),
-                    amount: Amount::u64(reward_amount),
-                }],
+                cats: vec![],
                 nfts: vec![],
             },
             fee: Amount::u64(fee),
