@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
     catalog_unroll_state_scheduler, catalog_verify_deployment, dig_clawback_rewards,
-    dig_commit_rewards, dig_launch, multisig_broadcast_catalog_state_update,
+    dig_commit_rewards, dig_launch, dig_sync, multisig_broadcast_catalog_state_update,
     multisig_broadcast_rekey, multisig_launch, multisig_sign_catalog_state_update,
     multisig_sign_rekey, multisig_verify_signature, multisig_view,
 };
@@ -445,6 +445,24 @@ enum DigCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+    /// Syncs the reward distributor
+    Sync {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Update timestamp (defaults to maximum value = timestamp of last transaction block)
+        #[arg(long, required = false)]
+        update_time: Option<u64>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
 }
 
 pub async fn run_cli() {
@@ -667,6 +685,12 @@ pub async fn run_cli() {
                 )
                 .await
             }
+            DigCliAction::Sync {
+                launcher_id,
+                update_time,
+                testnet11,
+                fee,
+            } => dig_sync(launcher_id, update_time, testnet11, fee).await,
         },
     };
 
