@@ -1,4 +1,4 @@
-use super::ClientError;
+use super::{ClientError, SageClient};
 use chia::{
     bls::{self, PublicKey, SecretKey, Signature},
     consensus::consensus_constants::ConsensusConstants,
@@ -8,6 +8,7 @@ use chia_wallet_sdk::{
     ChiaRpcClient, CoinsetClient, DriverError, OfferError, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
 };
 use hex::FromHex;
+use sage_api::GetDerivations;
 use std::{
     io::{self, Write},
     num::ParseIntError,
@@ -205,6 +206,34 @@ pub async fn wait_for_coin(
     }
 
     Ok(())
+}
+
+pub async fn get_coin_public_key(
+    client: &SageClient,
+    address: &String,
+    address_limit: u32,
+) -> Result<PublicKey, CliError> {
+    let addresses_per_request: u32 = 500;
+    let mut offset = 0;
+    while offset < address_limit {
+        let resp = client
+            .get_derivations(GetDerivations {
+                hardened: false,
+                offset,
+                limit: addresses_per_request,
+            })
+            .await?;
+        for derivation in resp.derivations {
+            if derivation.address.eq(address) {
+                return hex_string_to_pubkey(&derivation.public_key);
+            }
+        }
+        offset += addresses_per_request;
+    }
+
+    Err(CliError::Custom(
+        "Could not find public key associated with provided puzzle hash".to_string(),
+    ))
 }
 
 #[cfg(test)]

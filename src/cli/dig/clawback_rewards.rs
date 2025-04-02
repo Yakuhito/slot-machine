@@ -1,10 +1,16 @@
-use chia::protocol::Bytes32;
-use chia_wallet_sdk::{decode_address, SpendContext};
+use chia::{
+    protocol::{Bytes32, Coin, SpendBundle},
+    puzzles::DeriveSynthetic,
+};
+use chia_wallet_sdk::{decode_address, Offer, Spend, SpendContext, StandardLayer};
+use clvmr::NodePtr;
 use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    find_commitment_slot_for_puzzle_hash, find_reward_slot_for_epoch, get_coinset_client,
-    hex_string_to_bytes32, parse_amount, sync_distributor, yes_no_prompt, CliError, Db, SageClient,
+    find_commitment_slot_for_puzzle_hash, find_reward_slot_for_epoch, get_coin_public_key,
+    get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
+    parse_one_sided_offer, print_spend_bundle_to_file, spend_security_coin, sync_distributor,
+    yes_no_prompt, CliError, Db, DigWithdrawIncentivesAction, SageClient,
 };
 
 pub async fn dig_clawback_rewards(
@@ -48,11 +54,20 @@ pub async fn dig_clawback_rewards(
         commitment_slot.info.value.epoch_start,
         distributor.info.constants.epoch_seconds,
     )
-    .await?;
+    .await?
+    .ok_or(CliError::Custom(
+        "Reward slot could not be found".to_string(),
+    ))?;
+
+    println!(
+        "Will use commitment slot with rewards={} for epoch_start={}",
+        commitment_slot.info.value.rewards, commitment_slot.info.value.epoch_start
+    );
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  1 mojo",);
     println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
+    println!("Additionally, another 1-mojo coin with the clawback puzzle will be automatically created and used.");
 
     yes_no_prompt("Proceed?")?;
 
@@ -78,6 +93,66 @@ pub async fn dig_clawback_rewards(
         })
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
+
+    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
+    let security_coin_sk = new_sk()?;
+    let cat_destination_inner_puzzle = ctx.alloc(&(1, ()))?;
+    let cat_destination_inner_puzzle_hash: Bytes32 =
+        ctx.tree_hash(cat_destination_inner_puzzle).into();
+    let offer = parse_one_sided_offer(
+        &mut ctx,
+        offer,
+        security_coin_sk.public_key(),
+        Some(cat_destination_inner_puzzle_hash),
+        false,
+    )?;
+    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+
+    let (sec_conds, _slot1, _slot2) = distributor
+        .new_action::<DigWithdrawIncentivesAction>()
+        .spend(&mut ctx, &mut distributor, commitment_slot, reward_slot)?;
+    let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
+
+    let security_coin_sig = spend_security_coin(
+        &mut ctx,
+        offer.security_coin,
+        offer
+            .security_base_conditions
+            .extend(sec_conds)
+            .create_coin(clawback_ph, 0, None),
+        &security_coin_sk,
+        get_constants(testnet11),
+    )?;
+
+    println!("Fetching clawback public key...");
+    let wallet_pk = get_coin_public_key(&sage, &clawback_address, 10000).await?;
+    let message_coin = Coin::new(offer.security_coin.coin_id(), clawback_ph, 0);
+    let p2 = StandardLayer::new(wallet_pk.derive_synthetic());
+    let spend = p2.delegated_inner_spend(&mut ctx, Spend::new(NodePtr::NIL, NodePtr::NIL))?;
+    println!(
+        "Message coin ph: {}; computed ph: {}",
+        message_coin.puzzle_hash,
+        ctx.tree_hash(spend.puzzle)
+    );
+
+    println!("Signing spend...");
+
+    let spend_bundle =
+        SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+
+    print_spend_bundle_to_file(
+        spend_bundle.coin_spends,
+        spend_bundle.aggregated_signature,
+        "sb.debug",
+    );
+    // println!("Submitting transaction...");
+    // let client = get_coinset_client(testnet11);
+    // let resp = client.push_tx(spend_bundle).await?;
+
+    // println!("Transaction submitted; status='{}'", resp.status);
+
+    // wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    // println!("Confirmed!");
 
     Ok(())
 }
