@@ -357,9 +357,9 @@ enum DigCliAction {
         #[arg(long)]
         validator_payout_address: String,
 
-        /// First epoch start height
+        /// First epoch start timestamp
         #[arg(long)]
-        first_epoch_start_height: u64,
+        first_epoch_start_timestamp: u64,
 
         /// Reserve (reward token) asset id
         #[arg(long)]
@@ -606,7 +606,7 @@ pub async fn run_cli() {
             DigCliAction::Launch {
                 validator_launcher_id,
                 validator_payout_address,
-                first_epoch_start_height,
+                first_epoch_start_timestamp,
                 epoch_seconds,
                 max_seconds_offset,
                 payout_threshold,
@@ -619,7 +619,7 @@ pub async fn run_cli() {
                 dig_launch(
                     validator_launcher_id,
                     validator_payout_address,
-                    first_epoch_start_height,
+                    first_epoch_start_timestamp,
                     epoch_seconds,
                     max_seconds_offset,
                     payout_threshold,

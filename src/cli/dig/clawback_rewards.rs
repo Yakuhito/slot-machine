@@ -7,9 +7,8 @@ use sage_api::{Amount, Assets, CoinJson, CoinSpendJson, MakeOffer, SignCoinSpend
 use crate::{
     find_commitment_slot_for_puzzle_hash, find_reward_slot_for_epoch, get_coin_public_key,
     get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, new_sk,
-    parse_amount, parse_one_sided_offer, print_spend_bundle_to_file, spend_security_coin,
-    sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db, DigWithdrawIncentivesAction,
-    SageClient,
+    parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
+    yes_no_prompt, CliError, Db, DigWithdrawIncentivesAction, SageClient,
 };
 
 pub async fn dig_clawback_rewards(
@@ -158,18 +157,13 @@ pub async fn dig_clawback_rewards(
     );
 
     println!("Submitting transaction...");
-    print_spend_bundle_to_file(
-        spend_bundle.coin_spends,
-        spend_bundle.aggregated_signature,
-        "sb.debug",
-    );
-    // let client = get_coinset_client(testnet11);
-    // let resp = client.push_tx(spend_bundle).await?;
+    let client = get_coinset_client(testnet11);
+    let resp = client.push_tx(spend_bundle).await?;
 
-    // println!("Transaction submitted; status='{}'", resp.status);
+    println!("Transaction submitted; status='{}'", resp.status);
 
-    // wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
-    // println!("Confirmed!");
+    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    println!("Confirmed!");
 
     Ok(())
 }

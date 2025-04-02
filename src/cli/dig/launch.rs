@@ -12,7 +12,7 @@ use crate::{
 pub async fn dig_launch(
     validator_launcher_id_str: String,
     validator_payout_address_str: String,
-    first_epoch_start_height: u64,
+    first_epoch_start_timestamp: u64,
     epoch_seconds: u64,
     max_seconds_offset: u64,
     payout_threshold_str: String,
@@ -83,7 +83,7 @@ pub async fn dig_launch(
     let (sig, _sk, reward_distributor, _slot) = launch_dig_reward_distributor(
         &mut ctx,
         Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
-        first_epoch_start_height,
+        first_epoch_start_timestamp,
         user_puzzle_hash,
         DigRewardDistributorConstants::without_launcher_id(
             validator_launcher_id,
