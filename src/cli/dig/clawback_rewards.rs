@@ -1,7 +1,4 @@
-use chia::{
-    protocol::{Bytes32, Coin, SpendBundle},
-    puzzles::DeriveSynthetic,
-};
+use chia::protocol::{Bytes32, Coin, SpendBundle};
 use chia_wallet_sdk::{decode_address, Offer, Spend, SpendContext, StandardLayer};
 use clvmr::NodePtr;
 use sage_api::{Amount, Assets, MakeOffer};
@@ -96,16 +93,7 @@ pub async fn dig_clawback_rewards(
 
     let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
     let security_coin_sk = new_sk()?;
-    let cat_destination_inner_puzzle = ctx.alloc(&(1, ()))?;
-    let cat_destination_inner_puzzle_hash: Bytes32 =
-        ctx.tree_hash(cat_destination_inner_puzzle).into();
-    let offer = parse_one_sided_offer(
-        &mut ctx,
-        offer,
-        security_coin_sk.public_key(),
-        Some(cat_destination_inner_puzzle_hash),
-        false,
-    )?;
+    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let (sec_conds, _slot1, _slot2) = distributor
@@ -127,7 +115,7 @@ pub async fn dig_clawback_rewards(
     println!("Fetching clawback public key...");
     let wallet_pk = get_coin_public_key(&sage, &clawback_address, 10000).await?;
     let message_coin = Coin::new(offer.security_coin.coin_id(), clawback_ph, 0);
-    let p2 = StandardLayer::new(wallet_pk.derive_synthetic());
+    let p2 = StandardLayer::new(wallet_pk);
     let spend = p2.delegated_inner_spend(&mut ctx, Spend::new(NodePtr::NIL, NodePtr::NIL))?;
     println!(
         "Message coin ph: {}; computed ph: {}",
