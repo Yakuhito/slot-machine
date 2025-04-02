@@ -34,7 +34,10 @@ pub async fn dig_add_rewards(
 
     let also_sync = distributor.info.state.round_time_info.last_update + 180 < latest_timestamp;
     if also_sync {
-        println!("Will also sync the distributor.");
+        println!(
+            "Will also sync the distributor to timestamp {}",
+            latest_timestamp
+        );
     }
 
     println!("A one-sided offer will be created. It will contain:");
