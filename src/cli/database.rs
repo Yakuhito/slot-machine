@@ -547,6 +547,7 @@ impl Db {
         sqlx::query(
             "
             INSERT INTO reward_distributor_configurations (launcher_id, constants) VALUES (?1, ?2)
+            ON CONFLICT(launcher_id) DO UPDATE SET constants = excluded.constants
             ",
         )
         .bind(launcher_id.to_vec())
