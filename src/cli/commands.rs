@@ -2,10 +2,10 @@ use clap::{Parser, Subcommand};
 
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
-    catalog_unroll_state_scheduler, catalog_verify_deployment, dig_commit_rewards, dig_launch,
-    multisig_broadcast_catalog_state_update, multisig_broadcast_rekey, multisig_launch,
-    multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_verify_signature,
-    multisig_view,
+    catalog_unroll_state_scheduler, catalog_verify_deployment, dig_clawback_rewards,
+    dig_commit_rewards, dig_launch, multisig_broadcast_catalog_state_update,
+    multisig_broadcast_rekey, multisig_launch, multisig_sign_catalog_state_update,
+    multisig_sign_rekey, multisig_verify_signature, multisig_view,
 };
 
 #[derive(Parser)]
@@ -419,6 +419,32 @@ enum DigCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+    /// Claws back a previous reward commitment
+    ClawbackRewards {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Address that will be able to claw back the rewards
+        #[arg(long)]
+        clawback_address: String,
+
+        /// Epoch start timestamp
+        #[arg(long, required = false)]
+        epoch_start: Option<u64>,
+
+        /// Commitment amount (in CAT mojos)
+        #[arg(long, required = false)]
+        reward_amount: Option<String>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
 }
 
 pub async fn run_cli() {
@@ -618,6 +644,24 @@ pub async fn run_cli() {
                     reward_amount,
                     epoch_start,
                     clawback_address,
+                    testnet11,
+                    fee,
+                )
+                .await
+            }
+            DigCliAction::ClawbackRewards {
+                launcher_id,
+                clawback_address,
+                epoch_start,
+                reward_amount,
+                testnet11,
+                fee,
+            } => {
+                dig_clawback_rewards(
+                    launcher_id,
+                    clawback_address,
+                    epoch_start,
+                    reward_amount,
                     testnet11,
                     fee,
                 )
