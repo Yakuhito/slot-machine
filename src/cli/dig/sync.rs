@@ -26,19 +26,19 @@ pub async fn sync_distributor(
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
 ) -> Result<DigRewardDistributor, CliError> {
-    let (last_spent_coin_id, constants) = if let Some(constants_from_db) = db
-        .get_reward_distributor_configuration(&mut ctx.allocator, launcher_id)
-        .await?
-    {
-        let last_unspent_coin_info = db.get_last_unspent_singleton_coin(launcher_id).await?;
-        let last_spent_coin_id_from_db =
-            if let Some((_coin_id, parent_coin_id)) = last_unspent_coin_info {
-                parent_coin_id
-            } else {
-                constants_from_db.launcher_id
-            };
+    let last_unspent_coin_info = db.get_last_unspent_singleton_coin(launcher_id).await?;
 
-        (last_spent_coin_id_from_db, constants_from_db)
+    let (last_spent_coin_id, constants) = if let Some((_coin_id, parent_coin_id)) =
+        last_unspent_coin_info
+    {
+        let constants_from_db = db
+            .get_reward_distributor_configuration(&mut ctx.allocator, launcher_id)
+            .await?
+            .ok_or(CliError::Custom(
+                "Reward distributor configuration not found in database".to_string(),
+            ))?;
+
+        (parent_coin_id, constants_from_db)
     } else {
         let Some(launcher_coin_record) = client
             .get_coin_record_by_name(launcher_id)
@@ -177,6 +177,12 @@ pub async fn sync_distributor(
         db.save_dig_indexed_slot_value_by_epoch_start(
             slot_value.epoch_start,
             slot_value.tree_hash().into(),
+        )
+        .await?;
+        db.save_reward_distributor_configuration(
+            &mut ctx.allocator,
+            constants.launcher_id,
+            constants,
         )
         .await?;
 
