@@ -1,10 +1,12 @@
 use chia::protocol::{Bytes32, SpendBundle};
-use chia_wallet_sdk::{decode_address, ChiaRpcClient, SpendContext};
+use chia_wallet_sdk::{decode_address, CatSpend, ChiaRpcClient, Offer, Spend, SpendContext};
+use clvmr::NodePtr;
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, parse_amount, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, SageClient,
+    get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
+    parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
+    CliError, Db, DigCommitIncentivesAction, SageClient,
 };
 
 pub async fn dig_commit_rewards(
@@ -59,22 +61,49 @@ pub async fn dig_commit_rewards(
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    // todo: one-sided offer
+    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
+    let security_coin_sk = new_sk()?;
+    let cat_destination_inner_puzzle = ctx.alloc(&(1, ()))?;
+    let cat_destination_inner_puzzle_hash: Bytes32 =
+        ctx.tree_hash(cat_destination_inner_puzzle).into();
+    let offer = parse_one_sided_offer(
+        &mut ctx,
+        offer,
+        security_coin_sk.public_key(),
+        Some(cat_destination_inner_puzzle_hash),
+        false,
+    )?;
+    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    println!(
-        "Reward distributor launcher id (SAVE THIS): {}",
-        hex::encode(reward_distributor.info.constants.launcher_id)
-    );
+    let (sec_conds, _slot1, _slot2) = distributor
+        .new_action::<DigCommitIncentivesAction>()
+        .spend(
+            &mut ctx,
+            &mut distributor,
+            reward_slot,
+            epoch_start,
+            clawback_ph,
+            reward_amount,
+        )?;
+    let _new_distributor = distributor.finish_spend(
+        &mut ctx,
+        vec![CatSpend {
+            cat: offer.created_cat.unwrap(),
+            inner_spend: Spend::new(cat_destination_inner_puzzle, NodePtr::NIL),
+            extra_delta: 0,
+        }],
+    )?;
 
-    let db = Db::new(false).await?;
-    db.save_reward_distributor_configuration(
-        &mut ctx.allocator,
-        reward_distributor.info.constants.launcher_id,
-        reward_distributor.info.constants,
-    )
-    .await?;
+    let security_coin_sig = spend_security_coin(
+        &mut ctx,
+        offer.security_coin,
+        offer.security_base_conditions.extend(sec_conds),
+        &security_coin_sk,
+        get_constants(testnet11),
+    )?;
 
-    let spend_bundle = SpendBundle::new(ctx.take(), sig);
+    let spend_bundle =
+        SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);
