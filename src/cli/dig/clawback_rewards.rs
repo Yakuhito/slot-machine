@@ -1,12 +1,10 @@
-use chia::protocol::{Bytes32, SpendBundle};
-use chia_wallet_sdk::{decode_address, CatSpend, ChiaRpcClient, Offer, Spend, SpendContext};
-use clvmr::NodePtr;
+use chia::protocol::Bytes32;
+use chia_wallet_sdk::{decode_address, SpendContext};
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
-    CliError, Db, DigCommitIncentivesAction, DigRewardSlotValue, DigSlotNonce, SageClient,
+    get_coinset_client, hex_string_to_bytes32, parse_amount, sync_distributor, yes_no_prompt,
+    CliError, Db, DigRewardSlotValue, DigSlotNonce, SageClient,
 };
 
 pub async fn dig_clawback_rewards(
@@ -28,6 +26,27 @@ pub async fn dig_clawback_rewards(
     let db = Db::new(false).await?;
     let mut ctx = SpendContext::new();
     let mut distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;
+
+    println!("Fetching slots...");
+    let clawback_ph = Bytes32::new(decode_address(&clawback_address)?.0);
+    let value_hashes = db
+        .get_dig_indexed_slot_values_by_puzzle_hash(clawback_ph)
+        .await?;
+    let mut slot = None;
+    for value_hash in value_hashes {
+        let reward_slot = db
+            .get_slot::<DigRewardSlotValue>(
+                &mut ctx.allocator,
+                launcher_id,
+                DigSlotNonce::COMMITMENT.to_u64(),
+                reward_slot_value_hash,
+                0,
+            )
+            .await?
+            .ok_or(CliError::Custom(
+                "Reward slot could not be found".to_string(),
+            ))?;
+    }
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  1 mojo",);

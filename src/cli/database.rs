@@ -100,9 +100,9 @@ impl Db {
             sqlx::query(
                 "
                 CREATE TABLE IF NOT EXISTS dig_indexed_slot_values_by_epoch_start (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     epoch_start INTEGER NOT NULL,
-                    slot_value_hash BLOB NOT NULL,
-                    PRIMARY KEY (epoch_start, slot_value_hash)
+                    slot_value_hash BLOB NOT NULL
                 )
                 ",
             )
@@ -112,9 +112,9 @@ impl Db {
             sqlx::query(
                 "
                 CREATE TABLE IF NOT EXISTS dig_indexed_slot_values_by_puzzle_hashes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     puzzle_hash BLOB NOT NULL,
-                    slot_value_hash BLOB NOT NULL,
-                    PRIMARY KEY (puzzle_hash, slot_value_hash)
+                    slot_value_hash BLOB NOT NULL
                 )
                 ",
             )
@@ -625,50 +625,42 @@ impl Db {
         Ok(())
     }
 
-    pub async fn get_dig_indexed_slot_value_by_epoch_start(
+    pub async fn get_dig_indexed_slot_values_by_epoch_start(
         &self,
         epoch_start: u64,
-    ) -> Result<Option<Bytes32>, CliError> {
+    ) -> Result<Vec<Bytes32>, CliError> {
         let row = sqlx::query(
             "
             SELECT slot_value_hash FROM dig_indexed_slot_values_by_epoch_start WHERE epoch_start = ?1
             ",
         )
         .bind(epoch_start as i64)
-        .fetch_optional(&self.pool)
+        .fetch_all(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
-        let Some(row) = row else {
-            return Ok(None);
-        };
-
-        Ok(Some(column_to_bytes32(
-            row.get::<&[u8], _>("slot_value_hash"),
-        )?))
+        row.into_iter()
+            .map(|row| column_to_bytes32(row.get::<&[u8], _>("slot_value_hash")))
+            .collect::<Result<Vec<_>, _>>()
     }
 
-    pub async fn get_dig_indexed_slot_value_by_puzzle_hash(
+    pub async fn get_dig_indexed_slot_values_by_puzzle_hash(
         &self,
         puzzle_hash: Bytes32,
-    ) -> Result<Option<Bytes32>, CliError> {
+    ) -> Result<Vec<Bytes32>, CliError> {
         let row = sqlx::query(
             "
             SELECT slot_value_hash FROM dig_indexed_slot_values_by_puzzle_hash WHERE puzzle_hash = ?1
             ",
         )
         .bind(puzzle_hash.to_vec())
-        .fetch_optional(&self.pool)
+        .fetch_all(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
 
-        let Some(row) = row else {
-            return Ok(None);
-        };
-
-        Ok(Some(column_to_bytes32(
-            row.get::<&[u8], _>("slot_value_hash"),
-        )?))
+        row.into_iter()
+            .map(|row| column_to_bytes32(row.get::<&[u8], _>("slot_value_hash")))
+            .collect::<Result<Vec<_>, _>>()
     }
 
     pub async fn delete_dig_indexed_slot_values_by_epoch_start_using_value_hash(
