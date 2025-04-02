@@ -1,13 +1,12 @@
 use clap::{Parser, Subcommand};
 
 use super::{
-    catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
-    catalog_unroll_state_scheduler, catalog_verify_deployment, dig_add_rewards,
-    dig_broadcast_mirror_update, dig_clawback_rewards, dig_commit_rewards, dig_initiate_payout,
-    dig_launch, dig_new_epoch, dig_sign_mirror_update, dig_sync,
-    multisig_broadcast_catalog_state_update, multisig_broadcast_rekey, multisig_launch,
-    multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_verify_signature,
-    multisig_view,
+    catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
+    catalog_listen, catalog_register, catalog_sign_state_update, catalog_unroll_state_scheduler,
+    catalog_verify_deployment, dig_add_rewards, dig_broadcast_mirror_update, dig_clawback_rewards,
+    dig_commit_rewards, dig_initiate_payout, dig_launch, dig_new_epoch, dig_sign_mirror_update,
+    dig_sync, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
+    multisig_verify_signature, multisig_view,
 };
 
 #[derive(Parser)]
@@ -140,58 +139,6 @@ enum MultisigCliAction {
         /// Public key of signer (hex string)
         #[arg(long)]
         pubkey: String,
-    },
-    /// Sign a CATalog state update transaction
-    SignCatalogStateUpdate {
-        /// New payment asset id
-        #[arg(long)]
-        new_payment_asset_id: String,
-
-        /// New payment asset amount
-        #[arg(long)]
-        new_payment_asset_amount: String,
-
-        /// Pubkey to sign with (hex string)
-        #[arg(long)]
-        my_pubkey: String,
-
-        /// Vault (singleton) launcher id
-        #[arg(long)]
-        launcher_id: String,
-
-        /// Use testnet11
-        #[arg(long, default_value_t = false)]
-        testnet11: bool,
-
-        /// Use debug signing method (pk prompt)
-        #[arg(long, default_value_t = false)]
-        debug: bool,
-    },
-    /// Broadcast a CATalog state update transaction
-    BroadcastCatalogStateUpdate {
-        /// New payment asset id
-        #[arg(long)]
-        new_payment_asset_id: String,
-
-        /// New payment asset amount
-        #[arg(long)]
-        new_payment_asset_amount: String,
-
-        /// Collected m signatures (comma-separated list)
-        #[arg(long)]
-        sigs: String,
-
-        /// Vault (singleton) launcher id
-        #[arg(long)]
-        launcher_id: String,
-
-        /// Use testnet11
-        #[arg(long, default_value_t = false)]
-        testnet11: bool,
-
-        /// Fee to use, in XCH
-        #[arg(long, default_value = "0.0025")]
-        fee: String,
     },
 }
 
@@ -328,12 +275,63 @@ enum CatalogCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
-
     /// Listen for CATalog spends
     Listen {
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
+    },
+    /// Sign a CATalog state update transaction
+    SignCatalogStateUpdate {
+        /// New payment asset id
+        #[arg(long)]
+        new_payment_asset_id: String,
+
+        /// New payment asset amount
+        #[arg(long)]
+        new_payment_asset_amount: String,
+
+        /// Pubkey to sign with (hex string)
+        #[arg(long)]
+        my_pubkey: String,
+
+        /// Vault (singleton) launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Use debug signing method (pk prompt)
+        #[arg(long, default_value_t = false)]
+        debug: bool,
+    },
+    /// Broadcast a CATalog state update transaction
+    BroadcastCatalogStateUpdate {
+        /// New payment asset id
+        #[arg(long)]
+        new_payment_asset_id: String,
+
+        /// New payment asset amount
+        #[arg(long)]
+        new_payment_asset_amount: String,
+
+        /// Collected m signatures (comma-separated list)
+        #[arg(long)]
+        sigs: String,
+
+        /// Vault (singleton) launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
     },
 }
 
@@ -619,42 +617,6 @@ pub async fn run_cli() {
                 signature,
                 pubkey,
             } => multisig_verify_signature(raw_message, pubkey, signature).await,
-            MultisigCliAction::SignCatalogStateUpdate {
-                new_payment_asset_id,
-                new_payment_asset_amount,
-                my_pubkey,
-                launcher_id,
-                testnet11,
-                debug,
-            } => {
-                multisig_sign_catalog_state_update(
-                    new_payment_asset_id,
-                    new_payment_asset_amount,
-                    my_pubkey,
-                    launcher_id,
-                    testnet11,
-                    debug,
-                )
-                .await
-            }
-            MultisigCliAction::BroadcastCatalogStateUpdate {
-                new_payment_asset_id,
-                new_payment_asset_amount,
-                sigs,
-                launcher_id,
-                testnet11,
-                fee,
-            } => {
-                multisig_broadcast_catalog_state_update(
-                    new_payment_asset_id,
-                    new_payment_asset_amount,
-                    launcher_id,
-                    sigs,
-                    testnet11,
-                    fee,
-                )
-                .await
-            }
         },
         Commands::Catalog { action } => match action {
             CatalogCliAction::InitiateLaunch {
@@ -720,6 +682,42 @@ pub async fn run_cli() {
                 .await
             }
             CatalogCliAction::Listen { testnet11 } => catalog_listen(testnet11).await,
+            CatalogCliAction::SignCatalogStateUpdate {
+                new_payment_asset_id,
+                new_payment_asset_amount,
+                my_pubkey,
+                launcher_id,
+                testnet11,
+                debug,
+            } => {
+                catalog_sign_state_update(
+                    new_payment_asset_id,
+                    new_payment_asset_amount,
+                    my_pubkey,
+                    launcher_id,
+                    testnet11,
+                    debug,
+                )
+                .await
+            }
+            CatalogCliAction::BroadcastCatalogStateUpdate {
+                new_payment_asset_id,
+                new_payment_asset_amount,
+                sigs,
+                launcher_id,
+                testnet11,
+                fee,
+            } => {
+                catalog_broadcast_state_update(
+                    new_payment_asset_id,
+                    new_payment_asset_amount,
+                    launcher_id,
+                    sigs,
+                    testnet11,
+                    fee,
+                )
+                .await
+            }
         },
         Commands::Xchandles { action } => match action {
             XchandlesCliAction::InitiateLaunch => {

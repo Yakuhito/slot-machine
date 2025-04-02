@@ -11,7 +11,7 @@ use crate::{
     P2MOfNDelegateDirectArgs, P2MOfNDelegateDirectSolution, StateSchedulerLayerSolution,
 };
 
-pub async fn multisig_broadcast_catalog_state_update(
+pub async fn catalog_broadcast_state_update(
     new_payment_asset_id_str: String,
     new_payment_asset_amount_str: String,
     launcher_id_str: String,

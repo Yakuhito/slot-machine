@@ -6,7 +6,7 @@ use crate::{
     DefaultCatMakerArgs, MedievalVault,
 };
 
-pub async fn multisig_sign_catalog_state_update(
+pub async fn catalog_sign_state_update(
     new_payment_asset_id_str: String,
     new_payment_asset_amount_str: String,
     my_pubkey_str: String,
