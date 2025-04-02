@@ -1,3 +1,4 @@
+mod add_rewards;
 mod broadcast_mirror_update;
 mod clawback_rewards;
 mod commit_rewards;
@@ -8,6 +9,7 @@ mod sign_mirror_update;
 mod sync;
 mod sync_distributor;
 
+pub use add_rewards::*;
 pub use broadcast_mirror_update::*;
 pub use clawback_rewards::*;
 pub use commit_rewards::*;

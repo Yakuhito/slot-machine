@@ -2,11 +2,11 @@ use clap::{Parser, Subcommand};
 
 use super::{
     catalog_continue_launch, catalog_initiate_launch, catalog_listen, catalog_register,
-    catalog_unroll_state_scheduler, catalog_verify_deployment, dig_broadcast_mirror_update,
-    dig_clawback_rewards, dig_commit_rewards, dig_launch, dig_new_epoch, dig_sign_mirror_update,
-    dig_sync, multisig_broadcast_catalog_state_update, multisig_broadcast_rekey, multisig_launch,
-    multisig_sign_catalog_state_update, multisig_sign_rekey, multisig_verify_signature,
-    multisig_view,
+    catalog_unroll_state_scheduler, catalog_verify_deployment, dig_add_rewards,
+    dig_broadcast_mirror_update, dig_clawback_rewards, dig_commit_rewards, dig_launch,
+    dig_new_epoch, dig_sign_mirror_update, dig_sync, multisig_broadcast_catalog_state_update,
+    multisig_broadcast_rekey, multisig_launch, multisig_sign_catalog_state_update,
+    multisig_sign_rekey, multisig_verify_signature, multisig_view,
 };
 
 #[derive(Parser)]
@@ -538,6 +538,24 @@ enum DigCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+    /// Adds rewards to the current epoch
+    AddRewards {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Reward amount (in CAT mojos)
+        #[arg(long)]
+        reward_amount: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
 }
 
 pub async fn run_cli() {
@@ -811,6 +829,12 @@ pub async fn run_cli() {
                 )
                 .await
             }
+            DigCliAction::AddRewards {
+                launcher_id,
+                reward_amount,
+                testnet11,
+                fee,
+            } => dig_add_rewards(launcher_id, reward_amount, testnet11, fee).await,
         },
     };
 

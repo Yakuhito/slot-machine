@@ -40,9 +40,9 @@ pub async fn dig_sign_mirror_update(
     .await?;
 
     if remove_mirror {
-        println!("You'll *REMOVE* the following mirror from the rewarded mirror lists:");
+        println!("\nYou'll *REMOVE* the following mirror from the rewarded mirror lists:");
     } else {
-        println!("You'll *ADD* a new mirror reward entry with the following parameters:");
+        println!("\nYou'll *ADD* a new mirror reward entry with the following parameters:");
     }
     println!(
         "  Mirror payout puzzle hash: {}",
