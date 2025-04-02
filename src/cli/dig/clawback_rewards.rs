@@ -1,12 +1,13 @@
 use chia::protocol::{Bytes32, Coin, SpendBundle};
-use chia_wallet_sdk::{decode_address, Offer, Spend, SpendContext, StandardLayer};
+use chia_wallet_sdk::{decode_address, ChiaRpcClient, Offer, Spend, SpendContext, StandardLayer};
+use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
-use sage_api::{Amount, Assets, MakeOffer};
+use sage_api::{Amount, Assets, CoinJson, CoinSpendJson, MakeOffer, SignCoinSpends};
 
 use crate::{
     find_commitment_slot_for_puzzle_hash, find_reward_slot_for_epoch, get_coin_public_key,
-    get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, print_spend_bundle_to_file, spend_security_coin, sync_distributor,
+    get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, new_sk,
+    parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
     yes_no_prompt, CliError, Db, DigWithdrawIncentivesAction, SageClient,
 };
 
@@ -96,7 +97,7 @@ pub async fn dig_clawback_rewards(
     let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let (sec_conds, _slot1, _slot2) = distributor
+    let (send_message_conds, _slot1, _slot2) = distributor
         .new_action::<DigWithdrawIncentivesAction>()
         .spend(&mut ctx, &mut distributor, commitment_slot, reward_slot)?;
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
@@ -106,7 +107,6 @@ pub async fn dig_clawback_rewards(
         offer.security_coin,
         offer
             .security_base_conditions
-            .extend(sec_conds)
             .create_coin(clawback_ph, 0, None),
         &security_coin_sk,
         get_constants(testnet11),
@@ -116,31 +116,54 @@ pub async fn dig_clawback_rewards(
     let wallet_pk = get_coin_public_key(&sage, &clawback_address, 10000).await?;
     let message_coin = Coin::new(offer.security_coin.coin_id(), clawback_ph, 0);
     let p2 = StandardLayer::new(wallet_pk);
-    let spend = p2.delegated_inner_spend(&mut ctx, Spend::new(NodePtr::NIL, NodePtr::NIL))?;
-    println!(
-        "Message coin ph: {}; computed ph: {}",
-        message_coin.puzzle_hash,
-        ctx.tree_hash(spend.puzzle)
-    );
+    let inner_spend = Spend::new(ctx.alloc(&clvm_quote!(send_message_conds))?, NodePtr::NIL);
+    let spend = p2.delegated_inner_spend(&mut ctx, inner_spend)?;
+
+    if ctx.tree_hash(spend.puzzle) != clawback_ph.into() {
+        return Err(CliError::Custom(
+            "Clawback puzzle hash does not match - address is using custom puzzle :(".to_string(),
+        ));
+    }
 
     println!("Signing spend...");
+    let resp = sage
+        .sign_coin_spends(SignCoinSpends {
+            coin_spends: vec![CoinSpendJson {
+                coin: CoinJson {
+                    parent_coin_info: format!("0x{}", hex::encode(message_coin.parent_coin_info)),
+                    puzzle_hash: format!("0x{}", hex::encode(message_coin.puzzle_hash)),
+                    amount: Amount::u64(message_coin.amount),
+                },
+                puzzle_reveal: format!(
+                    "0x{:}",
+                    hex::encode(ctx.serialize(&spend.puzzle)?.to_vec())
+                ),
+                solution: format!(
+                    "0x{:}",
+                    hex::encode(ctx.serialize(&spend.solution)?.to_vec())
+                ),
+            }],
+            auto_submit: false,
+            partial: true,
+        })
+        .await?;
+    ctx.spend(message_coin, spend)?;
 
-    let spend_bundle =
-        SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+    let message_sig = hex_string_to_signature(&resp.spend_bundle.aggregated_signature)?;
 
-    print_spend_bundle_to_file(
-        spend_bundle.coin_spends,
-        spend_bundle.aggregated_signature,
-        "sb.debug",
+    let spend_bundle = SpendBundle::new(
+        ctx.take(),
+        offer.aggregated_signature + &security_coin_sig + &message_sig,
     );
-    // println!("Submitting transaction...");
-    // let client = get_coinset_client(testnet11);
-    // let resp = client.push_tx(spend_bundle).await?;
 
-    // println!("Transaction submitted; status='{}'", resp.status);
+    println!("Submitting transaction...");
+    let client = get_coinset_client(testnet11);
+    let resp = client.push_tx(spend_bundle).await?;
 
-    // wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
-    // println!("Confirmed!");
+    println!("Transaction submitted; status='{}'", resp.status);
+
+    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    println!("Confirmed!");
 
     Ok(())
 }
