@@ -47,9 +47,7 @@ pub async fn dig_broadcast_mirror_update(
     let mut reward_distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;
 
     let update_time = get_last_onchain_timestamp(&client).await?;
-    if update_time + distributor_constants.max_seconds_offset
-        < reward_distributor.info.state.round_time_info.last_update - 180
-    {
+    if reward_distributor.info.state.round_time_info.last_update < update_time - 180 {
         if update_time > reward_distributor.info.state.round_time_info.epoch_end {
             return Err(CliError::Custom(
                 "You need to start a new epoch before you can broadcast a mirror update"
@@ -93,7 +91,7 @@ pub async fn dig_broadcast_mirror_update(
     let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes>(
         &mut ctx,
         Bytes::from(message),
-        distributor_constants.validator_launcher_id,
+        launcher_id,
         medieval_vault.coin,
         &medieval_vault.info,
         constants.genesis_challenge,

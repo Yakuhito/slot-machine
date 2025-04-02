@@ -63,7 +63,7 @@ pub async fn dig_sign_mirror_update(
     let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes>(
         &mut ctx,
         Bytes::new(message),
-        distributor_constants.validator_launcher_id,
+        launcher_id,
         medieval_vault.coin,
         &medieval_vault.info,
         get_constants(testnet11).genesis_challenge,
