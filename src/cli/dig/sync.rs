@@ -131,9 +131,16 @@ pub async fn sync_distributor(
             parent_inner_puzzle_hash: eve_coin_inner_puzzle_hash.into(),
             parent_amount: distributor_eve_coin.amount,
         };
-        let reserve =
-            find_unspent_reserve(ctx, client, launcher_id, constants.reserve_asset_id, 0, 0)
-                .await?;
+        let reserve = find_reserve(
+            ctx,
+            client,
+            launcher_id,
+            constants.reserve_asset_id,
+            0,
+            0,
+            true,
+        )
+        .await?;
         let new_distributor = DigRewardDistributor::new(
             new_coin,
             Proof::Lineage(lineage_proof),
@@ -322,13 +329,14 @@ pub async fn sync_distributor(
     }
 }
 
-pub async fn find_unspent_reserve(
+pub async fn find_reserve(
     ctx: &mut SpendContext,
     client: &CoinsetClient,
     launcher_id: Bytes32,
     asset_id: Bytes32,
     nonce: u64,
     amount: u64,
+    include_spent: bool,
 ) -> Result<Reserve, CliError> {
     let controller_singleton_struct_hash = SingletonStruct::new(launcher_id).tree_hash().into();
     let inner_puzzle_hash =
@@ -336,7 +344,7 @@ pub async fn find_unspent_reserve(
     let puzzle_hash: Bytes32 = CatArgs::curry_tree_hash(asset_id, inner_puzzle_hash).into();
 
     let Some(coin_records) = client
-        .get_coin_records_by_puzzle_hash(puzzle_hash, None, None, Some(false))
+        .get_coin_records_by_puzzle_hash(puzzle_hash, None, None, Some(include_spent))
         .await?
         .coin_records
     else {
@@ -344,9 +352,7 @@ pub async fn find_unspent_reserve(
     };
 
     let Some(reserve_coin_record) = coin_records.iter().find(|coin_record| {
-        coin_record.coin.amount == amount
-            && !coin_record.spent
-            && coin_record.coin.puzzle_hash == puzzle_hash
+        coin_record.coin.amount == amount && coin_record.coin.puzzle_hash == puzzle_hash
     }) else {
         return Err(CliError::CoinNotFound(puzzle_hash));
     };

@@ -112,7 +112,7 @@ impl Db {
 
             sqlx::query(
                 "
-                CREATE TABLE IF NOT EXISTS dig_indexed_slot_values_by_puzzle_hashes (
+                CREATE TABLE IF NOT EXISTS dig_indexed_slot_values_by_puzzle_hash (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     puzzle_hash BLOB NOT NULL,
                     nonce INTEGER NOT NULL,
@@ -596,7 +596,6 @@ impl Db {
         sqlx::query(
             "
             INSERT INTO dig_indexed_slot_values_by_epoch_start (epoch_start, nonce, slot_value_hash) VALUES (?1, ?2, ?3)
-            ON CONFLICT(epoch_start, nonce, slot_value_hash) DO UPDATE SET slot_value_hash = excluded.slot_value_hash
             ",
         )
         .bind(epoch_start as i64)
@@ -618,7 +617,6 @@ impl Db {
         sqlx::query(
             "
             INSERT INTO dig_indexed_slot_values_by_puzzle_hash (puzzle_hash, nonce, slot_value_hash) VALUES (?1, ?2, ?3)
-            ON CONFLICT(puzzle_hash, nonce, slot_value_hash) DO UPDATE SET slot_value_hash = excluded.slot_value_hash
             ",
         )
         .bind(puzzle_hash.to_vec())
