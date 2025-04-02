@@ -97,10 +97,12 @@ pub async fn dig_clawback_rewards(
     let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let (send_message_conds, _slot1, _slot2) = distributor
+    let (send_message_conds, _slot1, returned_amount) = distributor
         .new_action::<DigWithdrawIncentivesAction>()
         .spend(&mut ctx, &mut distributor, commitment_slot, reward_slot)?;
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
+
+    println!("Returned amount: {} CAT mojos", returned_amount);
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,

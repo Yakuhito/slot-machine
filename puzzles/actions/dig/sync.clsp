@@ -25,7 +25,11 @@
                     active_shares
                     cumulative_payout
                     remaining_rewards
-                    (/ (* remaining_rewards (- update_time last_update)) (* active_shares (- epoch_end last_update))) ; cumulative_payout_delta
+                    (if (> active_shares 0)
+                        (/ (* remaining_rewards (- update_time last_update)) (* active_shares (- epoch_end last_update)))
+                        ; else
+                        0
+                    ) ; cumulative_payout_delta
                 )
                 (c update_time epoch_end)
             ) ; new state    
