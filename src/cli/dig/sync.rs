@@ -176,6 +176,7 @@ pub async fn sync_distributor(
         .await?;
         db.save_dig_indexed_slot_value_by_epoch_start(
             slot_value.epoch_start,
+            DigSlotNonce::REWARD.to_u64(),
             slot_value.tree_hash().into(),
         )
         .await?;
@@ -260,11 +261,13 @@ pub async fn sync_distributor(
                     db.save_slot(&mut ctx.allocator, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_epoch_start(
                         slot.info.value.epoch_start,
+                        DigSlotNonce::COMMITMENT.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
                     db.save_dig_indexed_slot_value_by_puzzle_hash(
                         slot.info.value.clawback_ph,
+                        DigSlotNonce::COMMITMENT.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
@@ -277,6 +280,7 @@ pub async fn sync_distributor(
                     db.save_slot(&mut ctx.allocator, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_puzzle_hash(
                         slot.info.value.payout_puzzle_hash,
+                        DigSlotNonce::MIRROR.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
@@ -289,6 +293,7 @@ pub async fn sync_distributor(
                     db.save_slot(&mut ctx.allocator, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_epoch_start(
                         slot.info.value.epoch_start,
+                        DigSlotNonce::REWARD.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
