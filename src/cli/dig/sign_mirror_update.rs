@@ -2,10 +2,11 @@ use chia::{
     clvm_utils::ToTreeHash,
     protocol::{Bytes, Bytes32},
 };
+use chia_wallet_sdk::SpendContext;
 
 use crate::{
-    get_constants, hex_string_to_bytes32, multisig_sign_thing_finish, multisig_sign_thing_start,
-    sync_distributor, CliError, Db, MedievalVault,
+    get_coinset_client, get_constants, hex_string_to_bytes32, multisig_sign_thing_finish,
+    multisig_sign_thing_start, sync_distributor, CliError, Db, MedievalVault,
 };
 
 pub async fn dig_sign_mirror_update(
@@ -20,18 +21,23 @@ pub async fn dig_sign_mirror_update(
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
     let mirror_payout_puzzle_hash = hex_string_to_bytes32(&mirror_payout_puzzle_hash_str)?;
 
-    let (my_pubkey, mut ctx, client, medieval_vault) =
-        multisig_sign_thing_start(my_pubkey_str, launcher_id_str, testnet11).await?;
-
     println!("\nSyncing reward distributor... ");
+    let client = get_coinset_client(testnet11);
     let db = Db::new(true).await?;
-    let reward_distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;
-    println!("Done!");
+    let mut first_ctx = SpendContext::new();
+    let reward_distributor = sync_distributor(&client, &db, &mut first_ctx, launcher_id).await?;
+
+    let (my_pubkey, mut ctx, _client, medieval_vault) = multisig_sign_thing_start(
+        my_pubkey_str,
+        hex::encode(reward_distributor.info.constants.validator_launcher_id),
+        testnet11,
+    )
+    .await?;
 
     if remove_mirror {
-        println!("You'll *ADD* a new mirror reward entry with the following parameters:");
-    } else {
         println!("You'll *REMOVE* the following mirror from the rewarded mirror lists:");
+    } else {
+        println!("You'll *ADD* a new mirror reward entry with the following parameters:");
     }
     println!(
         "  Mirror payout puzzle hash: {}",
