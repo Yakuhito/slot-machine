@@ -3,9 +3,9 @@ use chia_wallet_sdk::{ChiaRpcClient, Offer, SpendContext};
 use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
-    CliError, Db, DigSyncAction, SageClient,
+    find_reward_slot_for_epoch, get_coinset_client, get_constants, hex_string_to_bytes32, new_sk,
+    parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
+    yes_no_prompt, CliError, Db, DigNewEpochAction, DigSyncAction, SageClient,
 };
 
 pub async fn dig_new_epoch(
@@ -38,6 +38,17 @@ pub async fn dig_new_epoch(
             next_epoch_start,
         )?;
     }
+
+    println!("Finding appropriate reward slot...");
+    let reward_slot = find_reward_slot_for_epoch(
+        &mut ctx,
+        &db,
+        launcher_id,
+        next_epoch_start,
+        distributor.info.constants.epoch_seconds,
+    )
+    .await?
+    .ok_or(CliError::Custom("No reward slot found".to_string()))?;
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  1 mojo",);
@@ -72,17 +83,17 @@ pub async fn dig_new_epoch(
     let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    // let (sec_conds, _new_slot, validator_fee) = distributor
-    //     .new_action::<DigNewEpochAction>()
-    //     .spend(&mut ctx, &mut distributor, reward_slot)?;
-    // let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
+    let (sec_conds, _new_slot, validator_fee) = distributor
+        .new_action::<DigNewEpochAction>()
+        .spend(&mut ctx, &mut distributor, reward_slot)?;
+    let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
 
-    // println!("Validator fee for new epoch: {} CAT mojos", validator_fee);
+    println!("Validator fee for new epoch: {} CAT mojos", validator_fee);
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
         offer.security_coin,
-        offer.security_base_conditions, // .extend(sec_conds),
+        offer.security_base_conditions.extend(sec_conds),
         &security_coin_sk,
         get_constants(testnet11),
     )?;
