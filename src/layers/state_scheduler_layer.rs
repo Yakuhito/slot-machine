@@ -148,9 +148,8 @@ where
         message: M,
         inner_puzzle: I,
     ) -> TreeHash {
-        let program: TreeHash = STATE_SCHEDULER_PUZZLE_HASH.into();
-        CurriedProgram {
-            program,
+        CurriedProgram::<TreeHash, _> {
+            program: STATE_SCHEDULER_PUZZLE_HASH,
             args: StateSchedulerLayerArgs {
                 singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
                 receiver_singleton_struct_hash,

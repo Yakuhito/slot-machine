@@ -90,15 +90,15 @@ pub fn parse_one_sided_offer(
         let puzzle_ptr = coin_spend.puzzle_reveal.to_clvm(ctx)?;
         let solution_ptr = coin_spend.solution.to_clvm(ctx)?;
 
-        let curried_puzzle = CurriedPuzzle::parse(&ctx, puzzle_ptr);
+        let curried_puzzle = CurriedPuzzle::parse(ctx, puzzle_ptr);
         if let Some(curried_puzzle) = curried_puzzle {
             if curried_puzzle.mod_hash == CAT_PUZZLE_HASH.into() {
-                let cat_args = CatArgs::<NodePtr>::from_clvm(&ctx, curried_puzzle.args)?;
-                let cat_solution = CatSolution::<NodePtr>::from_clvm(&ctx, solution_ptr)?;
+                let cat_args = CatArgs::<NodePtr>::from_clvm(ctx, curried_puzzle.args)?;
+                let cat_solution = CatSolution::<NodePtr>::from_clvm(ctx, solution_ptr)?;
 
                 let inner_output =
                     ctx.run(cat_args.inner_puzzle, cat_solution.inner_puzzle_solution)?;
-                let inner_output = Vec::<Condition<NodePtr>>::from_clvm(&ctx, inner_output)?;
+                let inner_output = Vec::<Condition<NodePtr>>::from_clvm(ctx, inner_output)?;
 
                 if let Some(cc) = inner_output
                     .into_iter()
@@ -246,7 +246,7 @@ pub fn parse_one_sided_offer(
 
         if security_coin_parent_id.is_none() {
             let res = ctx.run(puzzle_ptr, solution_ptr)?;
-            let res = Vec::<Condition<NodePtr>>::from_clvm(&ctx, res)?;
+            let res = Vec::<Condition<NodePtr>>::from_clvm(ctx, res)?;
 
             if let Some(cc) = res
                 .into_iter()
@@ -356,7 +356,7 @@ pub fn sign_standard_transaction(
     consensus_constants: &ConsensusConstants,
 ) -> Result<Signature, DriverError> {
     let output = ctx.run(spend.puzzle, spend.solution)?;
-    let output = Vec::<Condition<NodePtr>>::from_clvm(&ctx, output)?;
+    let output = Vec::<Condition<NodePtr>>::from_clvm(ctx, output)?;
     let Some(agg_sig_me) = output.iter().find_map(|cond| {
         if let Condition::AggSigMe(agg_sig_me) = cond {
             return Some(agg_sig_me);

@@ -239,8 +239,8 @@ pub async fn catalog_register(
         };
 
         let parent_puzzle = node_from_bytes(&mut ctx, &parent_coin_spend.puzzle_reveal)?;
-        let parent_cat_layer = Puzzle::parse(&mut ctx, parent_puzzle);
-        let Some(parent_cat_layer) = CatLayer::<NodePtr>::parse_puzzle(&mut ctx, parent_cat_layer)?
+        let parent_cat_layer = Puzzle::parse(&ctx, parent_puzzle);
+        let Some(parent_cat_layer) = CatLayer::<NodePtr>::parse_puzzle(&ctx, parent_cat_layer)?
         else {
             eprintln!(
                 "Failed to parse CAT puzzle for coin {} - aborting...",

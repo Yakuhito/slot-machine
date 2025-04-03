@@ -87,12 +87,12 @@ where
             },
         })?;
 
-        Ok(ctx.alloc(&CurriedProgram {
+        ctx.alloc(&CurriedProgram {
             program: self_program,
             args: Slot2ndCurryArgs {
                 value_hash: self.info.value_hash,
             },
-        })?)
+        })
     }
 
     pub fn spend(

@@ -430,8 +430,8 @@ pub async fn catalog_continue_launch(
         };
 
         let puzzle = node_from_bytes(&mut ctx, &coin_spend.puzzle_reveal)?;
-        let layer = Puzzle::parse(&mut ctx, puzzle);
-        let Some(layer) = CatLayer::<NodePtr>::parse_puzzle(&mut ctx, layer)? else {
+        let layer = Puzzle::parse(&ctx, puzzle);
+        let Some(layer) = CatLayer::<NodePtr>::parse_puzzle(&ctx, layer)? else {
             eprintln!(
                 "Failed to parse CAT puzzle for coin {} - aborting...",
                 hex::encode(record.coin.coin_id())

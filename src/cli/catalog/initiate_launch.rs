@@ -184,7 +184,7 @@ pub async fn catalog_initiate_launch(
     let prefix = get_prefix(testnet11);
     let royalty_address = Address::new(constants.royalty_address, prefix.clone()).encode()?;
     let precommit_payout_address =
-        Address::new(constants.precommit_payout_puzzle_hash.into(), prefix).encode()?;
+        Address::new(constants.precommit_payout_puzzle_hash, prefix).encode()?;
 
     println!("Default constants will be used:");
     println!("  royalty address: {}", royalty_address);
