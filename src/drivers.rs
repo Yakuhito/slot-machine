@@ -1483,8 +1483,9 @@ mod tests {
             payment_cat.coin.amount - payment_cat_amount,
         );
 
+        println!("a"); // todo: debug
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-
+        println!("b"); // todo: debug
         let mut registry = registry;
         let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
             ctx,
@@ -1495,11 +1496,11 @@ mod tests {
             slot,
         )?;
         let new_registry = registry.finish_spend(ctx)?;
-
+        println!("c"); // todo: debug
         ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
-
+        println!("d"); // todo: debug
         sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
-
+        println!("e"); // todo: debug
         Ok((new_registry, new_payment_cat))
     }
 
@@ -1559,6 +1560,7 @@ mod tests {
         minter_p2.spend(ctx, minter_bls.coin, issue_cat)?;
 
         payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
+        println!("1"); // todo: debug
         sim.spend_coins(ctx.take(), &[minter_bls.sk.clone()])?;
 
         // Launch price singleton
@@ -1582,8 +1584,8 @@ mod tests {
         )?;
 
         sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
-
-        // Register 7 handles
+        println!("2"); // todo: debug
+                       // Register 7 handles
 
         let mut base_price = initial_registration_price;
 
@@ -1668,7 +1670,8 @@ mod tests {
             payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
 
             sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
-            // call the 'register' action on CNS
+            println!("3"); // todo: debug
+                           // call the 'register' action on CNS
             slots.sort_unstable_by(|a, b| a.info.value.cmp(&b.info.value));
 
             let slot_value_to_insert = XchandlesSlotValue::new(
@@ -1739,6 +1742,7 @@ mod tests {
                 registry.insert(action_spend);
                 registry = registry.finish_spend(ctx)?;
                 sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+                println!("4"); // todo: debug
             };
 
             let (secure_cond, new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
@@ -1755,7 +1759,7 @@ mod tests {
             registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
             sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
-
+            println!("5"); // todo: debug
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
             let oracle_slot = new_slots[1];
@@ -1848,7 +1852,7 @@ mod tests {
 
             registry = registry.finish_spend(ctx)?;
             sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
-
+            println!("6"); // todo: debug
             slots.retain(|s| *s != update_slot);
             slots.push(new_slot);
         }
@@ -1936,7 +1940,7 @@ mod tests {
 
         sim.set_next_timestamp(buy_time)?;
         sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
-
+        println!("7"); // todo: debug
         let (expire_conds, _new_slot) = registry.new_action::<XchandlesExpireAction>().spend(
             ctx,
             &mut registry,
@@ -1950,8 +1954,8 @@ mod tests {
         ensure_conditions_met(ctx, &mut sim, expire_conds, 1)?;
         registry = registry.finish_spend(ctx)?;
         sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
-
-        // Test refunds
+        println!("8"); // todo: debug
+                       // Test refunds
         let unregistered_handle = "yak7".to_string();
 
         for use_factor_pricing in [true, false] {
@@ -2047,7 +2051,7 @@ mod tests {
             alternative_payment_cat = alternative_payment_cat
                 .wrapped_child(minter2.puzzle_hash, alternative_payment_cat_amount);
             sim.spend_coins(ctx.take(), &[minter2.sk.clone()])?;
-
+            println!("9"); // todo: debug
             registry = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
@@ -2064,8 +2068,8 @@ mod tests {
                 &user_bls.sk,
             )?
             .0;
-
-            // b - the amount is wrong
+            println!("10"); // todo: debug
+                            // b - the amount is wrong
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
@@ -2081,8 +2085,8 @@ mod tests {
                 &minter2.sk,
                 &user_bls.sk,
             )?;
-
-            // c - the pricing puzzle has changed
+            println!("11"); // todo: debug
+                            // c - the pricing puzzle has changed
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
@@ -2098,8 +2102,8 @@ mod tests {
                 &minter2.sk,
                 &user_bls.sk,
             )?;
-
-            // d - the handle has already been registered
+            println!("12"); // todo: debug
+                            // d - the handle has already been registered
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
@@ -2115,6 +2119,7 @@ mod tests {
                 &minter2.sk,
                 &user_bls.sk,
             )?;
+            println!("13"); // todo: debug
         }
 
         Ok(())
@@ -2173,7 +2178,6 @@ mod tests {
 
         assert_eq!(new_nft.info.metadata, new_metadata);
         sim.spend_coins(ctx.take(), &[bls.sk])?;
-
         Ok(())
     }
 
