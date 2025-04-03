@@ -8,20 +8,20 @@ homepage = "https://github.com/Yakuhito/slot-machine"
 repository = "https://github.com/Yakuhito/slot-machine"
 
 [dependencies]
-clvmr = "0.10.0"
-chia = "0.17.0"
-clvm-traits = "0.17.0"
-hex-literal = "0.4.1"
-bip39 = "2.0.0"
-getrandom = "0.2.15"
-serde = { version = "1.0.203", features = ["derive"] }
-serde_json = "1.0.117"
+clvmr = "0.12.1"
+chia = "0.20.0"
+clvm-traits = "0.20.0"
+hex-literal = "1.0.0"
+bip39 = "2.1.0"
+getrandom = "0.3.2"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
 hex = "0.4.3"
 clap = { version = "4", features = ["derive"] }
-csv = "1.3.0"
-thiserror = "1.0.64"
-tokio = { version = "1", features = ["full"] }
-sqlx = { version = "0.6", features = ["sqlite", "runtime-async-std-native-tls"] }
+csv = "1.3.1"
+thiserror = "2.0.12"
+tokio = { version = "1.44.1", features = ["full"] }
+sqlx = { version = "0.8.3", features = ["sqlite", "runtime-async-std-native-tls"] }
 bech32 = "0.9.1"
 reqwest = { version = "0.12.15", features = ["json", "rustls-tls"] }
 dirs = "6.0.0"
@@ -30,9 +30,8 @@ futures-util = "0.3.31"
 axum = { version = "0.8.3", features = ["macros"]}
 tower-http = { version = "0.6.2", features = ["cors"] }
 futures = "0.3.31"
-
-chia-wallet-sdk = { git="https://github.com/xch-dev/chia-wallet-sdk.git", rev="995bf77bfb076af4a73f26f54d65789f99e37b37", features=["offers"] }
-sage-api = { version = "0.9.5", git = "https://github.com/xch-dev/sage.git" }
+chia-wallet-sdk = { version="0.23.0", features=["offers"] }
+sage-api = { version = "0.10.1", git = "https://github.com/xch-dev/sage.git" }
 
 [dev-dependencies]
 anyhow = "1.0.86"
