@@ -338,19 +338,19 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         num_years: u64,
     ) -> Result<u128, DriverError> {
         let puzzle = self.get_puzzle(ctx)?;
-        let solution =
-            XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
-                buy_time,
-                pricing_program_solution: XchandlesFactorPricingSolution {
-                    current_expiration: expiration,
-                    handle,
-                    num_years,
-                },
-            }
-            .to_clvm(ctx)?;
+        let solution = ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution::<
+            XchandlesFactorPricingSolution,
+        > {
+            buy_time,
+            pricing_program_solution: XchandlesFactorPricingSolution {
+                current_expiration: expiration,
+                handle,
+                num_years,
+            },
+        })?;
         let output = ctx.run(puzzle, solution)?;
 
-        Ok(<(u128, u64)>::from_clvm(ctx, output)?.0)
+        Ok(ctx.extract::<(u128, u64)>(output)?.0)
     }
 }
 
@@ -386,7 +386,7 @@ mod tests {
         for day in 0..28 {
             for hour in 0..24 {
                 let buy_time = day * 24 * 60 * 60 + hour * 60 * 60;
-                let solution = XchandlesExponentialPremiumRenewPuzzleSolution::<
+                let solution = ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution::<
                     XchandlesFactorPricingSolution,
                 > {
                     buy_time,
@@ -395,11 +395,10 @@ mod tests {
                         handle: "yakuhito".to_string(),
                         num_years: 1,
                     },
-                }
-                .to_clvm(&mut ctx)?;
+                })?;
 
                 let output = ctx.run(puzzle, solution)?;
-                let output = XchandlesPricingOutput::from_clvm(&mut ctx, output)?;
+                let output = ctx.extract::<XchandlesPricingOutput>(output)?;
 
                 assert_eq!(output.registered_time, 366 * 24 * 60 * 60);
 
@@ -432,19 +431,19 @@ mod tests {
         }
 
         // check premium after auction is 0
-        let solution =
-            XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
-                buy_time: 28 * 24 * 60 * 60,
-                pricing_program_solution: XchandlesFactorPricingSolution {
-                    current_expiration: 0,
-                    handle: "yakuhito".to_string(),
-                    num_years: 1,
-                },
-            }
-            .to_clvm(&mut ctx)?;
+        let solution = ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution::<
+            XchandlesFactorPricingSolution,
+        > {
+            buy_time: 28 * 24 * 60 * 60,
+            pricing_program_solution: XchandlesFactorPricingSolution {
+                current_expiration: 0,
+                handle: "yakuhito".to_string(),
+                num_years: 1,
+            },
+        })?;
 
         let output = ctx.run(puzzle, solution)?;
-        let output = XchandlesPricingOutput::from_clvm(&ctx, output)?;
+        let output = ctx.extract::<XchandlesPricingOutput>(output)?;
 
         assert_eq!(output.registered_time, 366 * 24 * 60 * 60);
         assert_eq!(output.price, 0);

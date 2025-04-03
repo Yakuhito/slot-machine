@@ -56,10 +56,9 @@ impl XchandlesOracleAction {
         slot.spend(ctx, registry.info.inner_puzzle_hash().into())?;
 
         // finally, spend self
-        let action_solution = XchandlesOracleActionSolution {
+        let action_solution = ctx.alloc(&XchandlesOracleActionSolution {
             data_treehash: slot.info.value.tree_hash().into(),
-        }
-        .to_clvm(ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));

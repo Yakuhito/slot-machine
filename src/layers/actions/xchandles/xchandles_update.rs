@@ -49,7 +49,7 @@ impl XchandlesUpdateAction {
         spent_slot_value: XchandlesSlotValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution = XchandlesUpdateActionSolution::from_clvm(ctx, solution)?;
+        let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
 
         Ok(spent_slot_value.with_launcher_ids(
             solution.new_owner_launcher_id,
@@ -72,7 +72,7 @@ impl XchandlesUpdateAction {
         slot.spend(ctx, my_inner_puzzle_hash)?;
 
         // spend self
-        let action_solution = XchandlesUpdateActionSolution {
+        let action_solution = ctx.alloc(&XchandlesUpdateActionSolution {
             value_hash: slot.info.value.handle_hash.tree_hash().into(),
             neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
             expiration: slot.info.value.expiration,
@@ -81,8 +81,7 @@ impl XchandlesUpdateAction {
             new_owner_launcher_id,
             new_resolved_launcher_id,
             announcer_inner_puzzle_hash,
-        }
-        .to_clvm(ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
@@ -125,9 +124,9 @@ pub struct XchandlesUpdateActionArgs {
 
 impl XchandlesUpdateActionArgs {
     pub fn new(launcher_id: Bytes32) -> Self {
-        let singleton_launcher_mod_hash: Bytes32 = SINGLETON_LAUNCHER_HASH;
+        let singleton_launcher_mod_hash: Bytes32 = SINGLETON_LAUNCHER_HASH.into();
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
             singleton_launcher_mod_hash_hash: singleton_launcher_mod_hash.tree_hash().into(),
             slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
         }

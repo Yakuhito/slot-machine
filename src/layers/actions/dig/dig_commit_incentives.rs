@@ -60,7 +60,7 @@ impl DigCommitIncentivesAction {
         ),
         DriverError,
     > {
-        let solution = DigCommitIncentivesActionSolution::from_clvm(ctx, solution)?;
+        let solution = ctx.extract::<DigCommitIncentivesActionSolution>(solution)?;
 
         let commitment_slot_value = DigCommitmentSlotValue {
             epoch_start: solution.epoch_start,
@@ -147,15 +147,14 @@ impl DigCommitIncentivesAction {
         reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         // spend self
-        let action_solution = DigCommitIncentivesActionSolution {
+        let action_solution = ctx.alloc(&DigCommitIncentivesActionSolution {
             slot_epoch_time: reward_slot.info.value.epoch_start,
             slot_next_epoch_initialized: reward_slot.info.value.next_epoch_initialized,
             slot_total_rewards: reward_slot.info.value.rewards,
             epoch_start,
             clawback_ph,
             rewards_to_add,
-        }
-        .to_clvm(ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let (_commitment_slot_value, reward_slot_values, _spent) = self

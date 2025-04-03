@@ -77,7 +77,7 @@ impl DelegatedStateAction {
         let conds = Conditions::new().send_message(
             18,
             message.into(),
-            vec![my_coin.puzzle_hash.to_clvm(ctx)?],
+            vec![ctx.alloc(&my_coin.puzzle_hash)?],
         );
         Ok((conds, Spend::new(my_puzzle, my_solution)))
     }

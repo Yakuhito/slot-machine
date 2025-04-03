@@ -64,7 +64,7 @@ impl DigAddMirrorAction {
         state: &DigRewardDistributorState,
         solution: NodePtr,
     ) -> Result<DigMirrorSlotValue, DriverError> {
-        let solution = DigAddMirrorActionSolution::from_clvm(ctx, solution)?;
+        let solution = ctx.extract::<DigAddMirrorActionSolution>(solution)?;
 
         Ok(DigMirrorSlotValue {
             payout_puzzle_hash: solution.mirror_payout_puzzle_hash,
@@ -89,16 +89,15 @@ impl DigAddMirrorAction {
         let add_mirror_message = Conditions::new().send_message(
             18,
             add_mirror_message.into(),
-            vec![distributor.coin.puzzle_hash.to_clvm(ctx)?],
+            vec![ctx.alloc(&distributor.coin.puzzle_hash)?],
         );
 
         // spend self
-        let action_solution = DigAddMirrorActionSolution {
+        let action_solution = ctx.alloc(&DigAddMirrorActionSolution {
             validator_singleton_inner_puzzle_hash,
             mirror_payout_puzzle_hash: payout_puzzle_hash,
             mirror_shares: shares,
-        }
-        .to_clvm(ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let my_state = distributor.get_latest_pending_state(ctx)?;

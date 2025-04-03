@@ -1,7 +1,6 @@
-use chia::consensus::gen::conditions::Condition;
 use chia_wallet_sdk::{
     driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
-    types::Conditions,
+    types::{Condition, Conditions},
 };
 use clvm_traits::{clvm_quote, match_quote, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};

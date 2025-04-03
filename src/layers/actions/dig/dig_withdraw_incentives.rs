@@ -55,7 +55,7 @@ impl DigWithdrawIncentivesAction {
         my_constants: &DigRewardDistributorConstants,
         solution: NodePtr,
     ) -> Result<(DigRewardSlotValue, [(DigSlotNonce, Bytes32); 2]), DriverError> {
-        let solution = DigWithdrawIncentivesActionSolution::from_clvm(ctx, solution)?;
+        let solution = ctx.extract::<DigWithdrawIncentivesActionSolution>(solution)?;
         let withdrawal_share = solution.committed_value * my_constants.withdrawal_share_bps / 10000;
 
         let old_reward_slot_value = DigRewardSlotValue {
@@ -106,7 +106,7 @@ impl DigWithdrawIncentivesAction {
             .send_message(
                 18,
                 Bytes::new(Vec::new()),
-                vec![distributor.coin.puzzle_hash.to_clvm(ctx)?],
+                vec![ctx.alloc(&distributor.coin.puzzle_hash)?],
             )
             .assert_concurrent_puzzle(commitment_slot.coin.puzzle_hash);
 
@@ -116,15 +116,14 @@ impl DigWithdrawIncentivesAction {
         commitment_slot.spend(ctx, my_inner_puzzle_hash)?;
 
         // spend self
-        let action_solution = DigWithdrawIncentivesActionSolution {
+        let action_solution = ctx.alloc(&DigWithdrawIncentivesActionSolution {
             reward_slot_epoch_time: reward_slot.info.value.epoch_start,
             reward_slot_next_epoch_initialized: reward_slot.info.value.next_epoch_initialized,
             reward_slot_total_rewards: reward_slot.info.value.rewards,
             clawback_ph: commitment_slot.info.value.clawback_ph,
             committed_value: commitment_slot.info.value.rewards,
             withdrawal_share,
-        }
-        .to_clvm(ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let slot_value = self

@@ -81,7 +81,7 @@ impl DigRemoveMirrorAction {
             .send_message(
                 18,
                 remove_mirror_message.into(),
-                vec![distributor.coin.puzzle_hash.to_clvm(ctx)?],
+                vec![ctx.alloc(&distributor.coin.puzzle_hash)?],
             )
             .assert_concurrent_puzzle(mirror_slot.coin.puzzle_hash);
 
@@ -93,14 +93,13 @@ impl DigRemoveMirrorAction {
         let mirror_payout_amount = mirror_slot.info.value.shares
             * (my_state.round_reward_info.cumulative_payout
                 - mirror_slot.info.value.initial_cumulative_payout);
-        let action_solution = DigRemoveMirrorActionSolution {
+        let action_solution = ctx.alloc(&DigRemoveMirrorActionSolution {
             validator_singleton_inner_puzzle_hash,
             mirror_payout_amount,
             mirror_payout_puzzle_hash: mirror_slot.info.value.payout_puzzle_hash,
             mirror_initial_cumulative_payout: mirror_slot.info.value.initial_cumulative_payout,
             mirror_shares: mirror_slot.info.value.shares,
-        }
-        .to_clvm(ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         distributor.insert(Spend::new(action_puzzle, action_solution));
@@ -112,7 +111,7 @@ impl DigRemoveMirrorAction {
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<(DigSlotNonce, Bytes32), DriverError> {
-        let solution = DigRemoveMirrorActionSolution::from_clvm(ctx, solution)?;
+        let solution = ctx.extract::<DigRemoveMirrorActionSolution>(solution)?;
 
         Ok((
             DigSlotNonce::MIRROR,

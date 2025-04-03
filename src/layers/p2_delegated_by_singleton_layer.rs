@@ -41,7 +41,7 @@ impl Layer for P2DelegatedBySingletonLayer {
 
         let args = P2DelegatedBySingletonLayerArgs::from_clvm(allocator, puzzle.args)?;
 
-        if args.singleton_mod_hash != SINGLETON_TOP_LAYER_V1_1_HASH {
+        if args.singleton_mod_hash != SINGLETON_TOP_LAYER_V1_1_HASH.into() {
             return Ok(None);
         }
 
@@ -95,7 +95,7 @@ pub struct P2DelegatedBySingletonLayerArgs {
 impl P2DelegatedBySingletonLayerArgs {
     pub fn new(singleton_struct_hash: Bytes32, nonce: u64) -> Self {
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
             singleton_struct_hash,
             nonce,
         }
@@ -103,7 +103,7 @@ impl P2DelegatedBySingletonLayerArgs {
 
     pub fn from_launcher_id(launcher_id: Bytes32, nonce: u64) -> Self {
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
             singleton_struct_hash: SingletonStruct::new(launcher_id).tree_hash().into(),
             nonce,
         }

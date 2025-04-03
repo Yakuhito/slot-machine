@@ -65,7 +65,7 @@ impl DigNewEpochAction {
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<(DigRewardSlotValue, (DigSlotNonce, Bytes32)), DriverError> {
-        let solution = DigNewEpochActionSolution::from_clvm(ctx, solution)?;
+        let solution = ctx.extract::<DigNewEpochActionSolution>(solution)?;
 
         let slot_valie = DigRewardSlotValue {
             epoch_start: solution.slot_epoch_time,
@@ -111,14 +111,13 @@ impl DigNewEpochAction {
         reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         // spend self
-        let action_solution = DigNewEpochActionSolution {
+        let action_solution = ctx.alloc(&DigNewEpochActionSolution {
             slot_epoch_time: reward_slot.info.value.epoch_start,
             slot_next_epoch_initialized: reward_slot.info.value.next_epoch_initialized,
             slot_total_rewards: reward_slot.info.value.rewards,
             epoch_total_rewards,
             validator_fee: valdiator_fee,
-        }
-        .to_clvm(ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let slot_value = self.get_slot_value_from_solution(ctx, action_solution)?.0;

@@ -64,7 +64,7 @@ impl DigInitiatePayoutAction {
         my_state: &DigRewardDistributorState,
         solution: NodePtr,
     ) -> Result<(DigMirrorSlotValue, (DigSlotNonce, Bytes32)), DriverError> {
-        let solution = DigInitiatePayoutActionSolution::from_clvm(ctx, solution)?;
+        let solution = ctx.extract::<DigInitiatePayoutActionSolution>(solution)?;
 
         let new_slot = DigMirrorSlotValue {
             payout_puzzle_hash: solution.mirror_payout_puzzle_hash,
@@ -114,13 +114,12 @@ impl DigInitiatePayoutAction {
         mirror_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         // spend self
-        let action_solution = DigInitiatePayoutActionSolution {
+        let action_solution = ctx.alloc(&DigInitiatePayoutActionSolution {
             mirror_payout_amount: withdrawal_amount,
             mirror_payout_puzzle_hash: mirror_slot.info.value.payout_puzzle_hash,
             mirror_initial_cumulative_payout: mirror_slot.info.value.initial_cumulative_payout,
             mirror_shares: mirror_slot.info.value.shares,
-        }
-        .to_clvm(ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let slot_value = self

@@ -48,7 +48,7 @@ impl DigSyncAction {
         ));
 
         // spend self
-        let action_solution = DigSyncActionSolution { update_time }.to_clvm(ctx)?;
+        let action_solution = ctx.alloc(&DigSyncActionSolution { update_time })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         distributor.insert(Spend::new(action_puzzle, action_solution));

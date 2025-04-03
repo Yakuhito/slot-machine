@@ -371,15 +371,14 @@ mod tests {
                         "a".repeat(handle_length)
                     };
 
-                    let solution = XchandlesFactorPricingSolution {
+                    let solution = ctx.alloc(&XchandlesFactorPricingSolution {
                         current_expiration: (handle_length - 3) as u64, // shouldn't matter
                         handle,
                         num_years,
-                    }
-                    .to_clvm(&mut ctx)?;
+                    })?;
 
                     let output = ctx.run(puzzle, solution)?;
-                    let output = XchandlesFactorPricingOutput::from_clvm(&mut ctx, output)?;
+                    let output = ctx.extract::<XchandlesFactorPricingOutput>(output)?;
 
                     let mut expected_price = if handle_length == 3 {
                         128
@@ -403,12 +402,11 @@ mod tests {
 
         // make sure the puzzle won't let us register a handle of length 2
 
-        let solution = XchandlesFactorPricingSolution {
+        let solution = ctx.alloc(&XchandlesFactorPricingSolution {
             current_expiration: 0,
             handle: "aa".to_string(),
             num_years: 1,
-        }
-        .to_clvm(&mut ctx)?;
+        })?;
 
         let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
             panic!("Expected error");
@@ -417,12 +415,11 @@ mod tests {
 
         // make sure the puzzle won't let us register a handle of length 32
 
-        let solution = XchandlesFactorPricingSolution {
+        let solution = ctx.alloc(&XchandlesFactorPricingSolution {
             current_expiration: 0,
             handle: "a".repeat(32),
             num_years: 1,
-        }
-        .to_clvm(&mut ctx)?;
+        })?;
 
         let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
             panic!("Expected error");
@@ -431,12 +428,11 @@ mod tests {
 
         // make sure the puzzle won't let us register a handle with invalid characters
 
-        let solution = XchandlesFactorPricingSolution {
+        let solution = ctx.alloc(&XchandlesFactorPricingSolution {
             current_expiration: 0,
             handle: "yak@test".to_string(),
             num_years: 1,
-        }
-        .to_clvm(&mut ctx)?;
+        })?;
 
         let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
             panic!("Expected error");

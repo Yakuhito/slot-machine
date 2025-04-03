@@ -51,7 +51,7 @@ impl Layer for StateSchedulerLayer {
 
         let args = StateSchedulerLayerArgs::<Bytes32, NodePtr>::from_clvm(allocator, puzzle.args)?;
 
-        if args.singleton_mod_hash != SINGLETON_TOP_LAYER_V1_1_HASH {
+        if args.singleton_mod_hash != SINGLETON_TOP_LAYER_V1_1_HASH.into() {
             return Err(DriverError::NonStandardLayer);
         }
 
@@ -102,7 +102,7 @@ impl Layer for StateSchedulerLayer {
         CurriedProgram {
             program: ctx.state_scheduler_puzzle()?,
             args: StateSchedulerLayerArgs::<Bytes32, NodePtr> {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
                 receiver_singleton_struct_hash: self.receiver_singleton_struct_hash,
                 message: self.new_state_hash,
                 inner_puzzle,
@@ -117,7 +117,7 @@ impl Layer for StateSchedulerLayer {
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        Ok(solution.to_clvm(ctx)?)
+        ctx.alloc(&solution)
     }
 }
 
@@ -148,10 +148,11 @@ where
         message: M,
         inner_puzzle: I,
     ) -> TreeHash {
+        let program: TreeHash = STATE_SCHEDULER_PUZZLE_HASH.into();
         CurriedProgram {
-            program: STATE_SCHEDULER_PUZZLE_HASH,
+            program,
             args: StateSchedulerLayerArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
                 receiver_singleton_struct_hash,
                 message: message.tree_hash(),
                 inner_puzzle: inner_puzzle.tree_hash(),

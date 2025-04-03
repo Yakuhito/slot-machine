@@ -59,8 +59,9 @@ impl Layer for VerificationLayer {
         if args_1st_curry
             .revocation_singleton_struct
             .launcher_puzzle_hash
-            != SINGLETON_LAUNCHER_HASH
-            || args_1st_curry.revocation_singleton_struct.mod_hash != SINGLETON_TOP_LAYER_V1_1_HASH
+            != SINGLETON_LAUNCHER_HASH.into()
+            || args_1st_curry.revocation_singleton_struct.mod_hash
+                != SINGLETON_TOP_LAYER_V1_1_HASH.into()
         {
             return Err(DriverError::NonStandardLayer);
         }
@@ -119,7 +120,7 @@ impl Layer for VerificationLayer {
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        solution.to_clvm(ctx).map_err(DriverError::ToClvm)
+        ctx.alloc(&solution)
     }
 }
 

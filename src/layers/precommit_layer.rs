@@ -48,7 +48,7 @@ impl<V> PrecommitLayer<V> {
         CurriedProgram {
             program: PRECOMMIT_LAYER_PUZZLE_HASH,
             args: PrecommitLayer1stCurryArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
                 singleton_struct_hash: controller_singleton_struct_hash,
                 relative_block_height,
                 payout_puzzle_hash,
@@ -128,7 +128,7 @@ where
         let prog_1st_curry = CurriedProgram {
             program: ctx.precommit_layer_puzzle()?,
             args: PrecommitLayer1stCurryArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
                 singleton_struct_hash: self.controller_singleton_struct_hash,
                 relative_block_height: self.relative_block_height,
                 payout_puzzle_hash: self.payout_puzzle_hash,
@@ -151,7 +151,7 @@ where
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        solution.to_clvm(ctx).map_err(DriverError::ToClvm)
+        ctx.alloc(&solution)
     }
 }
 

@@ -97,7 +97,7 @@ impl MOfNLayer {
         used_pubkeys: &[PublicKey],
         genesis_challenge: Bytes32,
     ) -> Result<(), DriverError> {
-        let genesis_challenge = genesis_challenge.to_clvm(ctx)?;
+        let genesis_challenge = ctx.alloc(&genesis_challenge)?;
         let spend = self.spend_with_conditions(
             ctx,
             Self::ensure_non_replayable(conditions, coin.coin_id(), genesis_challenge),

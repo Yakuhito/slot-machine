@@ -68,11 +68,10 @@ impl DigAddIncentivesAction {
         );
 
         // spend self
-        let action_solution = DigAddIncentivesActionSolution {
+        let action_solution = ctx.alloc(&DigAddIncentivesActionSolution {
             amount,
             validator_fee: amount * distributor.info.constants.validator_fee_bps / 10000,
-        }
-        .to_clvm(ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         distributor.insert(Spend::new(action_puzzle, action_solution));
