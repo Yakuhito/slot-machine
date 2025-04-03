@@ -4,8 +4,9 @@ use chia::{
     puzzles::{cat::CatArgs, singleton::SingletonStruct, LineageProof},
 };
 use chia_wallet_sdk::{
-    decode_address, encode_address, CatLayer, ChiaRpcClient, Layer, Offer, Puzzle, Spend,
-    SpendContext,
+    coinset::ChiaRpcClient,
+    driver::{CatLayer, Layer, Offer, Puzzle, Spend, SpendContext},
+    utils::Address,
 };
 use clvmr::{serde::node_from_bytes, NodePtr};
 use sage_api::{Amount, Assets, GetDerivations, MakeOffer, SendCat};
@@ -131,7 +132,7 @@ pub async fn catalog_register(
         derivation_resp.derivations[0].address.clone()
     };
 
-    let tail_ptr = node_from_bytes(&mut ctx.allocator, &hex_string_to_bytes(&tail_reveal_str)?)?;
+    let tail_ptr = node_from_bytes(&mut ctx, &hex_string_to_bytes(&tail_reveal_str)?)?;
     let registered_asset_id: Bytes32 = ctx.tree_hash(tail_ptr).into();
 
     if !refund
@@ -152,7 +153,7 @@ pub async fn catalog_register(
         }
     }
 
-    let recipient_puzzle_hash = Bytes32::new(decode_address(&recipient_address)?.0);
+    let recipient_puzzle_hash = Address::decode(&recipient_address)?.puzzle_hash;
 
     let initial_nft_puzzle_ptr = CatalogPrecommitValue::<()>::initial_inner_puzzle(
         &mut ctx,
@@ -237,11 +238,9 @@ pub async fn catalog_register(
             ));
         };
 
-        let parent_puzzle = node_from_bytes(&mut ctx.allocator, &parent_coin_spend.puzzle_reveal)?;
-        let Some(parent_cat_layer) = CatLayer::<NodePtr>::parse_puzzle(
-            &ctx.allocator,
-            Puzzle::parse(&ctx.allocator, parent_puzzle),
-        )?
+        let parent_puzzle = node_from_bytes(&mut ctx, &parent_coin_spend.puzzle_reveal)?;
+        let parent_cat_layer = Puzzle::parse(&mut ctx, parent_puzzle);
+        let Some(parent_cat_layer) = CatLayer::<NodePtr>::parse_puzzle(&mut ctx, parent_cat_layer)?
         else {
             eprintln!(
                 "Failed to parse CAT puzzle for coin {} - aborting...",
@@ -330,7 +329,7 @@ pub async fn catalog_register(
 
                     Some(
                         db.get_slot::<CatalogSlotValue>(
-                            &mut ctx.allocator,
+                            &mut ctx,
                             catalog_constants.launcher_id,
                             0,
                             slot_value_hash,
@@ -383,7 +382,7 @@ pub async fn catalog_register(
             let (left_slot, right_slot) = if local {
                 let db = Db::new(true).await?;
                 db.get_catalog_neighbors(
-                    &mut ctx.allocator,
+                    &mut ctx,
                     catalog_constants.launcher_id,
                     registered_asset_id,
                 )
@@ -465,15 +464,16 @@ pub async fn catalog_register(
     yes_no_prompt("Continue with registration?")?;
 
     let precommit_coin_address =
-        encode_address(precommit_inner_puzzle_hash.into(), &get_prefix(testnet11))?;
+        Address::new(precommit_inner_puzzle_hash.into(), get_prefix(testnet11)).encode()?;
     let send_resp = sage
         .send_cat(SendCat {
             asset_id: hex::encode(payment_asset_id),
             address: precommit_coin_address,
             amount: Amount::Number(payment_cat_amount),
             fee: Amount::Number(fee),
-            memos: vec![],
+            memos: None,
             auto_submit: true,
+            include_hint: true,
         })
         .await?;
     println!("Transaction sent.");

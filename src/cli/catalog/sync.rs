@@ -4,10 +4,10 @@ use chia::{
     puzzles::{singleton::LauncherSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::{
-    ChiaRpcClient, CoinRecord, CoinsetClient, Condition, Conditions, DriverError, Layer, Puzzle,
-    SingletonLayer, SpendContext,
+    coinset::{ChiaRpcClient, CoinRecord, CoinsetClient},
+    driver::{Layer, Puzzle, SingletonLayer, SpendContext},
+    types::{Condition, Conditions},
 };
-use clvm_traits::FromClvm;
 use clvmr::NodePtr;
 
 use crate::{
@@ -60,7 +60,7 @@ pub async fn sync_catalog(
         };
 
         let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(&ctx.allocator, puzzle_ptr);
+        let parent_puzzle = Puzzle::parse(ctx, puzzle_ptr);
         let solution_ptr = ctx.alloc(&coin_spend.solution)?;
         if !skip_db_save {
             if let Some(ref prev_catalog) = catalog {
@@ -83,7 +83,7 @@ pub async fn sync_catalog(
                 }
 
                 for slot in new_slots {
-                    db.save_slot(&mut ctx.allocator, slot, 0).await?;
+                    db.save_slot(ctx, slot, 0).await?;
                     db.save_catalog_indexed_slot_value(
                         slot.info.value.asset_id,
                         slot.info.value_hash,
@@ -94,7 +94,7 @@ pub async fn sync_catalog(
         }
 
         if let Some(some_catalog) = CatalogRegistry::from_parent_spend(
-            &mut ctx.allocator,
+            ctx,
             coin_record.coin,
             parent_puzzle,
             solution_ptr,
@@ -103,8 +103,7 @@ pub async fn sync_catalog(
             last_coin_id = some_catalog.coin.coin_id();
             catalog = Some(some_catalog);
         } else if coin_record.coin.coin_id() == constants.launcher_id {
-            let solution = LauncherSolution::<NodePtr>::from_clvm(&ctx.allocator, solution_ptr)
-                .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+            let solution = ctx.extract::<LauncherSolution<NodePtr>>(solution_ptr)?;
             let catalog_eve_coin =
                 Coin::new(constants.launcher_id, solution.singleton_puzzle_hash, 1);
             let catalog_eve_coin_id = catalog_eve_coin.coin_id();
@@ -120,14 +119,14 @@ pub async fn sync_catalog(
             };
 
             let eve_coin_puzzle_ptr = ctx.alloc(&eve_coin_spend.puzzle_reveal)?;
-            let eve_coin_puzzle = Puzzle::parse(&ctx.allocator, eve_coin_puzzle_ptr);
+            let eve_coin_puzzle = Puzzle::parse(ctx, eve_coin_puzzle_ptr);
             let Some(eve_coin_puzzle) =
-                SingletonLayer::<NodePtr>::parse_puzzle(&ctx.allocator, eve_coin_puzzle)?
+                SingletonLayer::<NodePtr>::parse_puzzle(ctx, eve_coin_puzzle)?
             else {
                 break;
             };
 
-            let eve_coin_inner_puzzle_hah = tree_hash(&ctx.allocator, eve_coin_puzzle.inner_puzzle);
+            let eve_coin_inner_puzzle_hash = tree_hash(ctx, eve_coin_puzzle.inner_puzzle);
 
             let eve_coin_solution_ptr = ctx.alloc(&eve_coin_spend.solution)?;
             let eve_coin_output = ctx.run(eve_coin_puzzle_ptr, eve_coin_solution_ptr)?;
@@ -147,11 +146,9 @@ pub async fn sync_catalog(
             };
 
             let (decoded_launcher_id, (_decoded_asset_id, (initial_state, ()))) =
-                <(Bytes32, (Bytes32, (CatalogRegistryState, ())))>::from_clvm(
-                    &ctx.allocator,
+                ctx.extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(
                     odd_create_coin.memos.unwrap().value,
-                )
-                .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+                )?;
             if decoded_launcher_id != constants.launcher_id {
                 break;
             }
@@ -163,7 +160,7 @@ pub async fn sync_catalog(
             );
             let lineage_proof = LineageProof {
                 parent_parent_coin_info: eve_coin_spend.coin.parent_coin_info,
-                parent_inner_puzzle_hash: eve_coin_inner_puzzle_hah.into(),
+                parent_inner_puzzle_hash: eve_coin_inner_puzzle_hash.into(),
                 parent_amount: eve_coin_spend.coin.amount,
             };
             let new_catalog = CatalogRegistry::new(
@@ -180,7 +177,7 @@ pub async fn sync_catalog(
             let right_slot_value = CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into());
 
             db.save_slot(
-                &mut ctx.allocator,
+                ctx,
                 Slot::new(
                     slot_proof,
                     SlotInfo::from_value(constants.launcher_id, 0, left_slot_value),
@@ -195,7 +192,7 @@ pub async fn sync_catalog(
             .await?;
 
             db.save_slot(
-                &mut ctx.allocator,
+                ctx,
                 Slot::new(
                     slot_proof,
                     SlotInfo::from_value(constants.launcher_id, 0, right_slot_value),

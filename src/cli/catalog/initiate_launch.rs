@@ -4,8 +4,8 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    get_coinset_client, launch_catalog_registry, load_catalog_state_schedule_csv, parse_amount,
-    print_medieval_vault_configuration, wait_for_coin, CatalogRegistryConstants,
+    get_coinset_client, get_prefix, launch_catalog_registry, load_catalog_state_schedule_csv,
+    parse_amount, print_medieval_vault_configuration, wait_for_coin, CatalogRegistryConstants,
     CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint, MedievalVaultInfo, SageClient,
     StateSchedulerInfo,
 };
@@ -16,8 +16,11 @@ use chia::{
     puzzles::cat::GenesisByCoinIdTailArgs,
 };
 use chia_wallet_sdk::{
-    decode_address, encode_address, Cat, ChiaRpcClient, Conditions, DriverError, Launcher, Memos,
-    Offer, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    coinset::ChiaRpcClient,
+    driver::{Cat, DriverError, Launcher, Offer, SpendContext},
+    prelude::Memos,
+    types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
+    utils::Address,
 };
 use clvmr::NodePtr;
 use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
@@ -178,12 +181,10 @@ pub async fn catalog_initiate_launch(
         db.delete_all_singleton_coins(constants.launcher_id).await?;
     }
 
-    let prefix = if testnet11 { "txch" } else { "xch" };
-    let royalty_address =
-        encode_address(constants.royalty_address.into(), prefix).map_err(CliError::Bech32)?;
+    let prefix = get_prefix(testnet11);
+    let royalty_address = Address::new(constants.royalty_address, prefix.clone()).encode()?;
     let precommit_payout_address =
-        encode_address(constants.precommit_payout_puzzle_hash.into(), prefix)
-            .map_err(CliError::Bech32)?;
+        Address::new(constants.precommit_payout_puzzle_hash.into(), prefix).encode()?;
 
     println!("Default constants will be used:");
     println!("  royalty address: {}", royalty_address);
@@ -279,7 +280,7 @@ pub async fn catalog_initiate_launch(
             pubkeys,
             m,
             cats_to_launch.len() as u64,
-            Bytes32::new(decode_address(&derivation_resp.derivations[0].address)?.0),
+            Address::decode(&derivation_resp.derivations[0].address)?.puzzle_hash,
         ),
     )
     .map_err(CliError::Driver)?;
@@ -294,7 +295,7 @@ pub async fn catalog_initiate_launch(
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
     for slot in slots {
-        db.save_slot(&mut ctx.allocator, slot, 0).await?;
+        db.save_slot(&mut ctx, slot, 0).await?;
         db.save_catalog_indexed_slot_value(slot.info.value.asset_id, slot.info.value_hash)
             .await?;
     }

@@ -1,15 +1,14 @@
-use chia::clvm_utils::{CurriedProgram, ToTreeHash};
+use chia::clvm_utils::{CurriedProgram, ToTreeHash, TreeHash};
 use chia::protocol::{Bytes32, Coin};
-use chia::puzzles::nft::{
-    NftOwnershipLayerArgs, NftRoyaltyTransferPuzzleArgs, NftStateLayerArgs,
-    NFT_STATE_LAYER_PUZZLE_HASH,
-};
-use chia::puzzles::singleton::{SingletonArgs, SINGLETON_LAUNCHER_PUZZLE_HASH};
+use chia::puzzles::nft::{NftOwnershipLayerArgs, NftRoyaltyTransferPuzzleArgs, NftStateLayerArgs};
+use chia::puzzles::singleton::SingletonArgs;
 use chia::puzzles::{LineageProof, Proof};
+use chia_puzzles::{NFT_STATE_LAYER_HASH, SINGLETON_LAUNCHER_HASH};
 use chia_wallet_sdk::{
-    ChiaRpcClient, Condition, Conditions, DriverError, Layer, Puzzle, SingletonLayer, SpendContext,
+    coinset::ChiaRpcClient,
+    driver::{Layer, Puzzle, SingletonLayer, SpendContext},
+    types::{Condition, Conditions},
 };
-use clvm_traits::FromClvm;
 use clvmr::serde::node_from_bytes;
 use clvmr::NodePtr;
 
@@ -64,14 +63,11 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         return Err(CliError::CoinNotSpent(catalog_constants.launcher_id));
     };
 
-    let launcher_puzzle_ptr =
-        node_from_bytes(&mut ctx.allocator, &launcher_coin_solution.puzzle_reveal)?;
-    let launcher_solution_ptr =
-        node_from_bytes(&mut ctx.allocator, &launcher_coin_solution.solution)?;
+    let launcher_puzzle_ptr = node_from_bytes(&mut ctx, &launcher_coin_solution.puzzle_reveal)?;
+    let launcher_solution_ptr = node_from_bytes(&mut ctx, &launcher_coin_solution.solution)?;
 
     let output_conds = ctx.run(launcher_puzzle_ptr, launcher_solution_ptr)?;
-    let output_conds = Conditions::<NodePtr>::from_clvm(&ctx.allocator, output_conds)
-        .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+    let output_conds = ctx.extract::<Conditions<NodePtr>>(output_conds)?;
     let create_coin_cond = output_conds
         .into_iter()
         .find_map(|cond| {
@@ -112,15 +108,12 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         return Err(CliError::CoinNotSpent(eve_catalog_coin.coin_id()));
     };
 
-    let eve_puzzle = node_from_bytes(&mut ctx.allocator, &eve_coin_spend.puzzle_reveal)?;
-    let eve_singleton_layer = SingletonLayer::<NodePtr>::parse_puzzle(
-        &ctx.allocator,
-        Puzzle::parse(&ctx.allocator, eve_puzzle),
-    )?
-    .unwrap();
+    let eve_puzzle = node_from_bytes(&mut ctx, &eve_coin_spend.puzzle_reveal)?;
+    let eve_singleton_layer = Puzzle::parse(&ctx, eve_puzzle);
+    let eve_singleton_layer =
+        SingletonLayer::<NodePtr>::parse_puzzle(&ctx, eve_singleton_layer)?.unwrap();
     let (_, conditions) =
-        <(u64, Conditions<NodePtr>)>::from_clvm(&ctx.allocator, eve_singleton_layer.inner_puzzle)
-            .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+        ctx.extract::<(u64, Conditions<NodePtr>)>(eve_singleton_layer.inner_puzzle)?;
 
     let conditions: Vec<Condition<NodePtr>> = conditions.into_iter().collect();
     let [Condition::CreateCoin(left_slot_cc), Condition::CreateCoin(right_slot_cc), Condition::CreateCoin(catalog_cc)] =
@@ -150,12 +143,10 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         ));
     }
 
-    let (hinted_launcher_id, (initial_registration_asset_id, (initial_state, ()))) =
-        <(Bytes32, (Bytes32, (CatalogRegistryState, ())))>::from_clvm(
-            &ctx.allocator,
+    let (hinted_launcher_id, (initial_registration_asset_id, (initial_state, ()))) = ctx
+        .extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(
             catalog_cc.memos.unwrap().value,
-        )
-        .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+        )?;
 
     let catalog_info = CatalogRegistryInfo::new(initial_state, catalog_constants);
     let catalog_full_ph = SingletonArgs::curry_tree_hash(
@@ -179,7 +170,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
                 initial_registration_asset_id.tree_hash().into(),
             )
             .into()
-        || launcher_coin_record.coin.puzzle_hash != SINGLETON_LAUNCHER_PUZZLE_HASH.into()
+        || launcher_coin_record.coin.puzzle_hash != SINGLETON_LAUNCHER_HASH.into()
         || catalog_cc.amount != 1
         || catalog_cc.puzzle_hash != catalog_info.inner_puzzle_hash().into()
     {
@@ -213,7 +204,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             break;
         };
 
-        let solution = node_from_bytes(&mut ctx.allocator, &coin_spend.solution)?;
+        let solution = node_from_bytes(&mut ctx, &coin_spend.solution)?;
         let new_slots = catalog.get_new_slots_from_spend(&mut ctx, solution)?;
 
         while cat_index < cats_to_launch.len() {
@@ -234,17 +225,17 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
                 );
                 let cat_nft_launcher = Coin::new(
                     uniqueness_prelauncher_coin.coin_id(),
-                    SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
+                    SINGLETON_LAUNCHER_HASH.into(),
                     1,
                 );
                 let cat_nft_launcher_id = cat_nft_launcher.coin_id();
 
                 let cat_nft_puzzle_hash = SingletonArgs::curry_tree_hash(
                     cat_nft_launcher_id,
-                    CurriedProgram {
-                        program: NFT_STATE_LAYER_PUZZLE_HASH,
+                    CurriedProgram::<TreeHash, _> {
+                        program: NFT_STATE_LAYER_HASH.into(),
                         args: NftStateLayerArgs {
-                            mod_hash: NFT_STATE_LAYER_PUZZLE_HASH.into(),
+                            mod_hash: NFT_STATE_LAYER_HASH.into(),
                             metadata: (),
                             metadata_updater_puzzle_hash: ANY_METADATA_UPDATER_HASH.into(),
                             inner_puzzle: NftOwnershipLayerArgs::curry_tree_hash(
@@ -278,10 +269,10 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             }
         }
 
-        let puzzle_ptr = node_from_bytes(&mut ctx.allocator, &coin_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(&ctx.allocator, puzzle_ptr);
+        let puzzle_ptr = node_from_bytes(&mut ctx, &coin_spend.puzzle_reveal)?;
+        let parent_puzzle = Puzzle::parse(&ctx, puzzle_ptr);
         catalog = CatalogRegistry::from_parent_spend(
-            &mut ctx.allocator,
+            &mut ctx,
             catalog.coin,
             parent_puzzle,
             solution,

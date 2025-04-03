@@ -6,8 +6,9 @@ use chia::{
     puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
 };
 use chia_wallet_sdk::{
-    CatLayer, ChiaRpcClient, CoinsetClient, Conditions, DriverError, Layer, Offer, Puzzle,
-    SingleCatSpend, Spend, SpendContext, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    coinset::{ChiaRpcClient, CoinsetClient},
+    driver::{CatLayer, DriverError, Layer, Offer, Puzzle, SingleCatSpend, Spend, SpendContext},
+    types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
 use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
@@ -47,7 +48,7 @@ fn precommit_value_for_cat(
     cat: &CatalogPremineRecord,
     payment_asset_id: Bytes32,
 ) -> Result<CatalogPrecommitValue, CliError> {
-    let tail_ptr = node_from_bytes(&mut ctx.allocator, &cat.tail)?;
+    let tail_ptr = node_from_bytes(ctx, &cat.tail)?;
     let tail_hash = ctx.tree_hash(tail_ptr);
     if tail_hash != cat.asset_id.into() {
         eprintln!("CAT {} has a tail hash mismatch - aborting", cat.asset_id);
@@ -428,12 +429,9 @@ pub async fn catalog_continue_launch(
             return Ok(());
         };
 
-        let puzzle = node_from_bytes(&mut ctx.allocator, &coin_spend.puzzle_reveal)?;
-        let Some(layer) = CatLayer::<NodePtr>::parse_puzzle(
-            &ctx.allocator,
-            Puzzle::parse(&ctx.allocator, puzzle),
-        )?
-        else {
+        let puzzle = node_from_bytes(&mut ctx, &coin_spend.puzzle_reveal)?;
+        let layer = Puzzle::parse(&mut ctx, puzzle);
+        let Some(layer) = CatLayer::<NodePtr>::parse_puzzle(&mut ctx, layer)? else {
             eprintln!(
                 "Failed to parse CAT puzzle for coin {} - aborting...",
                 hex::encode(record.coin.coin_id())
@@ -515,7 +513,7 @@ pub async fn catalog_continue_launch(
         let tail_hash: Bytes32 = ctx.tree_hash(precommit_value.tail_reveal).into();
 
         let (left_slot, right_slot) = db
-            .get_catalog_neighbors(&mut ctx.allocator, constants.launcher_id, tail_hash)
+            .get_catalog_neighbors(&mut ctx, constants.launcher_id, tail_hash)
             .await?;
 
         let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);
