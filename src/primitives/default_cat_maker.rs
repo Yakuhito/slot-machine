@@ -1,9 +1,9 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::cat::CAT_PUZZLE_HASH,
 };
-use chia_wallet_sdk::{DriverError, SpendContext};
+use chia_puzzles::CAT_PUZZLE_HASH;
+use chia_wallet_sdk::driver::{DriverError, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -47,11 +47,9 @@ impl DefaultCatMakerArgs {
         ctx: &mut SpendContext,
         tail_hash_hash: Bytes32,
     ) -> Result<NodePtr, DriverError> {
-        CurriedProgram {
+        ctx.alloc(&CurriedProgram {
             program: ctx.default_cat_maker_puzzle()?,
             args: DefaultCatMakerArgs::new(tail_hash_hash),
-        }
-        .to_clvm(&mut ctx.allocator)
-        .map_err(DriverError::ToClvm)
+        })
     }
 }

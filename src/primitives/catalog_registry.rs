@@ -1,9 +1,9 @@
 use chia::{
-    clvm_utils::{tree_hash, ToTreeHash},
+    clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::FromClvm;
 use clvmr::{Allocator, NodePtr};
 
@@ -124,9 +124,9 @@ impl CatalogRegistry {
         let my_spend = Spend::new(puzzle, solution);
         ctx.spend(self.coin, my_spend)?;
 
-        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let my_puzzle = Puzzle::parse(ctx, my_spend.puzzle);
         let new_self = CatalogRegistry::from_parent_spend(
-            &mut ctx.allocator,
+            ctx,
             self.coin,
             my_puzzle,
             my_spend.solution,
@@ -179,9 +179,8 @@ impl CatalogRegistry {
         ctx: &mut SpendContext,
         solution: NodePtr,
     ) -> Result<Vec<Slot<CatalogSlotValue>>, DriverError> {
-        let solution =
-            SingletonSolution::<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>::from_clvm(
-                &ctx.allocator,
+        let solution = ctx
+            .extract::<SingletonSolution<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>>(
                 solution,
             )?;
 
@@ -191,7 +190,7 @@ impl CatalogRegistry {
         let register_hash = register_action.tree_hash();
 
         for raw_action in solution.inner_solution.actions {
-            let raw_action_hash = tree_hash(&ctx.allocator, raw_action.action_puzzle_reveal);
+            let raw_action_hash = ctx.tree_hash(raw_action.action_puzzle_reveal);
 
             if raw_action_hash == register_hash {
                 slot_infos.extend(
