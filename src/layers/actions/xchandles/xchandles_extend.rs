@@ -84,27 +84,24 @@ impl XchandlesExtendAction {
         slot.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
-        let action_solution = XchandlesExtendActionSolution {
+        let cat_maker_puzzle_reveal =
+            DefaultCatMakerArgs::get_puzzle(ctx, payment_asset_id.tree_hash().into())?;
+        let pricing_puzzle_reveal =
+            XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_handle_price)?;
+        let action_solution = ctx.alloc(&XchandlesExtendActionSolution {
             handle_hash: slot.info.value.handle_hash,
-            pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
-                ctx,
-                base_handle_price,
-            )?,
+            pricing_puzzle_reveal,
             pricing_solution: XchandlesFactorPricingSolution {
                 current_expiration: slot.info.value.expiration,
                 handle: handle.clone(),
                 num_years,
             },
-            cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
-                ctx,
-                payment_asset_id.tree_hash().into(),
-            )?,
+            cat_maker_puzzle_reveal,
             cat_maker_solution: (),
             neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
             expiration: slot.info.value.expiration,
             rest_hash: slot.info.value.launcher_ids_data_hash().into(),
-        }
-        .to_clvm(&mut ctx)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));

@@ -1,12 +1,10 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::{
-        singleton::{SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH},
-        LineageProof,
-    },
+    puzzles::LineageProof,
 };
-use chia_wallet_sdk::{DriverError, Spend, SpendContext};
+use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
+use chia_wallet_sdk::driver::{DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use hex_literal::hex;
 
@@ -46,16 +44,16 @@ impl VerificationPayments {
         ctx: &mut SpendContext,
         solution: &VerificationPaymentsSolution,
     ) -> Result<Spend, DriverError> {
-        let puzzle = CurriedProgram {
-            program: ctx.verification_payments_puzzle()?,
+        let program = ctx.verification_payments_puzzle()?;
+        let puzzle = ctx.alloc(&CurriedProgram {
+            program,
             args: VerificationPaymentsArgs::new(
                 self.verifier_singleton_struct_hash,
                 self.verification_inner_puzzle_hash,
             ),
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        })?;
 
-        let solution = solution.to_clvm(&mut ctx.allocator)?;
+        let solution = ctx.alloc(&solution)?;
 
         Ok(Spend::new(puzzle, solution))
     }
@@ -84,8 +82,8 @@ impl VerificationPaymentsArgs {
         verification_inner_puzzle_hash: Bytes32,
     ) -> Self {
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
-            launcher_puzzle_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
+            launcher_puzzle_hash: SINGLETON_LAUNCHER_HASH.into(),
             verifier_singleton_struct_hash,
             verification_inner_puzzle_hash,
         }
