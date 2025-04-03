@@ -1,9 +1,12 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::SINGLETON_TOP_LAYER_PUZZLE_HASH,
 };
-use chia_wallet_sdk::{Conditions, DriverError, Layer, Puzzle, SpendContext};
+use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
+use chia_wallet_sdk::{
+    driver::{DriverError, Layer, Puzzle, SpendContext},
+    types::Conditions,
+};
 use clvm_traits::{clvm_quote, clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -45,7 +48,7 @@ impl<V> PrecommitLayer<V> {
         CurriedProgram {
             program: PRECOMMIT_LAYER_PUZZLE_HASH,
             args: PrecommitLayer1stCurryArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
                 singleton_struct_hash: controller_singleton_struct_hash,
                 relative_block_height,
                 payout_puzzle_hash,
@@ -125,13 +128,13 @@ where
         let prog_1st_curry = CurriedProgram {
             program: ctx.precommit_layer_puzzle()?,
             args: PrecommitLayer1stCurryArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
                 singleton_struct_hash: self.controller_singleton_struct_hash,
                 relative_block_height: self.relative_block_height,
                 payout_puzzle_hash: self.payout_puzzle_hash,
             },
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
 
         Ok(CurriedProgram {
             program: prog_1st_curry,
@@ -140,7 +143,7 @@ where
                 value: self.value.clone(),
             },
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     fn construct_solution(
@@ -148,9 +151,7 @@ where
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        solution.to_clvm(ctx).map_err(DriverError::ToClvm)
     }
 }
 

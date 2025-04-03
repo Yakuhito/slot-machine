@@ -3,7 +3,10 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -50,7 +53,7 @@ impl CatalogRefundAction {
                 self.payout_puzzle_hash,
             ),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -107,7 +110,7 @@ impl CatalogRefundAction {
             precommit_amount: precommit_coin.coin.amount,
             neighbors_hash,
         };
-        let action_solution = action_solution.to_clvm(&mut ctx.allocator)?;
+        let action_solution = action_solution.to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         catalog.insert(Spend::new(action_puzzle, action_solution));

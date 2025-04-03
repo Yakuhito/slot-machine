@@ -3,7 +3,10 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::Conditions,
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -49,7 +52,7 @@ impl DelegatedStateAction {
             program: ctx.delegated_state_action_puzzle()?,
             args: DelegatedStateActionArgs::new(self.other_launcher_id),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn spend<S>(
@@ -62,19 +65,19 @@ impl DelegatedStateAction {
     where
         S: ToClvm<Allocator>,
     {
-        let state = new_state.to_clvm(&mut ctx.allocator)?;
+        let state = new_state.to_clvm(ctx)?;
         let my_solution = DelegatedStateActionSolution::<NodePtr> {
             new_state: state,
             other_singleton_inner_puzzle_hash,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
         let message: Bytes32 = ctx.tree_hash(state).into();
         let conds = Conditions::new().send_message(
             18,
             message.into(),
-            vec![my_coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            vec![my_coin.puzzle_hash.to_clvm(ctx)?],
         );
         Ok((conds, Spend::new(my_puzzle, my_solution)))
     }

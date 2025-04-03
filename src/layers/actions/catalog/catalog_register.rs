@@ -1,17 +1,16 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::{
-        nft::{
-            NFT_OWNERSHIP_LAYER_PUZZLE_HASH, NFT_ROYALTY_TRANSFER_PUZZLE_HASH,
-            NFT_STATE_LAYER_PUZZLE_HASH,
-        },
-        singleton::{
-            SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH,
-        },
-    },
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_puzzle_types::singleton::SingletonStruct;
+use chia_puzzles::{
+    NFT_OWNERSHIP_LAYER_HASH, NFT_OWNERSHIP_TRANSFER_PROGRAM_ONE_WAY_CLAIM_WITH_ROYALTIES_HASH,
+    NFT_STATE_LAYER_HASH, SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH,
+};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -67,7 +66,7 @@ impl CatalogRegisterAction {
                 self.payout_puzzle_hash,
             ),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_values_from_solution(
@@ -75,8 +74,7 @@ impl CatalogRegisterAction {
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<[CatalogSlotValue; 3], DriverError> {
-        let params =
-            CatalogRegisterActionSolution::<NodePtr, ()>::from_clvm(&ctx.allocator, solution)?;
+        let params = CatalogRegisterActionSolution::<NodePtr, ()>::from_clvm(ctx, solution)?;
 
         Ok([
             CatalogSlotValue::new(
@@ -130,11 +128,8 @@ impl CatalogRegisterAction {
         )?;
 
         // spend uniqueness prelauncher
-        let uniqueness_prelauncher = UniquenessPrelauncher::<Bytes32>::new(
-            &mut ctx.allocator,
-            catalog.coin.coin_id(),
-            tail_hash,
-        )?;
+        let uniqueness_prelauncher =
+            UniquenessPrelauncher::<Bytes32>::new(ctx, catalog.coin.coin_id(), tail_hash)?;
         let nft_launcher = uniqueness_prelauncher.spend(ctx)?;
 
         // launch eve nft
@@ -166,7 +161,7 @@ impl CatalogRegisterAction {
             right_right_tail_hash: right_slot.info.value.neighbors.right_value,
             my_id: catalog.coin.coin_id(),
         };
-        let my_solution = my_solution.to_clvm(&mut ctx.allocator)?;
+        let my_solution = my_solution.to_clvm(ctx)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
         let slot_values = self.get_slot_values_from_solution(ctx, my_solution)?;
@@ -207,12 +202,13 @@ impl NftPack {
         let meta_updater_hash: Bytes32 = ANY_METADATA_UPDATER_HASH.into();
 
         Self {
-            launcher_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
-            singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
-            state_layer_mod_hash: NFT_STATE_LAYER_PUZZLE_HASH.into(),
+            launcher_hash: SINGLETON_LAUNCHER_HASH.into(),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
+            state_layer_mod_hash: NFT_STATE_LAYER_HASH.into(),
             metadata_updater_hash_hash: meta_updater_hash.tree_hash().into(),
-            nft_ownership_layer_mod_hash: NFT_OWNERSHIP_LAYER_PUZZLE_HASH.into(),
-            transfer_program_mod_hash: NFT_ROYALTY_TRANSFER_PUZZLE_HASH.into(),
+            nft_ownership_layer_mod_hash: NFT_OWNERSHIP_LAYER_HASH.into(),
+            transfer_program_mod_hash:
+                NFT_OWNERSHIP_TRANSFER_PROGRAM_ONE_WAY_CLAIM_WITH_ROYALTIES_HASH.into(),
             royalty_puzzle_hash_hash,
             trade_price_percentage,
         }

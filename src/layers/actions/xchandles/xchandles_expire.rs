@@ -3,7 +3,10 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -52,7 +55,7 @@ impl XchandlesExpireAction {
                 self.payout_puzzle_hash,
             ),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_value_from_solution(
@@ -67,7 +70,7 @@ impl XchandlesExpireAction {
             (),
             NodePtr,
             XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
-        >::from_clvm(&ctx.allocator, solution)?;
+        >::from_clvm(ctx, solution)?;
 
         Ok(XchandlesSlotValue {
             handle_hash: old_slot_value.handle_hash,
@@ -148,7 +151,7 @@ impl XchandlesExpireAction {
             .tree_hash()
             .into(),
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
@@ -322,7 +325,7 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
             program: ctx.xchandles_exponential_premium_renew_puzzle()?,
             args: self,
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -344,10 +347,10 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
                     num_years,
                 },
             }
-            .to_clvm(&mut ctx.allocator)?;
+            .to_clvm(ctx)?;
         let output = ctx.run(puzzle, solution)?;
 
-        Ok(<(u128, u64)>::from_clvm(&ctx.allocator, output)?.0)
+        Ok(<(u128, u64)>::from_clvm(ctx, output)?.0)
     }
 }
 
@@ -393,10 +396,10 @@ mod tests {
                         num_years: 1,
                     },
                 }
-                .to_clvm(&mut ctx.allocator)?;
+                .to_clvm(&mut ctx)?;
 
                 let output = ctx.run(puzzle, solution)?;
-                let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
+                let output = XchandlesPricingOutput::from_clvm(&mut ctx, output)?;
 
                 assert_eq!(output.registered_time, 366 * 24 * 60 * 60);
 
@@ -438,10 +441,10 @@ mod tests {
                     num_years: 1,
                 },
             }
-            .to_clvm(&mut ctx.allocator)?;
+            .to_clvm(&mut ctx)?;
 
         let output = ctx.run(puzzle, solution)?;
-        let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
+        let output = XchandlesPricingOutput::from_clvm(&ctx, output)?;
 
         assert_eq!(output.registered_time, 366 * 24 * 60 * 60);
         assert_eq!(output.price, 0);

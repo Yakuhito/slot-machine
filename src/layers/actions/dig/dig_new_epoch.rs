@@ -2,7 +2,10 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -43,10 +46,7 @@ impl Action<DigRewardDistributor> for DigNewEpochAction {
 }
 
 impl DigNewEpochAction {
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.dig_new_epoch_action_puzzle()?,
             args: DigNewEpochActionArgs::new(
@@ -56,7 +56,7 @@ impl DigNewEpochAction {
                 self.epoch_seconds,
             ),
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -65,7 +65,7 @@ impl DigNewEpochAction {
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<(DigRewardSlotValue, (DigSlotNonce, Bytes32)), DriverError> {
-        let solution = DigNewEpochActionSolution::from_clvm(&ctx.allocator, solution)?;
+        let solution = DigNewEpochActionSolution::from_clvm(ctx, solution)?;
 
         let slot_valie = DigRewardSlotValue {
             epoch_start: solution.slot_epoch_time,
@@ -85,7 +85,7 @@ impl DigNewEpochAction {
         reward_slot: Slot<DigRewardSlotValue>,
     ) -> Result<(Conditions, Slot<DigRewardSlotValue>, u64), DriverError> {
         // also returns validator fee
-        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
+        let my_state = distributor.get_latest_pending_state(ctx)?;
 
         let epoch_total_rewards =
             if my_state.round_time_info.epoch_end == reward_slot.info.value.epoch_start {
@@ -118,7 +118,7 @@ impl DigNewEpochAction {
             epoch_total_rewards,
             validator_fee: valdiator_fee,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let slot_value = self.get_slot_value_from_solution(ctx, action_solution)?.0;

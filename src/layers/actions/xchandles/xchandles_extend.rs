@@ -1,9 +1,13 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::offer::{NotarizedPayment, Payment, SETTLEMENT_PAYMENTS_PUZZLE_HASH},
+    puzzles::offer::{NotarizedPayment, Payment},
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -42,7 +46,7 @@ impl XchandlesExtendAction {
             program: ctx.xchandles_extend_puzzle()?,
             args: XchandlesExtendActionArgs::new(self.launcher_id, self.payout_puzzle_hash),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_value_from_solution(
@@ -56,7 +60,7 @@ impl XchandlesExtendAction {
             XchandlesFactorPricingSolution,
             NodePtr,
             (),
-        >::from_clvm(&ctx.allocator, solution)?;
+        >::from_clvm(ctx, solution)?;
 
         Ok(old_slot_value.with_expiration(
             old_slot_value.expiration + solution.pricing_solution.num_years * 366 * 24 * 60 * 60,
@@ -100,7 +104,7 @@ impl XchandlesExtendAction {
             expiration: slot.info.value.expiration,
             rest_hash: slot.info.value.launcher_ids_data_hash().into(),
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(&mut ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
@@ -153,7 +157,7 @@ pub struct XchandlesExtendActionArgs {
 impl XchandlesExtendActionArgs {
     pub fn new(launcher_id: Bytes32, payout_puzzle_hash: Bytes32) -> Self {
         Self {
-            offer_mod_hash: SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+            offer_mod_hash: SETTLEMENT_PAYMENT_HASH.into(),
             payout_puzzle_hash,
             slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
         }

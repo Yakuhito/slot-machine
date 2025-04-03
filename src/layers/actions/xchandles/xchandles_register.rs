@@ -3,7 +3,10 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -50,7 +53,7 @@ impl XchandlesRegisterAction {
                 self.payout_puzzle_hash,
             ),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_values_from_solution(
@@ -71,7 +74,7 @@ impl XchandlesRegisterAction {
             XchandlesFactorPricingSolution,
             NodePtr,
             NodePtr,
-        >::from_clvm(&ctx.allocator, solution)?;
+        >::from_clvm(ctx, solution)?;
 
         Ok([
             left_slot_value
@@ -178,7 +181,7 @@ impl XchandlesRegisterAction {
                 .into(),
             right_data_hash: right_slot.info.value.after_neigbors_data_hash().into(),
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
@@ -298,7 +301,7 @@ impl XchandlesFactorPricingPuzzleArgs {
             program: ctx.xchandles_factor_pricing_puzzle()?,
             args: XchandlesFactorPricingPuzzleArgs::new(base_price),
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -373,10 +376,10 @@ mod tests {
                         handle,
                         num_years,
                     }
-                    .to_clvm(&mut ctx.allocator)?;
+                    .to_clvm(&mut ctx)?;
 
                     let output = ctx.run(puzzle, solution)?;
-                    let output = XchandlesFactorPricingOutput::from_clvm(&ctx.allocator, output)?;
+                    let output = XchandlesFactorPricingOutput::from_clvm(&mut ctx, output)?;
 
                     let mut expected_price = if handle_length == 3 {
                         128
@@ -405,7 +408,7 @@ mod tests {
             handle: "aa".to_string(),
             num_years: 1,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(&mut ctx)?;
 
         let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
             panic!("Expected error");
@@ -419,7 +422,7 @@ mod tests {
             handle: "a".repeat(32),
             num_years: 1,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(&mut ctx)?;
 
         let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
             panic!("Expected error");
@@ -433,7 +436,7 @@ mod tests {
             handle: "yak@test".to_string(),
             num_years: 1,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(&mut ctx)?;
 
         let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
             panic!("Expected error");

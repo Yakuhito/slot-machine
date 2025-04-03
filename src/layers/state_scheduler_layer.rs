@@ -1,9 +1,12 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::SINGLETON_TOP_LAYER_PUZZLE_HASH,
 };
-use chia_wallet_sdk::{Condition, Conditions, DriverError, Layer, Puzzle, SpendContext};
+use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
+use chia_wallet_sdk::{
+    driver::{DriverError, Layer, Puzzle, SpendContext},
+    types::{Condition, Conditions},
+};
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -48,7 +51,7 @@ impl Layer for StateSchedulerLayer {
 
         let args = StateSchedulerLayerArgs::<Bytes32, NodePtr>::from_clvm(allocator, puzzle.args)?;
 
-        if args.singleton_mod_hash != SINGLETON_TOP_LAYER_PUZZLE_HASH.into() {
+        if args.singleton_mod_hash != SINGLETON_TOP_LAYER_V1_1_HASH {
             return Err(DriverError::NonStandardLayer);
         }
 
@@ -99,13 +102,13 @@ impl Layer for StateSchedulerLayer {
         CurriedProgram {
             program: ctx.state_scheduler_puzzle()?,
             args: StateSchedulerLayerArgs::<Bytes32, NodePtr> {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
                 receiver_singleton_struct_hash: self.receiver_singleton_struct_hash,
                 message: self.new_state_hash,
                 inner_puzzle,
             },
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -114,7 +117,7 @@ impl Layer for StateSchedulerLayer {
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        Ok(solution.to_clvm(&mut ctx.allocator)?)
+        Ok(solution.to_clvm(ctx)?)
     }
 }
 
@@ -148,7 +151,7 @@ where
         CurriedProgram {
             program: STATE_SCHEDULER_PUZZLE_HASH,
             args: StateSchedulerLayerArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
                 receiver_singleton_struct_hash,
                 message: message.tree_hash(),
                 inner_puzzle: inner_puzzle.tree_hash(),

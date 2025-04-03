@@ -1,9 +1,12 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::{SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH},
 };
-use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::Conditions,
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -37,7 +40,7 @@ impl XchandlesUpdateAction {
             program: ctx.xchandles_update_puzzle()?,
             args: XchandlesUpdateActionArgs::new(self.launcher_id),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_value_from_solution(
@@ -46,7 +49,7 @@ impl XchandlesUpdateAction {
         spent_slot_value: XchandlesSlotValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution = XchandlesUpdateActionSolution::from_clvm(&ctx.allocator, solution)?;
+        let solution = XchandlesUpdateActionSolution::from_clvm(ctx, solution)?;
 
         Ok(spent_slot_value.with_launcher_ids(
             solution.new_owner_launcher_id,
@@ -79,7 +82,7 @@ impl XchandlesUpdateAction {
             new_resolved_launcher_id,
             announcer_inner_puzzle_hash,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
@@ -122,9 +125,9 @@ pub struct XchandlesUpdateActionArgs {
 
 impl XchandlesUpdateActionArgs {
     pub fn new(launcher_id: Bytes32) -> Self {
-        let singleton_launcher_mod_hash: Bytes32 = SINGLETON_LAUNCHER_PUZZLE_HASH.into();
+        let singleton_launcher_mod_hash: Bytes32 = SINGLETON_LAUNCHER_HASH;
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
             singleton_launcher_mod_hash_hash: singleton_launcher_mod_hash.tree_hash().into(),
             slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
         }

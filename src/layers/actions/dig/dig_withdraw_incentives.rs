@@ -2,7 +2,10 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::{Bytes, Bytes32},
 };
-use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::Conditions,
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -37,15 +40,12 @@ impl Action<DigRewardDistributor> for DigWithdrawIncentivesAction {
 }
 
 impl DigWithdrawIncentivesAction {
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.dig_withdraw_incentives_action_puzzle()?,
             args: DigWithdrawIncentivesActionArgs::new(self.launcher_id, self.withdrawal_share_bps),
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -55,7 +55,7 @@ impl DigWithdrawIncentivesAction {
         my_constants: &DigRewardDistributorConstants,
         solution: NodePtr,
     ) -> Result<(DigRewardSlotValue, [(DigSlotNonce, Bytes32); 2]), DriverError> {
-        let solution = DigWithdrawIncentivesActionSolution::from_clvm(&ctx.allocator, solution)?;
+        let solution = DigWithdrawIncentivesActionSolution::from_clvm(ctx, solution)?;
         let withdrawal_share = solution.committed_value * my_constants.withdrawal_share_bps / 10000;
 
         let old_reward_slot_value = DigRewardSlotValue {
@@ -106,7 +106,7 @@ impl DigWithdrawIncentivesAction {
             .send_message(
                 18,
                 Bytes::new(Vec::new()),
-                vec![distributor.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+                vec![distributor.coin.puzzle_hash.to_clvm(ctx)?],
             )
             .assert_concurrent_puzzle(commitment_slot.coin.puzzle_hash);
 
@@ -124,7 +124,7 @@ impl DigWithdrawIncentivesAction {
             committed_value: commitment_slot.info.value.rewards,
             withdrawal_share,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let slot_value = self

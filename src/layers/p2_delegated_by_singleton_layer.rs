@@ -1,9 +1,10 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::{SingletonStruct, SINGLETON_TOP_LAYER_PUZZLE_HASH},
+    puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, SpendContext};
+use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
+use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -40,7 +41,7 @@ impl Layer for P2DelegatedBySingletonLayer {
 
         let args = P2DelegatedBySingletonLayerArgs::from_clvm(allocator, puzzle.args)?;
 
-        if args.singleton_mod_hash != SINGLETON_TOP_LAYER_PUZZLE_HASH.into() {
+        if args.singleton_mod_hash != SINGLETON_TOP_LAYER_V1_1_HASH {
             return Ok(None);
         }
 
@@ -63,7 +64,7 @@ impl Layer for P2DelegatedBySingletonLayer {
             program: ctx.p2_delegated_by_singleton_puzzle()?,
             args: P2DelegatedBySingletonLayerArgs::new(self.singleton_struct_hash, self.nonce),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     fn construct_solution(
@@ -71,9 +72,7 @@ impl Layer for P2DelegatedBySingletonLayer {
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        solution.to_clvm(ctx).map_err(DriverError::ToClvm)
     }
 }
 
@@ -96,7 +95,7 @@ pub struct P2DelegatedBySingletonLayerArgs {
 impl P2DelegatedBySingletonLayerArgs {
     pub fn new(singleton_struct_hash: Bytes32, nonce: u64) -> Self {
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
             singleton_struct_hash,
             nonce,
         }
@@ -104,7 +103,7 @@ impl P2DelegatedBySingletonLayerArgs {
 
     pub fn from_launcher_id(launcher_id: Bytes32, nonce: u64) -> Self {
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH,
             singleton_struct_hash: SingletonStruct::new(launcher_id).tree_hash().into(),
             nonce,
         }

@@ -2,7 +2,10 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -42,7 +45,7 @@ impl DigAddIncentivesAction {
                 validator_fee_bps: self.validator_fee_bps,
             },
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -52,7 +55,7 @@ impl DigAddIncentivesAction {
         distributor: &mut DigRewardDistributor,
         amount: u64,
     ) -> Result<Conditions, DriverError> {
-        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
+        let my_state = distributor.get_latest_pending_state(ctx)?;
 
         // calculate announcement needed to ensure everything's happening as expected
         let mut add_incentives_announcement: Vec<u8> =
@@ -69,7 +72,7 @@ impl DigAddIncentivesAction {
             amount,
             validator_fee: amount * distributor.info.constants.validator_fee_bps / 10000,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         distributor.insert(Spend::new(action_puzzle, action_solution));

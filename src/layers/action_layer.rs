@@ -6,7 +6,8 @@ use chia::{
     protocol::Bytes32,
 };
 use chia_wallet_sdk::{
-    run_puzzle, DriverError, Layer, MerkleProof, MerkleTree, Puzzle, Spend, SpendContext,
+    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
+    types::{run_puzzle, MerkleProof, MerkleTree},
 };
 use clvm_traits::{clvm_list, match_tuple};
 use clvmr::{Allocator, NodePtr};
@@ -249,7 +250,7 @@ where
                 program: ctx.default_finalizer_puzzle()?,
                 args: DefaultFinalizer1stCurryArgs::new(hint),
             }
-            .to_clvm(&mut ctx.allocator)?,
+            .to_clvm(ctx)?,
             Finalizer::Reserve {
                 hint,
                 reserve_full_puzzle_hash,
@@ -262,7 +263,7 @@ where
                     reserve_inner_puzzle_hash,
                 ),
             }
-            .to_clvm(&mut ctx.allocator)?,
+            .to_clvm(ctx)?,
         };
 
         let finalizer = match self.finalizer {
@@ -270,7 +271,7 @@ where
                 program: finalizer_1st_curry,
                 args: DefaultFinalizer2ndCurryArgs::new(hint),
             }
-            .to_clvm(&mut ctx.allocator)?,
+            .to_clvm(ctx)?,
             Finalizer::Reserve {
                 hint,
                 reserve_full_puzzle_hash,
@@ -283,7 +284,7 @@ where
                     hint,
                 ),
             }
-            .to_clvm(&mut ctx.allocator)?,
+            .to_clvm(ctx)?,
         };
 
         Ok(CurriedProgram {
@@ -294,7 +295,7 @@ where
                 self.state.clone(),
             ),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     fn construct_solution(
@@ -315,7 +316,7 @@ where
                 .collect(),
             finalizer_solution: solution.finalizer_solution,
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 }
 

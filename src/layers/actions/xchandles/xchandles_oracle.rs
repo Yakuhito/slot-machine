@@ -2,7 +2,10 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -36,7 +39,7 @@ impl XchandlesOracleAction {
             program: ctx.xchandles_oracle_puzzle()?,
             args: XchandlesOracleActionArgs::new(self.launcher_id),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_value(&self, old_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
@@ -56,7 +59,7 @@ impl XchandlesOracleAction {
         let action_solution = XchandlesOracleActionSolution {
             data_treehash: slot.info.value.tree_hash().into(),
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));

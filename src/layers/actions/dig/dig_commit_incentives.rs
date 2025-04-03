@@ -2,7 +2,10 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -39,7 +42,7 @@ impl DigCommitIncentivesAction {
             program: ctx.dig_commit_incentives_action_puzzle()?,
             args: DigCommitIncentivesActionArgs::new(self.launcher_id, self.epoch_seconds),
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -57,7 +60,7 @@ impl DigCommitIncentivesAction {
         ),
         DriverError,
     > {
-        let solution = DigCommitIncentivesActionSolution::from_clvm(&ctx.allocator, solution)?;
+        let solution = DigCommitIncentivesActionSolution::from_clvm(ctx, solution)?;
 
         let commitment_slot_value = DigCommitmentSlotValue {
             epoch_start: solution.epoch_start,
@@ -152,7 +155,7 @@ impl DigCommitIncentivesAction {
             clawback_ph,
             rewards_to_add,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let (_commitment_slot_value, reward_slot_values, _spent) = self

@@ -3,7 +3,10 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::{Bytes32, Coin},
 };
-use chia_wallet_sdk::{Condition, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
+    types::{Condition, Conditions},
+};
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -24,7 +27,7 @@ impl Layer for MOfNLayer {
             program: ctx.p2_m_of_n_delegate_direct_puzzle()?,
             args: P2MOfNDelegateDirectArgs::new(self.m, self.public_key_list.clone()),
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -94,7 +97,7 @@ impl MOfNLayer {
         used_pubkeys: &[PublicKey],
         genesis_challenge: Bytes32,
     ) -> Result<(), DriverError> {
-        let genesis_challenge = genesis_challenge.to_clvm(&mut ctx.allocator)?;
+        let genesis_challenge = genesis_challenge.to_clvm(ctx)?;
         let spend = self.spend_with_conditions(
             ctx,
             Self::ensure_non_replayable(conditions, coin.coin_id(), genesis_challenge),

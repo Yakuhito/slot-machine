@@ -1,9 +1,13 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::{SingletonStruct, SINGLETON_TOP_LAYER_PUZZLE_HASH},
+    puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -41,10 +45,7 @@ impl Action<DigRewardDistributor> for DigInitiatePayoutAction {
 }
 
 impl DigInitiatePayoutAction {
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.dig_initiate_payout_action_puzzle()?,
             args: DigInitiatePayoutActionArgs::new(
@@ -53,7 +54,7 @@ impl DigInitiatePayoutAction {
                 self.payout_threshold,
             ),
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -63,7 +64,7 @@ impl DigInitiatePayoutAction {
         my_state: &DigRewardDistributorState,
         solution: NodePtr,
     ) -> Result<(DigMirrorSlotValue, (DigSlotNonce, Bytes32)), DriverError> {
-        let solution = DigInitiatePayoutActionSolution::from_clvm(&ctx.allocator, solution)?;
+        let solution = DigInitiatePayoutActionSolution::from_clvm(ctx, solution)?;
 
         let new_slot = DigMirrorSlotValue {
             payout_puzzle_hash: solution.mirror_payout_puzzle_hash,
@@ -87,7 +88,7 @@ impl DigInitiatePayoutAction {
         distributor: &mut DigRewardDistributor,
         mirror_slot: Slot<DigMirrorSlotValue>,
     ) -> Result<(Conditions, Slot<DigMirrorSlotValue>, u64), DriverError> {
-        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
+        let my_state = distributor.get_latest_pending_state(ctx)?;
 
         let withdrawal_amount = mirror_slot.info.value.shares
             * (my_state.round_reward_info.cumulative_payout
@@ -119,7 +120,7 @@ impl DigInitiatePayoutAction {
             mirror_initial_cumulative_payout: mirror_slot.info.value.initial_cumulative_payout,
             mirror_shares: mirror_slot.info.value.shares,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let slot_value = self
@@ -179,7 +180,7 @@ impl DigInitiatePayoutActionArgs {
         payout_threshold: u64,
     ) -> Self {
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
             validator_singleton_struct_hash: SingletonStruct::new(validator_launcher_id)
                 .tree_hash()
                 .into(),

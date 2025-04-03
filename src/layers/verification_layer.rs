@@ -4,11 +4,11 @@ use chia::{
     clvm_traits::{FromClvm, ToClvm},
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::{
-        SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH,
-    },
+    puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, SpendContext};
+use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
+use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, SpendContext};
+
 use clvm_traits::clvm_list;
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -59,9 +59,8 @@ impl Layer for VerificationLayer {
         if args_1st_curry
             .revocation_singleton_struct
             .launcher_puzzle_hash
-            != SINGLETON_LAUNCHER_PUZZLE_HASH.into()
-            || args_1st_curry.revocation_singleton_struct.mod_hash
-                != SINGLETON_TOP_LAYER_PUZZLE_HASH.into()
+            != SINGLETON_LAUNCHER_HASH
+            || args_1st_curry.revocation_singleton_struct.mod_hash != SINGLETON_TOP_LAYER_V1_1_HASH
         {
             return Err(DriverError::NonStandardLayer);
         }
@@ -99,7 +98,7 @@ impl Layer for VerificationLayer {
                 ),
             },
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let self_hash: Bytes32 =
             VerificationLayer1stCurryArgs::curry_tree_hash(self.revocation_singleton_launcher_id)
                 .into();
@@ -111,7 +110,7 @@ impl Layer for VerificationLayer {
                 verified_data: self.verified_data.clone(),
             },
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -120,9 +119,7 @@ impl Layer for VerificationLayer {
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        solution.to_clvm(ctx).map_err(DriverError::ToClvm)
     }
 }
 
