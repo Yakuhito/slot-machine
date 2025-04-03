@@ -1,5 +1,5 @@
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
-use chia_wallet_sdk::{CoinRecord, DriverError};
+use chia_wallet_sdk::{coinset::CoinRecord, driver::DriverError};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{
     serde::{node_from_bytes, node_to_bytes},
@@ -140,7 +140,7 @@ impl Db {
             .info
             .value
             .to_clvm(allocator)
-            .map_err(|err| CliError::Driver(chia_wallet_sdk::DriverError::ToClvm(err)))?;
+            .map_err(|err| CliError::Driver(DriverError::ToClvm(err)))?;
         let slot_value_bytes = node_to_bytes(allocator, slot_value_ptr)?;
 
         sqlx::query(
@@ -179,7 +179,7 @@ impl Db {
 
         let value = node_from_bytes(allocator, row.get::<&[u8], _>("slot_value"))?;
         let value = SV::from_clvm(allocator, value)
-            .map_err(|err| CliError::Driver(chia_wallet_sdk::DriverError::FromClvm(err)))?;
+            .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
 
         Ok(Slot::new(
             SlotProof {

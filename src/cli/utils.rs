@@ -5,7 +5,10 @@ use chia::{
     protocol::{Bytes, Bytes32},
 };
 use chia_wallet_sdk::{
-    ChiaRpcClient, CoinsetClient, DriverError, OfferError, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    coinset::{ChiaRpcClient, CoinsetClient},
+    driver::{DriverError, OfferError},
+    types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
+    utils::AddressError,
 };
 use hex::FromHex;
 use sage_api::GetDerivations;
@@ -36,7 +39,7 @@ pub enum CliError {
     Bech32(#[from] bech32::Error),
 
     #[error("address: {0}")]
-    Address(#[from] chia_wallet_sdk::AddressError),
+    Address(#[from] AddressError),
 
     #[error("that's not a clear 'yes'")]
     YesNoPromptRejected,

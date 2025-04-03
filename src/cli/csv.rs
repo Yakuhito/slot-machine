@@ -1,6 +1,5 @@
 use chia::bls::PublicKey;
 use chia::protocol::{Bytes, Bytes32};
-use chia_wallet_sdk::decode_address;
 use csv::ReaderBuilder;
 use hex::FromHex;
 use serde::Deserialize;
