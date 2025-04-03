@@ -7,7 +7,8 @@ use chia::{
         LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{ChiaRpcClient, CoinsetClient, DriverError, SpendContext};
+use chia_wallet_sdk::coinset::{ChiaRpcClient, CoinsetClient};
+use chia_wallet_sdk::driver::SpendContext;
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{serde::node_from_bytes, Allocator, NodePtr};
 
@@ -72,14 +73,12 @@ where
         .coin_solution
         .ok_or(CliError::CoinNotSpent(launcher_id))?;
 
-    let launcher_solution_ptr = node_from_bytes(&mut ctx.allocator, &launcher_spend.solution)?;
-    let launcher_solution =
-        LauncherSolution::<NodePtr>::from_clvm(&ctx.allocator, launcher_solution_ptr)
-            .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+    let launcher_solution_ptr = node_from_bytes(ctx, &launcher_spend.solution)?;
+    let launcher_solution = ctx.extract::<LauncherSolution<NodePtr>>(launcher_solution_ptr)?;
 
     let parsed_state_scheduler_info = StateSchedulerInfo::<S>::from_launcher_solution::<
         MedievalVaultHint,
-    >(&mut ctx.allocator, launcher_solution);
+    >(ctx, launcher_solution);
 
     let (eve_vault, state_scheduler_info) = if let Ok(Some((
         state_scheduler_info,

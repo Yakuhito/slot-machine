@@ -1,5 +1,6 @@
 use chia::bls::PublicKey;
 use chia::protocol::{Bytes, Bytes32};
+use chia_wallet_sdk::utils::Address;
 use csv::ReaderBuilder;
 use hex::FromHex;
 use serde::Deserialize;
@@ -31,13 +32,13 @@ where
     D: serde::Deserializer<'de>,
 {
     let s: &str = Deserialize::deserialize(deserializer)?;
-    let (res, hrp) = decode_address(s).map_err(serde::de::Error::custom)?;
+    let address = Address::decode(s).map_err(serde::de::Error::custom)?;
 
-    if hrp != "xch" && hrp != "txch" {
+    if address.prefix != "xch" && address.prefix != "txch" {
         return Err(serde::de::Error::custom("Invalid bech32m prefix"));
     }
 
-    Ok(Bytes32::new(res))
+    Ok(address.puzzle_hash)
 }
 
 fn deserialize_string_array<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>

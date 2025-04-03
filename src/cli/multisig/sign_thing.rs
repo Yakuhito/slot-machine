@@ -1,8 +1,12 @@
 use chia::bls::sign;
 use chia::bls::PublicKey;
 use chia::protocol::Bytes;
-use chia_wallet_sdk::CoinsetClient;
-use chia_wallet_sdk::{AggSig, AggSigConstants, AggSigKind, RequiredBlsSignature, SpendContext};
+use chia_wallet_sdk::coinset::CoinsetClient;
+use chia_wallet_sdk::driver::SpendContext;
+use chia_wallet_sdk::prelude::AggSig;
+use chia_wallet_sdk::prelude::AggSigKind;
+use chia_wallet_sdk::signer::AggSigConstants;
+use chia_wallet_sdk::signer::RequiredBlsSignature;
 use clvmr::NodePtr;
 
 use crate::{

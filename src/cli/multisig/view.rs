@@ -1,4 +1,4 @@
-use chia_wallet_sdk::SpendContext;
+use chia_wallet_sdk::driver::SpendContext;
 use clvm_traits::{FromClvm, ToClvm};
 
 use crate::{
