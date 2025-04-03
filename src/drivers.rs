@@ -1484,7 +1484,9 @@ mod tests {
         );
 
         println!("a"); // todo: debug
-        sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+        let spends = ctx.take();
+        print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+        sim.spend_coins(spends, &[user_sk.clone(), minter_sk.clone()])?;
         println!("b"); // todo: debug
         let mut registry = registry;
         let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
@@ -2052,7 +2054,7 @@ mod tests {
                 .wrapped_child(minter2.puzzle_hash, alternative_payment_cat_amount);
             sim.spend_coins(ctx.take(), &[minter2.sk.clone()])?;
             println!("9"); // todo: debug
-            registry = test_refund_for_xchandles(
+            (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
                 unregistered_handle.clone(),
@@ -2066,8 +2068,7 @@ mod tests {
                 minter2.puzzle_hash,
                 &minter2.sk,
                 &user_bls.sk,
-            )?
-            .0;
+            )?;
             println!("10"); // todo: debug
                             // b - the amount is wrong
             (registry, payment_cat) = test_refund_for_xchandles(
