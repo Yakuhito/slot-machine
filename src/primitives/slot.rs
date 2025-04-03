@@ -3,7 +3,7 @@ use chia::{
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::singleton::{SingletonArgs, SingletonStruct},
 };
-use chia_wallet_sdk::{DriverError, SpendContext};
+use chia_wallet_sdk::driver::{DriverError, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -78,22 +78,21 @@ where
     }
 
     pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        let self_program = CurriedProgram {
-            program: ctx.slot_puzzle()?,
+        let program = ctx.slot_puzzle()?;
+        let self_program = ctx.alloc(&CurriedProgram {
+            program,
             args: Slot1stCurryArgs {
                 singleton_struct: SingletonStruct::new(self.info.launcher_id),
                 nonce: self.info.nonce,
             },
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        })?;
 
-        Ok(CurriedProgram {
+        Ok(ctx.alloc(&CurriedProgram {
             program: self_program,
             args: Slot2ndCurryArgs {
                 value_hash: self.info.value_hash,
             },
-        }
-        .to_clvm(&mut ctx.allocator)?)
+        })?)
     }
 
     pub fn spend(

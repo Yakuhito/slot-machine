@@ -2,15 +2,14 @@ use chia::{
     clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
-        singleton::{
-            LauncherSolution, SingletonArgs, SingletonSolution, SINGLETON_LAUNCHER_PUZZLE_HASH,
-        },
+        singleton::{LauncherSolution, SingletonArgs, SingletonSolution},
         EveProof, LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{DriverError, Layer, Spend, SpendContext};
+use chia_puzzles::SINGLETON_LAUNCHER_HASH;
+use chia_wallet_sdk::driver::{DriverError, Layer, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use clvmr::{serde::node_from_bytes, Allocator, NodePtr};
 
 use crate::{StateSchedulerInfo, StateSchedulerLayerSolution};
 
@@ -92,15 +91,15 @@ where
         ctx: &mut SpendContext,
         launcher_spend: CoinSpend,
     ) -> Result<Option<Self>, DriverError> {
-        if launcher_spend.coin.puzzle_hash != SINGLETON_LAUNCHER_PUZZLE_HASH.into() {
+        if launcher_spend.coin.puzzle_hash != SINGLETON_LAUNCHER_HASH.into() {
             return Ok(None);
         }
 
-        let solution = launcher_spend.solution.to_clvm(&mut ctx.allocator)?;
-        let solution = LauncherSolution::from_clvm(&ctx.allocator, solution)?;
+        let solution = node_from_bytes(ctx, &launcher_spend.solution)?;
+        let solution = ctx.extract::<LauncherSolution<NodePtr>>(solution)?;
 
         let Some((info, _other_hints)) =
-            StateSchedulerInfo::from_launcher_solution::<NodePtr>(&mut ctx.allocator, solution)?
+            StateSchedulerInfo::from_launcher_solution::<NodePtr>(ctx, solution)?
         else {
             return Ok(None);
         };
@@ -124,7 +123,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use chia_wallet_sdk::{Conditions, Launcher, Simulator, SingletonLayer};
+    use chia_wallet_sdk::{
+        driver::{Launcher, SingletonLayer},
+        test::Simulator,
+        types::Conditions,
+    };
     use clvmr::NodePtr;
 
     use crate::{CatalogRegistryState, StateSchedulerLauncherHints};
@@ -159,7 +162,7 @@ mod tests {
         let other_singleton_inner_puzzle = ctx.alloc(&1)?;
         let other_singleton_inner_puzzle_hash = ctx.tree_hash(other_singleton_inner_puzzle);
 
-        let other_singleton_launcher = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+        let other_singleton_launcher = sim.new_coin(SINGLETON_LAUNCHER_HASH.into(), 1);
         let other_launcher = Launcher::new(other_singleton_launcher.parent_coin_info, 1);
         let (_conds, mut other_singleton_coin) =
             other_launcher.spend(ctx, other_singleton_inner_puzzle_hash.into(), ())?;
@@ -167,7 +170,7 @@ mod tests {
         sim.spend_coins(ctx.take(), &[])?;
 
         // Launch state scheduler singleton
-        let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 1);
+        let launcher_coin = sim.new_coin(SINGLETON_LAUNCHER_HASH.into(), 1);
         let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
 
         let first_coin_info = StateSchedulerInfo::new(
@@ -228,18 +231,16 @@ mod tests {
                     parent_amount: other_singleton_coin_parent.amount,
                 })
             };
-            let state_scheduler_puzzle_hash_ptr = state_scheduler
-                .coin
-                .puzzle_hash
-                .to_clvm(&mut ctx.allocator)?;
-            let other_singleton_inner_solution = Conditions::new()
-                .receive_message(
-                    18,
-                    new_state.tree_hash().to_vec().into(),
-                    vec![state_scheduler_puzzle_hash_ptr],
-                )
-                .create_coin(other_singleton_inner_puzzle_hash.into(), 1, None)
-                .to_clvm(&mut ctx.allocator)?;
+            let state_scheduler_puzzle_hash_ptr = ctx.alloc(&state_scheduler.coin.puzzle_hash)?;
+            let other_singleton_inner_solution = ctx.alloc(
+                &Conditions::new()
+                    .receive_message(
+                        18,
+                        new_state.tree_hash().to_vec().into(),
+                        vec![state_scheduler_puzzle_hash_ptr],
+                    )
+                    .create_coin(other_singleton_inner_puzzle_hash.into(), 1, None),
+            )?;
             let other_singleton_spend = other_singleton.construct_spend(
                 ctx,
                 SingletonSolution {

@@ -6,7 +6,7 @@ use chia::{
         CoinProof, LineageProof,
     },
 };
-use chia_wallet_sdk::{CatLayer, DriverError, Layer, Spend, SpendContext};
+use chia_wallet_sdk::driver::{CatLayer, DriverError, Layer, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 

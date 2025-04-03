@@ -1,5 +1,5 @@
 use chia::{bls::PublicKey, clvm_utils::TreeHash, protocol::Bytes32};
-use chia_wallet_sdk::SingletonLayer;
+use chia_wallet_sdk::driver::SingletonLayer;
 use clvm_traits::{FromClvm, ToClvm};
 
 use crate::{MOfNLayer, P2MOfNDelegateDirectArgs};

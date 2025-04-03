@@ -47,8 +47,10 @@ impl DefaultCatMakerArgs {
         ctx: &mut SpendContext,
         tail_hash_hash: Bytes32,
     ) -> Result<NodePtr, DriverError> {
+        let cat_maker_puzzle = ctx.default_cat_maker_puzzle()?;
+
         ctx.alloc(&CurriedProgram {
-            program: ctx.default_cat_maker_puzzle()?,
+            program: cat_maker_puzzle,
             args: DefaultCatMakerArgs::new(tail_hash_hash),
         })
     }

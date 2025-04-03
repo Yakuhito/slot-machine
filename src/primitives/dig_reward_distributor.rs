@@ -1,12 +1,16 @@
 use chia::{
-    clvm_utils::{tree_hash, ToTreeHash},
+    clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
     puzzles::{
         singleton::{SingletonSolution, SingletonStruct},
         LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{run_puzzle, Cat, CatSpend, DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
+    prelude::{Cat, CatSpend},
+    types::run_puzzle,
+};
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
@@ -146,10 +150,9 @@ impl DigRewardDistributor {
             .map(|a| ctx.tree_hash(a.puzzle).into())
             .collect::<Vec<Bytes32>>();
 
-        let finalizer_solution = ReserveFinalizerSolution {
+        let finalizer_solution = ctx.alloc(&ReserveFinalizerSolution {
             reserve_parent_id: self.reserve.coin.parent_coin_info,
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        })?;
 
         let solution = layers.construct_solution(
             ctx,
@@ -186,9 +189,9 @@ impl DigRewardDistributor {
         cat_spends.push(cat_spend);
         Cat::spend_all(ctx, &cat_spends)?;
 
-        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let my_puzzle = Puzzle::parse(ctx, my_spend.puzzle);
         let new_reward_distributor = DigRewardDistributor::from_parent_spend(
-            &mut ctx.allocator,
+            ctx,
             self.coin,
             my_puzzle,
             solution,
@@ -264,9 +267,8 @@ impl DigRewardDistributor {
         ctx: &mut SpendContext,
         solution: NodePtr,
     ) -> Result<DigPendingItems, DriverError> {
-        let solution =
-            SingletonSolution::<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>::from_clvm(
-                &ctx.allocator,
+        let solution = ctx
+            .extract::<SingletonSolution<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>>(
                 solution,
             )?;
 
@@ -303,20 +305,14 @@ impl DigRewardDistributor {
                 raw_action.action_solution,
             ));
 
-            let actual_solution = clvm_list!(current_state, raw_action.action_solution)
-                .to_clvm(&mut ctx.allocator)?;
+            let actual_solution =
+                ctx.alloc(&clvm_list!(current_state, raw_action.action_solution))?;
 
-            let action_output = run_puzzle(
-                &mut ctx.allocator,
-                raw_action.action_puzzle_reveal,
-                actual_solution,
-            )?;
-            (current_state, _) = <match_tuple!(DigRewardDistributorState, NodePtr)>::from_clvm(
-                &ctx.allocator,
-                action_output,
-            )?;
+            let action_output = run_puzzle(ctx, raw_action.action_puzzle_reveal, actual_solution)?;
+            (current_state, _) =
+                ctx.extract::<match_tuple!(DigRewardDistributorState, NodePtr)>(action_output)?;
 
-            let raw_action_hash = tree_hash(&ctx.allocator, raw_action.action_puzzle_reveal);
+            let raw_action_hash = ctx.tree_hash(raw_action.action_puzzle_reveal);
 
             if raw_action_hash == new_epoch_hash {
                 let (rew, spent) = new_epoch_action

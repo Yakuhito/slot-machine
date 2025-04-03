@@ -3,7 +3,10 @@ use chia::{
     protocol::Bytes32,
     puzzles::{cat::CatArgs, singleton::SingletonArgs},
 };
-use chia_wallet_sdk::{DriverError, Layer, MerkleTree, Puzzle, SingletonLayer};
+use chia_wallet_sdk::{
+    driver::{DriverError, Layer, Puzzle, SingletonLayer},
+    types::MerkleTree,
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::Allocator;
 
