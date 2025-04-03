@@ -6,7 +6,7 @@ use chia::{
         EveProof, LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
+use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{VerificationLayer, VerificationLayer2ndCurryArgs, VerificationLayerSolution};
@@ -151,11 +151,13 @@ impl Verification {
 #[cfg(test)]
 mod tests {
     use anyhow::Ok;
-    use chia::{
-        protocol::Bytes,
-        puzzles::singleton::{SingletonStruct, SINGLETON_LAUNCHER_PUZZLE_HASH},
+    use chia::{protocol::Bytes, puzzles::singleton::SingletonStruct};
+    use chia_puzzles::SINGLETON_LAUNCHER_HASH;
+    use chia_wallet_sdk::{
+        driver::{Launcher, StandardLayer},
+        test::Simulator,
+        types::Conditions,
     };
-    use chia_wallet_sdk::{Conditions, Launcher, Puzzle, Simulator, StandardLayer};
 
     use crate::{VerificationPayments, VerifiedData};
 
@@ -165,18 +167,18 @@ mod tests {
     fn test_verifications_and_verification_payments() -> anyhow::Result<()> {
         let mut sim = Simulator::new();
         let ctx = &mut SpendContext::new();
-        let (sk, pk, _, coin) = sim.new_p2(1)?;
-        let p2 = StandardLayer::new(pk);
+        let bls = sim.bls(1);
+        let p2 = StandardLayer::new(bls.pk);
 
-        let did_launcher = Launcher::new(coin.coin_id(), 1);
+        let did_launcher = Launcher::new(bls.coin.coin_id(), 1);
         let (create_did, did) = did_launcher.create_simple_did(ctx, &p2)?;
-        p2.spend(ctx, coin, create_did)?;
+        p2.spend(ctx, bls.coin, create_did)?;
 
         let verifier_proof = did.child_lineage_proof();
         let did = did.update(
             ctx,
             &p2,
-            Conditions::new().create_coin(SINGLETON_LAUNCHER_PUZZLE_HASH.into(), 0, None),
+            Conditions::new().create_coin(SINGLETON_LAUNCHER_HASH.into(), 0, None),
         )?;
         let verification_launcher = Launcher::new(did.coin.parent_coin_info, 0);
         // we don't need an extra mojo for the verification coin since it's melted in the same tx
@@ -212,10 +214,9 @@ mod tests {
         ctx.insert(oracle_spend.clone());
 
         let parent_puzzle = ctx.alloc(&oracle_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(&ctx.allocator, parent_puzzle);
+        let parent_puzzle = Puzzle::parse(ctx, parent_puzzle);
         let verification =
-            Verification::from_parent_spend(&mut ctx.allocator, oracle_spend.coin, parent_puzzle)?
-                .unwrap();
+            Verification::from_parent_spend(ctx, oracle_spend.coin, parent_puzzle)?.unwrap();
 
         // create verification payment and spend it
         let verification_inner_puzzle_hash = Verification::inner_puzzle_hash(
@@ -255,7 +256,7 @@ mod tests {
         let melt_spend = verification.spend(ctx, Some(revocation_singleton_inner_ph))?;
         ctx.insert(melt_spend);
 
-        sim.spend_coins(ctx.take(), &[sk])?;
+        sim.spend_coins(ctx.take(), &[bls.sk])?;
 
         Ok(())
     }

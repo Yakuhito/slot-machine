@@ -3,7 +3,10 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -33,9 +36,9 @@ impl ToTreeHash for XchandlesExpireAction {
 }
 
 impl Action<XchandlesRegistry> for XchandlesExpireAction {
-    fn from_constants(launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
+    fn from_constants(constants: &XchandlesConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             relative_block_height: constants.relative_block_height,
             payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
         }
@@ -52,7 +55,7 @@ impl XchandlesExpireAction {
                 self.payout_puzzle_hash,
             ),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_value_from_solution(
@@ -67,7 +70,7 @@ impl XchandlesExpireAction {
             (),
             NodePtr,
             XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
-        >::from_clvm(&ctx.allocator, solution)?;
+        >::from_clvm(ctx, solution)?;
 
         Ok(XchandlesSlotValue {
             handle_hash: old_slot_value.handle_hash,
@@ -96,10 +99,6 @@ impl XchandlesExpireAction {
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
         // spend slot
-        let Some(slot_value) = slot.info.value else {
-            return Err(DriverError::Custom("Missing slot value".to_string()));
-        };
-
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
         slot.spend(ctx, my_inner_puzzle_hash)?;
 
@@ -131,7 +130,7 @@ impl XchandlesExpireAction {
                 XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
                     buy_time: precommit_coin.value.start_time,
                     pricing_program_solution: XchandlesFactorPricingSolution {
-                        current_expiration: slot_value.expiration,
+                        current_expiration: slot.info.value.expiration,
                         handle: precommit_coin.value.secret_and_handle.handle.clone(),
                         num_years,
                     },
@@ -143,8 +142,8 @@ impl XchandlesExpireAction {
                 .secret
                 .tree_hash()
                 .into(),
-            neighbors_hash: slot_value.neighbors.tree_hash().into(),
-            old_rest_hash: slot_value.launcher_ids_data_hash().into(),
+            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
+            old_rest_hash: slot.info.value.launcher_ids_data_hash().into(),
             new_rest_hash: clvm_tuple!(
                 precommit_coin.value.owner_launcher_id,
                 precommit_coin.value.resolved_launcher_id
@@ -152,13 +151,13 @@ impl XchandlesExpireAction {
             .tree_hash()
             .into(),
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
         let new_slot_value = self.get_slot_value_from_solution(
             ctx,
-            slot_value,
+            slot.info.value,
             precommit_coin.value,
             action_solution,
         )?;
@@ -326,7 +325,7 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
             program: ctx.xchandles_exponential_premium_renew_puzzle()?,
             args: self,
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -339,19 +338,19 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         num_years: u64,
     ) -> Result<u128, DriverError> {
         let puzzle = self.get_puzzle(ctx)?;
-        let solution =
-            XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
-                buy_time,
-                pricing_program_solution: XchandlesFactorPricingSolution {
-                    current_expiration: expiration,
-                    handle,
-                    num_years,
-                },
-            }
-            .to_clvm(&mut ctx.allocator)?;
+        let solution = ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution::<
+            XchandlesFactorPricingSolution,
+        > {
+            buy_time,
+            pricing_program_solution: XchandlesFactorPricingSolution {
+                current_expiration: expiration,
+                handle,
+                num_years,
+            },
+        })?;
         let output = ctx.run(puzzle, solution)?;
 
-        Ok(<(u128, u64)>::from_clvm(&ctx.allocator, output)?.0)
+        Ok(ctx.extract::<(u128, u64)>(output)?.0)
     }
 }
 
@@ -387,7 +386,7 @@ mod tests {
         for day in 0..28 {
             for hour in 0..24 {
                 let buy_time = day * 24 * 60 * 60 + hour * 60 * 60;
-                let solution = XchandlesExponentialPremiumRenewPuzzleSolution::<
+                let solution = ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution::<
                     XchandlesFactorPricingSolution,
                 > {
                     buy_time,
@@ -396,11 +395,10 @@ mod tests {
                         handle: "yakuhito".to_string(),
                         num_years: 1,
                     },
-                }
-                .to_clvm(&mut ctx.allocator)?;
+                })?;
 
                 let output = ctx.run(puzzle, solution)?;
-                let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
+                let output = ctx.extract::<XchandlesPricingOutput>(output)?;
 
                 assert_eq!(output.registered_time, 366 * 24 * 60 * 60);
 
@@ -433,19 +431,19 @@ mod tests {
         }
 
         // check premium after auction is 0
-        let solution =
-            XchandlesExponentialPremiumRenewPuzzleSolution::<XchandlesFactorPricingSolution> {
-                buy_time: 28 * 24 * 60 * 60,
-                pricing_program_solution: XchandlesFactorPricingSolution {
-                    current_expiration: 0,
-                    handle: "yakuhito".to_string(),
-                    num_years: 1,
-                },
-            }
-            .to_clvm(&mut ctx.allocator)?;
+        let solution = ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution::<
+            XchandlesFactorPricingSolution,
+        > {
+            buy_time: 28 * 24 * 60 * 60,
+            pricing_program_solution: XchandlesFactorPricingSolution {
+                current_expiration: 0,
+                handle: "yakuhito".to_string(),
+                num_years: 1,
+            },
+        })?;
 
         let output = ctx.run(puzzle, solution)?;
-        let output = XchandlesPricingOutput::from_clvm(&ctx.allocator, output)?;
+        let output = ctx.extract::<XchandlesPricingOutput>(output)?;
 
         assert_eq!(output.registered_time, 366 * 24 * 60 * 60);
         assert_eq!(output.price, 0);

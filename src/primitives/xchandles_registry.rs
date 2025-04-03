@@ -2,7 +2,10 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_wallet_sdk::{run_puzzle, DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
+    types::run_puzzle,
+};
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
@@ -102,10 +105,7 @@ impl XchandlesRegistry {
                     proofs: layers
                         .inner_puzzle
                         .get_proofs(
-                            &XchandlesRegistryInfo::action_puzzle_hashes(
-                                self.info.launcher_id,
-                                &self.info.constants,
-                            ),
+                            &XchandlesRegistryInfo::action_puzzle_hashes(&self.info.constants),
                             &action_puzzle_hashes,
                         )
                         .ok_or(DriverError::Custom(
@@ -120,9 +120,9 @@ impl XchandlesRegistry {
         let my_spend = Spend::new(puzzle, solution);
         ctx.spend(self.coin, my_spend)?;
 
-        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let my_puzzle = Puzzle::parse(ctx, my_spend.puzzle);
         let new_self = XchandlesRegistry::from_parent_spend(
-            &mut ctx.allocator,
+            ctx,
             self.coin,
             my_puzzle,
             my_spend.solution,
@@ -147,7 +147,7 @@ impl XchandlesRegistry {
     where
         A: Action<Self>,
     {
-        A::from_constants(self.info.launcher_id, &self.info.constants)
+        A::from_constants(&self.info.constants)
     }
 
     pub fn created_slot_values_to_slots(
@@ -164,7 +164,7 @@ impl XchandlesRegistry {
             .map(|slot_value| {
                 Slot::new(
                     proof,
-                    SlotInfo::from_value(self.info.launcher_id, 0, slot_value),
+                    SlotInfo::from_value(self.info.constants.launcher_id, 0, slot_value),
                 )
             })
             .collect()

@@ -3,7 +3,10 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::Conditions,
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -24,7 +27,7 @@ impl ToTreeHash for DelegatedStateAction {
 }
 
 impl Action<CatalogRegistry> for DelegatedStateAction {
-    fn from_constants(_launcher_id: Bytes32, constants: &CatalogRegistryConstants) -> Self {
+    fn from_constants(constants: &CatalogRegistryConstants) -> Self {
         Self {
             other_launcher_id: constants.price_singleton_launcher_id,
         }
@@ -32,7 +35,7 @@ impl Action<CatalogRegistry> for DelegatedStateAction {
 }
 
 impl Action<XchandlesRegistry> for DelegatedStateAction {
-    fn from_constants(_launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
+    fn from_constants(constants: &XchandlesConstants) -> Self {
         Self {
             other_launcher_id: constants.price_singleton_launcher_id,
         }
@@ -49,7 +52,7 @@ impl DelegatedStateAction {
             program: ctx.delegated_state_action_puzzle()?,
             args: DelegatedStateActionArgs::new(self.other_launcher_id),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn spend<S>(
@@ -62,19 +65,19 @@ impl DelegatedStateAction {
     where
         S: ToClvm<Allocator>,
     {
-        let state = new_state.to_clvm(&mut ctx.allocator)?;
+        let state = new_state.to_clvm(ctx)?;
         let my_solution = DelegatedStateActionSolution::<NodePtr> {
             new_state: state,
             other_singleton_inner_puzzle_hash,
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
         let message: Bytes32 = ctx.tree_hash(state).into();
         let conds = Conditions::new().send_message(
             18,
             message.into(),
-            vec![my_coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            vec![ctx.alloc(&my_coin.puzzle_hash)?],
         );
         Ok((conds, Spend::new(my_puzzle, my_solution)))
     }

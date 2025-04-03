@@ -1,12 +1,16 @@
 use chia::{
+    clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::FromClvm;
 use clvmr::{Allocator, NodePtr};
 
-use crate::{Action, ActionLayer, ActionLayerSolution, Registry};
+use crate::{
+    Action, ActionLayer, ActionLayerSolution, CatalogRegisterAction, RawActionLayerSolution,
+    Registry,
+};
 
 use super::{
     CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue, Slot,
@@ -21,6 +25,7 @@ pub struct CatalogRegistry {
     pub info: CatalogRegistryInfo,
 
     pub pending_actions: Vec<Spend>,
+    pub pending_slots: Vec<Slot<CatalogSlotValue>>,
 }
 
 impl CatalogRegistry {
@@ -30,6 +35,7 @@ impl CatalogRegistry {
             proof,
             info,
             pending_actions: vec![],
+            pending_slots: vec![],
         }
     }
 }
@@ -72,6 +78,7 @@ impl CatalogRegistry {
             proof,
             info: new_info,
             pending_actions: vec![],
+            pending_slots: vec![],
         }))
     }
 }
@@ -102,10 +109,7 @@ impl CatalogRegistry {
                     proofs: layers
                         .inner_puzzle
                         .get_proofs(
-                            &CatalogRegistryInfo::action_puzzle_hashes(
-                                self.info.launcher_id,
-                                &self.info.constants,
-                            ),
+                            &CatalogRegistryInfo::action_puzzle_hashes(&self.info.constants),
                             &action_puzzle_hashes,
                         )
                         .ok_or(DriverError::Custom(
@@ -120,9 +124,9 @@ impl CatalogRegistry {
         let my_spend = Spend::new(puzzle, solution);
         ctx.spend(self.coin, my_spend)?;
 
-        let my_puzzle = Puzzle::parse(&ctx.allocator, my_spend.puzzle);
+        let my_puzzle = Puzzle::parse(ctx, my_spend.puzzle);
         let new_self = CatalogRegistry::from_parent_spend(
-            &mut ctx.allocator,
+            ctx,
             self.coin,
             my_puzzle,
             my_spend.solution,
@@ -147,7 +151,7 @@ impl CatalogRegistry {
     where
         A: Action<Self>,
     {
-        A::from_constants(self.info.launcher_id, &self.info.constants)
+        A::from_constants(&self.info.constants)
     }
 
     pub fn created_slot_values_to_slots(
@@ -164,9 +168,71 @@ impl CatalogRegistry {
             .map(|slot_value| {
                 Slot::new(
                     proof,
-                    SlotInfo::from_value(self.info.launcher_id, 0, slot_value),
+                    SlotInfo::from_value(self.info.constants.launcher_id, 0, slot_value),
                 )
             })
             .collect()
+    }
+
+    pub fn get_new_slots_from_spend(
+        &self,
+        ctx: &mut SpendContext,
+        solution: NodePtr,
+    ) -> Result<Vec<Slot<CatalogSlotValue>>, DriverError> {
+        let solution = ctx
+            .extract::<SingletonSolution<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>>(
+                solution,
+            )?;
+
+        let mut slot_infos = vec![];
+
+        let register_action = CatalogRegisterAction::from_constants(&self.info.constants);
+        let register_hash = register_action.tree_hash();
+
+        for raw_action in solution.inner_solution.actions {
+            let raw_action_hash = ctx.tree_hash(raw_action.action_puzzle_reveal);
+
+            if raw_action_hash == register_hash {
+                slot_infos.extend(
+                    register_action
+                        .get_slot_values_from_solution(ctx, raw_action.action_solution)?,
+                );
+            }
+        }
+
+        Ok(self.created_slot_values_to_slots(slot_infos))
+    }
+
+    pub fn add_pending_slots(&mut self, slots: Vec<Slot<CatalogSlotValue>>) {
+        for slot in slots {
+            self.pending_slots
+                .retain(|s| s.info.value.asset_id != slot.info.value.asset_id);
+            self.pending_slots.push(slot);
+        }
+    }
+
+    pub fn actual_neigbors(
+        &self,
+        new_tail_hash: Bytes32,
+        on_chain_left_slot: Slot<CatalogSlotValue>,
+        on_chain_right_slot: Slot<CatalogSlotValue>,
+    ) -> (Slot<CatalogSlotValue>, Slot<CatalogSlotValue>) {
+        let mut left = on_chain_left_slot;
+        let mut right = on_chain_right_slot;
+
+        let new_slot_value =
+            CatalogSlotValue::new(new_tail_hash, Bytes32::default(), Bytes32::default());
+
+        for slot in self.pending_slots.iter() {
+            if slot.info.value < new_slot_value && slot.info.value >= left.info.value {
+                left = *slot;
+            }
+
+            if slot.info.value > new_slot_value && slot.info.value <= right.info.value {
+                right = *slot;
+            }
+        }
+
+        (left, right)
     }
 }

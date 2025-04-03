@@ -1,9 +1,13 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::{SingletonStruct, SINGLETON_TOP_LAYER_PUZZLE_HASH},
+    puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::Conditions,
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -31,9 +35,9 @@ impl ToTreeHash for DigAddMirrorAction {
 }
 
 impl Action<DigRewardDistributor> for DigAddMirrorAction {
-    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
+    fn from_constants(constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             validator_launcher_id: constants.validator_launcher_id,
             max_second_offset: constants.max_seconds_offset,
         }
@@ -50,7 +54,7 @@ impl DigAddMirrorAction {
                 self.max_second_offset,
             ),
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -60,7 +64,7 @@ impl DigAddMirrorAction {
         state: &DigRewardDistributorState,
         solution: NodePtr,
     ) -> Result<DigMirrorSlotValue, DriverError> {
-        let solution = DigAddMirrorActionSolution::from_clvm(&ctx.allocator, solution)?;
+        let solution = ctx.extract::<DigAddMirrorActionSolution>(solution)?;
 
         Ok(DigMirrorSlotValue {
             payout_puzzle_hash: solution.mirror_payout_puzzle_hash,
@@ -85,19 +89,18 @@ impl DigAddMirrorAction {
         let add_mirror_message = Conditions::new().send_message(
             18,
             add_mirror_message.into(),
-            vec![distributor.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+            vec![ctx.alloc(&distributor.coin.puzzle_hash)?],
         );
 
         // spend self
-        let action_solution = DigAddMirrorActionSolution {
+        let action_solution = ctx.alloc(&DigAddMirrorActionSolution {
             validator_singleton_inner_puzzle_hash,
             mirror_payout_puzzle_hash: payout_puzzle_hash,
             mirror_shares: shares,
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
+        let my_state = distributor.get_latest_pending_state(ctx)?;
         let slot_value = self.get_slot_value_from_solution(ctx, &my_state, action_solution)?;
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
@@ -131,7 +134,7 @@ impl DigAddMirrorActionArgs {
         max_second_offset: u64,
     ) -> Self {
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
             validator_singleton_struct_hash: SingletonStruct::new(validator_launcher_id)
                 .tree_hash()
                 .into(),

@@ -1,14 +1,17 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::SINGLETON_TOP_LAYER_PUZZLE_HASH,
 };
-use chia_wallet_sdk::{DriverError, Layer, Puzzle, SpendContext};
-use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
+use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
+use chia_wallet_sdk::{
+    driver::{DriverError, Layer, Puzzle, SpendContext},
+    types::Conditions,
+};
+use clvm_traits::{clvm_quote, clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
-use crate::{DefaultCatMakerArgs, SpendContextExt};
+use crate::{CatNftMetadata, DefaultCatMakerArgs, SpendContextExt};
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -45,7 +48,7 @@ impl<V> PrecommitLayer<V> {
         CurriedProgram {
             program: PRECOMMIT_LAYER_PUZZLE_HASH,
             args: PrecommitLayer1stCurryArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
                 singleton_struct_hash: controller_singleton_struct_hash,
                 relative_block_height,
                 payout_puzzle_hash,
@@ -125,13 +128,13 @@ where
         let prog_1st_curry = CurriedProgram {
             program: ctx.precommit_layer_puzzle()?,
             args: PrecommitLayer1stCurryArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
                 singleton_struct_hash: self.controller_singleton_struct_hash,
                 relative_block_height: self.relative_block_height,
                 payout_puzzle_hash: self.payout_puzzle_hash,
             },
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
 
         Ok(CurriedProgram {
             program: prog_1st_curry,
@@ -140,7 +143,7 @@ where
                 value: self.value.clone(),
             },
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     fn construct_solution(
@@ -148,9 +151,7 @@ where
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        solution
-            .to_clvm(&mut ctx.allocator)
-            .map_err(DriverError::ToClvm)
+        ctx.alloc(&solution)
     }
 }
 
@@ -197,13 +198,13 @@ pub struct CatalogPrecommitValue<T = NodePtr> {
 
 impl<T> CatalogPrecommitValue<T> {
     pub fn with_default_cat_maker(
-        tail_hash_hash: TreeHash,
+        payment_asset_tail_hash_hash: TreeHash,
         initial_inner_puzzle_hash: Bytes32,
         tail_reveal: T,
     ) -> Self {
         Self {
             refund_info_hash: clvm_tuple!(
-                DefaultCatMakerArgs::curry_tree_hash(tail_hash_hash.into()),
+                DefaultCatMakerArgs::curry_tree_hash(payment_asset_tail_hash_hash.into()),
                 ()
             )
             .tree_hash()
@@ -211,6 +212,23 @@ impl<T> CatalogPrecommitValue<T> {
             initial_inner_puzzle_hash,
             tail_reveal,
         }
+    }
+
+    pub fn initial_inner_puzzle(
+        ctx: &mut SpendContext,
+        owner_inner_puzzle_hash: Bytes32,
+        initial_metadata: CatNftMetadata,
+    ) -> Result<NodePtr, DriverError> {
+        let mut conds = Conditions::new().create_coin(
+            owner_inner_puzzle_hash,
+            1,
+            Some(ctx.hint(owner_inner_puzzle_hash)?),
+        );
+        let updater_solution = ctx.alloc(&initial_metadata)?;
+        conds = conds.update_nft_metadata(ctx.any_metadata_updater()?, updater_solution);
+        conds = conds.remark(ctx.alloc(&"MEOW".to_string())?);
+
+        ctx.alloc(&clvm_quote!(conds))
     }
 }
 

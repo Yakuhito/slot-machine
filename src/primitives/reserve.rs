@@ -4,7 +4,9 @@ use chia::{
     puzzles::{cat::CatArgs, singleton::SingletonSolution, LineageProof},
 };
 use chia_wallet_sdk::{
-    run_puzzle, Cat, CatSpend, CreateCoin, DriverError, Layer, Memos, Spend, SpendContext,
+    driver::{Cat, CatSpend, DriverError, Layer, Spend, SpendContext},
+    prelude::{CreateCoin, Memos},
+    types::run_puzzle,
 };
 use clvm_traits::{clvm_list, clvm_quote, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
@@ -115,23 +117,18 @@ impl Reserve {
     where
         S: ToClvm<Allocator> + FromClvm<Allocator> + Clone + Reserveful,
     {
-        let controller_solution = SingletonSolution::<
+        let controller_solution = ctx.extract::<SingletonSolution<
             RawActionLayerSolution<NodePtr, NodePtr, NodePtr>,
-        >::from_clvm(&ctx.allocator, controller_solution)?;
+        >>(controller_solution)?;
 
         let mut state: S = controlelr_initial_state;
         let mut reserve_conditions: Vec<NodePtr> = Vec::new();
         for raw_action in controller_solution.inner_solution.actions {
-            let actual_solution =
-                clvm_list!(state, raw_action.action_solution).to_clvm(&mut ctx.allocator)?;
+            let actual_solution = ctx.alloc(&clvm_list!(state, raw_action.action_solution))?;
 
-            let output = run_puzzle(
-                &mut ctx.allocator,
-                raw_action.action_puzzle_reveal,
-                actual_solution,
-            )?;
+            let output = run_puzzle(ctx, raw_action.action_puzzle_reveal, actual_solution)?;
             let (new_state, conditions) =
-                <match_tuple!(S, Vec<(i64, NodePtr)>)>::from_clvm(&ctx.allocator, output)?;
+                ctx.extract::<match_tuple!(S, Vec<(i64, NodePtr)>)>(output)?;
             state = new_state;
 
             for (opcode, cond) in conditions {
@@ -149,9 +146,9 @@ impl Reserve {
             new_reserve_amount,
             Some(Memos::new(vec![self.inner_puzzle_hash])),
         );
-        reserve_conditions.insert(0, cc.to_clvm(&mut ctx.allocator)?);
+        reserve_conditions.insert(0, ctx.alloc(&cc)?);
 
-        let delegated_puzzle = clvm_quote!(reserve_conditions).to_clvm(&mut ctx.allocator)?;
+        let delegated_puzzle = ctx.alloc(&clvm_quote!(reserve_conditions))?;
 
         Ok(delegated_puzzle)
     }

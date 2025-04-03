@@ -1,9 +1,13 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::{SingletonStruct, SINGLETON_TOP_LAYER_PUZZLE_HASH},
+    puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::Conditions,
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -31,9 +35,9 @@ impl ToTreeHash for DigRemoveMirrorAction {
 }
 
 impl Action<DigRewardDistributor> for DigRemoveMirrorAction {
-    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
+    fn from_constants(constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             validator_launcher_id: constants.validator_launcher_id,
             max_seconds_offset: constants.max_seconds_offset,
         }
@@ -41,10 +45,7 @@ impl Action<DigRewardDistributor> for DigRemoveMirrorAction {
 }
 
 impl DigRemoveMirrorAction {
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.dig_remove_mirror_action_puzzle()?,
             args: DigRemoveMirrorActionArgs::new(
@@ -53,7 +54,7 @@ impl DigRemoveMirrorAction {
                 self.max_seconds_offset,
             ),
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -65,14 +66,11 @@ impl DigRemoveMirrorAction {
         validator_singleton_inner_puzzle_hash: Bytes32,
     ) -> Result<(Conditions, u64), DriverError> {
         // u64 = last payment amount
-        let Some(mirror_slot_value) = mirror_slot.info.value else {
-            return Err(DriverError::Custom("Mirror slot value is None".to_string()));
-        };
 
         // compute message that the validator needs to send
         let remove_mirror_message: Bytes32 = clvm_tuple!(
-            mirror_slot_value.payout_puzzle_hash,
-            mirror_slot_value.shares
+            mirror_slot.info.value.payout_puzzle_hash,
+            mirror_slot.info.value.shares
         )
         .tree_hash()
         .into();
@@ -83,7 +81,7 @@ impl DigRemoveMirrorAction {
             .send_message(
                 18,
                 remove_mirror_message.into(),
-                vec![distributor.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+                vec![ctx.alloc(&distributor.coin.puzzle_hash)?],
             )
             .assert_concurrent_puzzle(mirror_slot.coin.puzzle_hash);
 
@@ -91,22 +89,40 @@ impl DigRemoveMirrorAction {
         mirror_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         // spend self
-        let my_state = distributor.get_latest_pending_state(&mut ctx.allocator)?;
-        let mirror_payout_amount = mirror_slot_value.shares
+        let my_state = distributor.get_latest_pending_state(ctx)?;
+        let mirror_payout_amount = mirror_slot.info.value.shares
             * (my_state.round_reward_info.cumulative_payout
-                - mirror_slot_value.initial_cumulative_payout);
-        let action_solution = DigRemoveMirrorActionSolution {
+                - mirror_slot.info.value.initial_cumulative_payout);
+        let action_solution = ctx.alloc(&DigRemoveMirrorActionSolution {
             validator_singleton_inner_puzzle_hash,
             mirror_payout_amount,
-            mirror_payout_puzzle_hash: mirror_slot_value.payout_puzzle_hash,
-            mirror_initial_cumulative_payout: mirror_slot_value.initial_cumulative_payout,
-            mirror_shares: mirror_slot_value.shares,
-        }
-        .to_clvm(&mut ctx.allocator)?;
+            mirror_payout_puzzle_hash: mirror_slot.info.value.payout_puzzle_hash,
+            mirror_initial_cumulative_payout: mirror_slot.info.value.initial_cumulative_payout,
+            mirror_shares: mirror_slot.info.value.shares,
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((remove_mirror_conditions, mirror_payout_amount))
+    }
+
+    pub fn get_spent_slot_value_from_solution(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<(DigSlotNonce, Bytes32), DriverError> {
+        let solution = ctx.extract::<DigRemoveMirrorActionSolution>(solution)?;
+
+        Ok((
+            DigSlotNonce::MIRROR,
+            DigMirrorSlotValue {
+                payout_puzzle_hash: solution.mirror_payout_puzzle_hash,
+                initial_cumulative_payout: solution.mirror_initial_cumulative_payout,
+                shares: solution.mirror_shares,
+            }
+            .tree_hash()
+            .into(),
+        ))
     }
 }
 
@@ -134,7 +150,7 @@ impl DigRemoveMirrorActionArgs {
         max_seconds_offset: u64,
     ) -> Self {
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
             validator_singleton_struct_hash: SingletonStruct::new(validator_launcher_id)
                 .tree_hash()
                 .into(),

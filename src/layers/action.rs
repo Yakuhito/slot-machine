@@ -1,16 +1,14 @@
-use chia::protocol::Bytes32;
-
 pub trait Registry {
     type State;
     type Constants;
 }
 
 pub trait Action<R: Registry> {
-    fn from_constants(launcher_id: Bytes32, constants: &R::Constants) -> Self;
+    fn from_constants(constants: &R::Constants) -> Self;
 
     // you may also add:
 
-    // fn curry_tree_hash(launcher_id: Bytes32, constants: &R::Constants) -> TreeHash;
+    // fn curry_tree_hash(constants: &R::Constants) -> TreeHash;
 
     // fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>;
 

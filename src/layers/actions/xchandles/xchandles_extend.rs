@@ -1,9 +1,13 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::offer::{NotarizedPayment, Payment, SETTLEMENT_PAYMENTS_PUZZLE_HASH},
+    puzzles::offer::{NotarizedPayment, Payment},
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -28,9 +32,9 @@ impl ToTreeHash for XchandlesExtendAction {
 }
 
 impl Action<XchandlesRegistry> for XchandlesExtendAction {
-    fn from_constants(launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
+    fn from_constants(constants: &XchandlesConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
         }
     }
@@ -42,7 +46,7 @@ impl XchandlesExtendAction {
             program: ctx.xchandles_extend_puzzle()?,
             args: XchandlesExtendActionArgs::new(self.launcher_id, self.payout_puzzle_hash),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_value_from_solution(
@@ -56,7 +60,7 @@ impl XchandlesExtendAction {
             XchandlesFactorPricingSolution,
             NodePtr,
             (),
-        >::from_clvm(&ctx.allocator, solution)?;
+        >::from_clvm(ctx, solution)?;
 
         Ok(old_slot_value.with_expiration(
             old_slot_value.expiration + solution.pricing_solution.num_years * 366 * 24 * 60 * 60,
@@ -75,36 +79,29 @@ impl XchandlesExtendAction {
         num_years: u64,
     ) -> Result<(NotarizedPayment, Conditions, Slot<XchandlesSlotValue>), DriverError> {
         // spend slots
-        let Some(slot_value) = slot.info.value else {
-            return Err(DriverError::Custom("Missing slot value".to_string()));
-        };
-
         let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
         slot.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
-        let action_solution = XchandlesExtendActionSolution {
-            handle_hash: slot_value.handle_hash,
-            pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
-                ctx,
-                base_handle_price,
-            )?,
+        let cat_maker_puzzle_reveal =
+            DefaultCatMakerArgs::get_puzzle(ctx, payment_asset_id.tree_hash().into())?;
+        let pricing_puzzle_reveal =
+            XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_handle_price)?;
+        let action_solution = ctx.alloc(&XchandlesExtendActionSolution {
+            handle_hash: slot.info.value.handle_hash,
+            pricing_puzzle_reveal,
             pricing_solution: XchandlesFactorPricingSolution {
-                current_expiration: slot_value.expiration,
+                current_expiration: slot.info.value.expiration,
                 handle: handle.clone(),
                 num_years,
             },
-            cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
-                ctx,
-                payment_asset_id.tree_hash().into(),
-            )?,
+            cat_maker_puzzle_reveal,
             cat_maker_solution: (),
-            neighbors_hash: slot_value.neighbors.tree_hash().into(),
-            expiration: slot_value.expiration,
-            rest_hash: slot_value.launcher_ids_data_hash().into(),
-        }
-        .to_clvm(&mut ctx.allocator)?;
+            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
+            expiration: slot.info.value.expiration,
+            rest_hash: slot.info.value.launcher_ids_data_hash().into(),
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
@@ -113,7 +110,7 @@ impl XchandlesExtendAction {
             XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, num_years);
 
         let notarized_payment = NotarizedPayment {
-            nonce: clvm_tuple!(handle.clone(), slot_value.expiration)
+            nonce: clvm_tuple!(handle.clone(), slot.info.value.expiration)
                 .tree_hash()
                 .into(),
             payments: vec![Payment {
@@ -126,7 +123,8 @@ impl XchandlesExtendAction {
         let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, handle).tree_hash().to_vec();
         extend_ann.insert(0, b'e');
 
-        let new_slot_value = self.get_slot_value_from_solution(ctx, slot_value, action_solution)?;
+        let new_slot_value =
+            self.get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
 
         Ok((
             notarized_payment,
@@ -156,7 +154,7 @@ pub struct XchandlesExtendActionArgs {
 impl XchandlesExtendActionArgs {
     pub fn new(launcher_id: Bytes32, payout_puzzle_hash: Bytes32) -> Self {
         Self {
-            offer_mod_hash: SETTLEMENT_PAYMENTS_PUZZLE_HASH.into(),
+            offer_mod_hash: SETTLEMENT_PAYMENT_HASH.into(),
             payout_puzzle_hash,
             slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
         }

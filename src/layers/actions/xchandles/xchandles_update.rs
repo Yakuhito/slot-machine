@@ -1,9 +1,12 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    puzzles::singleton::{SINGLETON_LAUNCHER_PUZZLE_HASH, SINGLETON_TOP_LAYER_PUZZLE_HASH},
 };
-use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::Conditions,
+};
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -24,8 +27,10 @@ impl ToTreeHash for XchandlesUpdateAction {
 }
 
 impl Action<XchandlesRegistry> for XchandlesUpdateAction {
-    fn from_constants(launcher_id: Bytes32, _constants: &XchandlesConstants) -> Self {
-        Self { launcher_id }
+    fn from_constants(constants: &XchandlesConstants) -> Self {
+        Self {
+            launcher_id: constants.launcher_id,
+        }
     }
 }
 
@@ -35,7 +40,7 @@ impl XchandlesUpdateAction {
             program: ctx.xchandles_update_puzzle()?,
             args: XchandlesUpdateActionArgs::new(self.launcher_id),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_value_from_solution(
@@ -44,7 +49,7 @@ impl XchandlesUpdateAction {
         spent_slot_value: XchandlesSlotValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution = XchandlesUpdateActionSolution::from_clvm(&ctx.allocator, solution)?;
+        let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
 
         Ok(spent_slot_value.with_launcher_ids(
             solution.new_owner_launcher_id,
@@ -62,34 +67,30 @@ impl XchandlesUpdateAction {
         announcer_inner_puzzle_hash: Bytes32,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
         // spend slots
-        let Some(slot_value) = slot.info.value else {
-            return Err(DriverError::Custom("Missing slot value".to_string()));
-        };
-
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
         slot.spend(ctx, my_inner_puzzle_hash)?;
 
         // spend self
-        let action_solution = XchandlesUpdateActionSolution {
-            value_hash: slot_value.handle_hash.tree_hash().into(),
-            neighbors_hash: slot_value.neighbors.tree_hash().into(),
-            expiration: slot_value.expiration,
-            current_owner_launcher_id: slot_value.owner_launcher_id,
-            current_resolved_launcher_id: slot_value.resolved_launcher_id,
+        let action_solution = ctx.alloc(&XchandlesUpdateActionSolution {
+            value_hash: slot.info.value.handle_hash.tree_hash().into(),
+            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
+            expiration: slot.info.value.expiration,
+            current_owner_launcher_id: slot.info.value.owner_launcher_id,
+            current_resolved_launcher_id: slot.info.value.resolved_launcher_id,
             new_owner_launcher_id,
             new_resolved_launcher_id,
             announcer_inner_puzzle_hash,
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
-        let new_slot_value = self.get_slot_value_from_solution(ctx, slot_value, action_solution)?;
+        let new_slot_value =
+            self.get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
 
         let msg: Bytes32 = clvm_tuple!(
-            slot_value.handle_hash,
+            slot.info.value.handle_hash,
             clvm_tuple!(new_owner_launcher_id, new_resolved_launcher_id)
         )
         .tree_hash()
@@ -123,9 +124,9 @@ pub struct XchandlesUpdateActionArgs {
 
 impl XchandlesUpdateActionArgs {
     pub fn new(launcher_id: Bytes32) -> Self {
-        let singleton_launcher_mod_hash: Bytes32 = SINGLETON_LAUNCHER_PUZZLE_HASH.into();
+        let singleton_launcher_mod_hash: Bytes32 = SINGLETON_LAUNCHER_HASH.into();
         Self {
-            singleton_mod_hash: SINGLETON_TOP_LAYER_PUZZLE_HASH.into(),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
             singleton_launcher_mod_hash_hash: singleton_launcher_mod_hash.tree_hash().into(),
             slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
         }

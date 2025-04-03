@@ -1,4 +1,7 @@
-use chia_wallet_sdk::{Condition, Conditions, DriverError, Layer, Puzzle, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
+    types::{Condition, Conditions},
+};
 use clvm_traits::{clvm_quote, match_quote, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
@@ -37,7 +40,7 @@ where
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        Ok(clvm_quote!(self.conditions.clone()).to_clvm(&mut ctx.allocator)?)
+        Ok(clvm_quote!(self.conditions.clone()).to_clvm(ctx)?)
     }
 
     fn construct_solution(

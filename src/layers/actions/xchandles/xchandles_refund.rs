@@ -3,7 +3,10 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -31,9 +34,9 @@ impl ToTreeHash for XchandlesRefundAction {
 }
 
 impl Action<XchandlesRegistry> for XchandlesRefundAction {
-    fn from_constants(launcher_id: Bytes32, constants: &XchandlesConstants) -> Self {
+    fn from_constants(constants: &XchandlesConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             relative_block_height: constants.relative_block_height,
             payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
         }
@@ -50,7 +53,7 @@ impl XchandlesRefundAction {
                 self.payout_puzzle_hash,
             ),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_value(&self, spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
@@ -116,26 +119,18 @@ impl XchandlesRefundAction {
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
             precommit_amount: precommit_coin.coin.amount,
             rest_hash: if let Some(slot) = slot {
-                slot.info
-                    .value
-                    .ok_or(DriverError::Custom(
-                        "Slot does not contain value".to_string(),
-                    ))?
-                    .after_handle_data_hash()
-                    .into()
+                slot.info.value.after_handle_data_hash().into()
             } else {
                 Bytes32::default()
             },
         }
-        .to_clvm(&mut ctx.allocator)?;
+        .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
         let new_slot_value = slot.map(|slot| {
-            registry
-                .created_slot_values_to_slots(vec![self.get_slot_value(slot.info.value.unwrap())])
-                [0]
+            registry.created_slot_values_to_slots(vec![self.get_slot_value(slot.info.value)])[0]
         });
 
         Ok((

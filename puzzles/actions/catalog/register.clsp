@@ -75,7 +75,7 @@
     ) 
   )
 
-  (if (all (> tail_hash left_tail_hash) (> right_tail_hash tail_hash) (= (sha256tree cat_maker_reveal) (f Current_State)))
+  (if (all (>s tail_hash left_tail_hash) (>s right_tail_hash tail_hash) (= (sha256tree cat_maker_reveal) (f Current_State)))
     (c
       Current_State ; new state
 

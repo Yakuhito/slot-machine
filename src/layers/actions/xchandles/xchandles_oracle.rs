@@ -2,7 +2,10 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
-use chia_wallet_sdk::{announcement_id, Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::{announcement_id, Conditions},
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -23,8 +26,10 @@ impl ToTreeHash for XchandlesOracleAction {
 }
 
 impl Action<XchandlesRegistry> for XchandlesOracleAction {
-    fn from_constants(launcher_id: Bytes32, _constants: &XchandlesConstants) -> Self {
-        Self { launcher_id }
+    fn from_constants(constants: &XchandlesConstants) -> Self {
+        Self {
+            launcher_id: constants.launcher_id,
+        }
     }
 }
 
@@ -34,7 +39,7 @@ impl XchandlesOracleAction {
             program: ctx.xchandles_oracle_puzzle()?,
             args: XchandlesOracleActionArgs::new(self.launcher_id),
         }
-        .to_clvm(&mut ctx.allocator)?)
+        .to_clvm(ctx)?)
     }
 
     pub fn get_slot_value(&self, old_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
@@ -48,24 +53,19 @@ impl XchandlesOracleAction {
         slot: Slot<XchandlesSlotValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
         // spend slots
-        let Some(slot_value) = slot.info.value else {
-            return Err(DriverError::Custom("Missing slot value".to_string()));
-        };
-
         slot.spend(ctx, registry.info.inner_puzzle_hash().into())?;
 
         // finally, spend self
-        let action_solution = XchandlesOracleActionSolution {
-            data_treehash: slot_value.tree_hash().into(),
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        let action_solution = ctx.alloc(&XchandlesOracleActionSolution {
+            data_treehash: slot.info.value.tree_hash().into(),
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
-        let new_slot = self.get_slot_value(slot_value);
+        let new_slot = self.get_slot_value(slot.info.value);
 
-        let mut oracle_ann = slot_value.tree_hash().to_vec();
+        let mut oracle_ann = slot.info.value.tree_hash().to_vec();
         oracle_ann.insert(0, b'o');
         Ok((
             Conditions::new()

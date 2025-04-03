@@ -7,25 +7,26 @@
 ;; For an example, see actions/shared/delegated_state.clsp (this is the trusted singleton).
 
 (mod (
-  OTHER_SINGLETON_STRUCT
-  BASE_CONDITIONS
-  NEW_STATE ; reveal on-chain
-  other_singleton_inner_puzzle_hash
+  SINGLETON_MOD_HASH
+  RECEIVER_SINGLETON_STRUCT_HASH
+  MESSAGE
+  INNER_PUZZLE
+  other_singleton_inner_puzzle_hash .
+  inner_solution
 )
   (include condition_codes.clib)
-  (include sha256tree.clib)
   (include curry.clib)
 
   (c
     (list
       SEND_MESSAGE
       18 ; puzzle-puzzle
-      (sha256tree NEW_STATE)
-      (curry_hashes_inline (f OTHER_SINGLETON_STRUCT)
-        (sha256tree OTHER_SINGLETON_STRUCT)
+      MESSAGE
+      (curry_hashes_inline SINGLETON_MOD_HASH
+        RECEIVER_SINGLETON_STRUCT_HASH
         other_singleton_inner_puzzle_hash
       )
     )
-    BASE_CONDITIONS
+    (a INNER_PUZZLE inner_solution)
   )
 )

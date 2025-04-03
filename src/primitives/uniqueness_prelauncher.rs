@@ -1,9 +1,9 @@
 use chia::{
     clvm_utils::{tree_hash, CurriedProgram, ToTreeHash, TreeHash},
     protocol::{Bytes32, Coin, CoinSpend},
-    puzzles::singleton::SINGLETON_LAUNCHER_PUZZLE_HASH,
 };
-use chia_wallet_sdk::{DriverError, Launcher, SpendContext};
+use chia_puzzles::SINGLETON_LAUNCHER_HASH;
+use chia_wallet_sdk::driver::{DriverError, Launcher, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
@@ -47,7 +47,7 @@ impl<V> UniquenessPrelauncher<V> {
         CurriedProgram {
             program: UNIQUENESS_PRELAUNCHER_PUZZLE_HASH,
             args: UniquenessPrelauncher1stCurryArgs {
-                launcher_puzzle_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
+                launcher_puzzle_hash: SINGLETON_LAUNCHER_HASH.into(),
             },
         }
         .tree_hash()
@@ -65,21 +65,20 @@ impl<V> UniquenessPrelauncher<V> {
     where
         V: ToClvm<Allocator> + Clone,
     {
-        let prog_1st_curry = CurriedProgram {
-            program: ctx.uniqueness_prelauncher_puzzle()?,
+        let program = ctx.uniqueness_prelauncher_puzzle()?;
+        let prog_1st_curry = ctx.alloc(&CurriedProgram {
+            program,
             args: UniquenessPrelauncher1stCurryArgs {
-                launcher_puzzle_hash: SINGLETON_LAUNCHER_PUZZLE_HASH.into(),
+                launcher_puzzle_hash: SINGLETON_LAUNCHER_HASH.into(),
             },
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        })?;
 
-        Ok(CurriedProgram {
+        ctx.alloc(&CurriedProgram {
             program: prog_1st_curry,
             args: UniquenessPrelauncher2ndCurryArgs {
                 value: self.value.clone(),
             },
-        }
-        .to_clvm(&mut ctx.allocator)?)
+        })
     }
 
     pub fn spend(self, ctx: &mut SpendContext) -> Result<Launcher, DriverError>

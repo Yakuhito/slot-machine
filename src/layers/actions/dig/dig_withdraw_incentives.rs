@@ -2,7 +2,10 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::{Bytes, Bytes32},
 };
-use chia_wallet_sdk::{Conditions, DriverError, Spend, SpendContext};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::Conditions,
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
@@ -28,24 +31,21 @@ impl ToTreeHash for DigWithdrawIncentivesAction {
 }
 
 impl Action<DigRewardDistributor> for DigWithdrawIncentivesAction {
-    fn from_constants(launcher_id: Bytes32, constants: &DigRewardDistributorConstants) -> Self {
+    fn from_constants(constants: &DigRewardDistributorConstants) -> Self {
         Self {
-            launcher_id,
+            launcher_id: constants.launcher_id,
             withdrawal_share_bps: constants.withdrawal_share_bps,
         }
     }
 }
 
 impl DigWithdrawIncentivesAction {
-    fn construct_puzzle(
-        &self,
-        ctx: &mut chia_wallet_sdk::SpendContext,
-    ) -> Result<NodePtr, DriverError> {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.dig_withdraw_incentives_action_puzzle()?,
             args: DigWithdrawIncentivesActionArgs::new(self.launcher_id, self.withdrawal_share_bps),
         }
-        .to_clvm(&mut ctx.allocator)
+        .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
@@ -54,15 +54,39 @@ impl DigWithdrawIncentivesAction {
         ctx: &SpendContext,
         my_constants: &DigRewardDistributorConstants,
         solution: NodePtr,
-    ) -> Result<DigRewardSlotValue, DriverError> {
-        let solution = DigWithdrawIncentivesActionSolution::from_clvm(&ctx.allocator, solution)?;
+    ) -> Result<(DigRewardSlotValue, [(DigSlotNonce, Bytes32); 2]), DriverError> {
+        let solution = ctx.extract::<DigWithdrawIncentivesActionSolution>(solution)?;
         let withdrawal_share = solution.committed_value * my_constants.withdrawal_share_bps / 10000;
 
-        Ok(DigRewardSlotValue {
+        let old_reward_slot_value = DigRewardSlotValue {
+            epoch_start: solution.reward_slot_epoch_time,
+            next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
+            rewards: solution.reward_slot_total_rewards,
+        };
+        let new_reward_slot_value = DigRewardSlotValue {
             epoch_start: solution.reward_slot_epoch_time,
             next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
             rewards: solution.reward_slot_total_rewards - withdrawal_share,
-        })
+        };
+        let commitment_slot_value = DigCommitmentSlotValue {
+            epoch_start: solution.reward_slot_epoch_time,
+            clawback_ph: solution.clawback_ph,
+            rewards: solution.committed_value,
+        };
+
+        Ok((
+            new_reward_slot_value,
+            [
+                (
+                    DigSlotNonce::REWARD,
+                    old_reward_slot_value.tree_hash().into(),
+                ),
+                (
+                    DigSlotNonce::COMMITMENT,
+                    commitment_slot_value.tree_hash().into(),
+                ),
+            ],
+        ))
     }
 
     pub fn spend(
@@ -73,24 +97,16 @@ impl DigWithdrawIncentivesAction {
         reward_slot: Slot<DigRewardSlotValue>,
     ) -> Result<(Conditions, Slot<DigRewardSlotValue>, u64), DriverError> {
         // last u64 = withdrawn amount
-        let Some(reward_slot_value) = reward_slot.info.value else {
-            return Err(DriverError::Custom("Reward slot value is None".to_string()));
-        };
-        let Some(commitment_slot_value) = commitment_slot.info.value else {
-            return Err(DriverError::Custom(
-                "Commitment slot value is None".to_string(),
-            ));
-        };
-
-        let withdrawal_share =
-            commitment_slot_value.rewards * distributor.info.constants.withdrawal_share_bps / 10000;
+        let withdrawal_share = commitment_slot.info.value.rewards
+            * distributor.info.constants.withdrawal_share_bps
+            / 10000;
 
         // calculate message that the validator needs to send
         let withdraw_incentives_conditions = Conditions::new()
             .send_message(
                 18,
                 Bytes::new(Vec::new()),
-                vec![distributor.coin.puzzle_hash.to_clvm(&mut ctx.allocator)?],
+                vec![ctx.alloc(&distributor.coin.puzzle_hash)?],
             )
             .assert_concurrent_puzzle(commitment_slot.coin.puzzle_hash);
 
@@ -100,19 +116,19 @@ impl DigWithdrawIncentivesAction {
         commitment_slot.spend(ctx, my_inner_puzzle_hash)?;
 
         // spend self
-        let action_solution = DigWithdrawIncentivesActionSolution {
-            reward_slot_epoch_time: reward_slot_value.epoch_start,
-            reward_slot_next_epoch_initialized: reward_slot_value.next_epoch_initialized,
-            reward_slot_total_rewards: reward_slot_value.rewards,
-            clawback_ph: commitment_slot_value.clawback_ph,
-            committed_value: commitment_slot_value.rewards,
+        let action_solution = ctx.alloc(&DigWithdrawIncentivesActionSolution {
+            reward_slot_epoch_time: reward_slot.info.value.epoch_start,
+            reward_slot_next_epoch_initialized: reward_slot.info.value.next_epoch_initialized,
+            reward_slot_total_rewards: reward_slot.info.value.rewards,
+            clawback_ph: commitment_slot.info.value.clawback_ph,
+            committed_value: commitment_slot.info.value.rewards,
             withdrawal_share,
-        }
-        .to_clvm(&mut ctx.allocator)?;
+        })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_value =
-            self.get_slot_value_from_solution(ctx, &distributor.info.constants, action_solution)?;
+        let slot_value = self
+            .get_slot_value_from_solution(ctx, &distributor.info.constants, action_solution)?
+            .0;
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             withdraw_incentives_conditions,

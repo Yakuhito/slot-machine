@@ -148,8 +148,8 @@
   (if (all
         (= handle_hash (sha256 1 (f (r pricing_solution))))
         (not (f pricing_solution)) ; Current_Expiry = 0 since handle is being registered
-        (> handle_hash left_value)
-        (> right_value handle_hash)
+        (>s handle_hash left_value)
+        (>s right_value handle_hash)
         (= (f Current_State) (sha256tree (f solution))) ; cat maker puzzle reveal is correct
         (= (f (r Current_State)) (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
         (> start_time 0)
