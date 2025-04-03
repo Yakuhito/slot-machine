@@ -3919,6 +3919,8 @@ dependencies = [
  "bech32",
  "bip39",
  "chia",
+ "chia-puzzle-types",
+ "chia-puzzles",
  "chia-wallet-sdk 0.23.0",
  "clap",
  "clvm-traits",
