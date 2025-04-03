@@ -13,7 +13,7 @@ use chia::{
     },
 };
 use chia_puzzle_types::offer::Memos;
-use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT, SETTLEMENT_PAYMENT_HASH};
+use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH};
 use chia_wallet_sdk::{
     driver::{
         Cat, CatSpend, CurriedPuzzle, DriverError, Launcher, Layer, Offer, SingleCatSpend, Spend,
@@ -21,10 +21,10 @@ use chia_wallet_sdk::{
     },
     prelude::{AggSig, AggSigKind},
     signer::{AggSigConstants, RequiredBlsSignature},
-    types::{announcement_id, Condition, Conditions},
+    types::{announcement_id, puzzles::SettlementPayment, Condition, Conditions},
 };
 use clvm_traits::{clvm_quote, clvm_tuple, FromClvm, ToClvm};
-use clvmr::{serde::node_from_bytes, Allocator, NodePtr};
+use clvmr::{Allocator, NodePtr};
 
 use crate::{
     CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
@@ -174,10 +174,12 @@ pub fn parse_one_sided_offer(
                             notarized_payments: vec![notarized_payment.clone()],
                         })?;
 
-                        let settlement_payments_puzzle = node_from_bytes(ctx, &SETTLEMENT_PAYMENT)?;
                         let offer_cat_spend = CatSpend::new(
                             offer_cat,
-                            Spend::new(settlement_payments_puzzle, offer_cat_inner_solution),
+                            Spend::new(
+                                ctx.alloc_mod::<SettlementPayment>()?,
+                                offer_cat_inner_solution,
+                            ),
                         );
 
                         let interim_cat = offer_cat.wrapped_child(interim_inner_ph, 1);
@@ -214,7 +216,7 @@ pub fn parse_one_sided_offer(
                             notarized_payments: vec![notarized_payment.clone()],
                         })?;
 
-                        let offer_cat_inner_puzzle = node_from_bytes(ctx, &SETTLEMENT_PAYMENT)?;
+                        let offer_cat_inner_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
                         offer_cat.spend(
                             ctx,
                             SingleCatSpend {
@@ -269,7 +271,7 @@ pub fn parse_one_sided_offer(
                 security_coin_parent_id = Some(offer_coin_id);
                 security_coin_amount = cc.amount;
 
-                let settlement_payments_puzzle = node_from_bytes(ctx, &SETTLEMENT_PAYMENT)?;
+                let settlement_payments_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
                 let offer_coin_puzzle = ctx.serialize(&settlement_payments_puzzle)?;
 
                 let offer_coin_solution = SettlementPaymentsSolution {
@@ -829,14 +831,14 @@ mod tests {
             CoinProof,
         },
     };
-    use chia_puzzles::{SETTLEMENT_PAYMENT, SINGLETON_LAUNCHER_HASH};
+    use chia_puzzles::SINGLETON_LAUNCHER_HASH;
     use chia_wallet_sdk::{
         driver::{Nft, NftMint, SpendWithConditions},
         test::Simulator,
         types::TESTNET11_CONSTANTS,
     };
     use clvm_traits::clvm_list;
-    use clvmr::{serde::node_from_bytes, Allocator};
+    use clvmr::Allocator;
     use hex_literal::hex;
 
     use crate::{
@@ -1800,9 +1802,8 @@ mod tests {
                     ),
             )?;
 
-            let settlement_payments_puzzle = node_from_bytes(ctx, &SETTLEMENT_PAYMENT)?;
             let cat_offer_inner_spend = Spend::new(
-                settlement_payments_puzzle,
+                ctx.alloc_mod::<SettlementPayment>()?,
                 ctx.alloc(&clvm_list!(notarized_payment))?,
             );
 
