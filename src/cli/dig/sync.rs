@@ -1,5 +1,8 @@
 use chia::protocol::SpendBundle;
-use chia_wallet_sdk::{ChiaRpcClient, Offer, SpendContext};
+use chia_wallet_sdk::{
+    coinset::ChiaRpcClient,
+    driver::{Offer, SpendContext},
+};
 use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{

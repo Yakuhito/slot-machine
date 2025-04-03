@@ -1,5 +1,9 @@
 use chia::protocol::{Bytes32, SpendBundle};
-use chia_wallet_sdk::{decode_address, CatSpend, ChiaRpcClient, Offer, Spend, SpendContext};
+use chia_wallet_sdk::{
+    coinset::ChiaRpcClient,
+    driver::{CatSpend, Offer, Spend, SpendContext},
+    utils::Address,
+};
 use clvmr::NodePtr;
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
@@ -38,7 +42,7 @@ pub async fn dig_commit_rewards(
     yes_no_prompt("Proceed?")?;
 
     let sage = SageClient::new()?;
-    let clawback_ph = Bytes32::new(decode_address(&clawback_address)?.0);
+    let clawback_ph = Address::decode(&clawback_address)?.puzzle_hash;
 
     let offer_resp = sage
         .make_offer(MakeOffer {

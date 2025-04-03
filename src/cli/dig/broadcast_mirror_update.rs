@@ -1,7 +1,7 @@
 use chia::protocol::Bytes32;
 use chia::puzzles::singleton::SingletonSolution;
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes};
-use chia_wallet_sdk::{Layer, Spend};
+use chia_wallet_sdk::driver::{Layer, Spend};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{

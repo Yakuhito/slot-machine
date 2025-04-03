@@ -1,5 +1,9 @@
-use chia::protocol::{Bytes32, Coin, SpendBundle};
-use chia_wallet_sdk::{decode_address, ChiaRpcClient, Offer, Spend, SpendContext, StandardLayer};
+use chia::protocol::{Coin, SpendBundle};
+use chia_wallet_sdk::{
+    coinset::ChiaRpcClient,
+    driver::{Offer, Spend, SpendContext, StandardLayer},
+    utils::Address,
+};
 use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
 use sage_api::{Amount, Assets, CoinJson, CoinSpendJson, MakeOffer, SignCoinSpends};
@@ -32,7 +36,7 @@ pub async fn dig_clawback_rewards(
     let mut distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;
 
     println!("Fetching slots...");
-    let clawback_ph = Bytes32::new(decode_address(&clawback_address)?.0);
+    let clawback_ph = Address::decode(&clawback_address)?.puzzle_hash;
     let commitment_slot = find_commitment_slot_for_puzzle_hash(
         &mut ctx,
         &db,
@@ -70,7 +74,6 @@ pub async fn dig_clawback_rewards(
     yes_no_prompt("Proceed?")?;
 
     let sage = SageClient::new()?;
-    let clawback_ph = Bytes32::new(decode_address(&clawback_address)?.0);
 
     let offer_resp = sage
         .make_offer(MakeOffer {

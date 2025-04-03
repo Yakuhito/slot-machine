@@ -8,10 +8,10 @@ use chia::{
     },
 };
 use chia_wallet_sdk::{
-    CatLayer, ChiaRpcClient, CoinsetClient, Condition, Conditions, DriverError, Layer, Puzzle,
-    SingletonLayer, SpendContext,
+    coinset::{ChiaRpcClient, CoinsetClient},
+    driver::{CatLayer, Layer, Puzzle, SingletonLayer, SpendContext},
+    types::{Condition, Conditions},
 };
-use clvm_traits::FromClvm;
 use clvmr::NodePtr;
 
 use crate::{
@@ -31,7 +31,7 @@ pub async fn sync_distributor(
     let (last_spent_coin_id, constants, mut skip_db_save, prev_distributor) =
         if let Some((_coin_id, parent_coin_id)) = last_unspent_coin_info {
             let constants_from_db = db
-                .get_reward_distributor_configuration(&mut ctx.allocator, launcher_id)
+                .get_reward_distributor_configuration(ctx, launcher_id)
                 .await?
                 .ok_or(CliError::Custom(
                     "Reward distributor configuration not found in database".to_string(),
@@ -62,12 +62,10 @@ pub async fn sync_distributor(
             };
 
             let launcher_solution_ptr = ctx.alloc(&launcher_coin_spend.solution)?;
-            let launcher_solution =
-                LauncherSolution::<(u64, DigRewardDistributorConstants)>::from_clvm(
-                    &ctx.allocator,
+            let launcher_solution = ctx
+                .extract::<LauncherSolution<(u64, DigRewardDistributorConstants)>>(
                     launcher_solution_ptr,
-                )
-                .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
+                )?;
 
             let distributor_eve_coin =
                 Coin::new(launcher_id, launcher_solution.singleton_puzzle_hash, 1);
@@ -85,15 +83,14 @@ pub async fn sync_distributor(
             };
 
             let eve_coin_puzzle_ptr = ctx.alloc(&distributor_eve_coin_spend.puzzle_reveal)?;
-            let eve_coin_puzzle = Puzzle::parse(&ctx.allocator, eve_coin_puzzle_ptr);
+            let eve_coin_puzzle = Puzzle::parse(ctx, eve_coin_puzzle_ptr);
             let Some(eve_coin_puzzle) =
-                SingletonLayer::<NodePtr>::parse_puzzle(&ctx.allocator, eve_coin_puzzle)?
+                SingletonLayer::<NodePtr>::parse_puzzle(ctx, eve_coin_puzzle)?
             else {
                 return Err(CliError::Custom("Eve coin not a singleton".to_string()));
             };
 
-            let eve_coin_inner_puzzle_hash =
-                tree_hash(&ctx.allocator, eve_coin_puzzle.inner_puzzle);
+            let eve_coin_inner_puzzle_hash = tree_hash(ctx, eve_coin_puzzle.inner_puzzle);
 
             let eve_coin_solution_ptr = ctx.alloc(&distributor_eve_coin_spend.solution)?;
             let eve_coin_output = ctx.run(eve_coin_puzzle_ptr, eve_coin_solution_ptr)?;
@@ -171,7 +168,7 @@ pub async fn sync_distributor(
             };
 
             db.save_slot(
-                &mut ctx.allocator,
+                ctx,
                 Slot::new(
                     slot_proof,
                     SlotInfo::from_value(
@@ -189,12 +186,8 @@ pub async fn sync_distributor(
                 slot_value.tree_hash().into(),
             )
             .await?;
-            db.save_reward_distributor_configuration(
-                &mut ctx.allocator,
-                constants.launcher_id,
-                constants,
-            )
-            .await?;
+            db.save_reward_distributor_configuration(ctx, constants.launcher_id, constants)
+                .await?;
 
             let Some(distributor_record) = client
                 .get_coin_record_by_name(new_distributor.coin.coin_id())
@@ -242,7 +235,7 @@ pub async fn sync_distributor(
         };
 
         let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(&ctx.allocator, puzzle_ptr);
+        let parent_puzzle = Puzzle::parse(ctx, puzzle_ptr);
         let solution_ptr = ctx.alloc(&coin_spend.solution)?;
         if !skip_db_save {
             if let Some(ref prev_distributor) = distributor {
@@ -268,7 +261,7 @@ pub async fn sync_distributor(
                     pending_items.pending_commitment_slot_values,
                     DigSlotNonce::COMMITMENT,
                 ) {
-                    db.save_slot(&mut ctx.allocator, slot, 0).await?;
+                    db.save_slot(ctx, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_epoch_start(
                         slot.info.value.epoch_start,
                         DigSlotNonce::COMMITMENT.to_u64(),
@@ -287,7 +280,7 @@ pub async fn sync_distributor(
                     pending_items.pending_mirror_slot_values,
                     DigSlotNonce::MIRROR,
                 ) {
-                    db.save_slot(&mut ctx.allocator, slot, 0).await?;
+                    db.save_slot(ctx, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_puzzle_hash(
                         slot.info.value.payout_puzzle_hash,
                         DigSlotNonce::MIRROR.to_u64(),
@@ -300,7 +293,7 @@ pub async fn sync_distributor(
                     pending_items.pending_reward_slot_values,
                     DigSlotNonce::REWARD,
                 ) {
-                    db.save_slot(&mut ctx.allocator, slot, 0).await?;
+                    db.save_slot(ctx, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_epoch_start(
                         slot.info.value.epoch_start,
                         DigSlotNonce::REWARD.to_u64(),
@@ -312,7 +305,7 @@ pub async fn sync_distributor(
         }
 
         if let Some(some_distributor) = DigRewardDistributor::from_parent_spend(
-            &mut ctx.allocator,
+            ctx,
             coin_record.coin,
             parent_puzzle,
             solution_ptr,
@@ -375,8 +368,8 @@ pub async fn find_reserve(
     };
 
     let parent_puzzle_ptr = ctx.alloc(&parent_spend.puzzle_reveal)?;
-    let parent_puzzle = Puzzle::parse(&ctx.allocator, parent_puzzle_ptr);
-    let Some(parent_cat) = CatLayer::<NodePtr>::parse_puzzle(&ctx.allocator, parent_puzzle)? else {
+    let parent_puzzle = Puzzle::parse(ctx, parent_puzzle_ptr);
+    let Some(parent_cat) = CatLayer::<NodePtr>::parse_puzzle(ctx, parent_puzzle)? else {
         return Err(CliError::Custom("Parent is not a CAT".to_string()));
     };
 

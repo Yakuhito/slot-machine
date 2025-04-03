@@ -1,5 +1,9 @@
-use chia::protocol::{Bytes32, SpendBundle};
-use chia_wallet_sdk::{decode_address, ChiaRpcClient, Offer, SpendContext};
+use chia::protocol::SpendBundle;
+use chia_wallet_sdk::{
+    coinset::ChiaRpcClient,
+    driver::{Offer, SpendContext},
+    utils::Address,
+};
 use sage_api::{Amount, Assets, CatAmount, GetDerivations, MakeOffer};
 
 use crate::{
@@ -23,8 +27,7 @@ pub async fn dig_launch(
     fee_str: String,
 ) -> Result<(), CliError> {
     let validator_launcher_id = hex_string_to_bytes32(&validator_launcher_id_str)?;
-    let validator_payout_puzzle_hash =
-        Bytes32::new(decode_address(&validator_payout_address_str)?.0);
+    let validator_payout_puzzle_hash = Address::decode(&validator_payout_address_str)?.puzzle_hash;
     let reserve_asset_id = hex_string_to_bytes32(&reserve_asset_id_str)?;
     let fee = parse_amount(&fee_str, false)?;
     let payout_threshold = parse_amount(&payout_threshold_str, true)?;
@@ -49,7 +52,7 @@ pub async fn dig_launch(
         })
         .await?;
     let user_address = &derivation_resp.derivations[0].address;
-    let user_puzzle_hash = Bytes32::new(decode_address(user_address)?.0);
+    let user_puzzle_hash = Address::decode(user_address)?.puzzle_hash;
     println!(
         "CAT will be returned to the active wallet (address: {})",
         user_address
@@ -106,7 +109,7 @@ pub async fn dig_launch(
 
     let db = Db::new(false).await?;
     db.save_reward_distributor_configuration(
-        &mut ctx.allocator,
+        &mut ctx,
         reward_distributor.info.constants.launcher_id,
         reward_distributor.info.constants,
     )

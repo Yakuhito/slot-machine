@@ -1,5 +1,5 @@
 use chia::protocol::Bytes32;
-use chia_wallet_sdk::SpendContext;
+use chia_wallet_sdk::driver::SpendContext;
 
 use crate::{
     CliError, Db, DigCommitmentSlotValue, DigMirrorSlotValue, DigRewardSlotValue, DigSlotNonce,
@@ -26,13 +26,7 @@ pub async fn find_reward_slot_for_epoch(
         // 0 or 1 value hashes per epoch
         for reward_slot_value_hash in reward_slot_value_hashes {
             if let Some(found_reward_slot) = db
-                .get_slot::<DigRewardSlotValue>(
-                    &mut ctx.allocator,
-                    launcher_id,
-                    nonce,
-                    reward_slot_value_hash,
-                    0,
-                )
+                .get_slot::<DigRewardSlotValue>(ctx, launcher_id, nonce, reward_slot_value_hash, 0)
                 .await?
             {
                 reward_slot = Some(found_reward_slot);
@@ -63,13 +57,7 @@ pub async fn find_commitment_slot_for_puzzle_hash(
     let mut slot = None;
     for value_hash in value_hashes {
         let Some(commitment_slot) = db
-            .get_slot::<DigCommitmentSlotValue>(
-                &mut ctx.allocator,
-                launcher_id,
-                nonce,
-                value_hash,
-                0,
-            )
+            .get_slot::<DigCommitmentSlotValue>(ctx, launcher_id, nonce, value_hash, 0)
             .await?
         else {
             continue;
@@ -109,7 +97,7 @@ pub async fn find_mirror_slot_for_puzzle_hash(
     let mut slot = None;
     for value_hash in value_hashes {
         let Some(mirror_slot) = db
-            .get_slot::<DigMirrorSlotValue>(&mut ctx.allocator, launcher_id, nonce, value_hash, 0)
+            .get_slot::<DigMirrorSlotValue>(ctx, launcher_id, nonce, value_hash, 0)
             .await?
         else {
             continue;

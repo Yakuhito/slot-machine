@@ -1,5 +1,9 @@
 use chia::protocol::{Bytes32, SpendBundle};
-use chia_wallet_sdk::{CatSpend, ChiaRpcClient, Conditions, Offer, Spend, SpendContext};
+use chia_wallet_sdk::{
+    coinset::ChiaRpcClient,
+    driver::{CatSpend, Offer, Spend, SpendContext},
+    types::Conditions,
+};
 use clvmr::NodePtr;
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
