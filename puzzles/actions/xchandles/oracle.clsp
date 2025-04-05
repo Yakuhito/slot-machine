@@ -5,7 +5,7 @@
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
     (
-        value_hash .
+        handle_hash .
         rest_treehash ; (sha256tree ((left_value . right_value) expiration owner_launcher_id . resolved_launcher_id))
     )
 )
@@ -31,8 +31,8 @@
         Current_State ; new state
         (get_conditions
             SLOT_1ST_CURRY_HASH
-            value_hash
-            (sha256 2 (sha256 1 value_hash) rest_treehash)
+            handle_hash
+            (sha256 2 (sha256 1 handle_hash) rest_treehash)
         ) ; conditions
     )
 )

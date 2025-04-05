@@ -73,7 +73,7 @@ impl XchandlesUpdateAction {
 
         // spend self
         let action_solution = ctx.alloc(&XchandlesUpdateActionSolution {
-            value_hash: slot.info.value.handle_hash.tree_hash().into(),
+            handle_hash: slot.info.value.handle_hash,
             neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
             expiration: slot.info.value.expiration,
             current_owner_launcher_id: slot.info.value.owner_launcher_id,
@@ -146,7 +146,7 @@ impl XchandlesUpdateActionArgs {
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct XchandlesUpdateActionSolution {
-    pub value_hash: Bytes32,
+    pub handle_hash: Bytes32,
     pub neighbors_hash: Bytes32,
     pub expiration: u64,
     pub current_owner_launcher_id: Bytes32,

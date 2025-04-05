@@ -170,15 +170,9 @@ impl XchandlesRegisterAction {
             start_time,
             secret_hash: secret.tree_hash().into(),
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
-            left_left_value_hash: left_slot.info.value.neighbors.left_value.tree_hash().into(),
+            left_left_value: left_slot.info.value.neighbors.left_value,
             left_data_hash: left_slot.info.value.after_neigbors_data_hash().into(),
-            right_right_value_hash: right_slot
-                .info
-                .value
-                .neighbors
-                .right_value
-                .tree_hash()
-                .into(),
+            right_right_value: right_slot.info.value.neighbors.right_value,
             right_data_hash: right_slot.info.value.after_neigbors_data_hash().into(),
         }
         .to_clvm(ctx)?;
@@ -271,9 +265,9 @@ pub struct XchandlesRegisterActionSolution<PP, PS, CMP, CMS> {
     pub start_time: u64,
     pub secret_hash: Bytes32,
     pub refund_puzzle_hash_hash: Bytes32,
-    pub left_left_value_hash: Bytes32,
+    pub left_left_value: Bytes32,
     pub left_data_hash: Bytes32,
-    pub right_right_value_hash: Bytes32,
+    pub right_right_value: Bytes32,
     pub right_data_hash: Bytes32,
 }
 

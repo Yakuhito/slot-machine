@@ -57,7 +57,8 @@ impl XchandlesOracleAction {
 
         // finally, spend self
         let action_solution = ctx.alloc(&XchandlesOracleActionSolution {
-            data_treehash: slot.info.value.tree_hash().into(),
+            handle_hash: slot.info.value.handle_hash,
+            rest_treehash: slot.info.value.after_handle_data_hash().into(),
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
@@ -110,5 +111,7 @@ impl XchandlesOracleActionArgs {
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct XchandlesOracleActionSolution {
-    pub data_treehash: Bytes32,
+    pub handle_hash: Bytes32,
+    #[clvm(rest)]
+    pub rest_treehash: Bytes32,
 }
