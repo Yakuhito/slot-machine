@@ -4,22 +4,24 @@ use chia::{
     puzzles::{cat::CatArgs, singleton::SingletonArgs},
 };
 use chia_wallet_sdk::{
-    driver::{DriverError, Layer, Puzzle, SingletonLayer},
+    driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext},
     types::MerkleTree,
 };
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::Allocator;
+use clvmr::{Allocator, NodePtr};
 
 use crate::{
     Action, ActionLayer, ActionLayerArgs, DigAddIncentivesAction, DigAddMirrorAction,
     DigCommitIncentivesAction, DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction,
     DigSyncAction, DigWithdrawIncentivesAction, Finalizer, P2DelegatedBySingletonLayerArgs,
-    ReserveFinalizer2ndCurryArgs,
+    ReserveFinalizer2ndCurryArgs, SpendContextExt,
+    RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM_HASH,
 };
 
 use super::Reserveful;
 
-pub type DigRewardDistributorLayers = SingletonLayer<ActionLayer<DigRewardDistributorState>>;
+pub type DigRewardDistributorLayers =
+    SingletonLayer<ActionLayer<DigRewardDistributorState, NodePtr>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
 #[clvm(list)]
@@ -175,20 +177,24 @@ impl DigRewardDistributorInfo {
         ]
     }
 
-    #[must_use]
-    pub fn into_layers(self) -> DigRewardDistributorLayers {
-        SingletonLayer::new(
+    pub fn into_layers(
+        self,
+        ctx: &mut SpendContext,
+    ) -> Result<DigRewardDistributorLayers, DriverError> {
+        Ok(SingletonLayer::new(
             self.constants.launcher_id,
-            ActionLayer::from_action_puzzle_hashes(
+            ActionLayer::<DigRewardDistributorState, NodePtr>::from_action_puzzle_hashes(
                 &Self::action_puzzle_hashes(&self.constants),
                 self.state,
                 Finalizer::Reserve {
-                    hint: self.constants.launcher_id,
                     reserve_full_puzzle_hash: self.constants.reserve_full_puzzle_hash,
                     reserve_inner_puzzle_hash: self.constants.reserve_inner_puzzle_hash,
+                    reserve_amount_from_state_program: ctx
+                        .default_reserve_amount_from_state_program()?,
+                    hint: self.constants.launcher_id,
                 },
             ),
-        )
+        ))
     }
 
     pub fn parse(
@@ -228,6 +234,7 @@ impl DigRewardDistributorInfo {
             ReserveFinalizer2ndCurryArgs::curry_tree_hash(
                 self.constants.reserve_full_puzzle_hash,
                 self.constants.reserve_inner_puzzle_hash,
+                RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM_HASH,
                 self.constants.launcher_id,
             ),
             MerkleTree::new(&Self::action_puzzle_hashes(&self.constants)).root(),

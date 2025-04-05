@@ -139,7 +139,7 @@ impl DigRewardDistributor {
         ctx: &mut SpendContext,
         other_cat_spends: Vec<CatSpend>,
     ) -> Result<Self, DriverError> {
-        let layers = self.info.into_layers();
+        let layers = self.info.into_layers(ctx)?;
 
         let puzzle = layers.construct_puzzle(ctx)?;
 

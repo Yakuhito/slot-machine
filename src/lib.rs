@@ -49,6 +49,7 @@ pub trait SpendContextExt {
     fn p2_delegated_by_singleton_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn state_scheduler_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn p2_m_of_n_delegate_direct_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn default_reserve_amount_from_state_program(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -238,6 +239,14 @@ impl SpendContextExt for SpendContext {
             &P2_M_OF_N_DELEGATE_DIRECT_PUZZLE,
         )
     }
+
+    /// Allocate the default reserve amount from state program and return its pointer.
+    fn default_reserve_amount_from_state_program(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM_HASH,
+            &RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -289,6 +298,10 @@ mod tests {
         assert_puzzle_hash!(P2_DELEGATED_BY_SINGLETON_PUZZLE => P2_DELEGATED_BY_SINGLETON_PUZZLE_HASH);
         assert_puzzle_hash!(STATE_SCHEDULER_PUZZLE => STATE_SCHEDULER_PUZZLE_HASH);
         assert_puzzle_hash!(P2_M_OF_N_DELEGATE_DIRECT_PUZZLE => P2_M_OF_N_DELEGATE_DIRECT_PUZZLE_HASH);
+        assert_puzzle_hash!(
+            RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM =>
+                RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM_HASH
+        );
         Ok(())
     }
 }

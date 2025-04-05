@@ -29,7 +29,7 @@ pub enum Finalizer<P> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ActionLayer<S, P> {
+pub struct ActionLayer<S, P = ()> {
     pub merkle_root: Bytes32,
     pub state: S,
     pub finalizer: Finalizer<P>,
@@ -198,7 +198,7 @@ where
                 )?;
 
                 let reserve_amount_from_state_program_hash = tree_hash(
-                    &allocator,
+                    allocator,
                     finalizer_1st_curry_args.reserve_amount_from_state_program,
                 );
 
