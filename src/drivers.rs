@@ -692,7 +692,9 @@ pub fn launch_dig_reward_distributor(
         Some(cat_refund_puzzle_hash),
         true,
     )?;
-    let launcher = Launcher::new(mock_offer.security_coin.coin_id(), 1);
+    let dig_reward_distributor_hint: Bytes32 = "DIG Reward Distributor v1".tree_hash().into();
+    let launcher_memos = ctx.hint(dig_reward_distributor_hint)?;
+    let launcher = Launcher::with_memos(mock_offer.security_coin.coin_id(), 1, launcher_memos);
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
 
