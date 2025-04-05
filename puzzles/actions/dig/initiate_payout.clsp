@@ -46,6 +46,7 @@
 
                 (create_slot MIRROR_SLOT_1ST_CURRY_HASH
                     (get_slot_data_hash mirror_payout_puzzle_hash (f reward_info) mirror_shares)
+                    mirror_payout_puzzle_hash
                 )
 
                 (list CREATE_PUZZLE_ANNOUNCEMENT

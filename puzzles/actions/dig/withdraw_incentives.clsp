@@ -53,6 +53,7 @@
                     reward_slot_next_epoch_initialized
                     (- reward_slot_total_rewards withdrawal_share)
                 )
+                (sha256 1 reward_slot_epoch_time)
             )
 
             ; spend commitment slot, which functions as a ticket

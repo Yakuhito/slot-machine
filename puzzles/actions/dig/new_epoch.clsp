@@ -19,10 +19,10 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun-inline slot_oracle (SLOT_1ST_CURRY_HASH slot_value_hash)
+    (defun-inline slot_oracle (SLOT_1ST_CURRY_HASH slot_value_hash hint)
         (list
             (spend_slot SLOT_1ST_CURRY_HASH slot_value_hash)
-            (create_slot SLOT_1ST_CURRY_HASH slot_value_hash)
+            (create_slot SLOT_1ST_CURRY_HASH slot_value_hash hint)
         )
     )
 
@@ -66,6 +66,7 @@
                                 (sha256 1 slot_total_rewards)
                             )
                         ) ; (sha256tree (epoch_time next_epoch_initialized . total_rewards))
+                        (sha256 1 slot_epoch_time)
                     )
                 )
             ) ; conditions
