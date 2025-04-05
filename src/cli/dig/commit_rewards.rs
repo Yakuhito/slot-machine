@@ -89,9 +89,7 @@ pub async fn dig_commit_rewards(
         distributor.info.constants.epoch_seconds,
     )
     .await?
-    .ok_or(CliError::Custom(
-        "Reward slot value hash could not be found".to_string(),
-    ))?;
+    .ok_or(CliError::SlotNotFound("Reward"))?;
 
     let (sec_conds, _slot1, _slot2) = distributor
         .new_action::<DigCommitIncentivesAction>()

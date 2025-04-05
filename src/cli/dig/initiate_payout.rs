@@ -54,7 +54,7 @@ pub async fn dig_initiate_payout(
         None,
     )
     .await?
-    .ok_or(CliError::Custom("Mirror reward slot not found".to_string()))?;
+    .ok_or(CliError::SlotNotFound("Mirror reward"))?;
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  1 mojo",);

@@ -135,7 +135,7 @@ pub async fn dig_broadcast_mirror_update(
             Some(mirror_shares),
         )
         .await?
-        .ok_or(CliError::Custom("Could not find mirror slot".to_string()))?;
+        .ok_or(CliError::SlotNotFound("Mirror"))?;
 
         let (_conds, last_payment_amount) = reward_distributor
             .new_action::<DigRemoveMirrorAction>()
