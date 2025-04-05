@@ -108,6 +108,7 @@
                     ; create new slot
                     (create_slot SLOT_1ST_CURRY_HASH
                         (get_slot_value_hash handle_hash neighbors_hash (+ registered_time buy_time) new_rest_hash)
+                        handle_hash
                     )
                 ) ; base conditions
             ) ; conditions

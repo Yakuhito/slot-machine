@@ -9,7 +9,7 @@
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
     (
-        value_hash
+        handle_hash
         neighbors_hash ; (sha256tree (left_value . right_value))
         expiration
         current_owner_launcher_id
@@ -23,9 +23,9 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_slot_data_hash (value_hash neighbors_hash expiration owner_launcher_id resolved_launcher_id)
+    (defun get_slot_data_hash (handle_hash neighbors_hash expiration owner_launcher_id resolved_launcher_id)
         (sha256 2
-            value_hash
+            (sha256 1 handle_hash)
             (sha256 2
                 neighbors_hash
                 (sha256 2
@@ -45,7 +45,7 @@
             ; spend slot
             (spend_slot SLOT_1ST_CURRY_HASH 
                 (get_slot_data_hash
-                    value_hash
+                    handle_hash
                     neighbors_hash
                     expiration
                     current_owner_launcher_id
@@ -56,12 +56,13 @@
             ; create new slot
             (create_slot SLOT_1ST_CURRY_HASH
                 (get_slot_data_hash
-                    value_hash
+                    handle_hash
                     neighbors_hash
                     expiration
                     new_owner_launcher_id
                     new_resolved_launcher_id
                 )
+                handle_hash
             )
 
             ; assert message from current owner
@@ -69,7 +70,7 @@
                 RECEIVE_MESSAGE
                 18 ; puzzle-puzzle
                 (sha256 2
-                    value_hash
+                    handle_hash
                     (sha256 2
                         (sha256 1 new_owner_launcher_id)
                         (sha256 1 new_resolved_launcher_id)

@@ -61,6 +61,7 @@
                         (+ expiration registered_time)
                         rest_hash
                     )
+                    handle_hash
                 ) 
                 
                 ; assert payment

@@ -25,11 +25,11 @@
   (include curry.clib)
   (include slots.clib)
 
-  (defun get_slot_value_hash (value_hash left_value_hash right_value_hash data_hash)
+  (defun get_slot_value_hash (value left_value right_value data_hash)
     (sha256 2
-        value_hash
+        (sha256 1 value)
         (sha256 2
-            (sha256 2 left_value_hash right_value_hash)
+            (sha256 2 (sha256 1 left_value) (sha256 1 right_value))
             data_hash
         )
     )
@@ -47,13 +47,12 @@
         secret_hash
         refund_puzzle_hash_hash ; needed to compute precommit coin puzzle hash
         ; end
-        left_left_value_hash left_data_hash ; left slot info
-        right_right_value_hash right_data_hash ; right slot info
+        left_left_value left_data_hash ; left slot info
+        right_right_value right_data_hash ; right slot info
     )
     handle_hash
-    value_hash
-    left_value_hash
-    right_value_hash
+    left_value
+    right_value
     (total_price . registered_time)
     pricing_solution_hash
   )
@@ -64,33 +63,36 @@
             
             ; spend left slot
             (spend_slot SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash left_value_hash left_left_value_hash right_value_hash left_data_hash)
+                (get_slot_value_hash left_value left_left_value right_value left_data_hash)
             )
             ; spend right slot
             (spend_slot SLOT_1ST_CURRY_HASH
-                (get_slot_value_hash right_value_hash left_value_hash right_right_value_hash right_data_hash)
+                (get_slot_value_hash right_value left_value right_right_value right_data_hash)
             )
             
             ; create new slot
             (create_slot SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash
-                    value_hash
-                    left_value_hash
-                    right_value_hash
+                    handle_hash
+                    left_value
+                    right_value
                     (sha256 2 
                         (sha256 1 (+ start_time registered_time))
                         rest_data_hash
                     ) ; sha256tree data
                 )
+                handle_hash
             )
 
             ; create new left slot
             (create_slot SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash left_value_hash left_left_value_hash value_hash left_data_hash)
+                (get_slot_value_hash left_value left_left_value handle_hash left_data_hash)
+                left_value
             ) 
             ; create new right slot
             (create_slot SLOT_1ST_CURRY_HASH
-                (get_slot_value_hash right_value_hash value_hash right_right_value_hash right_data_hash)
+                (get_slot_value_hash right_value handle_hash right_right_value right_data_hash)
+                right_value
             )
 
             ; announcement
@@ -152,16 +154,14 @@
         (>s right_value handle_hash)
         (= (f Current_State) (sha256tree (f solution))) ; cat maker puzzle reveal is correct
         (= (f (r Current_State)) (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
-        (> start_time 0)
     )
     (main
             PRECOMMIT_1ST_CURRY_HASH SLOT_1ST_CURRY_HASH
             Current_State
             solution
             handle_hash
-            (sha256 1 handle_hash)
-            (sha256 1 left_value) 
-            (sha256 1 right_value)
+            left_value
+            right_value
             (a pricing_puzzle_reveal pricing_solution)
             (sha256tree pricing_solution)
         )

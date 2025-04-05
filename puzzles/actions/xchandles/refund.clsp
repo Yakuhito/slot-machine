@@ -31,12 +31,12 @@
   (include sha256tree.clib)
   (include slots.clib)
 
-  (defun main (SLOT_1ST_CURRY_HASH slot_puzhash slot_spend_needed base_conditions)
+  (defun main (SLOT_1ST_CURRY_HASH slot_value_hash slot_hint slot_spend_needed base_conditions)
     (if slot_spend_needed
       (c 
-        (spend_slot SLOT_1ST_CURRY_HASH slot_puzhash)
+        (spend_slot SLOT_1ST_CURRY_HASH slot_value_hash)
         (c 
-          (create_slot SLOT_1ST_CURRY_HASH slot_puzhash)
+          (create_slot SLOT_1ST_CURRY_HASH slot_value_hash)
           base_conditions
         )
       )
@@ -55,6 +55,7 @@
       (main
         SLOT_1ST_CURRY_HASH
         (sha256 2 (sha256 1 handle_hash) rest_hash)
+        handle_hash
         (all
           ; not (a)
           (= precommited_cat_maker_hash (f Current_State))
