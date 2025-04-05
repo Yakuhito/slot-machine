@@ -365,6 +365,10 @@ enum DigCliAction {
         #[arg(long)]
         reserve_asset_id: String,
 
+        /// Launch comment (will be included after the hint that creates the launcher)
+        #[arg(long)]
+        comment: String,
+
         /// Seconds in an epoch
         #[arg(long, default_value = "604800")]
         epoch_seconds: u64,
@@ -741,6 +745,7 @@ pub async fn run_cli() {
                 validator_fee_bps,
                 withdrawal_share_bps,
                 reserve_asset_id,
+                comment,
                 testnet11,
                 fee,
             } => {
@@ -754,6 +759,7 @@ pub async fn run_cli() {
                     validator_fee_bps,
                     withdrawal_share_bps,
                     reserve_asset_id,
+                    comment,
                     testnet11,
                     fee,
                 )

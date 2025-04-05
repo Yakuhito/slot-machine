@@ -673,6 +673,7 @@ pub fn launch_dig_reward_distributor(
     cat_refund_puzzle_hash: Bytes32,
     constants: DigRewardDistributorConstants,
     consensus_constants: &ConsensusConstants,
+    comment: &str,
 ) -> Result<
     (
         Signature,
@@ -693,7 +694,9 @@ pub fn launch_dig_reward_distributor(
         true,
     )?;
     let dig_reward_distributor_hint: Bytes32 = "DIG Reward Distributor v1".tree_hash().into();
-    let launcher_memos = ctx.hint(dig_reward_distributor_hint)?;
+    let launcher_memos = chia_wallet_sdk::prelude::Memos::new(
+        ctx.alloc(&(dig_reward_distributor_hint, (comment, ())))?,
+    );
     let launcher = Launcher::with_memos(mock_offer.security_coin.coin_id(), 1, launcher_memos);
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
@@ -2341,6 +2344,7 @@ mod tests {
             Bytes32::default(),
             constants,
             &TESTNET11_CONSTANTS,
+            "yak yak yak",
         )?;
         sim.spend_coins(
             ctx.take(),

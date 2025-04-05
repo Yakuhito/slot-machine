@@ -23,6 +23,7 @@ pub async fn dig_launch(
     validator_fee_bps: u64,
     withdrawal_share_bps: u64,
     reserve_asset_id_str: String,
+    comment_str: String,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -99,6 +100,7 @@ pub async fn dig_launch(
             reserve_asset_id,
         ),
         get_constants(testnet11),
+        &comment_str,
     )
     .map_err(CliError::Driver)?;
 
