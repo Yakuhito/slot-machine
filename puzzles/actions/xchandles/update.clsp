@@ -70,7 +70,7 @@
                 RECEIVE_MESSAGE
                 18 ; puzzle-puzzle
                 (sha256 2
-                    handle_hash
+                    (sha256 1 handle_hash)
                     (sha256 2
                         (sha256 1 new_owner_launcher_id)
                         (sha256 1 new_resolved_launcher_id)

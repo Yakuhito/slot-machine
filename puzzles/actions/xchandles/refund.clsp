@@ -36,7 +36,7 @@
       (c 
         (spend_slot SLOT_1ST_CURRY_HASH slot_value_hash)
         (c 
-          (create_slot SLOT_1ST_CURRY_HASH slot_value_hash)
+          (create_slot SLOT_1ST_CURRY_HASH slot_value_hash slot_hint)
           base_conditions
         )
       )

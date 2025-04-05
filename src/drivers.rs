@@ -1483,9 +1483,7 @@ mod tests {
             payment_cat.coin.amount - payment_cat_amount,
         );
 
-        println!("a"); // todo: debug
         sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-        println!("b"); // todo: debug
         let mut registry = registry;
         let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
             ctx,
