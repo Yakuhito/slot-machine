@@ -82,7 +82,7 @@
     )
 
     (list
-        King ; Current_State
+        Current_State ; new state
         (if Ephemeral_State (x) 1); Ephemeral State
         (send_assets
             King
