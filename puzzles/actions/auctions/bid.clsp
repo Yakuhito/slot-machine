@@ -7,19 +7,21 @@
         ; return: (new_state seconds is_relative)
     REFUND_PROGRAM
     (@ Current_State (Bid_Index Bid King End_State))
+    Ephemeral_State
     solution ; (new_bid new_king)
 )
     (include condition_codes.clib)
 
     (defun main ((Bid_Index Bid King End_State) (new_bid new_king) (end_new_state end_seconds end_is_relative))
         (if (a BID_PROGRAM (list Bid_Index Bid new_bid))
-            (c
+            (list
                 (
                     (+ Bid_Index 1)
                     new_bid
                     new_king
                     end_new_state
                 ) ; new state
+                1 ; new ephemeral state
                 (list
                     (list
                         CREATE_PUZZLE_ANNOUNCEMENT
@@ -32,7 +34,11 @@
                         (list King)
                     ) ; refund last bid
                     (i is_relative
-                        (list ASSERT_BEFORE_SECONDS_RELATIVE end_seconds)
+                        (i Ephemeral_State
+                            (list REMARK) ; THIS IS TERRIBLE REMOVE BEFORE PRODUCTION
+                            ; else
+                            (list ASSERT_BEFORE_SECONDS_RELATIVE end_seconds)
+                        )
                         ; else
                         (list ASSERT_BEFORE_SECONDS_ABSOLUTE end_seconds)
                     )

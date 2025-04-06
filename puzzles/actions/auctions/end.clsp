@@ -1,1 +1,20 @@
-; bid.clsp by yakuhito & Rigidity
+; end.clsp by yakuhito & Rigidity
+
+(mod (
+    TIMESTAMP_PROGRAM ; Adds conditions to the output of the action
+        ; return: (new_state seconds is_relative)
+    (@ Current_State (Bid_Index Bid King End_State))
+    Ephemeral_State
+    () ; solution
+)
+    (include condition_codes.clib)
+
+
+    (list
+        () ; Current_State
+        (if Ephemeral_State (x) 1); Ephemeral State
+        (list
+            (make_sure_auction_ended (a TIMESTAMP_PROGRAM (list Bid_Index End_State)))
+        ) ; conditions
+    )
+)
