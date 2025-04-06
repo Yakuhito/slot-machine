@@ -1320,7 +1320,8 @@ mod tests {
 
                 catalog.insert(action_spend);
                 catalog = catalog.finish_spend(ctx)?;
-                sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+                // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+                benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
             };
 
             let (secure_cond, new_slots) = catalog.new_action::<CatalogRegisterAction>().spend(
@@ -1341,16 +1342,7 @@ mod tests {
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
-            benchmark.add_spends(
-                ctx,
-                &mut sim,
-                if i % 2 == 1 {
-                    "update_price_and_register"
-                } else {
-                    "register"
-                },
-                &[user_bls.sk.clone()],
-            )?;
+            benchmark.add_spends(ctx, &mut sim, "register", &[user_bls.sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
@@ -1790,7 +1782,8 @@ mod tests {
 
                 registry.insert(action_spend);
                 registry = registry.finish_spend(ctx)?;
-                sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+                // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+                benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
             };
 
             let (secure_cond, new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
