@@ -1,0 +1,5 @@
+; static_incease.clsp by yakuhito & Rigidity
+
+(mod (AMOUNT Prev_Index Prev_Bid bid)
+
+)
