@@ -6,10 +6,9 @@ pub mod tests {
     use chia::{
         bls::{SecretKey, Signature},
         consensus::spendbundle_conditions::get_conditions_from_spendbundle,
-        protocol::{CoinSpend, SpendBundle},
+        protocol::SpendBundle,
     };
-    use chia_wallet_sdk::{test::Simulator, types::TESTNET11_CONSTANTS};
-    use clvmr::Allocator;
+    use chia_wallet_sdk::{driver::SpendContext, test::Simulator, types::TESTNET11_CONSTANTS};
     use prettytable::{row, Table};
 
     pub struct Benchmark {
@@ -29,15 +28,14 @@ pub mod tests {
 
         pub fn add_spends(
             &mut self,
+            ctx: &mut SpendContext,
             sim: &mut Simulator,
-            allocator: &mut Allocator,
             key: &str,
-            spends: Vec<CoinSpend>,
             keys: &[SecretKey],
         ) -> anyhow::Result<()> {
-            let sb = SpendBundle::new(spends, Signature::default());
+            let sb = SpendBundle::new(ctx.take(), Signature::default());
             let sb_conds = get_conditions_from_spendbundle(
-                allocator,
+                ctx,
                 &sb,
                 u64::MAX,
                 sim.height(),
@@ -62,7 +60,7 @@ pub mod tests {
                 let data = &self.data[key];
 
                 let total = data.iter().sum::<u64>();
-                let avg = total as f64 / data.len() as f64;
+                let avg = format!("{:.1}", total as f64 / data.len() as f64);
 
                 let mut sorted = data.clone();
                 sorted.sort();
