@@ -985,6 +985,8 @@ mod tests {
     fn test_refund_for_catalog(
         ctx: &mut SpendContext,
         sim: &mut Simulator,
+        benchmark: &mut Benchmark,
+        benchmark_label: &str,
         reg_amount: u64,
         payment_cat: Cat,
         tail_puzzle_to_refund: Option<NodePtr>,
@@ -1053,7 +1055,9 @@ mod tests {
         let new_payment_cat =
             payment_cat.wrapped_child(minter_puzzle_hash, payment_cat.coin.amount - reg_amount);
 
-        sim.spend_coins(ctx.take(), sks)?;
+        // sim.spend_coins(ctx.take(), sks)?;
+        let spends = ctx.take();
+        benchmark.add_spends(sim, ctx, "create_precommit", spends, sks)?;
 
         let slot = slots
             .iter()
@@ -1077,7 +1081,9 @@ mod tests {
 
         ensure_conditions_met(ctx, sim, secure_cond, 0)?;
 
-        sim.spend_coins(ctx.take(), sks)?;
+        // sim.spend_coins(ctx.take(), sks)?;
+        let spends = ctx.take();
+        benchmark.add_spends(sim, ctx, benchmark_label, spends, sks)?;
 
         Ok((new_catalog, new_payment_cat))
     }
@@ -1086,7 +1092,7 @@ mod tests {
     fn test_catalog() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
         let mut sim = Simulator::new();
-        let mut benchmark = Benchmark::new();
+        let mut benchmark = Benchmark::new("CATalog".to_string());
 
         // setup config
 
@@ -1173,7 +1179,15 @@ mod tests {
             ),
         )?;
 
-        sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
+        // sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
+        let spends = ctx.take();
+        benchmark.add_spends(
+            &mut sim,
+            ctx,
+            "launch",
+            spends,
+            &[launcher_bls.sk, security_sk],
+        )?;
 
         // Register CAT
 
@@ -1244,7 +1258,15 @@ mod tests {
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
 
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            let spends = ctx.take();
+            benchmark.add_spends(
+                &mut sim,
+                ctx,
+                "create_precommit",
+                spends,
+                &[user_bls.sk.clone(), minter_bls.sk.clone()],
+            )?;
 
             // call the 'register' action on CATalog
             slots.sort_unstable_by(|a, b| a.info.value.cmp(&b.info.value));
@@ -1329,7 +1351,19 @@ mod tests {
 
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            let spends = ctx.take();
+            benchmark.add_spends(
+                &mut sim,
+                ctx,
+                if i % 2 == 1 {
+                    "update_price_and_register"
+                } else {
+                    "register"
+                },
+                spends,
+                &[user_bls.sk.clone()],
+            )?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
@@ -1346,6 +1380,8 @@ mod tests {
         let (catalog, payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,
+            &mut benchmark,
+            "refund_amount_wrong",
             catalog.info.state.registration_price + 1,
             payment_cat,
             None,
@@ -1383,6 +1419,8 @@ mod tests {
         let (catalog, _alternative_payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,
+            &mut benchmark,
+            "refund_cat_changed",
             catalog.info.state.registration_price,
             alternative_payment_cat,
             None,
@@ -1399,6 +1437,8 @@ mod tests {
         let (_catalog, _payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,
+            &mut benchmark,
+            "refund_cat_already_registered",
             catalog.info.state.registration_price,
             payment_cat,
             Some(tail),
@@ -1411,6 +1451,7 @@ mod tests {
             &[user_bls.sk.clone(), minter_bls.sk.clone()],
         )?;
 
+        benchmark.print_summary();
         Ok(())
     }
 

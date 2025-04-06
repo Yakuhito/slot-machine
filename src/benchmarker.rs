@@ -8,49 +8,53 @@ pub mod tests {
         consensus::spendbundle_conditions::get_conditions_from_spendbundle,
         protocol::{CoinSpend, SpendBundle},
     };
-    use chia_wallet_sdk::{driver::SpendContext, test::Simulator, types::TESTNET11_CONSTANTS};
+    use chia_wallet_sdk::{test::Simulator, types::TESTNET11_CONSTANTS};
+    use clvmr::Allocator;
+    use prettytable::{row, Table};
 
     pub struct Benchmark {
+        pub title: String,
         pub data: HashMap<String, Vec<u64>>,
     }
 
     impl Benchmark {
-        pub fn new() -> Self {
+        pub fn new(title: String) -> Self {
             Self {
+                title,
                 data: HashMap::new(),
             }
         }
 
         pub fn add_spends(
             &mut self,
-            ctx: &mut SpendContext,
             sim: &mut Simulator,
+            allocator: &mut Allocator,
             key: &str,
             spends: Vec<CoinSpend>,
             keys: &[SecretKey],
         ) -> anyhow::Result<()> {
             let sb = SpendBundle::new(spends, Signature::default());
             let sb_conds = get_conditions_from_spendbundle(
-                ctx,
+                allocator,
                 &sb,
                 u64::MAX,
                 sim.height(),
                 &TESTNET11_CONSTANTS,
             )?;
-            // add execution cost to storage cost
-            let cost = sb_conds.cost
-                + 12000
-                    * sb.coin_spends.iter().fold(0, |acc, cs| {
-                        acc + cs.puzzle_reveal.len() as u64 + cs.solution.len() as u64
-                    });
 
-            self.data.entry(key.to_string()).or_default().push(cost);
+            self.data
+                .entry(key.to_string())
+                .or_default()
+                .push(sb_conds.cost);
 
             sim.spend_coins(sb.coin_spends, keys)?;
             Ok(())
         }
 
         pub fn print_summary(&self) {
+            let mut table = Table::new();
+            table.add_row(row![format!("Cost statistics for {}", self.title)]);
+            table.add_row(row!["label", "avg", "n", "min", "max", "median"]);
             for (key, data) in &self.data {
                 let total = data.iter().sum::<u64>();
                 let avg = total as f64 / data.len() as f64;
@@ -63,16 +67,11 @@ pub mod tests {
                 } else {
                     sorted[sorted.len() / 2] as f64
                 };
-                println!(
-                    "{}: average={:.2}, num_samples={}, min={}, max={}, median={:.1}",
-                    key,
-                    avg,
-                    data.len(),
-                    data_min,
-                    data_max,
-                    data_median
-                );
+
+                table.add_row(row![key, avg, data.len(), data_min, data_max, data_median]);
             }
+
+            table.printstd();
         }
     }
 }
