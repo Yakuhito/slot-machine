@@ -1438,7 +1438,7 @@ mod tests {
             &[user_bls.sk.clone(), minter_bls.sk.clone()],
         )?;
 
-        benchmark.print_summary();
+        benchmark.print_summary(Some("catalog.costs"));
         Ok(())
     }
 
@@ -2203,7 +2203,7 @@ mod tests {
             )?;
         }
 
-        benchmark.print_summary();
+        benchmark.print_summary(Some("xchandles.costs"));
 
         Ok(())
     }
@@ -3045,7 +3045,7 @@ mod tests {
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert_eq!(sim.coin_state(payout_coin_id).unwrap().coin.amount, 12602);
 
-        benchmark.print_summary();
+        benchmark.print_summary(Some("dig.costs"));
 
         Ok(())
     }

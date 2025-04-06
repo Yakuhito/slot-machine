@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 #[cfg(test)]
 pub mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, fs::File};
 
     use chia::{
         bls::{SecretKey, Signature},
@@ -52,7 +52,7 @@ pub mod tests {
             Ok(())
         }
 
-        pub fn print_summary(&self) {
+        pub fn print_summary(&self, filename: Option<&str>) {
             let mut table = Table::new();
             table.add_row(row![format!("Cost statistics for {}", self.title)]);
             table.add_row(row!["label", "avg", "n", "min", "max", "median"]);
@@ -77,6 +77,10 @@ pub mod tests {
             }
 
             table.printstd();
+            if let Some(filename) = filename {
+                let mut file = File::create(filename).unwrap();
+                table.print(&mut file).unwrap();
+            }
         }
     }
 }
