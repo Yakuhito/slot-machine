@@ -1,5 +1,9 @@
 ; minimum_bid.clsp by yakuhito & Rigidity
 
 (mod (MINIMUM_AMOUNT INNER_PROGRAM (@ inner_solution (Prev_Index Prev_Bid bid)))
-    (all (> bid MINIMUM_AMOUNT) (a INNER_PROGRAM inner_solution))
+    (if (= Prev_Index 0)
+        (not (> MINIMUM_AMOUNT bid))
+        ; else
+        (a INNER_PROGRAM inner_solution)
+    )
 )

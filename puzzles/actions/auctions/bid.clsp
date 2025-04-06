@@ -1,42 +1,49 @@
 ; bid.clsp by yakuhito & Rigidity
 
-; (a END_PROGRAM End_State Bid_Index Bid new_bid new_king)
-;                     /\ current absolute block height when the auction ends
-
 (mod (
     BID_PROGRAM ; Checks the pre-buyer's premium amount against the previous bid
+        ; CHECK PREVIOUS BID > BID HERE
     TIMESTAMP_PROGRAM ; Adds conditions to the output of the action
+        ; return: (new_state seconds is_relative)
     REFUND_PROGRAM
-    (Bid_Index Bid King End_State) ; Current_State
-    (
-        new_bid
-        new_king
-    )
+    (@ Current_State (Bid_Index Bid King End_State))
+    solution ; (new_bid new_king)
 )
-    (if (a BID_PROGRAM (list Bid_Index Bid new_bid))
-        (c
-            (
-                (+ Bid_Index 1)
-                new_bid
-                new_king
-            ) ; new state
-            (list
+    (include condition_codes.clib)
+
+    (defun main ((Bid_Index Bid King End_State) (new_bid new_king) (end_new_state end_seconds end_is_relative))
+        (if (a BID_PROGRAM (list Bid_Index Bid new_bid))
+            (c
+                (
+                    (+ Bid_Index 1)
+                    new_bid
+                    new_king
+                    end_new_state
+                ) ; new state
                 (list
-                    CREATE_PUZZLE_ANNOUNCEMENT
-                    (sha256 2 (sha256 1 new_bid) (sha256 1 new_king))
-                ) ; create puzzle
-                (list -42
-                    CREATE_COIN
-                    King
-                    (a REFUND_PROGRAM (list Bid_Index Bid))
-                    (list King)
-                ) ; refund last bid
-                (a BID_FINALIZER_PROGRAM )
-            ) ; conditions
+                    (list
+                        CREATE_PUZZLE_ANNOUNCEMENT
+                        (sha256 2 (sha256 1 new_bid) (sha256 1 new_king))
+                    ) ; create puzzle
+                    (list -42
+                        CREATE_COIN
+                        King
+                        (a REFUND_PROGRAM (list Bid_Index Bid))
+                        (list King)
+                    ) ; refund last bid
+                    (i is_relative
+                        (list ASSERT_BEFORE_SECONDS_RELATIVE end_seconds)
+                        ; else
+                        (list ASSERT_BEFORE_SECONDS_ABSOLUTE end_seconds)
+                    )
+                ) ; conditions
+            )
+            ; else
+            (x)
         )
-        ; else
-        (x)
     )
+
+    (main Current_State solution (a TIMESTAMP_PROGRAM (list Bid_Index End_State)))
 )
 
 ; Auction with 1 hour sliding window
