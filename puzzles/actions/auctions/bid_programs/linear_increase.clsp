@@ -1,0 +1,5 @@
+; linear_increase.clsp by yakuhito & Rigidity
+
+(mod (STEP_AMOUNT Prev_Index Prev_Bid bid)
+    (not (> (* STEP_AMOUNT Prev_Index) (- bid Prev_Bid)))
+)
