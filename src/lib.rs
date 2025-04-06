@@ -1,6 +1,7 @@
 use chia_wallet_sdk::driver::{DriverError, SpendContext};
 use clvmr::NodePtr;
 
+mod benchmarker;
 mod cat_nft_metadata;
 mod cli;
 mod debug;

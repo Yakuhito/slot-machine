@@ -847,16 +847,16 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction,
-        CatalogSlotValue, DelegatedStateAction, DelegatedStateActionSolution,
-        DigAddIncentivesAction, DigAddMirrorAction, DigCommitIncentivesAction,
-        DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction,
-        DigRewardDistributorConstants, DigSyncAction, DigWithdrawIncentivesAction, PrecommitCoin,
-        Slot, SpendContextExt, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
-        XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesExtendAction,
-        XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesOracleAction,
-        XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRegisterAction,
-        XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
+        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
+        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
+        DelegatedStateActionSolution, DigAddIncentivesAction, DigAddMirrorAction,
+        DigCommitIncentivesAction, DigInitiatePayoutAction, DigNewEpochAction,
+        DigRemoveMirrorAction, DigRewardDistributorConstants, DigSyncAction,
+        DigWithdrawIncentivesAction, PrecommitCoin, Slot, SpendContextExt, XchandlesExpireAction,
+        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
+        XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
+        XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction,
+        XchandlesRegisterAction, XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -1086,6 +1086,7 @@ mod tests {
     fn test_catalog() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
         let mut sim = Simulator::new();
+        let mut benchmark = Benchmark::new();
 
         // setup config
 
