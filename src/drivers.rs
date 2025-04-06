@@ -1459,6 +1459,8 @@ mod tests {
     fn test_refund_for_xchandles(
         ctx: &mut SpendContext,
         sim: &mut Simulator,
+        benchmark: &mut Benchmark,
+        benchmark_label: &str,
         handle_to_refund: String,
         pricing_puzzle: NodePtr,
         pricing_solution: NodePtr,
@@ -1530,7 +1532,16 @@ mod tests {
             payment_cat.coin.amount - payment_cat_amount,
         );
 
-        sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+        let spends = ctx.take();
+        benchmark.add_spends(
+            sim,
+            ctx,
+            "create_precommit",
+            spends,
+            &[user_sk.clone(), minter_sk.clone()],
+        )?;
+
         let mut registry = registry;
         let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
             ctx,
@@ -1544,7 +1555,9 @@ mod tests {
 
         ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
 
-        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        let spends = ctx.take();
+        benchmark.add_spends(sim, ctx, benchmark_label, spends, &[user_sk.clone()])?;
 
         Ok((new_registry, new_payment_cat))
     }
@@ -1553,7 +1566,7 @@ mod tests {
     fn test_xchandles() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
         let mut sim = Simulator::new();
-
+        let mut benchmark = Benchmark::new("XCHandles".to_string());
         // setup config
         let initial_registration_price = 2000;
         let test_price_schedule = [1000, 500, 250];
@@ -1628,7 +1641,15 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
-        sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
+        // sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
+        let spends = ctx.take();
+        benchmark.add_spends(
+            &mut sim,
+            ctx,
+            "launch",
+            spends,
+            &[launcher_bls.sk, security_sk],
+        )?;
 
         // Register 7 handles
 
@@ -1714,9 +1735,17 @@ mod tests {
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
 
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            let spends = ctx.take();
+            benchmark.add_spends(
+                &mut sim,
+                ctx,
+                "create_precommit",
+                spends,
+                &[user_bls.sk.clone(), minter_bls.sk.clone()],
+            )?;
 
-            // call the 'register' action on CNS
+            // call the 'register' action on the registry
             slots.sort_unstable_by(|a, b| a.info.value.cmp(&b.info.value));
 
             let slot_value_to_insert = XchandlesSlotValue::new(
@@ -1802,7 +1831,10 @@ mod tests {
 
             registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            let spends = ctx.take();
+            benchmark.add_spends(&mut sim, ctx, "register", spends, &[user_bls.sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
@@ -1818,6 +1850,10 @@ mod tests {
 
             let user_coin = sim.new_coin(user_bls.puzzle_hash, 0);
             StandardLayer::new(user_bls.pk).spend(ctx, user_coin, oracle_conds)?;
+
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            let spends = ctx.take();
+            benchmark.add_spends(&mut sim, ctx, "oracle", spends, &[user_bls.sk.clone()])?;
 
             slots.retain(|s| *s != oracle_slot);
             slots.push(new_slot);
@@ -1875,6 +1911,16 @@ mod tests {
             payment_cat_amount -= pay_for_extension;
             payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
 
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            let spends = ctx.take();
+            benchmark.add_spends(
+                &mut sim,
+                ctx,
+                "extend",
+                spends,
+                &[user_bls.sk.clone(), minter_bls.sk.clone()],
+            )?;
+
             slots.retain(|s| *s != extension_slot);
             slots.push(new_slot);
 
@@ -1895,7 +1941,10 @@ mod tests {
             let _new_did = did.update(ctx, &user_p2, update_conds)?;
 
             registry = registry.finish_spend(ctx)?;
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            let spends = ctx.take();
+            benchmark.add_spends(&mut sim, ctx, "update", spends, &[user_bls.sk.clone()])?;
 
             slots.retain(|s| *s != update_slot);
             slots.push(new_slot);
@@ -1983,7 +2032,15 @@ mod tests {
             payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat.coin.amount - reg_amount);
 
         sim.set_next_timestamp(buy_time)?;
-        sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+        let spends = ctx.take();
+        benchmark.add_spends(
+            &mut sim,
+            ctx,
+            "create_precommit",
+            spends,
+            &[user_bls.sk.clone(), minter_bls.sk.clone()],
+        )?;
 
         let (expire_conds, _new_slot) = registry.new_action::<XchandlesExpireAction>().spend(
             ctx,
@@ -1997,7 +2054,10 @@ mod tests {
         // assert expire conds
         ensure_conditions_met(ctx, &mut sim, expire_conds, 1)?;
         registry = registry.finish_spend(ctx)?;
-        sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+
+        // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+        let spends = ctx.take();
+        benchmark.add_spends(&mut sim, ctx, "expire", spends, &[user_bls.sk.clone()])?;
 
         // Test refunds
         let unregistered_handle = "yak7".to_string();
@@ -2099,6 +2159,8 @@ mod tests {
             registry = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
+                &mut benchmark,
+                "refund_cat_wrong",
                 unregistered_handle.clone(),
                 pricing_puzzle,
                 pricing_solution,
@@ -2117,6 +2179,8 @@ mod tests {
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
+                &mut benchmark,
+                "refund_amount_wrong",
                 unregistered_handle.clone(),
                 pricing_puzzle,
                 pricing_solution,
@@ -2134,6 +2198,8 @@ mod tests {
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
+                &mut benchmark,
+                "refund_pricing_wrong",
                 unregistered_handle.clone(),
                 other_pricing_puzzle,
                 pricing_solution,
@@ -2151,6 +2217,8 @@ mod tests {
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
+                &mut benchmark,
+                "refund_handle_already_registered",
                 existing_handle.clone(), // already registered handle
                 pricing_puzzle,
                 existing_handle_pricing_solution,
