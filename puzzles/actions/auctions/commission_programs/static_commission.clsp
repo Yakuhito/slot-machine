@@ -1,3 +1,0 @@
-(mod (PUZZLE_HASH AMOUNT)
-    (c PUZZLE_HASH AMOUNT)
-)

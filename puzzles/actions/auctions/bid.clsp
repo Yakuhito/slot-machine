@@ -51,11 +51,3 @@
 
     (main Current_State solution (a TIMESTAMP_PROGRAM (list Bid_Index End_State)))
 )
-
-; Auction with 1 hour sliding window
-; Buyer's premium & commission
-; Create a bid to replace the last one
-; Assert before relative the sliding window
-; Or assert before absolute the end time
-; Check the bid amount against the last one
-; Pay the buyer's premium on top of it in the new bid coin
