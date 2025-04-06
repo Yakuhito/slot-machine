@@ -9,6 +9,13 @@
 )
     (include condition_codes.clib)
 
+    (defun make_sure_auction_ended ((new_state seconds is_relative))
+        (i is_relative
+            (list ASSERT_SECONDS_RELATIVE end_seconds)
+            ; else
+            (list ASSERT_SECONDS_ABSOLUTE end_seconds)
+        )
+    )
 
     (list
         () ; Current_State
