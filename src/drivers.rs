@@ -1848,8 +1848,9 @@ mod tests {
                 oracle_slot,
             )?;
 
-            let user_coin = sim.new_coin(user_bls.puzzle_hash, 0);
-            StandardLayer::new(user_bls.pk).spend(ctx, user_coin, oracle_conds)?;
+            ensure_conditions_met(ctx, &mut sim, oracle_conds, 0)?;
+
+            registry = registry.finish_spend(ctx)?;
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
             let spends = ctx.take();
@@ -1910,6 +1911,8 @@ mod tests {
 
             payment_cat_amount -= pay_for_extension;
             payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
+
+            registry = registry.finish_spend(ctx)?;
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
             let spends = ctx.take();
@@ -2232,6 +2235,8 @@ mod tests {
                 &user_bls.sk,
             )?;
         }
+
+        benchmark.print_summary();
 
         Ok(())
     }

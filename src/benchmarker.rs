@@ -14,6 +14,7 @@ pub mod tests {
 
     pub struct Benchmark {
         pub title: String,
+        pub data_keys: Vec<String>,
         pub data: HashMap<String, Vec<u64>>,
     }
 
@@ -21,6 +22,7 @@ pub mod tests {
         pub fn new(title: String) -> Self {
             Self {
                 title,
+                data_keys: Vec::new(),
                 data: HashMap::new(),
             }
         }
@@ -42,10 +44,11 @@ pub mod tests {
                 &TESTNET11_CONSTANTS,
             )?;
 
-            self.data
-                .entry(key.to_string())
-                .or_default()
-                .push(sb_conds.cost);
+            let key = key.to_string();
+            if !self.data_keys.contains(&key) {
+                self.data_keys.push(key.clone());
+            }
+            self.data.entry(key).or_default().push(sb_conds.cost);
 
             sim.spend_coins(sb.coin_spends, keys)?;
             Ok(())
@@ -55,13 +58,17 @@ pub mod tests {
             let mut table = Table::new();
             table.add_row(row![format!("Cost statistics for {}", self.title)]);
             table.add_row(row!["label", "avg", "n", "min", "max", "median"]);
-            for (key, data) in &self.data {
+            for key in &self.data_keys {
+                let data = &self.data[key];
+
                 let total = data.iter().sum::<u64>();
                 let avg = total as f64 / data.len() as f64;
+
                 let mut sorted = data.clone();
                 sorted.sort();
                 let data_min = sorted[0];
                 let data_max = sorted[sorted.len() - 1];
+
                 let data_median = if sorted.len() % 2 == 0 {
                     (sorted[sorted.len() / 2] + sorted[sorted.len() / 2 - 1]) as f64 / 2.0
                 } else {
