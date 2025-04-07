@@ -116,17 +116,14 @@ impl<S, P> ActionLayer<S, P> {
     where
         S: ToClvm<Allocator> + FromClvm<Allocator>,
     {
-        let solution = RawActionLayerSolution::<NodePtr, NodePtr, NodePtr>::from_clvm(
-            allocator,
-            action_layer_solution,
-        )?;
+        let solution = Self::parse_solution(allocator, action_layer_solution)?;
 
         let mut state_incl_ephemeral: (NodePtr, S) = (NodePtr::NIL, initial_state);
-        for raw_action in solution.actions {
+        for raw_action in solution.action_spends {
             let actual_solution =
-                clvm_list!(state_incl_ephemeral, raw_action.action_solution).to_clvm(allocator)?;
+                clvm_list!(state_incl_ephemeral, raw_action.solution).to_clvm(allocator)?;
 
-            let output = run_puzzle(allocator, raw_action.action_puzzle_reveal, actual_solution)?;
+            let output = run_puzzle(allocator, raw_action.puzzle, actual_solution)?;
 
             (state_incl_ephemeral, _) =
                 <match_tuple!((NodePtr, S), NodePtr)>::from_clvm(allocator, output)?;
@@ -247,16 +244,34 @@ where
         let solution =
             RawActionLayerSolution::<NodePtr, NodePtr, NodePtr>::from_clvm(allocator, solution)?;
 
-        let action_spends = solution
-            .actions
-            .iter()
-            .map(|action| Spend::new(action.action_puzzle_reveal, action.action_solution))
-            .collect();
+        let mut actions = Vec::<NodePtr>::with_capacity(solution.solutions.len());
+        let mut proofs = Vec::<MerkleProof>::with_capacity(solution.solutions.len());
+        let mut selector_proofs = HashMap::<u32, MerkleProof>::new();
 
-        let proofs = solution
-            .actions
-            .into_iter()
-            .map(|action| action.action_proof)
+        for (selector, proof) in solution.selectors_and_proofs {
+            let proof = if let Some(existing_proof) = selector_proofs.get(&selector) {
+                existing_proof.clone()
+            } else {
+                selector_proofs.insert(selector, proof.clone());
+                proof
+            };
+
+            proofs.push(proof);
+
+            let mut index = 0;
+            let mut remaining_selector = 2;
+            while remaining_selector > 2 {
+                index += 1;
+                remaining_selector = remaining_selector / 2;
+            }
+            actions.push(solution.puzzles[index as usize]);
+        }
+
+        let action_spends = solution
+            .solutions
+            .iter()
+            .zip(actions)
+            .map(|(action_solution, action_puzzle)| Spend::new(action_puzzle, *action_solution))
             .collect();
 
         Ok(ActionLayerSolution {
