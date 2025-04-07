@@ -249,17 +249,18 @@ impl DigRewardDistributor {
         &self,
         allocator: &mut Allocator,
     ) -> Result<DigRewardDistributorState, DriverError> {
-        let mut state = self.info.state;
+        let mut state = (NodePtr::NIL, self.info.state);
 
         for action in self.pending_items.pending_actions.iter() {
             let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
 
             let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
-            (state, _) =
-                <match_tuple!(DigRewardDistributorState, NodePtr)>::from_clvm(allocator, output)?;
+            (state, _) = <match_tuple!((NodePtr, DigRewardDistributorState), NodePtr)>::from_clvm(
+                allocator, output,
+            )?;
         }
 
-        Ok(state)
+        Ok(state.1)
     }
 
     pub fn get_pending_items_from_spend(
@@ -298,7 +299,7 @@ impl DigRewardDistributor {
         let initiate_payout_action = DigInitiatePayoutAction::from_constants(&self.info.constants);
         let initiate_payout_hash = initiate_payout_action.tree_hash();
 
-        let mut current_state = self.info.state;
+        let mut current_state = (NodePtr::NIL, self.info.state);
         for raw_action in solution.inner_solution.actions {
             actions.push(Spend::new(
                 raw_action.action_puzzle_reveal,
@@ -309,8 +310,10 @@ impl DigRewardDistributor {
                 ctx.alloc(&clvm_list!(current_state, raw_action.action_solution))?;
 
             let action_output = run_puzzle(ctx, raw_action.action_puzzle_reveal, actual_solution)?;
-            (current_state, _) =
-                ctx.extract::<match_tuple!(DigRewardDistributorState, NodePtr)>(action_output)?;
+            (current_state, _) = ctx
+                .extract::<match_tuple!((NodePtr, DigRewardDistributorState), NodePtr)>(
+                    action_output,
+                )?;
 
             let raw_action_hash = ctx.tree_hash(raw_action.action_puzzle_reveal);
 
@@ -334,7 +337,7 @@ impl DigRewardDistributor {
             } else if raw_action_hash == add_mirror_hash {
                 mirror_slot_values.push(add_mirror_action.get_slot_value_from_solution(
                     ctx,
-                    &current_state,
+                    &current_state.1,
                     raw_action.action_solution,
                 )?);
             } else if raw_action_hash == remove_mirror_hash {
@@ -354,7 +357,7 @@ impl DigRewardDistributor {
             } else if raw_action_hash == initiate_payout_hash {
                 let (mirr, spent) = initiate_payout_action.get_slot_value_from_solution(
                     ctx,
-                    &current_state,
+                    &current_state.1,
                     raw_action.action_solution,
                 )?;
 

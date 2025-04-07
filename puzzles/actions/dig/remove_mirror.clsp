@@ -16,8 +16,10 @@
                 total_reserves
                 active_shares .
                 (@ Current_State_Rest
-                    (@ Reward_Info (cumulative_payout . remaining_rewards))
-                    (@ Round_Time_Info (last_update . epoch_end))
+                    (
+                        (@ Reward_Info (cumulative_payout . remaining_rewards))
+                        (@ Round_Time_Info (last_update . epoch_end))
+                    )
                 )
             )
         )

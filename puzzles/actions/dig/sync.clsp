@@ -42,7 +42,7 @@
                         0
                     ) ; cumulative_payout_delta
                 )
-                Round_Time_Info
+                (c update_time epoch_end)
             ) ; new state    
             (list
                 (list ASSERT_SECONDS_ABSOLUTE update_time)

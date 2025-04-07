@@ -36,7 +36,7 @@
                 (run_actions
                     MERKLE_ROOT
                     (c new_conditions current_conditions)
-                    (a action_puzzle action_solution)
+                    (a action_puzzle (list ephemeral_and_actual_state action_solution))
                     remaining_pending_actions
                 )
                 ; else

@@ -121,16 +121,17 @@ impl<S, P> ActionLayer<S, P> {
             action_layer_solution,
         )?;
 
-        let mut state: S = initial_state;
+        let mut state_incl_ephemeral: (NodePtr, S) = (NodePtr::NIL, initial_state);
         for raw_action in solution.actions {
             let actual_solution =
-                clvm_list!(state, raw_action.action_solution).to_clvm(allocator)?;
+                clvm_list!(state_incl_ephemeral, raw_action.action_solution).to_clvm(allocator)?;
 
             let output = run_puzzle(allocator, raw_action.action_puzzle_reveal, actual_solution)?;
-            (state, _) = <match_tuple!(S, NodePtr)>::from_clvm(allocator, output)?;
+            (state_incl_ephemeral, _) =
+                <match_tuple!((NodePtr, S), NodePtr)>::from_clvm(allocator, output)?;
         }
 
-        Ok(state)
+        Ok(state_incl_ephemeral.1)
     }
 }
 
@@ -523,10 +524,10 @@ pub struct ReserveFinalizerSolution {
     pub reserve_parent_id: Bytes32,
 }
 
-pub const ACTION_LAYER_PUZZLE: [u8; 439] = hex!("ff02ffff01ff02ff05ffff04ff0bffff04ff17ffff04ffff02ff04ffff04ff02ffff04ff0bffff04ff80ffff04ffff04ffff04ff80ff1780ff8080ffff04ff2fff80808080808080ffff04ff5fff808080808080ffff04ffff01ffff02ffff03ff2fffff01ff02ffff03ffff09ff05ffff02ff0effff04ff02ffff04ffff0bffff0101ffff02ff0affff04ff02ffff04ff82014fff8080808080ffff04ff818fff808080808080ffff01ff02ff04ffff04ff02ffff04ff05ffff04ffff04ff37ff0b80ffff04ffff02ff82014fff8201cf80ffff04ff6fff80808080808080ffff01ff088080ff0180ffff01ff04ff27ffff04ff37ff0b808080ff0180ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff0affff04ff02ffff04ff09ff80808080ffff02ff0affff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff02ffff03ff1bffff01ff02ff0effff04ff02ffff04ffff02ffff03ffff18ffff0101ff1380ffff01ff0bffff0102ff2bff0580ffff01ff0bffff0102ff05ff2b8080ff0180ffff04ffff04ffff17ff13ffff0181ff80ff3b80ff8080808080ffff010580ff0180ff018080");
+pub const ACTION_LAYER_PUZZLE: [u8; 451] = hex!("ff02ffff01ff02ff05ffff04ff0bffff04ff17ffff04ffff02ff04ffff04ff02ffff04ff0bffff04ff80ffff04ffff04ffff04ff80ff1780ff8080ffff04ff2fff80808080808080ffff04ff5fff808080808080ffff04ffff01ffff02ffff03ff2fffff01ff02ffff03ffff09ff05ffff02ff0effff04ff02ffff04ffff0bffff0101ffff02ff0affff04ff02ffff04ff82014fff8080808080ffff04ff818fff808080808080ffff01ff02ff04ffff04ff02ffff04ff05ffff04ffff04ff37ff0b80ffff04ffff02ff82014fffff04ff27ffff04ff8201cfff80808080ffff04ff6fff80808080808080ffff01ff088080ff0180ffff01ff04ff27ffff04ff37ff0b808080ff0180ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff0affff04ff02ffff04ff09ff80808080ffff02ff0affff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff02ffff03ff1bffff01ff02ff0effff04ff02ffff04ffff02ffff03ffff18ffff0101ff1380ffff01ff0bffff0102ff2bff0580ffff01ff0bffff0102ff05ff2b8080ff0180ffff04ffff04ffff17ff13ffff0181ff80ff3b80ff8080808080ffff010580ff0180ff018080");
 pub const ACTION_LAYER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    131e640ab1f224e3c3a4a798260e78f5310f5a43bd5672a23ca1d626e9539c39
+    62f096402e8d8654a05143520155c10193bb4b5ea8abe1d2e6abd7b43fa32ba8
     "
 ));
 

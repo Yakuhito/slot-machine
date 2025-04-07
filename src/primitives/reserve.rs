@@ -9,7 +9,7 @@ use chia_wallet_sdk::{
     types::run_puzzle,
 };
 use clvm_traits::{clvm_list, clvm_quote, match_tuple, FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
 
 use crate::{
     P2DelegatedBySingletonLayer, P2DelegatedBySingletonLayerArgs,
@@ -121,14 +121,24 @@ impl Reserve {
             RawActionLayerSolution<NodePtr, NodePtr, NodePtr>,
         >>(controller_solution)?;
 
-        let mut state: S = controlelr_initial_state;
+        let mut state: (NodePtr, S) = (NodePtr::NIL, controlelr_initial_state);
         let mut reserve_conditions: Vec<NodePtr> = Vec::new();
+        println!("start raw actions"); // todo: debug
         for raw_action in controller_solution.inner_solution.actions {
+            println!("alloc solution"); // todo: debug
             let actual_solution = ctx.alloc(&clvm_list!(state, raw_action.action_solution))?;
 
+            println!("run puzzle"); // todo: debug
+            println!(
+                "puzzle: {:} solution: {:}",
+                hex::encode(node_to_bytes(ctx, raw_action.action_puzzle_reveal)?),
+                hex::encode(node_to_bytes(ctx, actual_solution)?)
+            ); // todo: debug
             let output = run_puzzle(ctx, raw_action.action_puzzle_reveal, actual_solution)?;
+
             let (new_state, conditions) =
-                ctx.extract::<match_tuple!(S, Vec<(i64, NodePtr)>)>(output)?;
+                ctx.extract::<match_tuple!((NodePtr, S), Vec<(i64, NodePtr)>)>(output)?;
+            println!("parsed output");
             state = new_state;
 
             for (opcode, cond) in conditions {
@@ -137,10 +147,11 @@ impl Reserve {
                 }
             }
         }
+        println!("done raw actions"); // todo: debug
 
         // prepend CREATE_COIN, just like the reserve finalizer does
         // (list CREATE_COIN RESERVE_INNER_PUZZLE_HASH (f New_State) (list RESERVE_INNER_PUZZLE_HASH))
-        let new_reserve_amount = state.reserve_amount(0);
+        let new_reserve_amount = state.1.reserve_amount(0);
         let cc = CreateCoin::new(
             self.inner_puzzle_hash,
             new_reserve_amount,
