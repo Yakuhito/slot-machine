@@ -27,7 +27,7 @@
   (include curry.clib)
 
   (defun singleton_full_puzzle_hash (SINGLETON_STRUCT inner_puzzle_hash)
-    (curry_hashes (f SINGLETON_STRUCT)
+    (curry_hashes_inline (f SINGLETON_STRUCT)
       (sha256tree SINGLETON_STRUCT)
       inner_puzzle_hash
     )

@@ -18,9 +18,9 @@
     (include sha256tree.clib)
     (include curry.clib)
 
-    (defun flatten_list ((first_thing . the_rest))
+    (defun flatten_list (((@ first_thing (first_cond . remaining_conds)) . the_rest))
       (if first_thing
-        (c (f first_thing) (flatten_list (c (r first_thing) the_rest)))
+        (c first_cond (flatten_list (c remaining_conds the_rest)))
         ; else
         (if the_rest
           (flatten_list the_rest)
