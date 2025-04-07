@@ -4,6 +4,7 @@
 (mod (
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Current_State ; Truth
+    Ephemeral_State ; not used
     (
         handle_hash .
         rest_treehash ; (sha256tree ((left_value . right_value) expiration owner_launcher_id . resolved_launcher_id))
@@ -17,18 +18,19 @@
     (defun get_conditions (SLOT_1ST_CURRY_HASH hint data_treehash)
         (list
             ; spend slot
-            (spend_slot SLOT_1ST_CURRY_HASH data_treehash)
+            (spend_slot_inline SLOT_1ST_CURRY_HASH data_treehash)
 
             ; create new slot
-            (create_slot SLOT_1ST_CURRY_HASH data_treehash hint)
+            (create_slot_inline SLOT_1ST_CURRY_HASH data_treehash hint)
 
             ; announce value
             (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'o' data_treehash))
         )
     )
 
-    (c
+    (list
         Current_State ; new state
+        () ; new ephemeral state
         (get_conditions
             SLOT_1ST_CURRY_HASH
             handle_hash
