@@ -6,7 +6,18 @@
     VALIDATOR_SINGLETON_STRUCT_HASH ; (sha256 SINGLETON_STRUCT) for validator singleton
     MIRROR_SLOT_1ST_CURRY_HASH ; after 1st curry
     PAYOUT_THRESHOLD ; to prevent spam, payout needs to be >= PAYOUT_THRESHOLD
-    (total_reserves active_shares reward_info current_round_info) ; Current_State
+    (@
+        Current_State
+        (
+            total_reserves .
+            (@ Current_State_Rest (
+                active_shares
+                (@ Reward_Info (cumulative_payout . remaining_rewards))
+                Round_Time_Info
+            ))
+        )
+    ) ; Truth
+    Ephemeral_State ; not used
     (
         mirror_payout_amount
         mirror_payout_puzzle_hash
@@ -29,23 +40,22 @@
     )
 
     (if (all
-        (= (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares) mirror_payout_amount)
+        (= (* (- cumulative_payout mirror_initial_cumulative_payout) mirror_shares) mirror_payout_amount)
         (not (> PAYOUT_THRESHOLD mirror_payout_amount))
     )
-        (c
-            (list
+        (list
+            (c
                 (- total_reserves mirror_payout_amount)
-                active_shares
-                reward_info
-                current_round_info
-            ) ; new state  
+                Current_State_Rest
+            ) ; new state
+            () ; new ephemeral state
             (list
-                (spend_slot MIRROR_SLOT_1ST_CURRY_HASH
+                (spend_slot_inline MIRROR_SLOT_1ST_CURRY_HASH
                     (get_slot_data_hash mirror_payout_puzzle_hash mirror_initial_cumulative_payout mirror_shares)
                 )
 
-                (create_slot MIRROR_SLOT_1ST_CURRY_HASH
-                    (get_slot_data_hash mirror_payout_puzzle_hash (f reward_info) mirror_shares)
+                (create_slot_inline MIRROR_SLOT_1ST_CURRY_HASH
+                    (get_slot_data_hash mirror_payout_puzzle_hash cumulative_payout mirror_shares)
                     mirror_payout_puzzle_hash
                 )
 
@@ -58,7 +68,7 @@
                             )
                             (sha256 2
                                 (sha256 1 mirror_initial_cumulative_payout)
-                                (sha256 1 (f reward_info))
+                                (sha256 1 cumulative_payout)
                             )
                         ) ; (sha256tree ((mirror_payout_puzzle_hash . mirror_shares) . (mirror_initial_cumulative_payout new_mirror_initial_cumulative_payout)))
                     ) 
