@@ -2730,8 +2730,6 @@ mod tests {
         // sim.spend_coins(ctx.take(), &[])?;
         benchmark.add_spends(ctx, &mut sim, "sync", &[])?;
 
-        println!("state: {:?}", registry.info.state); // todo: debug
-        println!("first_epoch_start + 100: {:?}", first_epoch_start + 100); // todo: debug
         assert!(registry.info.state.round_time_info.last_update == first_epoch_start + 100);
 
         let cumulative_payout_delta = initial_reward_info.remaining_rewards / 10;
@@ -2753,12 +2751,9 @@ mod tests {
         )?;
         ensure_conditions_met(ctx, &mut sim, sync_conditions, 0)?;
 
-        println!("finishing spend..."); // todo: debug
         registry = registry.finish_spend(ctx, vec![])?;
-        println!("done!!"); // todo: debug
-                            // sim.spend_coins(ctx.take(), &[])?;
+        // sim.spend_coins(ctx.take(), &[])?;
         benchmark.add_spends(ctx, &mut sim, "sync", &[])?;
-        println!("done 2!!"); // todo: debug
         assert!(registry.info.state.round_time_info.last_update == first_epoch_start + 500);
 
         let cumulative_payout_delta = initial_reward_info.remaining_rewards * 400 / 900;
@@ -2795,12 +2790,10 @@ mod tests {
             )?,
         );
 
-        println!("finishing spend 2..."); // todo: debug
         registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
-        println!("done 3!!"); // todo: debug
-                              // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
         benchmark.add_spends(ctx, &mut sim, "add_incentives", &[cat_minter.sk.clone()])?;
-        println!("done 4!!"); // todo: debug
+
         assert_eq!(
             registry.info.state.round_time_info.last_update,
             first_epoch_start + 500
@@ -2840,7 +2833,6 @@ mod tests {
         sim.pass_time(250);
         // sim.spend_coins(ctx.take(), &[])?;
         benchmark.add_spends(ctx, &mut sim, "add_mirror", &[])?;
-        println!("done 5!!"); // todo: debug
         assert_eq!(registry.info.state.active_shares, 3);
 
         // sync to 75% (so + 25%)
@@ -2855,7 +2847,6 @@ mod tests {
         registry = registry.finish_spend(ctx, vec![])?;
         // sim.spend_coins(ctx.take(), &[])?;
         benchmark.add_spends(ctx, &mut sim, "sync", &[])?;
-        println!("done 6!!"); // todo: debug
         assert!(registry.info.state.round_time_info.last_update == first_epoch_start + 750);
 
         let cumulative_payout_delta = initial_reward_info.remaining_rewards * 250 / (3 * 500);
@@ -2869,7 +2860,6 @@ mod tests {
         );
 
         // remove mirror2
-        println!("removing mirror2..."); // todo: debug
         let reserve_cat = registry.reserve.to_cat();
         let (remove_mirror_validator_conditions, mirror2_payout_amount) =
             registry.new_action::<DigRemoveMirrorAction>().spend(
@@ -2887,12 +2877,9 @@ mod tests {
             remove_mirror_validator_conditions,
         )?;
 
-        println!("finishing spend 3..."); // todo: debug
         registry = registry.finish_spend(ctx, vec![])?;
-        println!("done 7!!"); // todo: debug
-                              // sim.spend_coins(ctx.take(), &[])?;
+        // sim.spend_coins(ctx.take(), &[])?;
         benchmark.add_spends(ctx, &mut sim, "remove_mirror", &[])?;
-        println!("done 8!!"); // todo: debug
         let payout_coin_id = reserve_cat
             .wrapped_child(mirror2_bls.puzzle_hash, mirror2_payout_amount)
             .coin
@@ -2905,10 +2892,8 @@ mod tests {
             .unwrap()
             .spent_height
             .is_some());
-        println!("done 7!!"); // todo: debug
 
         for epoch in 1..7 {
-            println!("syncing epoch {:?}", epoch); // todo: debug
             let update_time = registry.info.state.round_time_info.epoch_end;
             let sync_conditions =
                 registry

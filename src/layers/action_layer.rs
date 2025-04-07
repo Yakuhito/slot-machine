@@ -127,6 +127,7 @@ impl<S, P> ActionLayer<S, P> {
                 clvm_list!(state_incl_ephemeral, raw_action.action_solution).to_clvm(allocator)?;
 
             let output = run_puzzle(allocator, raw_action.action_puzzle_reveal, actual_solution)?;
+
             (state_incl_ephemeral, _) =
                 <match_tuple!((NodePtr, S), NodePtr)>::from_clvm(allocator, output)?;
         }
