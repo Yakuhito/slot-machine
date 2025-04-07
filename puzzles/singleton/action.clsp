@@ -19,28 +19,47 @@
     FINALZIER
     MERKLE_ROOT
     STATE
-    actions ; (list (action_proof action_puzzle . action_solution) ...)
+    puzzles
+    selectors_and_proofs ; (list (selector . proof) ...)
+    solutions ; (list (action_solution ...)
     finalizer_solution
 )
     (include merkle_utils.clib)
     (include sha256tree.clib)
 
-    (defun run_actions (
+    (defun reduce_and_verify_proofs (
         MERKLE_ROOT
-        current_conditions
-        (ephemeral_and_actual_state . new_conditions)
-        (@ pending_actions ((action_proof action_puzzle . action_solution) . remaining_pending_actions))
+        puzzles
+        (@ pending_selectors_and_proofs ((selector . proof) . remaining_pending_selectors_and_proofs))
     )
-        (if pending_actions
-            (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree action_puzzle) action_proof))
-                (run_actions
-                    MERKLE_ROOT
-                    (c new_conditions current_conditions)
-                    (a action_puzzle (list ephemeral_and_actual_state action_solution))
-                    remaining_pending_actions
+        (if pending_selectors_and_proofs
+            (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzles)) proof))
+                (c
+                    selector
+                    (reduce_and_verify_proofs MERKLE_ROOT puzzles remaining_pending_selectors_and_proofs)
                 )
                 ; else
                 (x)
+            )
+            ; else
+            2 ; valid selector
+        )
+    )
+
+    (defun run_actions (
+        puzzles
+        current_conditions
+        (ephemeral_and_actual_state . new_conditions)
+        (@ pending_selectors (selector . remaining_selectors))
+        (@ pending_solution (solution . remaining_solutions))
+    )
+        (if pending_selectors
+            (run_actions
+                puzzles
+                (c new_conditions current_conditions)
+                (a (a selector puzzles) (list ephemeral_and_actual_state solution))
+                remaining_selectors
+                remaining_solutions
             )
             ; else
             (c
@@ -56,10 +75,11 @@
             MERKLE_ROOT
             STATE
             (run_actions
-                MERKLE_ROOT
+                puzzles                
                 (list)
                 (list (c () STATE))
-                actions
+                (reduce_and_verify_proofs MERKLE_ROOT puzzles selectors_and_proofs)
+                solutions
             )
             finalizer_solution
         )
