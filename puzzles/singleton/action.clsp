@@ -3,80 +3,65 @@
 ;; Each action will receive the current state + an ephemeral state and return new values
 ;; One or more actions may be run per spend
 
-;; An action's solution will always be: (list Current_State Ephemeral_State solution)
+;; An action's solution will always be: (list (Ephemeral_State . Current_State) solution)
 ;;    (where capital first letters are used to denote Truths)
-;; It returns three values: (list new_state new_ephemeral_state new_conditions)
+;; It returns three values: (c (new_ephemeral_state . new_state) . new_conditions)
 ;;    state is passed from one action to the next and the latest value is saved between spends
 ;;        (it is persistent)
 ;;    ephemeral_state is not persistent - it's () for the first action of any new spend
+;;        but passed from the previous action in the same spend
 ;;    new_conditions will be directly aded to this puzzle's output conditions
 ;;    but the finalizer puzzle is able to filter them after all actions are run
 
-;; Warning: This puzzle's finalizer may assume the singleton's amount is 1 (like the default one does).
+;; Warning: This puzzle's finalizer likely assumes the singleton's amount is 1 (like the default one does).
 
 (mod (
-  FINALZIER
-  MERKLE_ROOT
-  STATE
-  puzzle_reveals ; shared so sha256tree is not performed n times
-  selectors_and_proofs ; (list (selector . proof) ...)
-  actions ; (list (selector_selector . action_solution) ...)
-  finalizer_solution
-)
-  (include merkle_utils.clib)
-  (include sha256tree.clib)
-
-  (defun verify_and_reduce (MERKLE_ROOT puzzle_reveals (@ selectors_and_proofs ((selector . proof) . remaining_selectors_and_proofs)))
-    (if selectors_and_proofs
-      (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzle_reveals)) proof))
-        (c selector (verify_and_reduce MERKLE_ROOT puzzle_reveals remaining_selectors_and_proofs))
-        ; else
-        (x)
-      )
-      ; else
-      ()
-    )
-  )
-
-  (defun run_actions (
-    puzzle_reveals
-    selectors
-    current_conditions
-    (state ephemeral_state . new_conditions)
-    (@ pending_actions ((selector_selector . action_solution) . remaining_pending_actions))
-  )
-    (if pending_actions
-      (run_actions
-        selectors
-        (c new_conditions current_conditions)
-        (a
-          (a (a selector_selector selectors) puzzle_reveals)
-          (list state ephemeral_state action_solution)
-        )
-        remaining_pending_actions
-      )
-      ; else
-      (list
-        state
-        ephemeral_state
-        (c new_conditions current_conditions)
-      )
-    )
-  )
-  
-  (a
     FINALZIER
-    (list
-      MERKLE_ROOT
-      STATE
-      (run_actions
-        puzzle_reveals
-        (verify_and_reduce MERKLE_ROOT puzzle_reveals selectors_and_proofs)
-        (list)
-        (list STATE ())
-        actions
-      )
-      finalizer_solution
+    MERKLE_ROOT
+    STATE
+    actions ; (list (action_proof action_puzzle . action_solution) ...)
+    finalizer_solution
+)
+    (include merkle_utils.clib)
+    (include sha256tree.clib)
+
+    (defun run_actions (
+        MERKLE_ROOT
+        current_conditions
+        (ephemeral_and_actual_state . new_conditions)
+        (@ pending_actions ((action_proof action_puzzle . action_solution) . remaining_pending_actions))
     )
-  )
+        (if pending_actions
+            (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree action_puzzle) action_proof))
+                (run_actions
+                    MERKLE_ROOT
+                    (c new_conditions current_conditions)
+                    (a action_puzzle action_solution)
+                    remaining_pending_actions
+                )
+                ; else
+                (x)
+            )
+            ; else
+            (c
+                ephemeral_and_actual_state
+                (c new_conditions current_conditions)
+            )
+        )
+    )
+    
+    (a
+        FINALZIER
+        (list
+            MERKLE_ROOT
+            STATE
+            (run_actions
+                MERKLE_ROOT
+                (list)
+                (list (c () STATE))
+                actions
+            )
+            finalizer_solution
+        )
+    )
 )

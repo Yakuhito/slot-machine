@@ -12,42 +12,42 @@
 ;;  about this case is that the launcher singleton delegated revocation capabilities to a third party.
 
 (mod (
-  REVOCATION_SINGLETON_STRUCT
-  ; 2nd curry
-  SELF_HASH
-  VERIFIED_DATA
-  revocation_singleton_inner_puzzle_hash
+    REVOCATION_SINGLETON_STRUCT
+    ; 2nd curry
+    SELF_HASH
+    VERIFIED_DATA
+    revocation_singleton_inner_puzzle_hash
 )
-  (include condition_codes.clib)
-  (include sha256tree.clib)
-  (include curry.clib)
+    (include condition_codes.clib)
+    (include sha256tree.clib)
+    (include curry.clib)
 
-  (if (= revocation_singleton_inner_puzzle_hash ())
-    ; oracle mode - just re-create
-    (list
-      (list CREATE_PUZZLE_ANNOUNCEMENT ())
-      (list
-        CREATE_COIN
-        (curry_hashes_inline SELF_HASH
-          (sha256 1 SELF_HASH)
-          (sha256tree VERIFIED_DATA)
+    (if (= revocation_singleton_inner_puzzle_hash ())
+        ; oracle mode - just re-create
+        (list
+            (list CREATE_PUZZLE_ANNOUNCEMENT ())
+            (list
+                CREATE_COIN
+                (curry_hashes_inline SELF_HASH
+                  (sha256 1 SELF_HASH)
+                  (sha256tree VERIFIED_DATA)
+                )
+                1
+            )
         )
-        1
-      )
-    )
-    ; else
-    ; consume announcement from revocation singleton and melt
-    (list
-      (list CREATE_COIN () -113)
-      (list
-        RECEIVE_MESSAGE
-        18 ; puzzle-puzzle
-        () ; message
-        (curry_hashes_inline (f REVOCATION_SINGLETON_STRUCT)
-          (sha256tree REVOCATION_SINGLETON_STRUCT)
-          revocation_singleton_inner_puzzle_hash
+        ; else
+        ; consume announcement from revocation singleton and melt
+        (list
+            (list CREATE_COIN () -113)
+            (list
+                RECEIVE_MESSAGE
+                18 ; puzzle-puzzle
+                () ; message
+                (curry_hashes_inline (f REVOCATION_SINGLETON_STRUCT)
+                    (sha256tree REVOCATION_SINGLETON_STRUCT)
+                    revocation_singleton_inner_puzzle_hash
+                )
+            )
         )
-      )
     )
-  )
 )

@@ -19,29 +19,29 @@
     (include curry.clib)
 
     (defun flatten_list (((@ first_thing (first_cond . remaining_conds)) . the_rest))
-      (if first_thing
-        (c first_cond (flatten_list (c remaining_conds the_rest)))
-        ; else
-        (if the_rest
-          (flatten_list the_rest)
-          ; else
-          ()
+        (if first_thing
+            (c first_cond (flatten_list (c remaining_conds the_rest)))
+            ; else
+            (if the_rest
+                (flatten_list the_rest)
+                ; else
+                ()
+            )
         )
-      )
     )
 
     (c
         (list
-          CREATE_COIN
-          (curry_hashes ACTION_LAYER_MOD_HASH
-            (curry_hashes FINALIZER_SELF_HASH
-                (sha256 1 FINALIZER_SELF_HASH)
-            ) ; finalizer puzzle hash
-            (sha256 1 Merkle_Root)
-            (sha256tree New_State)
-          ) ; new inner ph
-          1
-          (list HINT)
+            CREATE_COIN
+            (curry_hashes ACTION_LAYER_MOD_HASH
+                (curry_hashes FINALIZER_SELF_HASH
+                    (sha256 1 FINALIZER_SELF_HASH)
+                ) ; finalizer puzzle hash
+                (sha256 1 Merkle_Root)
+                (sha256tree New_State)
+            ) ; new inner ph
+            1
+            (list HINT)
         )
         (flatten_list Conditions)
     )
