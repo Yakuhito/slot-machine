@@ -27,22 +27,41 @@
     (include merkle_utils.clib)
     (include sha256tree.clib)
 
+    (defun item_in_list (the_item (@ the_list (first_item . remaining_list)))
+        (if the_list
+            (if (= the_item first_item)
+                1
+                (item_in_list the_item remaining_list)
+            )
+            ; else
+            ()
+        )
+    )
+
     (defun reduce_and_verify_proofs (
         MERKLE_ROOT
         puzzles
+        selectors_so_far
         (@ pending_selectors_and_proofs ((selector . proof) . remaining_pending_selectors_and_proofs))
     )
         (if pending_selectors_and_proofs
-            (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzles)) proof))
-                (c
-                    selector
-                    (reduce_and_verify_proofs MERKLE_ROOT puzzles remaining_pending_selectors_and_proofs)
+            (if 
+                (if proof
+                    (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzles)) proof))
+                    ; else
+                    (item_in_list selector selectors_so_far)
+                )
+                (reduce_and_verify_proofs
+                    MERKLE_ROOT
+                    puzzles
+                    (c selector selectors_so_far)
+                    remaining_pending_selectors_and_proofs
                 )
                 ; else
                 (x)
             )
             ; else
-            2 ; valid selector
+            selectors_so_far
         )
     )
 
@@ -78,7 +97,7 @@
                 puzzles                
                 (list)
                 (list (c () STATE))
-                (reduce_and_verify_proofs MERKLE_ROOT puzzles selectors_and_proofs)
+                (reduce_and_verify_proofs MERKLE_ROOT puzzles (list) selectors_and_proofs)
                 solutions
             )
             finalizer_solution
