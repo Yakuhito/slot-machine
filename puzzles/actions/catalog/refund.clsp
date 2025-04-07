@@ -10,10 +10,15 @@
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
     (@
-        Current_State
-        (Cat_Maker_Puzzle_Hash . Registration_Price)
-    ) ; Truth
-    Ephemeral_State ; not used
+        Truth
+        (
+            Ephemeral_State . ; not used
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash . Registration_Price)
+            )
+        )
+    )
     ( 
         precommited_cat_maker_reveal
         precommited_cat_maker_hash
@@ -49,9 +54,8 @@
     )
 
     (if (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
-        (list
-            Current_State ; new state
-            () ; new ephemeral state
+        (c
+            Truth ; nothing changes
             (main 
                 SLOT_1ST_CURRY_HASH
                 (get_slot_value_hash tail_hash neighbors_hash)

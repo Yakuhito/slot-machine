@@ -5,13 +5,14 @@
     REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
     COMMITMENT_SLOT_1ST_CURRY_HASH ; after 1st curry
     WITHDRAWAL_SHARE_BPS ; / 10000 * committed_value will actually be sent to the recipient
-    (@ Current_State
-        (
-            total_reserves . Current_State_Rest
+    (
+        Ephemeral_State . ; not used
+        (@ Current_State
+            (
+                total_reserves . Current_State_Rest
+            ) 
         ) 
-    ) ; truth
-    Ephemeral_State ; not used
-    (total_reserves active_shares reward_info current_round_info) ; Current_State
+    ) ; Truth
     (
         reward_slot_epoch_time
         reward_slot_next_epoch_initialized
@@ -37,12 +38,14 @@
     
     (c
         (c
-            (- total_reserves 
-                (if (= withdrawal_share (/ (* WITHDRAWAL_SHARE_BPS committed_value) 10000)) withdrawal_share (x))
-            )
-            Current_State_Rest
-        ) ; new state
-        () ; new ephemeral state
+            () ; new ephemeral state
+            (c
+                (- total_reserves 
+                    (if (= withdrawal_share (/ (* WITHDRAWAL_SHARE_BPS committed_value) 10000)) withdrawal_share (x))
+                )
+                Current_State_Rest
+            ) ; new state
+        )
         (list
             ; this also ensures that the wihdrawal doesn't affect the current round
             (list ASSERT_BEFORE_SECONDS_ABSOLUTE reward_slot_epoch_time)

@@ -8,11 +8,15 @@
     OFFER_MOD_HASH
     PAYOUT_PUZZLE_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    (@
-        Current_State
-        (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
-    ) ; Truth
-    Ephemeral_State ; not used
+    (@ Truth
+        (
+            Ephemeral_State .
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
+            )
+        )
+    )
     (
         handle_hash
         pricing_puzzle_reveal
@@ -42,9 +46,8 @@
     )
 
     (defun-inline main ((total_price . registered_time))
-        (list
-            Current_State ; new state
-            () ; new ephemeral state
+        (c
+            Truth
             (list
                 ; spend slot
                 (spend_slot_inline SLOT_1ST_CURRY_HASH 

@@ -10,8 +10,7 @@
     ASSETS ; list (coin_id . amount)
     TIMESTAMP_PROGRAM ; Adds conditions to the output of the action
         ; return: (new_state seconds is_relative)
-    (@ Current_State (Bid_Index Bid King End_State))
-    Ephemeral_State
+    (Ephemeral_State . (@ Current_State (Bid_Index Bid King End_State)))
     () ; solution
 )
     (include condition_codes.clib)

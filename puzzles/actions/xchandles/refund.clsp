@@ -10,11 +10,15 @@
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    (@
-        Current_State
-        (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
-    ) ; Truth
-    Ephemeral_State ; not used
+    (@ Truth
+        (
+            Ephemeral_State .
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
+            )
+        )
+    )
     (
         handle_hash ; (sha256 1 handle)
         precommited_cat_maker_reveal
@@ -53,9 +57,8 @@
         (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
         (= precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_reveal))
     )
-      (list
-          Current_State ; new state
-          () ; new ephemeral state
+      (c
+          Truth
           (main
               SLOT_1ST_CURRY_HASH
               (sha256 2 (sha256 1 handle_hash) rest_hash)

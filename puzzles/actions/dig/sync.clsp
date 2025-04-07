@@ -2,15 +2,17 @@
 ;; Syncs reward distribution for the current epoch
 
 (mod (
-    (@ Current_State
-        (
-            total_reserves
-            active_shares
-            (cumulative_payout . remaining_rewards)
-            (@ Round_Time_Info (last_update . epoch_end))
-        ) 
-    ) ; truth
-    Ephemeral_State ; not used
+    (
+        Ephemeral_State . ; not used
+        (@ Current_State
+            (
+                total_reserves
+                active_shares
+                (cumulative_payout . remaining_rewards)
+                (@ Round_Time_Info (last_update . epoch_end))
+            ) 
+        ) ; Truth
+    )
     (
         update_time
     )
@@ -25,8 +27,9 @@
     )
 
     (if (all (not (> update_time epoch_end)) (> update_time last_update))
-        (list
+        (c
             (list
+                () ; new ephemeral state
                 total_reserves
                 active_shares
                 (calculate_new_distribution
@@ -40,8 +43,7 @@
                     ) ; cumulative_payout_delta
                 )
                 Round_Time_Info
-            ) ; new state 
-            () ; new ephemeral state   
+            ) ; new state    
             (list
                 (list ASSERT_SECONDS_ABSOLUTE update_time)
                 (list

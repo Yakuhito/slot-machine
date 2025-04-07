@@ -24,10 +24,15 @@
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
     (@
-        Current_State
-        (Cat_Maker_Puzzle_Hash . Registration_Price)
-    ) ; Truth
-    Ephemeral_State ; not used
+        Truth
+        (
+            Ephemeral_State . ; not used
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash . Registration_Price)
+            )
+        )
+    )
     ( 
         cat_maker_reveal
         cat_maker_solution
@@ -84,9 +89,8 @@
         (>s right_tail_hash tail_hash)
         (= (sha256tree cat_maker_reveal) Cat_Maker_Puzzle_Hash)
     )
-        (list
-            Current_State ; new state
-            () ; new ephemeral state
+        (c
+            Truth ; nothing changes
             ; create NFT that will hold CAT info
             (create_prelauncher_and_assert_launcher
                 NFT_PACK

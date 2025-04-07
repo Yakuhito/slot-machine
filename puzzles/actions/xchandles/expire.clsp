@@ -7,11 +7,15 @@
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    (@
-        Current_State
-        (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
-    ) ; Truth
-    Ephemeral_State ; not used
+    (@ Truth
+        (
+            Ephemeral_State .
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
+            )
+        )
+    )
     (
         cat_maker_puzzle_reveal
         cat_maker_puzzle_solution
@@ -75,9 +79,8 @@
         (total_price . registered_time)
         expired_handle_pricing_puzzle_solution_hash
     )
-        (list
-            Current_State ; new state
-            () ; new ephemeral state
+        (c
+            Truth ; nothing changes
             (spend_precommit_coin_and_announce
                 cat_maker_puzzle_reveal
                 cat_maker_puzzle_solution

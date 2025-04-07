@@ -8,18 +8,20 @@
     MAX_SECONDS_OFFSET ; at most this amount of seconds can pass since last update
     ; /\ this prevents the reward distributor from 'stealing' earned rewards while not
     ;    dropping the remove mirror tx from the mempool after each block
-    (@
-        Current_State
-        (
-            total_reserves
-            active_shares .
-            (@ Current_State_Rest
-                (@ Reward_Info (cumulative_payout . remaining_rewards))
-                (@ Round_Time_Info (last_update . epoch_end))
+    (
+        Ephemeral_State . ; not used
+        (@
+            Current_State
+            (
+                total_reserves
+                active_shares .
+                (@ Current_State_Rest
+                    (@ Reward_Info (cumulative_payout . remaining_rewards))
+                    (@ Round_Time_Info (last_update . epoch_end))
+                )
             )
         )
     ) ; Truth
-    Ephemeral_State ; not used
     (
         validator_singleton_inner_puzzle_hash
         mirror_payout_amount
@@ -33,15 +35,17 @@
     (include slots.clib)
 
     (if (= mirror_payout_amount (* (- cumulative_payout mirror_initial_cumulative_payout) mirror_shares))
-        (list
+        (c
             (c
-                (- total_reserves mirror_payout_amount)
+                () ; new ephemeral state
                 (c
-                    (- active_shares mirror_shares)
-                    Current_State_Rest
-                )
-            ) ; new state
-            () ; new ephemeral state
+                    (- total_reserves mirror_payout_amount)
+                    (c
+                        (- active_shares mirror_shares)
+                        Current_State_Rest
+                    )
+                ) ; new state
+            )
             (list
                 ; validator actually wants us to add this mirror
                 (list RECEIVE_MESSAGE

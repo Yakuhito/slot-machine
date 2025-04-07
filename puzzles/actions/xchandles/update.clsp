@@ -7,8 +7,15 @@
     SINGLETON_MOD_HASH
     SINGLETON_LAUNCHER_PUZZLE_HASH_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    Current_State ; Truth
-    Ephemeral_State ; not used
+    (@ Truth
+        (
+            Ephemeral_State .
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
+            )
+        )
+    )
     (
         handle_hash
         neighbors_hash ; (sha256tree (left_value . right_value))
@@ -40,9 +47,8 @@
         )
     )
 
-    (list
-        Current_State ; new state
-        () ; new ephemeral state
+    (c
+        Truth
         (list
             ; spend slot
             (spend_slot_inline SLOT_1ST_CURRY_HASH 

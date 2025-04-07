@@ -6,18 +6,20 @@
     VALIDATOR_SINGLETON_STRUCT_HASH ; (sha256 SINGLETON_STRUCT) for validator singleton
     MIRROR_SLOT_1ST_CURRY_HASH ; after 1st curry
     PAYOUT_THRESHOLD ; to prevent spam, payout needs to be >= PAYOUT_THRESHOLD
-    (@
-        Current_State
-        (
-            total_reserves .
-            (@ Current_State_Rest (
-                active_shares
-                (@ Reward_Info (cumulative_payout . remaining_rewards))
-                Round_Time_Info
-            ))
+    (
+        Ephemeral_State . ; not used
+        (@
+            Current_State
+            (
+                total_reserves .
+                (@ Current_State_Rest (
+                    active_shares
+                    (@ Reward_Info (cumulative_payout . remaining_rewards))
+                    Round_Time_Info
+                ))
+            )
         )
     ) ; Truth
-    Ephemeral_State ; not used
     (
         mirror_payout_amount
         mirror_payout_puzzle_hash
@@ -43,12 +45,14 @@
         (= (* (- cumulative_payout mirror_initial_cumulative_payout) mirror_shares) mirror_payout_amount)
         (not (> PAYOUT_THRESHOLD mirror_payout_amount))
     )
-        (list
-            (c
-                (- total_reserves mirror_payout_amount)
-                Current_State_Rest
-            ) ; new state
-            () ; new ephemeral state
+        (c
+            (c 
+                () ; new ephemeral state
+                (c
+                    (- total_reserves mirror_payout_amount)
+                    Current_State_Rest
+                ) ; new state
+            ) 
             (list
                 (spend_slot_inline MIRROR_SLOT_1ST_CURRY_HASH
                     (get_slot_data_hash mirror_payout_puzzle_hash mirror_initial_cumulative_payout mirror_shares)

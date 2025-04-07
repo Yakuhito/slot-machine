@@ -9,17 +9,15 @@
 (mod (
   SINGLETON_MOD_HASH
   OTHER_SINGLETON_STRUCT_HASH
-  Current_State
-  Ephemeral_State
+  (Ephemeral_State . Current_State) ; Truth
   (new_state . other_singleton_inner_puzzle_hash)
 )
   (include condition_codes.clib)
   (include sha256tree.clib)
   (include curry.clib)
 
-  (list
-    new_state
-    Ephemeral_State
+  (c
+    (c Ephemeral_State new_state)
     (list
       (list
         RECEIVE_MESSAGE

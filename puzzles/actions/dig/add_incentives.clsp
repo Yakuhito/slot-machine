@@ -4,16 +4,18 @@
 (mod (
     VALIDATOR_PAYOUT_PUZZLE_HASH
     VALIDATOR_FEE_BPS ; * amount / 10000 will be given to the validator - rest is distributed to mirrors
-    (@
-        Current_State
-        (
-            total_reserves
-            active_shares
-            (cumulative_payout . remaining_rewards)
-            (@ Round_Time_Info (last_update . epoch_end))
+    (
+        Ephemeral_State . ; not used
+        (@
+            Current_State
+            (
+                total_reserves
+                active_shares
+                (cumulative_payout . remaining_rewards)
+                (@ Round_Time_Info (last_update . epoch_end))
+            )
         )
     ) ; Truth
-    Ephemeral_State ; not used
     (
         amount .
         validator_fee
@@ -22,8 +24,9 @@
     (include condition_codes.clib)
 
     (if (all (> epoch_end last_update) (> amount 0) (= validator_fee (/ (* amount VALIDATOR_FEE_BPS) 10000)))
-        (list
+        (c
             (list
+                () ; new ephemeral state
                 (+ total_reserves (- amount validator_fee))
                 active_shares
                 (c
@@ -31,8 +34,7 @@
                     (+ remaining_rewards (- amount validator_fee))
                 )
                 Round_Time_Info
-            ) ; new state    
-            () ; new ephemeral state
+            ) ; new state 
             (list
                 (list
                     CREATE_PUZZLE_ANNOUNCEMENT

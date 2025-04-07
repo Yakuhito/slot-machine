@@ -5,16 +5,18 @@
     REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
     COMMITMENT_SLOT_1ST_CURRY_HASH ; after 1st curry
     EPOCH_SECONDS
-    (@
-        Current_State
-        (
-            total_reserves
-            active_shares
-            Reward_Info
-            (@ Round_Time_Info (last_update . epoch_end))
+    (
+        Ephemeral_State . ; not used
+        (@
+            Current_State
+            (
+                total_reserves
+                active_shares
+                Reward_Info
+                (@ Round_Time_Info (last_update . epoch_end))
+            )
         )
     ) ; Truth
-    Ephemeral_State ; not used
     (
         slot_epoch_time
         slot_next_epoch_initialized
@@ -73,14 +75,14 @@
         (not (> epoch_end epoch_start)) ; we're adding incentives to a future epoch
         (> rewards_to_add 0)
     )
-        (list
+        (c
             (list
+                () ; new ephemeral state
                 (+ total_reserves rewards_to_add)
                 active_shares
                 Reward_Info
                 Round_Time_Info
             ) ; new state
-            () ; new ephemeral state
             (create_precommitment_slot_and_announce
                 COMMITMENT_SLOT_1ST_CURRY_HASH
                 (sha256 2

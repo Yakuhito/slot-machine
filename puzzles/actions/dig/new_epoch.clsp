@@ -6,15 +6,17 @@
     VALIDATOR_PAYOUT_PUZZLE_HASH
     VALIDATOR_FEE_BPS ; * epoch_total_rewards / 10000 will be given to the validator - rest is distributed to mirrors
     EPOCH_SECONDS
-    (@ Current_State
-        (
-            total_reserves
-            active_shares
-            (cumulative_payout . remaining_rewards)
-            (last_update . epoch_end)
-        ) 
-    ) ; truth
-    Ephemeral_State ; not used
+    (
+        Ephemeral_State . ; not used
+        (@ Current_State
+            (
+                total_reserves
+                active_shares
+                (cumulative_payout . remaining_rewards)
+                (last_update . epoch_end)
+            ) 
+        ) ; truth
+    )
     (
         slot_epoch_time
         slot_next_epoch_initialized
@@ -41,8 +43,9 @@
             (all (> epoch_end slot_epoch_time) (not slot_next_epoch_initialized) (= epoch_total_rewards 0)) ; slot is for previous epoch; next epoch is 0
         )
     )
-        (list
+        (c
             (list
+                () ; new ephemeral state
                 (- total_reserves validator_fee)
                 active_shares
                 (c
@@ -51,7 +54,6 @@
                 )
                 (c epoch_end (+ epoch_end EPOCH_SECONDS))
             ) ; new state 
-            () ; new ephemeral state
             (c
                 (list
                     CREATE_PUZZLE_ANNOUNCEMENT

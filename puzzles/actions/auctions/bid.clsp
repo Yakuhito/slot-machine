@@ -6,8 +6,7 @@
     TIMESTAMP_PROGRAM ; Adds conditions to the output of the action
         ; return: (new_state seconds is_relative)
     REFUND_PROGRAM
-    (@ Current_State (Bid_Index Bid King End_State))
-    Ephemeral_State
+    (Ephemeral_State . (@ Current_State (Bid_Index Bid King End_State)))
     solution ; (new_bid new_king)
 )
     (include condition_codes.clib)
