@@ -1,13 +1,16 @@
 ; action.clsp by yakuhito
 ;; Inner puzzle for a singleton that has a state and may run any of n actions
-;; Each action will receive the current state/list of output conditions and return new values
+;; Each action will receive the current state + an ephemeral state and return new values
 ;; One or more actions may be run per spend
 
-;; An action's solution will always be: (list Current_State solution)
-;;  (where capital first letters are used to denote Truths)
-;; It returns two values: (c new_state new_conditions)
-;;  new_conditions will be directly aded to this puzzle's output conditions
-;;  but the finalizer puzzle is able to filter them after all actions are run
+;; An action's solution will always be: (list Current_State Ephemeral_State solution)
+;;    (where capital first letters are used to denote Truths)
+;; It returns three values: (list new_state new_ephemeral_state new_conditions)
+;;    state is passed from one action to the next and the latest value is saved between spends
+;;        (it is persistent)
+;;    ephemeral_state is not persistent - it's () for the first action of any new spend
+;;    new_conditions will be directly aded to this puzzle's output conditions
+;;    but the finalizer puzzle is able to filter them after all actions are run
 
 ;; Warning: This puzzle's finalizer may assume the singleton's amount is 1 (like the default one does).
 
@@ -15,36 +18,47 @@
   FINALZIER
   MERKLE_ROOT
   STATE
-  actions ; (list (proof puzzle . solution) ...)
+  puzzle_reveals ; shared so sha256tree is not performed n times
+  selectors_and_proofs ; (list (selector . proof) ...)
+  actions ; (list (selector_selector . action_solution) ...)
   finalizer_solution
 )
   (include merkle_utils.clib)
   (include sha256tree.clib)
 
-  (defun run_actions (
-    MERKLE_ROOT
-    current_conditions
-    (state . new_conditions)
-    remaining_actions
-  )
-    (if remaining_actions
-      ; (f remaining_actions) = (proof puzzle . solution)
-      (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (f (r (f remaining_actions)))) (f (f remaining_actions))))
-        (run_actions
-          MERKLE_ROOT
-          (c new_conditions current_conditions)
-          (a
-            (f (r (f remaining_actions)))
-            (list state (r (r (f remaining_actions))))
-          )
-          (r remaining_actions)
-        )
+  (defun verify_and_reduce (MERKLE_ROOT puzzle_reveals (@ selectors_and_proofs ((selector . proof) . remaining_selectors_and_proofs)))
+    (if selectors_and_proofs
+      (if (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzle_reveals)) proof))
+        (c selector (verify_and_reduce MERKLE_ROOT puzzle_reveals remaining_selectors_and_proofs))
         ; else
         (x)
       )
       ; else
-      (c
+      ()
+    )
+  )
+
+  (defun run_actions (
+    puzzle_reveals
+    selectors
+    current_conditions
+    (state ephemeral_state . new_conditions)
+    (@ pending_actions ((selector_selector . action_solution) . remaining_pending_actions))
+  )
+    (if pending_actions
+      (run_actions
+        selectors
+        (c new_conditions current_conditions)
+        (a
+          (a (a selector_selector selectors) puzzle_reveals)
+          (list state ephemeral_state action_solution)
+        )
+        remaining_pending_actions
+      )
+      ; else
+      (list
         state
+        ephemeral_state
         (c new_conditions current_conditions)
       )
     )
@@ -55,7 +69,13 @@
     (list
       MERKLE_ROOT
       STATE
-      (run_actions MERKLE_ROOT (list) (list STATE) actions)
+      (run_actions
+        puzzle_reveals
+        (verify_and_reduce MERKLE_ROOT puzzle_reveals selectors_and_proofs)
+        (list)
+        (list STATE ())
+        actions
+      )
       finalizer_solution
     )
   )

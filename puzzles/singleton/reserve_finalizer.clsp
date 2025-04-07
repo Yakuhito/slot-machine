@@ -17,7 +17,7 @@
     FINALIZER_SELF_HASH
     Merkle_Root
     Initial_State ; not used for this puzzle
-    (New_State . Conditions) ; last action output
+    (New_State Last_Ephemeral_State Conditions) ; last action output
     (reserve_parent_id) ; my_solution
 )
     (include condition_codes.clib)
