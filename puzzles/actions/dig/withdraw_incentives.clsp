@@ -7,11 +7,7 @@
     WITHDRAWAL_SHARE_BPS ; / 10000 * committed_value will actually be sent to the recipient
     (
         Ephemeral_State . ; not used
-        (@ Current_State
-            (
-                total_reserves . Current_State_Rest
-            ) 
-        ) 
+        (@ Current_State (total_reserves . Current_State_Rest)) 
     ) ; Truth
     (
         reward_slot_epoch_time
