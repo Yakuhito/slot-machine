@@ -8,7 +8,18 @@
     MAX_SECONDS_OFFSET ; at most this amount of seconds can pass since last update
     ; /\ this prevents the reward distributor from 'stealing' earned rewards while not
     ;    dropping the remove mirror tx from the mempool after each block
-    (total_reserves active_shares reward_info current_round_info) ; Current_State
+    (@
+        Current_State
+        (
+            total_reserves
+            active_shares .
+            (@ Current_State_Rest
+                (@ Reward_Info (cumulative_payout . remaining_rewards))
+                (@ Round_Time_Info (last_update . epoch_end))
+            )
+        )
+    ) ; Truth
+    Ephemeral_State ; not used
     (
         validator_singleton_inner_puzzle_hash
         mirror_payout_amount
@@ -21,14 +32,16 @@
     (include curry.clib)
     (include slots.clib)
 
-    (if (= mirror_payout_amount (* (- (f reward_info) mirror_initial_cumulative_payout) mirror_shares))
-        (c
-            (list
+    (if (= mirror_payout_amount (* (- cumulative_payout mirror_initial_cumulative_payout) mirror_shares))
+        (list
+            (c
                 (- total_reserves mirror_payout_amount)
-                (- active_shares mirror_shares)
-                reward_info
-                current_round_info
+                (c
+                    (- active_shares mirror_shares)
+                    Current_State_Rest
+                )
             ) ; new state
+            () ; new ephemeral state
             (list
                 ; validator actually wants us to add this mirror
                 (list RECEIVE_MESSAGE
@@ -44,10 +57,10 @@
                 )
 
                 ; make sure the reward info is up to date
-                (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ (f current_round_info) MAX_SECONDS_OFFSET))
+                (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ last_update MAX_SECONDS_OFFSET))
 
                 ; spend mirror reward slot without recreating it
-                (spend_slot MIRROR_SLOT_1ST_CURRY_HASH
+                (spend_slot_inline MIRROR_SLOT_1ST_CURRY_HASH
                     (sha256 2
                         (sha256 1 mirror_payout_puzzle_hash)
                         (sha256 2

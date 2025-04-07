@@ -6,7 +6,15 @@
     VALIDATOR_PAYOUT_PUZZLE_HASH
     VALIDATOR_FEE_BPS ; * epoch_total_rewards / 10000 will be given to the validator - rest is distributed to mirrors
     EPOCH_SECONDS
-    (total_reserves active_shares (cumulative_payout . remaining_rewards) (last_update . epoch_end)) ; Current_State
+    (@ Current_State
+        (
+            total_reserves
+            active_shares
+            (cumulative_payout . remaining_rewards)
+            (last_update . epoch_end)
+        ) 
+    ) ; truth
+    Ephemeral_State ; not used
     (
         slot_epoch_time
         slot_next_epoch_initialized
@@ -21,8 +29,8 @@
 
     (defun-inline slot_oracle (SLOT_1ST_CURRY_HASH slot_value_hash hint)
         (list
-            (spend_slot SLOT_1ST_CURRY_HASH slot_value_hash)
-            (create_slot SLOT_1ST_CURRY_HASH slot_value_hash hint)
+            (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
+            (create_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash hint)
         )
     )
 
@@ -33,7 +41,7 @@
             (all (> epoch_end slot_epoch_time) (not slot_next_epoch_initialized) (= epoch_total_rewards 0)) ; slot is for previous epoch; next epoch is 0
         )
     )
-        (c
+        (list
             (list
                 (- total_reserves validator_fee)
                 active_shares
@@ -42,7 +50,8 @@
                     (+ remaining_rewards (- epoch_total_rewards validator_fee))
                 )
                 (c epoch_end (+ epoch_end EPOCH_SECONDS))
-            ) ; new state    
+            ) ; new state 
+            () ; new ephemeral state
             (c
                 (list
                     CREATE_PUZZLE_ANNOUNCEMENT
