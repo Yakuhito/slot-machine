@@ -10,7 +10,11 @@
 (mod (
   PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
   SLOT_1ST_CURRY_HASH ; after 1st curry
-  Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
+  (@
+        Current_State
+        (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
+    ) ; Truth
+  Ephemeral_State ; not used
   (
     handle_hash ; (sha256 1 handle)
     precommited_cat_maker_reveal
@@ -34,9 +38,9 @@
   (defun main (SLOT_1ST_CURRY_HASH slot_value_hash slot_hint slot_spend_needed base_conditions)
     (if slot_spend_needed
       (c 
-        (spend_slot SLOT_1ST_CURRY_HASH slot_value_hash)
+        (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
         (c 
-          (create_slot SLOT_1ST_CURRY_HASH slot_value_hash slot_hint)
+          (create_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash slot_hint)
           base_conditions
         )
       )
@@ -49,22 +53,22 @@
     (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
     (= precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_reveal))
   )
-    (c
+    (list
       Current_State ; new state
-
+      () ; new ephemeral state
       (main
         SLOT_1ST_CURRY_HASH
         (sha256 2 (sha256 1 handle_hash) rest_hash)
         handle_hash
         (all
           ; not (a)
-          (= precommited_cat_maker_hash (f Current_State))
+          (= precommited_cat_maker_hash Cat_Maker_Puzzle_Hash)
           ; not (b)
           (any
-            (if (= precommited_pricing_puzzle_hash (f (r Current_State)))
+            (if (= precommited_pricing_puzzle_hash Pricing_Puzzle_Hash)
                 (= handle_hash (sha256 1 (f (r precommited_pricing_puzzle_solution)))) ()
             )
-            (if (= precommited_pricing_puzzle_hash (r (r Current_State)))
+            (if (= precommited_pricing_puzzle_hash Expired_Handle_Pricing_Puzzle_Hash)
                 (= handle_hash (sha256 1 (f (r (r precommited_pricing_puzzle_solution))))) ()
             )
           )
@@ -94,7 +98,7 @@
             (a
               precommited_cat_maker_reveal
               (list
-                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
                   refund_puzzle_hash_hash
                   (sha256 2
                     (sha256 1

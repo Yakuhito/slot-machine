@@ -82,7 +82,7 @@
                 cat_maker_puzzle_reveal
                 cat_maker_puzzle_solution
                 total_price
-                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
                     refund_puzzle_hash_hash
                     (sha256 2
                         (sha256 1 
@@ -110,12 +110,12 @@
                     (list ASSERT_SECONDS_ABSOLUTE current_expiration)
 
                     ; spend slot
-                    (spend_slot SLOT_1ST_CURRY_HASH 
+                    (spend_slot_inline SLOT_1ST_CURRY_HASH 
                         (get_slot_value_hash handle_hash neighbors_hash current_expiration old_rest_hash)
                     )
                     
                     ; create new slot
-                    (create_slot SLOT_1ST_CURRY_HASH
+                    (create_slot_inline SLOT_1ST_CURRY_HASH
                         (get_slot_value_hash handle_hash neighbors_hash (+ registered_time buy_time) new_rest_hash)
                         handle_hash
                     )
