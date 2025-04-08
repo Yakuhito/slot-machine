@@ -7,7 +7,15 @@
     SINGLETON_MOD_HASH
     SINGLETON_LAUNCHER_PUZZLE_HASH_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    Current_State ; Truth
+    (@ Truth
+        (
+            Ephemeral_State .
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
+            )
+        )
+    )
     (
         handle_hash
         neighbors_hash ; (sha256tree (left_value . right_value))
@@ -40,10 +48,10 @@
     )
 
     (c
-        Current_State ; new state
+        Truth
         (list
             ; spend slot
-            (spend_slot SLOT_1ST_CURRY_HASH 
+            (spend_slot_inline SLOT_1ST_CURRY_HASH 
                 (get_slot_data_hash
                     handle_hash
                     neighbors_hash
@@ -54,7 +62,7 @@
             )
 
             ; create new slot
-            (create_slot SLOT_1ST_CURRY_HASH
+            (create_slot_inline SLOT_1ST_CURRY_HASH
                 (get_slot_data_hash
                     handle_hash
                     neighbors_hash
@@ -76,7 +84,7 @@
                         (sha256 1 new_resolved_launcher_id)
                     )
                 )
-                (curry_hashes SINGLETON_MOD_HASH
+                (curry_hashes_inline SINGLETON_MOD_HASH
                     (sha256 2
                         (sha256 1 SINGLETON_MOD_HASH)
                         (sha256 2

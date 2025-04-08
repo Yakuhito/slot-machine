@@ -7,96 +7,107 @@
 ;; c) the tail hash has already been registered
 
 (mod (
-  PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
-  SLOT_1ST_CURRY_HASH ; after 1st curry
-  Current_State ; Truth = (cat_maker_puzzle_hash . registration_price)
-  ( 
-    precommited_cat_maker_reveal
-    precommited_cat_maker_hash
-    precommited_cat_maker_solution
-    tail_hash ; full TAIL in the reveal of the pre-commit coin
-    initial_nft_owner_ph ; also included in the pre-commit coin
-    refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
-    precommit_amount . ; amount of the pre-commit coin
-    neighbors_hash ; (sha256sum (left_tail_hash . right_tail_hash))
-  ) ; solution
-)
-  (include condition_codes.clib)
-  (include secure_nft.clib)
-  (include sha256tree.clib)
-  (include slots.clib)
-
-  (defun get_slot_value_hash (value neighbors_hash)
-    (sha256 2 (sha256 1 value) neighbors_hash) 
-  )
-
-  (defun main (SLOT_1ST_CURRY_HASH slot_value_hash slot_hint slot_spend_needed base_conditions)
-    (if slot_spend_needed
-      (c 
-        (spend_slot SLOT_1ST_CURRY_HASH slot_value_hash)
-        (c 
-          (create_slot SLOT_1ST_CURRY_HASH slot_value_hash slot_hint)
-          base_conditions
+    PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
+    SLOT_1ST_CURRY_HASH ; after 1st curry
+    (@
+        Truth
+        (
+            Ephemeral_State . ; not used
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash . Registration_Price)
+            )
         )
-      )
-      ; else
-      base_conditions
     )
-  )
+    ( 
+        precommited_cat_maker_reveal
+        precommited_cat_maker_hash
+        precommited_cat_maker_solution
+        tail_hash ; full TAIL in the reveal of the pre-commit coin
+        initial_nft_owner_ph ; also included in the pre-commit coin
+        refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
+        precommit_amount . ; amount of the pre-commit coin
+        neighbors_hash ; (sha256sum (left_tail_hash . right_tail_hash))
+    ) ; solution
+)
+    (include condition_codes.clib)
+    (include secure_nft.clib)
+    (include sha256tree.clib)
+    (include slots.clib)
 
-  (if (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
-    (c
-      Current_State ; new state
-
-      (main 
-        SLOT_1ST_CURRY_HASH
-        (get_slot_value_hash tail_hash neighbors_hash)
-        tail_hash
-        (all
-          (= (r Current_State) precommit_amount)
-          (= precommited_cat_maker_hash (f Current_State))
-        ) ; spend slot only if (a) and (b) are not met
-        (list
-          ; announcement
-          (list
-              CREATE_PUZZLE_ANNOUNCEMENT
-              (concat '$'
-                  (sha256 2 
-                      (sha256 1 tail_hash)
-                      (sha256 1 initial_nft_owner_ph)
-                  ) ; (sha256tree (tail_hash . initial_nft_owner_ph))
-              ) 
-          )
-
-          ; consume precommit coin
-          (list
-            SEND_MESSAGE
-            19 ; sender puzzle + receiver puzzle + receiver amount
-            0 ; message = 0 = refund
-            (a
-              precommited_cat_maker_reveal
-              (list
-                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
-                  refund_puzzle_hash_hash
-                  (sha256 2
-                    (sha256 1
-                      (sha256 2 precommited_cat_maker_hash (sha256tree precommited_cat_maker_solution))
-                    )
-                    (sha256 2
-                      (sha256 1 initial_nft_owner_ph)
-                      tail_hash
-                    )
-                  ) ; precommit coin reveal will be (c refund_info_hash (c initial_nft_owner_ph TAIL))
-                ) ; Inner_Puzzle_Hash
-                precommited_cat_maker_solution
-              )
-            ) ; receiver puzzle hash
-            precommit_amount
-          ) 
-        ) ; base_conditions
-      ) ; conditions
+    (defun get_slot_value_hash (value neighbors_hash)
+        (sha256 2 (sha256 1 value) neighbors_hash) 
     )
-    ; else
-    (x)
-  )
+
+    (defun main (SLOT_1ST_CURRY_HASH slot_value_hash slot_hint slot_spend_needed base_conditions)
+        (if slot_spend_needed
+            (c 
+                (spend_slot SLOT_1ST_CURRY_HASH slot_value_hash)
+                (c 
+                    (create_slot SLOT_1ST_CURRY_HASH slot_value_hash slot_hint)
+                    base_conditions
+                )
+            )
+            ; else
+            base_conditions
+        )
+    )
+
+    (if (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
+        (c
+            Truth ; nothing changes
+            (main 
+                SLOT_1ST_CURRY_HASH
+                (get_slot_value_hash tail_hash neighbors_hash)
+                tail_hash
+                (all
+                    (= Registration_Price precommit_amount)
+                    (= precommited_cat_maker_hash Cat_Maker_Puzzle_Hash)
+                ) ; spend slot only if (a) and (b) are not met
+                (list
+                    ; announcement
+                    (list
+                        CREATE_PUZZLE_ANNOUNCEMENT
+                        (concat '$'
+                            (sha256 2 
+                                (sha256 1 tail_hash)
+                                (sha256 1 initial_nft_owner_ph)
+                            ) ; (sha256tree (tail_hash . initial_nft_owner_ph))
+                        ) 
+                    )
+
+                    ; consume precommit coin
+                    (list
+                        SEND_MESSAGE
+                        19 ; sender puzzle + receiver puzzle + receiver amount
+                        0 ; message = 0 = refund
+                        (a
+                            precommited_cat_maker_reveal
+                            (list
+                                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                                    refund_puzzle_hash_hash
+                                    (sha256 2
+                                        (sha256 1
+                                            (sha256 2
+                                                precommited_cat_maker_hash
+                                                (sha256tree precommited_cat_maker_solution)
+                                            )
+                                        )
+                                        (sha256 2
+                                            (sha256 1 initial_nft_owner_ph)
+                                            tail_hash
+                                        )
+                                    ) ; precommit coin reveal will be (c refund_info_hash (c initial_nft_owner_ph TAIL))
+                                ) ; Inner_Puzzle_Hash
+                                precommited_cat_maker_solution
+                            )
+                        ) ; receiver puzzle hash
+                        precommit_amount
+                      ) 
+                ) ; base_conditions
+            ) ; conditions
+        )
+        ; else
+        (x)
+    )
 )

@@ -1,0 +1,5 @@
+; static_increase.clsp by yakuhito & Rigidity
+
+(mod (AMOUNT Prev_Index Prev_Bid bid)
+    (not (> AMOUNT (- bid Prev_Bid)))
+)

@@ -5,7 +5,10 @@
     REWARD_SLOT_1ST_CURRY_HASH ; after 1st curry
     COMMITMENT_SLOT_1ST_CURRY_HASH ; after 1st curry
     WITHDRAWAL_SHARE_BPS ; / 10000 * committed_value will actually be sent to the recipient
-    (total_reserves active_shares reward_info current_round_info) ; Current_State
+    (
+        Ephemeral_State . ; not used
+        (@ Current_State (total_reserves . Current_State_Rest)) 
+    ) ; Truth
     (
         reward_slot_epoch_time
         reward_slot_next_epoch_initialized
@@ -30,24 +33,25 @@
     )
     
     (c
-        (list
-            (- total_reserves 
-                (if (= withdrawal_share (/ (* WITHDRAWAL_SHARE_BPS committed_value) 10000)) withdrawal_share (x))
-            )
-            active_shares
-            reward_info
-            current_round_info
-        ) ; new state  
+        (c
+            () ; new ephemeral state
+            (c
+                (- total_reserves 
+                    (if (= withdrawal_share (/ (* WITHDRAWAL_SHARE_BPS committed_value) 10000)) withdrawal_share (x))
+                )
+                Current_State_Rest
+            ) ; new state
+        )
         (list
             ; this also ensures that the wihdrawal doesn't affect the current round
             (list ASSERT_BEFORE_SECONDS_ABSOLUTE reward_slot_epoch_time)
 
             ; update epoch reward (lower total rewards)
-            (spend_slot REWARD_SLOT_1ST_CURRY_HASH
+            (spend_slot_inline REWARD_SLOT_1ST_CURRY_HASH
                 (get_slot_data_hash reward_slot_epoch_time reward_slot_next_epoch_initialized reward_slot_total_rewards)
             )
 
-            (create_slot REWARD_SLOT_1ST_CURRY_HASH
+            (create_slot_inline REWARD_SLOT_1ST_CURRY_HASH
                 (get_slot_data_hash
                     reward_slot_epoch_time
                     reward_slot_next_epoch_initialized
@@ -57,7 +61,7 @@
             )
 
             ; spend commitment slot, which functions as a ticket
-            (spend_slot COMMITMENT_SLOT_1ST_CURRY_HASH
+            (spend_slot_inline COMMITMENT_SLOT_1ST_CURRY_HASH
                 (get_slot_data_hash reward_slot_epoch_time clawback_ph committed_value)
             )
 

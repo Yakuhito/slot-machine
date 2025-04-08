@@ -20,4 +20,26 @@
       (list hint)
     )
   )
+
+  (defun spend_slot_inline (SLOT_1ST_CURRY_HASH slot_value_hash)
+    (list
+      SEND_MESSAGE
+      18 ; puzzle-puzzle
+      ()
+      (curry_hashes_inline SLOT_1ST_CURRY_HASH
+        (sha256 1 slot_value_hash)
+      )
+    )
+  )
+
+  (defun create_slot_inline (SLOT_1ST_CURRY_HASH slot_value_hash hint)
+    (list
+      CREATE_COIN
+      (curry_hashes_inline SLOT_1ST_CURRY_HASH
+        (sha256 1 slot_value_hash)
+      )
+      0
+      (list hint)
+    )
+  )
 )

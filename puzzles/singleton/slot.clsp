@@ -10,33 +10,33 @@
 ;; Warning 2: This puzzle assumes the controller singleton has an amount of 1.
 
 (mod (
-    ; 1st curry
-    SINGLETON_STRUCT ; owner/controller singleton
-    NONCE ; different nonces will hold different data types
-    ; 2nd curry
-    VALUE_HASH
-    ; info about this coin's parent (previous singleton coin)
-    parent_parent_info
-    parent_inner_puzzle_hash
-    ; info about this coin's spender (current singleton coin - the one consuming the value)
-    spender_inner_puzzle_hash
-  )
+      ; 1st curry
+      SINGLETON_STRUCT ; owner/controller singleton
+      NONCE ; different nonces will hold different data types
+      ; 2nd curry
+      VALUE_HASH
+      ; info about this coin's parent (previous singleton coin)
+      parent_parent_info
+      parent_inner_puzzle_hash
+      ; info about this coin's spender (current singleton coin - the one consuming the value)
+      spender_inner_puzzle_hash
+)
 
-  (include condition_codes.clib)
-  (include sha256tree.clib)
-  (include curry.clib)
+    (include condition_codes.clib)
+    (include sha256tree.clib)
+    (include curry.clib)
 
-  (defun singleton_full_puzzle_hash (SINGLETON_STRUCT inner_puzzle_hash)
-    (curry_hashes (f SINGLETON_STRUCT)
-      (sha256tree SINGLETON_STRUCT)
-      inner_puzzle_hash
+    (defun singleton_full_puzzle_hash (SINGLETON_STRUCT inner_puzzle_hash)
+        (curry_hashes_inline (f SINGLETON_STRUCT)
+            (sha256tree SINGLETON_STRUCT)
+            inner_puzzle_hash
+        )
     )
-  )
 
-  (list 
-    (list ASSERT_MY_PARENT_ID
-      (coinid parent_parent_info (singleton_full_puzzle_hash SINGLETON_STRUCT parent_inner_puzzle_hash) 1)
+    (list 
+        (list ASSERT_MY_PARENT_ID
+            (coinid parent_parent_info (singleton_full_puzzle_hash SINGLETON_STRUCT parent_inner_puzzle_hash) 1)
+        )
+        (list RECEIVE_MESSAGE 18 () (singleton_full_puzzle_hash SINGLETON_STRUCT spender_inner_puzzle_hash)) ; puzzle-puzzle
     )
-    (list RECEIVE_MESSAGE 18 () (singleton_full_puzzle_hash SINGLETON_STRUCT spender_inner_puzzle_hash)) ; puzzle-puzzle
-  )
 )

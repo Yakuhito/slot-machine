@@ -2793,6 +2793,7 @@ mod tests {
         registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
         // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
         benchmark.add_spends(ctx, &mut sim, "add_incentives", &[cat_minter.sk.clone()])?;
+
         assert_eq!(
             registry.info.state.round_time_info.last_update,
             first_epoch_start + 500
@@ -2894,7 +2895,15 @@ mod tests {
 
         for epoch in 1..7 {
             let update_time = registry.info.state.round_time_info.epoch_end;
-            let sync_conditions =
+            let first_update_time =
+                (registry.info.state.round_time_info.last_update + update_time) / 2;
+            let sync_conditions1 = registry.new_action::<DigSyncAction>().spend(
+                ctx,
+                &mut registry,
+                first_update_time,
+            )?;
+
+            let sync_conditions2 =
                 registry
                     .new_action::<DigSyncAction>()
                     .spend(ctx, &mut registry, update_time)?;
@@ -2907,6 +2916,7 @@ mod tests {
                             + if epoch <= 4 { epoch } else { 4 } * constants.epoch_seconds
                 })
                 .unwrap();
+
             let (new_epoch_conditions, new_reward_slot, _validator_fee) = registry
                 .new_action::<DigNewEpochAction>()
                 .spend(ctx, &mut registry, reward_slot)?;
@@ -2917,14 +2927,16 @@ mod tests {
             ensure_conditions_met(
                 ctx,
                 &mut sim,
-                sync_conditions.extend(new_epoch_conditions),
+                sync_conditions1
+                    .extend(sync_conditions2)
+                    .extend(new_epoch_conditions),
                 0,
             )?;
 
             registry = registry.finish_spend(ctx, vec![])?;
             sim.set_next_timestamp(update_time)?;
             // sim.spend_coins(ctx.take(), &[])?;
-            benchmark.add_spends(ctx, &mut sim, "sync", &[])?;
+            benchmark.add_spends(ctx, &mut sim, "sync_and_new_epoch", &[])?;
         }
 
         // commit incentives for 10th epoch
@@ -2962,7 +2974,7 @@ mod tests {
 
         registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
         // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
-        benchmark.add_spends(ctx, &mut sim, "add_incentives", &[cat_minter.sk.clone()])?;
+        benchmark.add_spends(ctx, &mut sim, "commit_incentives", &[cat_minter.sk.clone()])?;
         let _source_cat = source_cat.wrapped_child(
             cat_minter.puzzle_hash,
             source_cat.coin.amount - rewards_to_add,

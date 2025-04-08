@@ -19,127 +19,152 @@
 ;; For CATalog, a slot's value is the tail hash of a registered CAT
 
 (mod (
-  NFT_PACK ; see 'assert_launcher_ann' to see what this contains
-  UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
-  PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
-  SLOT_1ST_CURRY_HASH ; after 1st curry
-  Current_State ; Truth = (cat_maker_puzzle_hash . registration_price)
-  ( 
-    cat_maker_reveal
-    cat_maker_solution
-    tail_hash ; full TAIL in the reveal of the pre-commit coin
-    initial_nft_owner_ph ; also included in the pre-commit coin
-    refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
-    left_tail_hash left_left_tail_hash ; left slot info
-    right_tail_hash right_right_tail_hash . ; right slot info
-    my_id
-  ) ; solution
-)
-  (include condition_codes.clib)
-  (include secure_nft.clib)
-  (include sha256tree.clib)
-  (include slots.clib)
-
-  (defun create_prelauncher_and_assert_launcher (
-    NFT_PACK
-    my_id
-    initial_nft_owner_ph
-    prelauncher_full_puzzle_hash
-    conditions_so_far
-  )
-    (c
-      (list
-        CREATE_COIN
-        prelauncher_full_puzzle_hash
-        0
-      ) ; create uniqueness prelauncher
-      (c 
-        (secure_nft
-          NFT_PACK
-          initial_nft_owner_ph
-          (coinid 
-            (coinid my_id prelauncher_full_puzzle_hash 0) ; prelauncher id
-            (f NFT_PACK)
-            1
-          ) ; launcher id
+    NFT_PACK ; see 'assert_launcher_ann' to see what this contains
+    UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
+    PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
+    SLOT_1ST_CURRY_HASH ; after 1st curry
+    (@
+        Truth
+        (
+            Ephemeral_State . ; not used
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash . Registration_Price)
+            )
         )
-        conditions_so_far
-      )
     )
-  )
+    ( 
+        cat_maker_reveal
+        cat_maker_solution
+        tail_hash ; full TAIL in the reveal of the pre-commit coin
+        initial_nft_owner_ph ; also included in the pre-commit coin
+        refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
+        left_tail_hash left_left_tail_hash ; left slot info
+        right_tail_hash right_right_tail_hash . ; right slot info
+        my_id
+    ) ; solution
+)
+    (include condition_codes.clib)
+    (include secure_nft.clib)
+    (include sha256tree.clib)
+    (include slots.clib)
 
-  (defun get_slot_value_hash (value left_value right_value)
-    (sha256 2
-      (sha256 1 value)
-      (sha256 2 (sha256 1 left_value) (sha256 1 right_value))
-    ) 
-  )
-
-  (if (all (>s tail_hash left_tail_hash) (>s right_tail_hash tail_hash) (= (sha256tree cat_maker_reveal) (f Current_State)))
-    (c
-      Current_State ; new state
-
-      ; create NFT that will hold CAT info
-      (create_prelauncher_and_assert_launcher
+    (defun create_prelauncher_and_assert_launcher (
         NFT_PACK
         my_id
         initial_nft_owner_ph
-        (curry_hashes UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH (sha256 1 tail_hash))
-        (list
-          (list ASSERT_MY_COIN_ID my_id)
-
-          ; announcement
-          (list
-              CREATE_PUZZLE_ANNOUNCEMENT
-              (concat 'r'
-                  (sha256 2 
-                      (sha256 1 tail_hash)
-                      (sha256 1 initial_nft_owner_ph)
-                  ) ; (sha256tree (tail_hash . initial_nft_owner_ph))
-              ) 
-          )
-
-          ; spend left slot
-          (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash left_tail_hash left_left_tail_hash right_tail_hash))
-          ; spend right slot
-          (spend_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash right_tail_hash left_tail_hash right_right_tail_hash))
-          
-          ; create new slot
-          (create_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash tail_hash left_tail_hash right_tail_hash) tail_hash) 
-          ; create new left slot
-          (create_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash left_tail_hash left_left_tail_hash tail_hash) left_tail_hash) 
-          ; create new right slot
-          (create_slot SLOT_1ST_CURRY_HASH (get_slot_value_hash right_tail_hash tail_hash right_right_tail_hash) right_tail_hash) 
-          
-          ; consume precommit coin
-          (list
-            SEND_MESSAGE
-            19 ; sender puzzle + receiver puzzle + receiver amount
-            1 ; message = 1 = spend to payout puzzle hash
-            (a
-              cat_maker_reveal
-              (list
-                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
-                  refund_puzzle_hash_hash
-                  (sha256 2
-                    (sha256 1
-                      (sha256 2 (f Current_State) (sha256tree cat_maker_solution))
-                    )
-                    (sha256 2
-                      (sha256 1 initial_nft_owner_ph)
-                      tail_hash
-                    )
-                  ) ; precommit coin reveal will be (c refund_info_hash (c initial_nft_owner_ph TAIL))
-                ) ; Inner_Puzzle_Hash
-                cat_maker_solution
-              )
-            ) ; receiver puzzle hash
-            (r Current_State) ; receiver amount = precommit_amount = registration fee = last value held in state
-          ) 
-        )
-      ) ; conditions
+        prelauncher_full_puzzle_hash
+        conditions_so_far
     )
-    ; else
-    (x)
-  )
+        (c
+            (list
+                CREATE_COIN
+                prelauncher_full_puzzle_hash
+                0
+            ) ; create uniqueness prelauncher
+            (c 
+                (secure_nft
+                    NFT_PACK
+                    initial_nft_owner_ph
+                    (coinid 
+                        (coinid my_id prelauncher_full_puzzle_hash 0) ; prelauncher id
+                        (f NFT_PACK)
+                        1
+                    ) ; launcher id
+                )
+                conditions_so_far
+            )
+        )
+    )
+
+    (defun get_slot_value_hash (value left_value right_value)
+        (sha256 2
+            (sha256 1 value)
+            (sha256 2 (sha256 1 left_value) (sha256 1 right_value))
+        ) 
+    )
+
+    (if (all
+        (>s tail_hash left_tail_hash)
+        (>s right_tail_hash tail_hash)
+        (= (sha256tree cat_maker_reveal) Cat_Maker_Puzzle_Hash)
+    )
+        (c
+            Truth ; nothing changes
+            ; create NFT that will hold CAT info
+            (create_prelauncher_and_assert_launcher
+                NFT_PACK
+                my_id
+                initial_nft_owner_ph
+                (curry_hashes UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH (sha256 1 tail_hash))
+                (list
+                    (list ASSERT_MY_COIN_ID my_id)
+
+                    ; announcement
+                    (list
+                        CREATE_PUZZLE_ANNOUNCEMENT
+                        (concat 'r'
+                            (sha256 2 
+                                (sha256 1 tail_hash)
+                                (sha256 1 initial_nft_owner_ph)
+                            ) ; (sha256tree (tail_hash . initial_nft_owner_ph))
+                        ) 
+                    )
+
+                    ; spend left slot
+                    (spend_slot SLOT_1ST_CURRY_HASH
+                        (get_slot_value_hash left_tail_hash left_left_tail_hash right_tail_hash)
+                    )
+                    ; spend right slot
+                    (spend_slot SLOT_1ST_CURRY_HASH
+                        (get_slot_value_hash right_tail_hash left_tail_hash right_right_tail_hash)
+                    )
+                    
+                    ; create new slot
+                    (create_slot SLOT_1ST_CURRY_HASH
+                        (get_slot_value_hash tail_hash left_tail_hash right_tail_hash)
+                        tail_hash
+                    ) 
+                    ; create new left slot
+                    (create_slot SLOT_1ST_CURRY_HASH
+                        (get_slot_value_hash left_tail_hash left_left_tail_hash tail_hash)
+                        left_tail_hash
+                    ) 
+                    ; create new right slot
+                    (create_slot SLOT_1ST_CURRY_HASH
+                        (get_slot_value_hash right_tail_hash tail_hash right_right_tail_hash)
+                        right_tail_hash
+                    ) 
+                    
+                    ; consume precommit coin
+                    (list
+                        SEND_MESSAGE
+                        19 ; sender puzzle + receiver puzzle + receiver amount
+                        1 ; message = 1 = spend to payout puzzle hash
+                        (a
+                            cat_maker_reveal
+                            (list
+                                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                                    refund_puzzle_hash_hash
+                                    (sha256 2
+                                        (sha256 1
+                                            (sha256 2 Cat_Maker_Puzzle_Hash (sha256tree cat_maker_solution))
+                                        )
+                                        (sha256 2
+                                            (sha256 1 initial_nft_owner_ph)
+                                            tail_hash
+                                        )
+                                    ) ; precommit coin reveal will be (c refund_info_hash (c initial_nft_owner_ph TAIL))
+                                ) ; Inner_Puzzle_Hash
+                                cat_maker_solution
+                            )
+                        ) ; receiver puzzle hash
+                        Registration_Price ; receiver amount = precommit_amount = registration fee
+                    ) 
+                )
+            ) ; conditions
+        )
+        ; else
+        (x)
+    )
 )
