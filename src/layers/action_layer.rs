@@ -114,9 +114,9 @@ impl<S, P> ActionLayer<S, P> {
         action_layer_solution: NodePtr,
     ) -> Result<S, DriverError>
     where
-        S: ToClvm<Allocator> + FromClvm<Allocator>,
+        S: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
     {
-        let solution = Self::parse_solution(allocator, action_layer_solution)?;
+        let solution = ActionLayer::<S, NodePtr>::parse_solution(allocator, action_layer_solution)?;
 
         let mut state_incl_ephemeral: (NodePtr, S) = (NodePtr::NIL, initial_state);
         for raw_action in solution.action_spends {
@@ -262,7 +262,7 @@ where
             let mut remaining_selector = 2;
             while remaining_selector > 2 {
                 index += 1;
-                remaining_selector = remaining_selector / 2;
+                remaining_selector /= 2;
             }
             actions.push(solution.puzzles[index as usize]);
         }

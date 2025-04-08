@@ -7,10 +7,7 @@ use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, Spend, SpendContext};
 use clvm_traits::FromClvm;
 use clvmr::{Allocator, NodePtr};
 
-use crate::{
-    Action, ActionLayer, ActionLayerSolution, CatalogRegisterAction, RawActionLayerSolution,
-    Registry,
-};
+use crate::{Action, ActionLayer, ActionLayerSolution, CatalogRegisterAction, Registry};
 
 use super::{
     CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue, Slot,
@@ -179,23 +176,24 @@ impl CatalogRegistry {
         ctx: &mut SpendContext,
         solution: NodePtr,
     ) -> Result<Vec<Slot<CatalogSlotValue>>, DriverError> {
-        let solution = ctx
-            .extract::<SingletonSolution<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>>(
-                solution,
-            )?;
+        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
 
         let mut slot_infos = vec![];
 
         let register_action = CatalogRegisterAction::from_constants(&self.info.constants);
         let register_hash = register_action.tree_hash();
 
-        for raw_action in solution.inner_solution.actions {
-            let raw_action_hash = ctx.tree_hash(raw_action.action_puzzle_reveal);
+        let inner_solution = ActionLayer::<CatalogRegistryState, NodePtr>::parse_solution(
+            ctx,
+            solution.inner_solution,
+        )?;
+
+        for raw_action in inner_solution.action_spends {
+            let raw_action_hash = ctx.tree_hash(raw_action.puzzle);
 
             if raw_action_hash == register_hash {
                 slot_infos.extend(
-                    register_action
-                        .get_slot_values_from_solution(ctx, raw_action.action_solution)?,
+                    register_action.get_slot_values_from_solution(ctx, raw_action.solution)?,
                 );
             }
         }

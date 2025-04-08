@@ -12,8 +12,8 @@ use clvm_traits::{clvm_list, clvm_quote, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    P2DelegatedBySingletonLayer, P2DelegatedBySingletonLayerArgs,
-    P2DelegatedBySingletonLayerSolution, RawActionLayerSolution,
+    ActionLayer, P2DelegatedBySingletonLayer, P2DelegatedBySingletonLayerArgs,
+    P2DelegatedBySingletonLayerSolution,
 };
 
 #[derive(Debug, Clone)]
@@ -117,16 +117,16 @@ impl Reserve {
     where
         S: ToClvm<Allocator> + FromClvm<Allocator> + Clone + Reserveful,
     {
-        let controller_solution = ctx.extract::<SingletonSolution<
-            RawActionLayerSolution<NodePtr, NodePtr, NodePtr>,
-        >>(controller_solution)?;
+        let controller_solution = ctx.extract::<SingletonSolution<NodePtr>>(controller_solution)?;
+        let inner_solution =
+            ActionLayer::<S, NodePtr>::parse_solution(ctx, controller_solution.inner_solution)?;
 
         let mut state: (NodePtr, S) = (NodePtr::NIL, controlelr_initial_state);
         let mut reserve_conditions: Vec<NodePtr> = Vec::new();
-        for raw_action in controller_solution.inner_solution.actions {
-            let actual_solution = ctx.alloc(&clvm_list!(state, raw_action.action_solution))?;
+        for raw_action in inner_solution.action_spends {
+            let actual_solution = ctx.alloc(&clvm_list!(state, raw_action.solution))?;
 
-            let output = run_puzzle(ctx, raw_action.action_puzzle_reveal, actual_solution)?;
+            let output = run_puzzle(ctx, raw_action.puzzle, actual_solution)?;
 
             let (new_state, conditions) =
                 ctx.extract::<match_tuple!((NodePtr, S), Vec<(i64, NodePtr)>)>(output)?;
