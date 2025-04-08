@@ -28,13 +28,9 @@
     (include sha256tree.clib)
 
     (defun item_in_list (the_item (@ the_list (first_item . remaining_list)))
-        (if the_list
-            (if (= the_item first_item)
-                1
-                (item_in_list the_item remaining_list)
-            )
-            ; else
-            ()
+        (if (= the_item first_item)
+            1
+            (item_in_list the_item remaining_list)
         )
     )
 
@@ -97,7 +93,7 @@
                 puzzles                
                 (list)
                 (list (c () STATE))
-                (reduce_and_verify_proofs MERKLE_ROOT puzzles (list) selectors_and_proofs)
+                (reduce_and_verify_proofs MERKLE_ROOT puzzles () selectors_and_proofs)
                 solutions
             )
             finalizer_solution
