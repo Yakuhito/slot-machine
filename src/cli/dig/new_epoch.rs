@@ -51,7 +51,7 @@ pub async fn dig_new_epoch(
         distributor.info.constants.epoch_seconds,
     )
     .await?
-    .ok_or(CliError::Custom("No reward slot found".to_string()))?;
+    .ok_or(CliError::SlotNotFound("Reward"))?;
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  1 mojo",);

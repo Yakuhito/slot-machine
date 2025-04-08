@@ -8,15 +8,22 @@
     OFFER_MOD_HASH
     PAYOUT_PUZZLE_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
+    (@ Truth
+        (
+            Ephemeral_State .
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
+            )
+        )
+    )
     (
         handle_hash
         pricing_puzzle_reveal
-        pricing_solution
+        (@ pricing_solution (expiration handle))
         cat_maker_puzzle_reveal
         cat_maker_solution
-        neighbors_hash
-        expiration . 
+        neighbors_hash . 
         rest_hash
     )
 )
@@ -40,10 +47,10 @@
 
     (defun-inline main ((total_price . registered_time))
         (c
-            Current_State ; new state
+            Truth
             (list
                 ; spend slot
-                (spend_slot SLOT_1ST_CURRY_HASH 
+                (spend_slot_inline SLOT_1ST_CURRY_HASH 
                     (get_slot_value_hash handle_hash neighbors_hash expiration rest_hash)
                 )
 
@@ -54,13 +61,14 @@
                 (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
 
                 ; create new slot
-                (create_slot SLOT_1ST_CURRY_HASH
+                (create_slot_inline SLOT_1ST_CURRY_HASH
                     (get_slot_value_hash
                         handle_hash
                         neighbors_hash
                         (+ expiration registered_time)
                         rest_hash
                     )
+                    handle_hash
                 ) 
                 
                 ; assert payment
@@ -84,10 +92,9 @@
     )
 
     (if (all
-        (= (f Current_State) (sha256tree cat_maker_puzzle_reveal)) ; cat maker puzzle reveal is correct
-        (= (f (r Current_State)) (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
-        (= (f pricing_solution) expiration) ; Current_Expiration truth
-        (= handle_hash (sha256 1 (f (r pricing_solution)))) ; Handle truth
+        (= Cat_Maker_Puzzle_Hash (sha256tree cat_maker_puzzle_reveal)) ; cat maker puzzle reveal is correct
+        (= Pricing_Puzzle_Hash (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
+        (= handle_hash (sha256 1 handle)) ; pricing_solution Handle truth
     )
         (main
             (a pricing_puzzle_reveal pricing_solution)

@@ -3,40 +3,40 @@
 ;;  some time ago
 
 (mod (
-    ; 1st curry
-    SINGLETON_MOD_HASH
-    SINGLETON_STRUCT_HASH ; owner/controller singleton
-    RELATIVE_BLOCK_HEIGHT ; how many blocks to wait before this coin is spendable
-    PAYOUT_PUZZLE_HASH ; where the funds go if message=1 (use precommit to do something)
-    ; 2nd curry
-    REFUND_PUZZLE_HASH ; where the funds go if message=0 (refund)
-    VALUE
-    spend_mode ; 0 = refund, 1 = spend to payout puzzle hash
-    my_amount
-    ; info about this coin's spender (singleton coin being spent)
-    singleton_inner_puzzle_hash
-  )
-
-  (include condition_codes.clib)
-  (include curry.clib)
-
-  (list 
-    (list ASSERT_HEIGHT_RELATIVE RELATIVE_BLOCK_HEIGHT)
-    (list ASSERT_MY_AMOUNT my_amount)
-    (list
-      CREATE_COIN
-      (i spend_mode PAYOUT_PUZZLE_HASH REFUND_PUZZLE_HASH)
-      my_amount
-      (list (i spend_mode PAYOUT_PUZZLE_HASH REFUND_PUZZLE_HASH))
-    )
-    (list
-      RECEIVE_MESSAGE
-      19 ; sender puzzle + receiver puzzle + receiver amount
-      spend_mode ; message
-      (curry_hashes SINGLETON_MOD_HASH
-        SINGLETON_STRUCT_HASH
+        ; 1st curry
+        SINGLETON_MOD_HASH
+        SINGLETON_STRUCT_HASH ; owner/controller singleton
+        RELATIVE_BLOCK_HEIGHT ; how many blocks to wait before this coin is spendable
+        PAYOUT_PUZZLE_HASH ; where the funds go if message=1 (use precommit to do something)
+        ; 2nd curry
+        REFUND_PUZZLE_HASH ; where the funds go if message=0 (refund)
+        VALUE
+        spend_mode ; 0 = refund, 1 = spend to payout puzzle hash
+        my_amount
+        ; info about this coin's spender (singleton coin being spent)
         singleton_inner_puzzle_hash
-      )
     )
-  )
+
+    (include condition_codes.clib)
+    (include curry.clib)
+
+    (list 
+        (list ASSERT_HEIGHT_RELATIVE RELATIVE_BLOCK_HEIGHT)
+        (list ASSERT_MY_AMOUNT my_amount)
+        (list
+            CREATE_COIN
+            (i spend_mode PAYOUT_PUZZLE_HASH REFUND_PUZZLE_HASH)
+            my_amount
+            (list (i spend_mode PAYOUT_PUZZLE_HASH REFUND_PUZZLE_HASH))
+        )
+        (list
+            RECEIVE_MESSAGE
+            19 ; sender puzzle + receiver puzzle + receiver amount
+            spend_mode ; message
+            (curry_hashes SINGLETON_MOD_HASH
+                SINGLETON_STRUCT_HASH
+                singleton_inner_puzzle_hash
+            )
+        )
+    )
 )

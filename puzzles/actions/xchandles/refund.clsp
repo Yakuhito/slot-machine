@@ -8,118 +8,126 @@
 ;; d) the handle has already been registered
 
 (mod (
-  PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
-  SLOT_1ST_CURRY_HASH ; after 1st curry
-  Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
-  (
-    handle_hash ; (sha256 1 handle)
-    precommited_cat_maker_reveal
-    precommited_cat_maker_hash
-    precommited_cat_maker_solution
-    precommited_pricing_puzzle_reveal
-    precommited_pricing_puzzle_hash
-    precommited_pricing_puzzle_solution
-    secret_hash
-    precommit_value_rest_hash ; hash of (c start_time (c new_owner_launcher_id new_resolved_launcher_id))
-    refund_puzzle_hash_hash
-    precommit_amount . ; amount of the pre-commit coin
-    rest_hash ; sha256sum of all data in slot after 'value' (handle hash)
-  )
-)
-  (include condition_codes.clib)
-  (include secure_nft.clib)
-  (include sha256tree.clib)
-  (include slots.clib)
-
-  (defun main (SLOT_1ST_CURRY_HASH slot_puzhash slot_spend_needed base_conditions)
-    (if slot_spend_needed
-      (c 
-        (spend_slot SLOT_1ST_CURRY_HASH slot_puzhash)
-        (c 
-          (create_slot SLOT_1ST_CURRY_HASH slot_puzhash)
-          base_conditions
+    PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
+    SLOT_1ST_CURRY_HASH ; after 1st curry
+    (@ Truth
+        (
+            Ephemeral_State .
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
+            )
         )
+    )
+    (
+        handle_hash ; (sha256 1 handle)
+        precommited_cat_maker_reveal
+        precommited_cat_maker_hash
+        precommited_cat_maker_solution
+        precommited_pricing_puzzle_reveal
+        precommited_pricing_puzzle_hash
+        precommited_pricing_puzzle_solution
+        secret_hash
+        precommit_value_rest_hash ; hash of (c start_time (c new_owner_launcher_id new_resolved_launcher_id))
+        refund_puzzle_hash_hash
+        precommit_amount . ; amount of the pre-commit coin
+        rest_hash ; sha256sum of all data in slot after 'value' (handle hash)
+    )
+)
+    (include condition_codes.clib)
+    (include secure_nft.clib)
+    (include sha256tree.clib)
+    (include slots.clib)
+
+    (defun main (SLOT_1ST_CURRY_HASH slot_value_hash slot_hint slot_spend_needed base_conditions)
+        (if slot_spend_needed
+            (c 
+                (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
+                (c 
+                    (create_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash slot_hint)
+                    base_conditions
+                )
+            )
+            ; else
+            base_conditions
+        )
+    )
+
+    (if (all
+        (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
+        (= precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_reveal))
+    )
+      (c
+          Truth
+          (main
+              SLOT_1ST_CURRY_HASH
+              (sha256 2 (sha256 1 handle_hash) rest_hash)
+              handle_hash
+              (all
+                  ; not (a)
+                  (= precommited_cat_maker_hash Cat_Maker_Puzzle_Hash)
+                  ; not (b)
+                  (any
+                      (if (= precommited_pricing_puzzle_hash Pricing_Puzzle_Hash)
+                          (= handle_hash (sha256 1 (f (r precommited_pricing_puzzle_solution)))) ()
+                      )
+                      (if (= precommited_pricing_puzzle_hash Expired_Handle_Pricing_Puzzle_Hash)
+                          (= handle_hash (sha256 1 (f (r (r precommited_pricing_puzzle_solution))))) ()
+                      )
+                  )
+                  ; not (c)
+                  (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
+              ) ; slot spend needed if (a), (b), and (c) are not met - we need (d)
+              (list
+                  ; announcement
+                  (list
+                      CREATE_PUZZLE_ANNOUNCEMENT
+                      (concat '$'
+                          (sha256 2
+                              (sha256 2 
+                                  secret_hash
+                                  handle_hash
+                              )
+                              precommit_value_rest_hash
+                          )
+                      ) 
+                  )
+
+                  ; consume precommit coin
+                  (list
+                      SEND_MESSAGE
+                      19 ; sender puzzle + receiver puzzle + receiver amount
+                      0 ; message = 0 = refund
+                      (a
+                          precommited_cat_maker_reveal
+                          (list
+                              (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
+                                  refund_puzzle_hash_hash
+                                  (sha256 2
+                                      (sha256 1
+                                          (sha256 2
+                                              (sha256 2 precommited_cat_maker_hash (sha256tree precommited_cat_maker_solution))
+                                              (sha256 2 precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_solution))
+                                          )
+                                      ) ; hash of refund info hash
+                                      (sha256 2
+                                          (sha256 2 
+                                              secret_hash
+                                              handle_hash
+                                          )
+                                          precommit_value_rest_hash
+                                      )
+                                  ) ; hash of precommit value
+                              ) ; Inner_Puzzle_Hash
+                              precommited_cat_maker_solution
+                          )
+                      ) ; receiver puzzle hash
+                      precommit_amount
+                  )
+              ) ; base_conditions
+          ) ; conditions
       )
       ; else
-      base_conditions
+      (x)
     )
-  )
-
-  (if (all
-    (= precommited_cat_maker_hash (sha256tree precommited_cat_maker_reveal))
-    (= precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_reveal))
-  )
-    (c
-      Current_State ; new state
-
-      (main
-        SLOT_1ST_CURRY_HASH
-        (sha256 2 (sha256 1 handle_hash) rest_hash)
-        (all
-          ; not (a)
-          (= precommited_cat_maker_hash (f Current_State))
-          ; not (b)
-          (any
-            (if (= precommited_pricing_puzzle_hash (f (r Current_State)))
-                (= handle_hash (sha256 1 (f (r precommited_pricing_puzzle_solution)))) ()
-            )
-            (if (= precommited_pricing_puzzle_hash (r (r Current_State)))
-                (= handle_hash (sha256 1 (f (r (r precommited_pricing_puzzle_solution))))) ()
-            )
-          )
-          ; not (c)
-          (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
-        ) ; slot spend needed if (a), (b), and (c) are not met - we need (d)
-        (list
-          ; announcement
-          (list
-              CREATE_PUZZLE_ANNOUNCEMENT
-              (concat '$'
-                  (sha256 2
-                    (sha256 2 
-                        secret_hash
-                        handle_hash
-                    )
-                    precommit_value_rest_hash
-                  )
-              ) 
-          )
-
-          ; consume precommit coin
-          (list
-            SEND_MESSAGE
-            19 ; sender puzzle + receiver puzzle + receiver amount
-            0 ; message = 0 = refund
-            (a
-              precommited_cat_maker_reveal
-              (list
-                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
-                  refund_puzzle_hash_hash
-                  (sha256 2
-                    (sha256 1
-                        (sha256 2
-                            (sha256 2 precommited_cat_maker_hash (sha256tree precommited_cat_maker_solution))
-                            (sha256 2 precommited_pricing_puzzle_hash (sha256tree precommited_pricing_puzzle_solution))
-                        )
-                    ) ; hash of refund info hash
-                    (sha256 2
-                        (sha256 2 
-                            secret_hash
-                            handle_hash
-                        )
-                        precommit_value_rest_hash
-                    )
-                   ) ; hash of precommit value
-                ) ; Inner_Puzzle_Hash
-                precommited_cat_maker_solution
-              )
-            ) ; receiver puzzle hash
-            precommit_amount
-          ) 
-        ) ; base_conditions
-      ) ; conditions
-    )
-    ; else
-    (x)
-  )
 )

@@ -7,8 +7,9 @@
 ;; and then have the registration singleton trust it.
 
 (mod (
-  OTHER_SINGLETON_STRUCT
-  Current_State
+  SINGLETON_MOD_HASH
+  OTHER_SINGLETON_STRUCT_HASH
+  (Ephemeral_State . Current_State) ; Truth
   (new_state . other_singleton_inner_puzzle_hash)
 )
   (include condition_codes.clib)
@@ -16,14 +17,14 @@
   (include curry.clib)
 
   (c
-    new_state
+    (c Ephemeral_State new_state)
     (list
       (list
         RECEIVE_MESSAGE
         18 ; puzzle-puzzle
         (sha256tree new_state)
-        (curry_hashes_inline (f OTHER_SINGLETON_STRUCT)
-          (sha256tree OTHER_SINGLETON_STRUCT)
+        (curry_hashes_inline SINGLETON_MOD_HASH
+          OTHER_SINGLETON_STRUCT_HASH
           other_singleton_inner_puzzle_hash
         )
       )

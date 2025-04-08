@@ -174,16 +174,17 @@ impl XchandlesRegistry {
         &self,
         allocator: &mut Allocator,
     ) -> Result<XchandlesRegistryState, DriverError> {
-        let mut state = self.info.state;
+        let mut state = (NodePtr::NIL, self.info.state);
 
         for action in self.pending_actions.iter() {
             let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
 
             let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
-            (state, _) =
-                <match_tuple!(XchandlesRegistryState, NodePtr)>::from_clvm(allocator, output)?;
+            (state, _) = <match_tuple!((NodePtr, XchandlesRegistryState), NodePtr)>::from_clvm(
+                allocator, output,
+            )?;
         }
 
-        Ok(state)
+        Ok(state.1)
     }
 }

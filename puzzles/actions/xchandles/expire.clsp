@@ -7,13 +7,20 @@
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
-    Current_State ; Truth = (cat_maker_puzzle_hash pricing_puzzle_hash . expired_handle_pricing_puzzle_hash)
+    (@ Truth
+        (
+            Ephemeral_State .
+            (@
+                Current_State
+                (Cat_Maker_Puzzle_Hash Pricing_Puzzle_Hash . Expired_Handle_Pricing_Puzzle_Hash)
+            )
+        )
+    )
     (
         cat_maker_puzzle_reveal
         cat_maker_puzzle_solution
         expired_handle_pricing_puzzle_reveal
-        ; \/ the first arguments NEED to be (current_expiration buy_time handle . rest)
-        expired_handle_pricing_puzzle_solution
+        (@ expired_handle_pricing_puzzle_solution (buy_time current_expiration handle))
         refund_puzzle_hash_hash
         secret_hash
         neighbors_hash
@@ -39,7 +46,13 @@
         )
     )
 
-    (defun spend_precommit_coin_and_announce (cat_maker_puzzle_reveal cat_maker_puzzle_solution total_price slot_inner_ph base_conditions)
+    (defun spend_precommit_coin_and_announce (
+        cat_maker_puzzle_reveal
+        cat_maker_puzzle_solution
+        total_price
+        slot_inner_ph
+        base_conditions
+    )
         (c
             (list
                 SEND_MESSAGE
@@ -64,22 +77,21 @@
     (defun-inline main (
         handle_hash
         (total_price . registered_time)
-        (buy_time current_expiration . rest)
         expired_handle_pricing_puzzle_solution_hash
     )
         (c
-            Current_State ; new state
+            Truth ; nothing changes
             (spend_precommit_coin_and_announce
                 cat_maker_puzzle_reveal
                 cat_maker_puzzle_solution
                 total_price
-                (curry_hashes PRECOMMIT_1ST_CURRY_HASH
+                (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
                     refund_puzzle_hash_hash
                     (sha256 2
                         (sha256 1 
                             (sha256 2
-                                (sha256 2 (f Current_State) (sha256tree cat_maker_puzzle_solution))
-                                (sha256 2 (r (r Current_State)) expired_handle_pricing_puzzle_solution_hash)
+                                (sha256 2 Cat_Maker_Puzzle_Hash (sha256tree cat_maker_puzzle_solution))
+                                (sha256 2 Expired_Handle_Pricing_Puzzle_Hash expired_handle_pricing_puzzle_solution_hash)
                             ) ; refund_info_hash where REFUND_INFO = (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution))
                         ) ; hash of refund_info_hash
                         (sha256 2
@@ -101,13 +113,14 @@
                     (list ASSERT_SECONDS_ABSOLUTE current_expiration)
 
                     ; spend slot
-                    (spend_slot SLOT_1ST_CURRY_HASH 
+                    (spend_slot_inline SLOT_1ST_CURRY_HASH 
                         (get_slot_value_hash handle_hash neighbors_hash current_expiration old_rest_hash)
                     )
                     
                     ; create new slot
-                    (create_slot SLOT_1ST_CURRY_HASH
+                    (create_slot_inline SLOT_1ST_CURRY_HASH
                         (get_slot_value_hash handle_hash neighbors_hash (+ registered_time buy_time) new_rest_hash)
+                        handle_hash
                     )
                 ) ; base conditions
             ) ; conditions
@@ -115,13 +128,12 @@
     )
 
     (if (all
-        (= (sha256tree cat_maker_puzzle_reveal) (f Current_State))
-        (= (sha256tree expired_handle_pricing_puzzle_reveal) (r (r Current_State)))
+        (= (sha256tree cat_maker_puzzle_reveal) Cat_Maker_Puzzle_Hash)
+        (= (sha256tree expired_handle_pricing_puzzle_reveal) Expired_Handle_Pricing_Puzzle_Hash)
     )
         (main
-            (sha256 1 (f (r (r expired_handle_pricing_puzzle_solution))))
+            (sha256 1 handle)
             (a expired_handle_pricing_puzzle_reveal expired_handle_pricing_puzzle_solution)
-            expired_handle_pricing_puzzle_solution
             (sha256tree expired_handle_pricing_puzzle_solution)
         )
         ; else

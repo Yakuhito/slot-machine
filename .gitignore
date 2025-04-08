@@ -171,3 +171,4 @@ cython_debug/
 main.sym
 sb.debug*
 data.db
+*.costs

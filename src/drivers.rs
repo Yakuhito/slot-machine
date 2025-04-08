@@ -673,6 +673,7 @@ pub fn launch_dig_reward_distributor(
     cat_refund_puzzle_hash: Bytes32,
     constants: DigRewardDistributorConstants,
     consensus_constants: &ConsensusConstants,
+    comment: &str,
 ) -> Result<
     (
         Signature,
@@ -692,7 +693,11 @@ pub fn launch_dig_reward_distributor(
         Some(cat_refund_puzzle_hash),
         true,
     )?;
-    let launcher = Launcher::new(mock_offer.security_coin.coin_id(), 1);
+    let dig_reward_distributor_hint: Bytes32 = "DIG Reward Distributor v1".tree_hash().into();
+    let launcher_memos = chia_wallet_sdk::prelude::Memos::new(
+        ctx.alloc(&(dig_reward_distributor_hint, (comment, ())))?,
+    );
+    let launcher = Launcher::with_memos(mock_offer.security_coin.coin_id(), 1, launcher_memos);
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
 
@@ -842,16 +847,16 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction,
-        CatalogSlotValue, DelegatedStateAction, DelegatedStateActionSolution,
-        DigAddIncentivesAction, DigAddMirrorAction, DigCommitIncentivesAction,
-        DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction,
-        DigRewardDistributorConstants, DigSyncAction, DigWithdrawIncentivesAction, PrecommitCoin,
-        Slot, SpendContextExt, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
-        XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesExtendAction,
-        XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesOracleAction,
-        XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRegisterAction,
-        XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
+        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
+        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
+        DelegatedStateActionSolution, DigAddIncentivesAction, DigAddMirrorAction,
+        DigCommitIncentivesAction, DigInitiatePayoutAction, DigNewEpochAction,
+        DigRemoveMirrorAction, DigRewardDistributorConstants, DigSyncAction,
+        DigWithdrawIncentivesAction, PrecommitCoin, Slot, SpendContextExt, XchandlesExpireAction,
+        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
+        XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
+        XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction,
+        XchandlesRegisterAction, XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -980,6 +985,8 @@ mod tests {
     fn test_refund_for_catalog(
         ctx: &mut SpendContext,
         sim: &mut Simulator,
+        benchmark: &mut Benchmark,
+        benchmark_label: &str,
         reg_amount: u64,
         payment_cat: Cat,
         tail_puzzle_to_refund: Option<NodePtr>,
@@ -1048,7 +1055,8 @@ mod tests {
         let new_payment_cat =
             payment_cat.wrapped_child(minter_puzzle_hash, payment_cat.coin.amount - reg_amount);
 
-        sim.spend_coins(ctx.take(), sks)?;
+        // sim.spend_coins(ctx.take(), sks)?;
+        benchmark.add_spends(ctx, sim, "create_precommit", sks)?;
 
         let slot = slots
             .iter()
@@ -1072,7 +1080,8 @@ mod tests {
 
         ensure_conditions_met(ctx, sim, secure_cond, 0)?;
 
-        sim.spend_coins(ctx.take(), sks)?;
+        // sim.spend_coins(ctx.take(), sks)?;
+        benchmark.add_spends(ctx, sim, benchmark_label, sks)?;
 
         Ok((new_catalog, new_payment_cat))
     }
@@ -1081,6 +1090,7 @@ mod tests {
     fn test_catalog() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
         let mut sim = Simulator::new();
+        let mut benchmark = Benchmark::new("CATalog".to_string());
 
         // setup config
 
@@ -1167,7 +1177,8 @@ mod tests {
             ),
         )?;
 
-        sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
+        // sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
+        benchmark.add_spends(ctx, &mut sim, "launch", &[launcher_bls.sk, security_sk])?;
 
         // Register CAT
 
@@ -1238,7 +1249,13 @@ mod tests {
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
 
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            benchmark.add_spends(
+                ctx,
+                &mut sim,
+                "create_precommit",
+                &[user_bls.sk.clone(), minter_bls.sk.clone()],
+            )?;
 
             // call the 'register' action on CATalog
             slots.sort_unstable_by(|a, b| a.info.value.cmp(&b.info.value));
@@ -1303,7 +1320,8 @@ mod tests {
 
                 catalog.insert(action_spend);
                 catalog = catalog.finish_spend(ctx)?;
-                sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+                // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+                benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
             };
 
             let (secure_cond, new_slots) = catalog.new_action::<CatalogRegisterAction>().spend(
@@ -1323,7 +1341,8 @@ mod tests {
 
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            benchmark.add_spends(ctx, &mut sim, "register", &[user_bls.sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
             slots.extend(new_slots);
@@ -1340,6 +1359,8 @@ mod tests {
         let (catalog, payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,
+            &mut benchmark,
+            "refund_amount_wrong",
             catalog.info.state.registration_price + 1,
             payment_cat,
             None,
@@ -1377,6 +1398,8 @@ mod tests {
         let (catalog, _alternative_payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,
+            &mut benchmark,
+            "refund_cat_changed",
             catalog.info.state.registration_price,
             alternative_payment_cat,
             None,
@@ -1393,6 +1416,8 @@ mod tests {
         let (_catalog, _payment_cat) = test_refund_for_catalog(
             ctx,
             &mut sim,
+            &mut benchmark,
+            "refund_cat_already_registered",
             catalog.info.state.registration_price,
             payment_cat,
             Some(tail),
@@ -1405,6 +1430,7 @@ mod tests {
             &[user_bls.sk.clone(), minter_bls.sk.clone()],
         )?;
 
+        benchmark.print_summary(Some("catalog.costs"));
         Ok(())
     }
 
@@ -1412,6 +1438,8 @@ mod tests {
     fn test_refund_for_xchandles(
         ctx: &mut SpendContext,
         sim: &mut Simulator,
+        benchmark: &mut Benchmark,
+        benchmark_label: &str,
         handle_to_refund: String,
         pricing_puzzle: NodePtr,
         pricing_solution: NodePtr,
@@ -1483,9 +1511,14 @@ mod tests {
             payment_cat.coin.amount - payment_cat_amount,
         );
 
-        println!("a"); // todo: debug
-        sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
-        println!("b"); // todo: debug
+        // sim.spend_coins(ctx.take(), &[user_sk.clone(), minter_sk.clone()])?;
+        benchmark.add_spends(
+            ctx,
+            sim,
+            "create_precommit",
+            &[user_sk.clone(), minter_sk.clone()],
+        )?;
+
         let mut registry = registry;
         let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
             ctx,
@@ -1499,7 +1532,8 @@ mod tests {
 
         ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
 
-        sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[user_sk.clone()])?;
+        benchmark.add_spends(ctx, sim, benchmark_label, &[user_sk.clone()])?;
 
         Ok((new_registry, new_payment_cat))
     }
@@ -1508,7 +1542,7 @@ mod tests {
     fn test_xchandles() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
         let mut sim = Simulator::new();
-
+        let mut benchmark = Benchmark::new("XCHandles".to_string());
         // setup config
         let initial_registration_price = 2000;
         let test_price_schedule = [1000, 500, 250];
@@ -1583,7 +1617,8 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
-        sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
+        // sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
+        benchmark.add_spends(ctx, &mut sim, "launch", &[launcher_bls.sk, security_sk])?;
 
         // Register 7 handles
 
@@ -1669,9 +1704,15 @@ mod tests {
             payment_cat_amount -= reg_amount;
             payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
 
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            benchmark.add_spends(
+                ctx,
+                &mut sim,
+                "create_precommit",
+                &[user_bls.sk.clone(), minter_bls.sk.clone()],
+            )?;
 
-            // call the 'register' action on CNS
+            // call the 'register' action on the registry
             slots.sort_unstable_by(|a, b| a.info.value.cmp(&b.info.value));
 
             let slot_value_to_insert = XchandlesSlotValue::new(
@@ -1741,7 +1782,8 @@ mod tests {
 
                 registry.insert(action_spend);
                 registry = registry.finish_spend(ctx)?;
-                sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+                // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+                benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
             };
 
             let (secure_cond, new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
@@ -1757,7 +1799,9 @@ mod tests {
 
             registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            benchmark.add_spends(ctx, &mut sim, "register", &[user_bls.sk.clone()])?;
 
             slots.retain(|s| *s != left_slot && *s != right_slot);
 
@@ -1771,8 +1815,12 @@ mod tests {
                 oracle_slot,
             )?;
 
-            let user_coin = sim.new_coin(user_bls.puzzle_hash, 0);
-            StandardLayer::new(user_bls.pk).spend(ctx, user_coin, oracle_conds)?;
+            ensure_conditions_met(ctx, &mut sim, oracle_conds, 0)?;
+
+            registry = registry.finish_spend(ctx)?;
+
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            benchmark.add_spends(ctx, &mut sim, "oracle", &[user_bls.sk.clone()])?;
 
             slots.retain(|s| *s != oracle_slot);
             slots.push(new_slot);
@@ -1830,6 +1878,16 @@ mod tests {
             payment_cat_amount -= pay_for_extension;
             payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
 
+            registry = registry.finish_spend(ctx)?;
+
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            benchmark.add_spends(
+                ctx,
+                &mut sim,
+                "extend",
+                &[user_bls.sk.clone(), minter_bls.sk.clone()],
+            )?;
+
             slots.retain(|s| *s != extension_slot);
             slots.push(new_slot);
 
@@ -1850,7 +1908,9 @@ mod tests {
             let _new_did = did.update(ctx, &user_p2, update_conds)?;
 
             registry = registry.finish_spend(ctx)?;
-            sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+
+            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+            benchmark.add_spends(ctx, &mut sim, "update", &[user_bls.sk.clone()])?;
 
             slots.retain(|s| *s != update_slot);
             slots.push(new_slot);
@@ -1938,7 +1998,13 @@ mod tests {
             payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat.coin.amount - reg_amount);
 
         sim.set_next_timestamp(buy_time)?;
-        sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+        benchmark.add_spends(
+            ctx,
+            &mut sim,
+            "create_precommit",
+            &[user_bls.sk.clone(), minter_bls.sk.clone()],
+        )?;
 
         let (expire_conds, _new_slot) = registry.new_action::<XchandlesExpireAction>().spend(
             ctx,
@@ -1952,7 +2018,9 @@ mod tests {
         // assert expire conds
         ensure_conditions_met(ctx, &mut sim, expire_conds, 1)?;
         registry = registry.finish_spend(ctx)?;
-        sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+
+        // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
+        benchmark.add_spends(ctx, &mut sim, "expire", &[user_bls.sk.clone()])?;
 
         // Test refunds
         let unregistered_handle = "yak7".to_string();
@@ -2054,6 +2122,8 @@ mod tests {
             registry = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
+                &mut benchmark,
+                "refund_cat_wrong",
                 unregistered_handle.clone(),
                 pricing_puzzle,
                 pricing_solution,
@@ -2072,6 +2142,8 @@ mod tests {
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
+                &mut benchmark,
+                "refund_amount_wrong",
                 unregistered_handle.clone(),
                 pricing_puzzle,
                 pricing_solution,
@@ -2089,6 +2161,8 @@ mod tests {
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
+                &mut benchmark,
+                "refund_pricing_wrong",
                 unregistered_handle.clone(),
                 other_pricing_puzzle,
                 pricing_solution,
@@ -2106,6 +2180,8 @@ mod tests {
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
+                &mut benchmark,
+                "refund_handle_already_registered",
                 existing_handle.clone(), // already registered handle
                 pricing_puzzle,
                 existing_handle_pricing_solution,
@@ -2119,6 +2195,8 @@ mod tests {
                 &user_bls.sk,
             )?;
         }
+
+        benchmark.print_summary(Some("xchandles.costs"));
 
         Ok(())
     }
@@ -2221,6 +2299,7 @@ mod tests {
     fn test_dig_reward_distributor() -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
         let mut sim = Simulator::new();
+        let mut benchmark = Benchmark::new("DIG Reward Distributor".to_string());
 
         // Launch token CAT
         let cat_amount = 10_000_000_000;
@@ -2341,15 +2420,28 @@ mod tests {
             Bytes32::default(),
             constants,
             &TESTNET11_CONSTANTS,
+            "yak yak yak",
         )?;
-        sim.spend_coins(
-            ctx.take(),
+
+        // sim.spend_coins(
+        //     ctx.take(),
+        //     &[
+        //         launcher_bls.sk.clone(),
+        //         security_sk.clone(),
+        //         cat_minter.sk.clone(),
+        //     ],
+        // )?;
+        benchmark.add_spends(
+            ctx,
+            &mut sim,
+            "launch",
             &[
                 launcher_bls.sk.clone(),
                 security_sk.clone(),
                 cat_minter.sk.clone(),
             ],
         )?;
+
         source_cat = source_cat
             .wrapped_child(SETTLEMENT_PAYMENT_HASH.into(), source_cat.coin.amount)
             .wrapped_child(cat_minter.puzzle_hash, source_cat.coin.amount);
@@ -2373,7 +2465,9 @@ mod tests {
             validator_singleton_puzzle,
             validator_conditions,
         )?;
-        sim.spend_coins(ctx.take(), &[])?;
+
+        // sim.spend_coins(ctx.take(), &[])?;
+        benchmark.add_spends(ctx, &mut sim, "add_mirror", &[])?;
 
         // commit incentives for first epoch
         let rewards_to_add = constants.epoch_seconds;
@@ -2401,7 +2495,8 @@ mod tests {
         );
 
         registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
-        sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        benchmark.add_spends(ctx, &mut sim, "commit_incentives", &[cat_minter.sk.clone()])?;
         source_cat = source_cat.wrapped_child(
             cat_minter.puzzle_hash,
             source_cat.coin.amount - rewards_to_add,
@@ -2447,7 +2542,9 @@ mod tests {
         );
 
         registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
-        sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        benchmark.add_spends(ctx, &mut sim, "commit_incentives", &[cat_minter.sk.clone()])?;
+
         source_cat = source_cat.wrapped_child(
             cat_minter.puzzle_hash,
             source_cat.coin.amount - rewards_to_add,
@@ -2495,7 +2592,8 @@ mod tests {
         );
 
         registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
-        sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        benchmark.add_spends(ctx, &mut sim, "commit_incentives", &[cat_minter.sk.clone()])?;
 
         source_cat = source_cat.wrapped_child(
             cat_minter.puzzle_hash,
@@ -2540,7 +2638,14 @@ mod tests {
 
         registry = registry.finish_spend(ctx, vec![])?;
         sim.set_next_timestamp(first_epoch_start)?;
-        sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        benchmark.add_spends(
+            ctx,
+            &mut sim,
+            "withdraw_incentives",
+            &[cat_minter.sk.clone()],
+        )?;
+
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert!(sim
             .coin_state(fifth_epoch_commitment_slot.coin.coin_id())
@@ -2578,7 +2683,9 @@ mod tests {
 
         registry = registry.finish_spend(ctx, vec![])?;
         sim.pass_time(100);
-        sim.spend_coins(ctx.take(), &[])?;
+        // sim.spend_coins(ctx.take(), &[])?;
+        benchmark.add_spends(ctx, &mut sim, "new_epoch", &[])?;
+
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert_eq!(registry.info.state.active_shares, 1);
         assert_eq!(registry.info.state.total_reserves, 4000 - validator_fee);
@@ -2620,7 +2727,9 @@ mod tests {
 
         registry = registry.finish_spend(ctx, vec![])?;
         sim.pass_time(400);
-        sim.spend_coins(ctx.take(), &[])?;
+        // sim.spend_coins(ctx.take(), &[])?;
+        benchmark.add_spends(ctx, &mut sim, "sync", &[])?;
+
         assert!(registry.info.state.round_time_info.last_update == first_epoch_start + 100);
 
         let cumulative_payout_delta = initial_reward_info.remaining_rewards / 10;
@@ -2643,7 +2752,8 @@ mod tests {
         ensure_conditions_met(ctx, &mut sim, sync_conditions, 0)?;
 
         registry = registry.finish_spend(ctx, vec![])?;
-        sim.spend_coins(ctx.take(), &[])?;
+        // sim.spend_coins(ctx.take(), &[])?;
+        benchmark.add_spends(ctx, &mut sim, "sync", &[])?;
         assert!(registry.info.state.round_time_info.last_update == first_epoch_start + 500);
 
         let cumulative_payout_delta = initial_reward_info.remaining_rewards * 400 / 900;
@@ -2681,7 +2791,9 @@ mod tests {
         );
 
         registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
-        sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        benchmark.add_spends(ctx, &mut sim, "add_incentives", &[cat_minter.sk.clone()])?;
+
         assert_eq!(
             registry.info.state.round_time_info.last_update,
             first_epoch_start + 500
@@ -2719,7 +2831,8 @@ mod tests {
 
         registry = registry.finish_spend(ctx, vec![])?;
         sim.pass_time(250);
-        sim.spend_coins(ctx.take(), &[])?;
+        // sim.spend_coins(ctx.take(), &[])?;
+        benchmark.add_spends(ctx, &mut sim, "add_mirror", &[])?;
         assert_eq!(registry.info.state.active_shares, 3);
 
         // sync to 75% (so + 25%)
@@ -2732,7 +2845,8 @@ mod tests {
         ensure_conditions_met(ctx, &mut sim, sync_conditions, 0)?;
 
         registry = registry.finish_spend(ctx, vec![])?;
-        sim.spend_coins(ctx.take(), &[])?;
+        // sim.spend_coins(ctx.take(), &[])?;
+        benchmark.add_spends(ctx, &mut sim, "sync", &[])?;
         assert!(registry.info.state.round_time_info.last_update == first_epoch_start + 750);
 
         let cumulative_payout_delta = initial_reward_info.remaining_rewards * 250 / (3 * 500);
@@ -2764,7 +2878,8 @@ mod tests {
         )?;
 
         registry = registry.finish_spend(ctx, vec![])?;
-        sim.spend_coins(ctx.take(), &[])?;
+        // sim.spend_coins(ctx.take(), &[])?;
+        benchmark.add_spends(ctx, &mut sim, "remove_mirror", &[])?;
         let payout_coin_id = reserve_cat
             .wrapped_child(mirror2_bls.puzzle_hash, mirror2_payout_amount)
             .coin
@@ -2780,7 +2895,15 @@ mod tests {
 
         for epoch in 1..7 {
             let update_time = registry.info.state.round_time_info.epoch_end;
-            let sync_conditions =
+            let first_update_time =
+                (registry.info.state.round_time_info.last_update + update_time) / 2;
+            let sync_conditions1 = registry.new_action::<DigSyncAction>().spend(
+                ctx,
+                &mut registry,
+                first_update_time,
+            )?;
+
+            let sync_conditions2 =
                 registry
                     .new_action::<DigSyncAction>()
                     .spend(ctx, &mut registry, update_time)?;
@@ -2793,6 +2916,7 @@ mod tests {
                             + if epoch <= 4 { epoch } else { 4 } * constants.epoch_seconds
                 })
                 .unwrap();
+
             let (new_epoch_conditions, new_reward_slot, _validator_fee) = registry
                 .new_action::<DigNewEpochAction>()
                 .spend(ctx, &mut registry, reward_slot)?;
@@ -2803,13 +2927,16 @@ mod tests {
             ensure_conditions_met(
                 ctx,
                 &mut sim,
-                sync_conditions.extend(new_epoch_conditions),
+                sync_conditions1
+                    .extend(sync_conditions2)
+                    .extend(new_epoch_conditions),
                 0,
             )?;
 
             registry = registry.finish_spend(ctx, vec![])?;
             sim.set_next_timestamp(update_time)?;
-            sim.spend_coins(ctx.take(), &[])?;
+            // sim.spend_coins(ctx.take(), &[])?;
+            benchmark.add_spends(ctx, &mut sim, "sync_and_new_epoch", &[])?;
         }
 
         // commit incentives for 10th epoch
@@ -2846,7 +2973,8 @@ mod tests {
         );
 
         registry = registry.finish_spend(ctx, vec![source_cat_spend])?;
-        sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        // sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
+        benchmark.add_spends(ctx, &mut sim, "commit_incentives", &[cat_minter.sk.clone()])?;
         let _source_cat = source_cat.wrapped_child(
             cat_minter.puzzle_hash,
             source_cat.coin.amount - rewards_to_add,
@@ -2891,7 +3019,8 @@ mod tests {
 
             registry = registry.finish_spend(ctx, vec![])?;
             sim.set_next_timestamp(update_time)?;
-            sim.spend_coins(ctx.take(), &[])?;
+            // sim.spend_coins(ctx.take(), &[])?;
+            benchmark.add_spends(ctx, &mut sim, "sync", &[])?;
         }
 
         let update_time = registry.info.state.round_time_info.epoch_end - 100;
@@ -2910,7 +3039,8 @@ mod tests {
 
         let _registry = registry.finish_spend(ctx, vec![])?;
         sim.set_next_timestamp(update_time)?;
-        sim.spend_coins(ctx.take(), &[])?;
+        // sim.spend_coins(ctx.take(), &[])?;
+        benchmark.add_spends(ctx, &mut sim, "initiate_payout", &[])?;
 
         let payout_coin_id = reserve_cat
             .wrapped_child(mirror1_bls.puzzle_hash, withdrawal_amount)
@@ -2919,6 +3049,8 @@ mod tests {
 
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert_eq!(sim.coin_state(payout_coin_id).unwrap().coin.amount, 12602);
+
+        benchmark.print_summary(Some("dig.costs"));
 
         Ok(())
     }

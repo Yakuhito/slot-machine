@@ -35,6 +35,9 @@ jobs:
       - name: Run tests
         run: cargo tarpaulin --release --workspace --all-features --out xml
 
+      - name: Log costs
+        run: cat *.costs
+
       - name: Cleanup coverage reports
         run: rm -f cobertura.xml
 

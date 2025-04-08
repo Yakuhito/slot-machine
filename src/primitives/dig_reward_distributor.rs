@@ -139,7 +139,7 @@ impl DigRewardDistributor {
         ctx: &mut SpendContext,
         other_cat_spends: Vec<CatSpend>,
     ) -> Result<Self, DriverError> {
-        let layers = self.info.into_layers();
+        let layers = self.info.into_layers(ctx)?;
 
         let puzzle = layers.construct_puzzle(ctx)?;
 
@@ -249,17 +249,18 @@ impl DigRewardDistributor {
         &self,
         allocator: &mut Allocator,
     ) -> Result<DigRewardDistributorState, DriverError> {
-        let mut state = self.info.state;
+        let mut state = (NodePtr::NIL, self.info.state);
 
         for action in self.pending_items.pending_actions.iter() {
             let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
 
             let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
-            (state, _) =
-                <match_tuple!(DigRewardDistributorState, NodePtr)>::from_clvm(allocator, output)?;
+            (state, _) = <match_tuple!((NodePtr, DigRewardDistributorState), NodePtr)>::from_clvm(
+                allocator, output,
+            )?;
         }
 
-        Ok(state)
+        Ok(state.1)
     }
 
     pub fn get_pending_items_from_spend(
@@ -267,10 +268,11 @@ impl DigRewardDistributor {
         ctx: &mut SpendContext,
         solution: NodePtr,
     ) -> Result<DigPendingItems, DriverError> {
-        let solution = ctx
-            .extract::<SingletonSolution<RawActionLayerSolution<NodePtr, NodePtr, NodePtr>>>(
-                solution,
-            )?;
+        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
+        let inner_solution = ActionLayer::<DigRewardDistributorState, NodePtr>::parse_solution(
+            ctx,
+            solution.inner_solution,
+        )?;
 
         let mut actions: Vec<Spend> = vec![];
         let mut reward_slot_values: Vec<DigRewardSlotValue> = vec![];
@@ -298,25 +300,23 @@ impl DigRewardDistributor {
         let initiate_payout_action = DigInitiatePayoutAction::from_constants(&self.info.constants);
         let initiate_payout_hash = initiate_payout_action.tree_hash();
 
-        let mut current_state = self.info.state;
-        for raw_action in solution.inner_solution.actions {
-            actions.push(Spend::new(
-                raw_action.action_puzzle_reveal,
-                raw_action.action_solution,
-            ));
+        let mut current_state = (NodePtr::NIL, self.info.state);
+        for raw_action in inner_solution.action_spends {
+            actions.push(Spend::new(raw_action.puzzle, raw_action.solution));
 
-            let actual_solution =
-                ctx.alloc(&clvm_list!(current_state, raw_action.action_solution))?;
+            let actual_solution = ctx.alloc(&clvm_list!(current_state, raw_action.solution))?;
 
-            let action_output = run_puzzle(ctx, raw_action.action_puzzle_reveal, actual_solution)?;
-            (current_state, _) =
-                ctx.extract::<match_tuple!(DigRewardDistributorState, NodePtr)>(action_output)?;
+            let action_output = run_puzzle(ctx, raw_action.puzzle, actual_solution)?;
+            (current_state, _) = ctx
+                .extract::<match_tuple!((NodePtr, DigRewardDistributorState), NodePtr)>(
+                    action_output,
+                )?;
 
-            let raw_action_hash = ctx.tree_hash(raw_action.action_puzzle_reveal);
+            let raw_action_hash = ctx.tree_hash(raw_action.puzzle);
 
             if raw_action_hash == new_epoch_hash {
-                let (rew, spent) = new_epoch_action
-                    .get_slot_value_from_solution(ctx, raw_action.action_solution)?;
+                let (rew, spent) =
+                    new_epoch_action.get_slot_value_from_solution(ctx, raw_action.solution)?;
 
                 reward_slot_values.push(rew);
                 spent_slots.push(spent);
@@ -325,7 +325,7 @@ impl DigRewardDistributor {
                     .get_slot_values_from_solution(
                         ctx,
                         self.info.constants.epoch_seconds,
-                        raw_action.action_solution,
+                        raw_action.solution,
                     )?;
 
                 commitment_slot_values.push(comm);
@@ -334,19 +334,19 @@ impl DigRewardDistributor {
             } else if raw_action_hash == add_mirror_hash {
                 mirror_slot_values.push(add_mirror_action.get_slot_value_from_solution(
                     ctx,
-                    &current_state,
-                    raw_action.action_solution,
+                    &current_state.1,
+                    raw_action.solution,
                 )?);
             } else if raw_action_hash == remove_mirror_hash {
                 spent_slots.push(
                     remove_mirror_action
-                        .get_spent_slot_value_from_solution(ctx, raw_action.action_solution)?,
+                        .get_spent_slot_value_from_solution(ctx, raw_action.solution)?,
                 );
             } else if raw_action_hash == withdraw_incentives_hash {
                 let (rew, spnt) = withdraw_incentives_action.get_slot_value_from_solution(
                     ctx,
                     &self.info.constants,
-                    raw_action.action_solution,
+                    raw_action.solution,
                 )?;
 
                 reward_slot_values.push(rew);
@@ -354,8 +354,8 @@ impl DigRewardDistributor {
             } else if raw_action_hash == initiate_payout_hash {
                 let (mirr, spent) = initiate_payout_action.get_slot_value_from_solution(
                     ctx,
-                    &current_state,
-                    raw_action.action_solution,
+                    &current_state.1,
+                    raw_action.solution,
                 )?;
 
                 mirror_slot_values.push(mirr);

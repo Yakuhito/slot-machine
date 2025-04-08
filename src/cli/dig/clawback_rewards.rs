@@ -46,9 +46,7 @@ pub async fn dig_clawback_rewards(
         reward_amount,
     )
     .await?
-    .ok_or(CliError::Custom(
-        "Commitment slot could not be found".to_string(),
-    ))?;
+    .ok_or(CliError::SlotNotFound("Commitment"))?;
     let reward_slot = find_reward_slot_for_epoch(
         &mut ctx,
         &db,
@@ -57,9 +55,7 @@ pub async fn dig_clawback_rewards(
         distributor.info.constants.epoch_seconds,
     )
     .await?
-    .ok_or(CliError::Custom(
-        "Reward slot could not be found".to_string(),
-    ))?;
+    .ok_or(CliError::SlotNotFound("Reward"))?;
 
     println!(
         "Will use commitment slot with rewards={} for epoch_start={}",

@@ -33,7 +33,7 @@
                                 (coinid
                                     (coinid
                                         verifier_parent_info
-                                        (curry_hashes SINGLETON_MOD_HASH
+                                        (curry_hashes_inline SINGLETON_MOD_HASH
                                             VERIFIER_SINGLETON_STRUCT_HASH
                                             verifier_inner_puzzle_hash
                                         )

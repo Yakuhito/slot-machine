@@ -8,7 +8,18 @@
     MAX_SECONDS_OFFSET ; at most this amount of seconds can pass since last update
     ; /\ this prevents the reward distributor from 'stealing' earned rewards before MAX_SECONDS_OFFSET by
     ;    adding a mirror with a gazillion shares during long periods of non-sync
-    (total_reserves active_shares reward_info current_round_info) ; Current_State
+    (
+        Ephemeral_State . ; not used
+        (@
+            Current_State
+            (
+                total_reserves
+                active_shares
+                (@ Reward_Info (cumulative_payout . remaining_rewards))
+                (@ Round_Time_Info (last_update . epoch_end))
+            )
+        )
+    ) ; Truth
     (
         validator_singleton_inner_puzzle_hash
         mirror_payout_puzzle_hash .
@@ -21,10 +32,11 @@
 
     (c
         (list
+            ()
             total_reserves
             (+ active_shares mirror_shares)
-            reward_info
-            current_round_info
+            Reward_Info
+            Round_Time_Info
         ) ; new state  
         (list
             ; validator actually wants us to add this mirror
@@ -40,18 +52,19 @@
                 )
             )
 
-            (create_slot MIRROR_SLOT_1ST_CURRY_HASH
+            (create_slot_inline MIRROR_SLOT_1ST_CURRY_HASH
                 (sha256 2
                     (sha256 1 mirror_payout_puzzle_hash)
                     (sha256 2
-                        (sha256 1 (f reward_info))
+                        (sha256 1 cumulative_payout)
                         (sha256 1 mirror_shares)
                     )
                 ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
+                mirror_payout_puzzle_hash
             )
 
             ; make sure the reward info is up to date
-            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ (f current_round_info) MAX_SECONDS_OFFSET))
+            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ last_update MAX_SECONDS_OFFSET))
         ) ; conditions
     )
         

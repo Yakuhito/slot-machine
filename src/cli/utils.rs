@@ -85,6 +85,9 @@ pub enum CliError {
 
     #[error("constants not set (launcher id or price singletong launcher id)")]
     ConstantsNotSet,
+
+    #[error("{0} slot not found")]
+    SlotNotFound(&'static str),
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {

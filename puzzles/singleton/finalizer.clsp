@@ -11,37 +11,37 @@
     FINALIZER_SELF_HASH
     Merkle_Root
     Initial_State ; not used for this puzzle
-    (New_State . Conditions) ; last action output
+    ((Last_Ephemeral_State . New_State) . Conditions) ; last action output
     my_solution ; not used here
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
     (include curry.clib)
 
-    (defun flatten_list ((first_thing . the_rest))
-      (if first_thing
-        (c (f first_thing) (flatten_list (c (r first_thing) the_rest)))
-        ; else
-        (if the_rest
-          (flatten_list the_rest)
-          ; else
-          ()
+    (defun flatten_list (((@ first_thing (first_cond . remaining_conds)) . the_rest))
+        (if first_thing
+            (c first_cond (flatten_list (c remaining_conds the_rest)))
+            ; else
+            (if the_rest
+                (flatten_list the_rest)
+                ; else
+                ()
+            )
         )
-      )
     )
 
     (c
         (list
-          CREATE_COIN
-          (curry_hashes ACTION_LAYER_MOD_HASH
-            (curry_hashes FINALIZER_SELF_HASH
-                (sha256 1 FINALIZER_SELF_HASH)
-            ) ; finalizer puzzle hash
-            (sha256 1 Merkle_Root)
-            (sha256tree New_State)
-          ) ; new inner ph
-          1
-          (list HINT)
+            CREATE_COIN
+            (curry_hashes ACTION_LAYER_MOD_HASH
+                (curry_hashes FINALIZER_SELF_HASH
+                    (sha256 1 FINALIZER_SELF_HASH)
+                ) ; finalizer puzzle hash
+                (sha256 1 Merkle_Root)
+                (sha256tree New_State)
+            ) ; new inner ph
+            1
+            (list HINT)
         )
         (flatten_list Conditions)
     )

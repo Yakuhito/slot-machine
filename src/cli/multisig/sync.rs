@@ -175,47 +175,34 @@ where
     };
 
     if print_sync {
-        println!("Following vault on-chain...");
+        println!("Getting latest vault on-chain...");
     }
-    let mut vault = eve_vault;
-    loop {
-        let coin_record = client
-            .get_coin_record_by_name(vault.coin.coin_id())
-            .await?
-            .coin_record
-            .ok_or(CliError::CoinNotFound(vault.coin.coin_id()))?;
+    let vault_records = client
+        .get_coin_records_by_hint(launcher_id, None, None, Some(false))
+        .await?
+        .coin_records
+        .ok_or(CliError::CoinNotFound(launcher_id))?;
 
-        if !coin_record.spent {
-            if print_sync {
-                println!(
-                    "Latest vault coin {} not spent.",
-                    hex::encode(vault.coin.coin_id())
-                );
-            }
-            break;
+    for vault_record in vault_records {
+        if vault_record.spent {
+            continue;
         }
 
-        let vault_spend = client
-            .get_puzzle_and_solution(vault.coin.coin_id(), Some(coin_record.spent_block_index))
+        let vault_parent_spend = client
+            .get_puzzle_and_solution(
+                vault_record.coin.parent_coin_info,
+                Some(vault_record.confirmed_block_index),
+            )
             .await?
             .coin_solution
-            .ok_or(CliError::CoinNotSpent(vault.coin.coin_id()))?;
+            .ok_or(CliError::CoinNotSpent(vault_record.coin.parent_coin_info))?;
 
-        if print_sync {
-            println!("Vault coin {} spent.", hex::encode(vault.coin.coin_id()));
+        if let Some(vault) = MedievalVault::from_parent_spend(ctx, vault_parent_spend)? {
+            return Ok((MultisigSingleton::Vault(vault), state_scheduler_info));
         }
-        let Some(new_vault) = MedievalVault::from_parent_spend(ctx, vault_spend)? else {
-            if print_sync {
-                println!(
-                    "Vault coin {}spent, but could not be interpreted as a new vault :(",
-                    hex::encode(vault.coin.coin_id())
-                );
-            }
-            break;
-        };
-
-        vault = new_vault;
     }
 
-    Ok((MultisigSingleton::Vault(vault), state_scheduler_info))
+    // couldn't parse medieval vault from parent spend ->
+    //   vault either just laucnhed (parent is launcher) or parent is state scheduler
+    Ok((MultisigSingleton::Vault(eve_vault), state_scheduler_info))
 }

@@ -1,0 +1,95 @@
+; end.clsp by yakuhito & Rigidity
+
+(mod (
+    AUCTIONEER_PUZZLE_HASH ; Where to pay the remainder of the reserves to after the auction is over
+    FEES ; (type puzzle_hash arg), arg - absolute number / bps
+        ; type 0 - BPS - buyer's premium (added on top)
+        ; type 1 - flat fee - buyer's premium (added on top)
+        ; type 2 - BPS - comission (taken from bid)
+        ; type 3 - flat fee - comission (taken from bid)
+    ASSETS ; list (coin_id . amount)
+    TIMESTAMP_PROGRAM ; Adds conditions to the output of the action
+        ; return: (new_state seconds is_relative)
+    (Ephemeral_State . (@ Current_State (Bid_Index Bid King End_State)))
+    () ; solution
+)
+    (include condition_codes.clib)
+
+    (defun make_sure_auction_ended ((new_state seconds is_relative))
+        (i is_relative
+            (list ASSERT_SECONDS_RELATIVE end_seconds)
+            ; else
+            (list ASSERT_SECONDS_ABSOLUTE end_seconds)
+        )
+    )
+
+    (defun take_commissions (
+            AUCTIONEER_PUZZLE_HASH
+            bid_amount
+            remaining_funds ; auctioneer's reward
+            (@ fees ((fee_type fee_ph fee_arg) . remaining_fees))
+        )
+        (if fees
+            (c
+                (list -42 CREATE_COIN
+                    fee_ph
+                    (if (= fee_type 0)
+                        (/ (* bid_amount fee_arg) 10000)
+                        ; else
+                        fee_arg
+                    )
+                    (list fee_ph)
+                )
+                (take_comissions
+                    AUCTIONEER_PUZZLE_HASH
+                    bid_amount
+                    (if (> fee_type 2)
+                        (- remaining_funds
+                            (if (= fee_type 0)
+                                (/ (* bid_amount fee_arg) 10000)
+                                ; else
+                                fee_arg
+                            )
+                        )
+                        ; else
+                        remaining_funds
+                    )
+                    remaining_fees
+                )
+            )
+            ; else
+            (list -42 CREATE_COIN AUCTIONEER_PUZZLE_HASH remaining_funds (list AUCTIONEER_PUZZLE_HASH))
+        )
+    )
+
+    (defun send_assets (King (@ assets ((asset_coin_id . asset_amount) . remaining_assets)) base_conditions)
+        (if assets
+            (c
+                (list SEND_MESSAGE
+                    23 ; sender puzzle hash, receiver coin id
+                    (sha256tree (c ; this is the leading 'q . ' in the delegated puzzle
+                        1
+                        (list (list CREATE_COIN King asset_amount (list King)))
+                    )) ; message = delegated puzzle hash
+                    asset_coin_id
+                )
+                (send_assets King remaining_assets base_conditions)
+            )
+            ; else
+            base_conditions
+        )
+    )
+
+    (list
+        Current_State ; new state
+        (if Ephemeral_State (x) 1); Ephemeral State
+        (send_assets
+            King
+            ASSETS
+            (c
+                (make_sure_auction_ended (a TIMESTAMP_PROGRAM (list Bid_Index End_State)))
+                (take_commissions Bid Bid FEES)
+            ) ; conditions
+        )
+    )
+)

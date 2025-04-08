@@ -1,0 +1,21 @@
+(mod (
+    BPS_ES
+    TOTAL_FLAT_FEE
+    (@
+        State
+        (Bid_Index Bid)
+    )
+)
+    (defun compute_bps (bid bps_es)
+        (if bps_es
+            (+
+                (/ (* bid (f bps_es)) 10000)
+                (compute_bps bid (r bps_es))
+            )
+            ; else
+            bid
+        )
+    )
+
+    (+ TOTAL_FLAT_FEE (compute_bps Bid BPS_ES))
+)
