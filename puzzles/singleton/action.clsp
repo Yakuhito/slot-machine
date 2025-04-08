@@ -27,12 +27,39 @@
     (include merkle_utils.clib)
     (include sha256tree.clib)
 
-    (defun item_in_list (the_item (@ the_list (first_item . remaining_list)))
-        (if (= the_item first_item)
-            1
-            (item_in_list the_item remaining_list)
-        )
-    )
+    ; (defun item_in_list (the_item (@ the_list (first_item . remaining_list)))
+    ;     (if (= the_item first_item)
+    ;         1
+    ;         (item_in_list the_item remaining_list)
+    ;     )
+    ; )
+
+    ; (defun reduce_and_verify_proofs (
+    ;     MERKLE_ROOT
+    ;     puzzles
+    ;     selectors_so_far
+    ;     (@ pending_selectors_and_proofs ((selector . proof) . remaining_pending_selectors_and_proofs))
+    ; )
+    ;     (if pending_selectors_and_proofs
+    ;         (if 
+    ;             (if proof
+    ;                 (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzles)) proof))
+    ;                 ; else
+    ;                 (item_in_list selector selectors_so_far)
+    ;             )
+    ;             (reduce_and_verify_proofs
+    ;                 MERKLE_ROOT
+    ;                 puzzles
+    ;                 (c selector selectors_so_far)
+    ;                 remaining_pending_selectors_and_proofs
+    ;             )
+    ;             ; else
+    ;             (x)
+    ;         )
+    ;         ; else
+    ;         selectors_so_far
+    ;     )
+    ; )
 
     (defun reduce_and_verify_proofs (
         MERKLE_ROOT
@@ -41,20 +68,11 @@
         (@ pending_selectors_and_proofs ((selector . proof) . remaining_pending_selectors_and_proofs))
     )
         (if pending_selectors_and_proofs
-            (if 
-                (if proof
-                    (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzles)) proof))
-                    ; else
-                    (item_in_list selector selectors_so_far)
-                )
-                (reduce_and_verify_proofs
-                    MERKLE_ROOT
-                    puzzles
-                    (c selector selectors_so_far)
-                    remaining_pending_selectors_and_proofs
-                )
-                ; else
-                (x)
+            (reduce_and_verify_proofs
+                MERKLE_ROOT
+                puzzles
+                (c selector selectors_so_far)
+                remaining_pending_selectors_and_proofs
             )
             ; else
             selectors_so_far
@@ -66,7 +84,7 @@
         current_conditions
         (ephemeral_and_actual_state . new_conditions)
         (@ pending_selectors (selector . remaining_selectors))
-        (@ pending_solution (solution . remaining_solutions))
+        (@ pending_solutions (solution . remaining_solutions))
     )
         (if pending_selectors
             (run_actions
