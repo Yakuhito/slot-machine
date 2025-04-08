@@ -248,7 +248,6 @@ where
         let mut proofs = Vec::<MerkleProof>::with_capacity(solution.solutions.len());
         let mut selector_proofs = HashMap::<u32, MerkleProof>::new();
 
-        println!("parsing solution.."); // todo: debug
         for (selector, proof) in solution.selectors_and_proofs.into_iter() {
             let proof = if let Some(existing_proof) = selector_proofs.get(&selector) {
                 existing_proof.clone()
@@ -268,14 +267,14 @@ where
             }
             actions.push(solution.puzzles[index as usize]);
         }
-        println!("solution parsed"); // todo: debug
 
         let action_spends = solution
             .solutions
             .iter()
-            .zip(actions)
+            .zip(actions.into_iter().rev())
             .map(|(action_solution, action_puzzle)| Spend::new(action_puzzle, *action_solution))
             .collect();
+        let proofs = proofs.into_iter().rev().collect();
 
         Ok(ActionLayerSolution {
             proofs,
@@ -367,12 +366,10 @@ where
                 selectors_and_proofs.push((*selector, Some(proof.clone())));
             } else {
                 puzzles.push(spend.puzzle);
-                println!("adding selector: {}", next_selector); // todo: debug
                 selectors_and_proofs.push((next_selector, Some(proof.clone())));
                 puzzle_to_selector.insert(puzzle_hash, next_selector);
 
                 next_selector = next_selector * 2 + 1;
-                println!("next selector: {}", next_selector); // todo: debug
             }
 
             solutions.push(spend.solution);

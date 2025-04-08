@@ -2880,7 +2880,6 @@ mod tests {
         registry = registry.finish_spend(ctx, vec![])?;
         // sim.spend_coins(ctx.take(), &[])?;
         benchmark.add_spends(ctx, &mut sim, "remove_mirror", &[])?;
-        println!("removed mirror2"); // todo: debug
         let payout_coin_id = reserve_cat
             .wrapped_child(mirror2_bls.puzzle_hash, mirror2_payout_amount)
             .coin
