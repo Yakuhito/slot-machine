@@ -249,7 +249,7 @@ where
         let mut selector_proofs = HashMap::<u32, MerkleProof>::new();
 
         println!("parsing solution.."); // todo: debug
-        for (selector, proof) in solution.selectors_and_proofs {
+        for (selector, proof) in solution.selectors_and_proofs.into_iter() {
             let proof = if let Some(existing_proof) = selector_proofs.get(&selector) {
                 existing_proof.clone()
             } else {
@@ -364,17 +364,32 @@ where
         for (spend, proof) in solution.action_spends.into_iter().zip(solution.proofs) {
             let puzzle_hash: Bytes32 = ctx.tree_hash(spend.puzzle).into();
             if let Some(selector) = puzzle_to_selector.get(&puzzle_hash) {
-                selectors_and_proofs.push((*selector, None));
+                selectors_and_proofs.push((*selector, Some(proof.clone())));
             } else {
                 puzzles.push(spend.puzzle);
                 println!("adding selector: {}", next_selector); // todo: debug
-                selectors_and_proofs.push((next_selector, Some(proof)));
+                selectors_and_proofs.push((next_selector, Some(proof.clone())));
                 puzzle_to_selector.insert(puzzle_hash, next_selector);
 
                 next_selector = next_selector * 2 + 1;
                 println!("next selector: {}", next_selector); // todo: debug
             }
+
             solutions.push(spend.solution);
+        }
+
+        let mut proven_selectors = Vec::<u32>::new();
+        let mut selectors_and_proofs: Vec<(u32, Option<MerkleProof>)> =
+            selectors_and_proofs.into_iter().rev().collect();
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..selectors_and_proofs.len() {
+            let selector = selectors_and_proofs[i].0;
+
+            if proven_selectors.contains(&selector) {
+                selectors_and_proofs[i].1 = None;
+            } else {
+                proven_selectors.push(selector);
+            }
         }
 
         Ok(RawActionLayerSolution {
@@ -559,10 +574,10 @@ pub struct ReserveFinalizerSolution {
     pub reserve_parent_id: Bytes32,
 }
 
-pub const ACTION_LAYER_PUZZLE: [u8; 307] = hex!("ff02ffff01ff02ff05ffff04ff0bffff04ff17ffff04ffff02ff06ffff04ff02ffff04ff2fffff04ff80ffff04ffff04ffff04ff80ff1780ff8080ffff04ffff02ff04ffff04ff02ffff04ff0bffff04ff2fffff04ff80ffff04ff5fff80808080808080ffff04ff81bfff8080808080808080ffff04ff82017fff808080808080ffff04ffff01ffff02ffff03ff2fffff01ff02ff04ffff04ff02ffff04ff05ffff04ff0bffff04ffff04ff818fff1780ffff04ff6fff80808080808080ffff011780ff0180ff02ffff03ff2fffff01ff02ff06ffff04ff02ffff04ff05ffff04ffff04ff37ff0b80ffff04ffff02ffff02ff4fff0580ffff04ff27ffff04ff819fff80808080ffff04ff6fffff04ff81dfff8080808080808080ffff01ff04ff27ffff04ff37ff0b808080ff0180ff018080");
+pub const ACTION_LAYER_PUZZLE: [u8; 670] = hex!("ff02ffff01ff02ff05ffff04ff0bffff04ff17ffff04ffff02ff0affff04ff02ffff04ff2fffff04ff80ffff04ffff04ffff04ff80ff1780ff8080ffff04ffff02ff0cffff04ff02ffff04ff0bffff04ff2fffff04ff80ffff04ff5fff80808080808080ffff04ff81bfff8080808080808080ffff04ff82017fff808080808080ffff04ffff01ffffff02ffff03ffff09ff05ff1380ffff01ff0101ffff01ff02ff08ffff04ff02ffff04ff05ffff04ff1bff808080808080ff0180ff02ffff03ff2fffff01ff02ffff03ffff02ffff03ff81cfffff01ff09ff05ffff02ff1effff04ff02ffff04ffff0bffff0101ffff02ff16ffff04ff02ffff04ffff02ff818fff0b80ff8080808080ffff04ff81cfff808080808080ffff01ff02ff08ffff04ff02ffff04ff818fffff04ff17ff808080808080ff0180ffff01ff02ff0cffff04ff02ffff04ff05ffff04ff0bffff04ffff04ff818fff1780ffff04ff6fff80808080808080ffff01ff088080ff0180ffff011780ff0180ffff02ffff03ff2fffff01ff02ff0affff04ff02ffff04ff05ffff04ffff04ff37ff0b80ffff04ffff02ffff02ff4fff0580ffff04ff27ffff04ff819fff80808080ffff04ff6fffff04ff81dfff8080808080808080ffff01ff04ff27ffff04ff37ff0b808080ff0180ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff16ffff04ff02ffff04ff09ff80808080ffff02ff16ffff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff02ffff03ff1bffff01ff02ff1effff04ff02ffff04ffff02ffff03ffff18ffff0101ff1380ffff01ff0bffff0102ff2bff0580ffff01ff0bffff0102ff05ff2b8080ff0180ffff04ffff04ffff17ff13ffff0181ff80ff3b80ff8080808080ffff010580ff0180ff018080");
 pub const ACTION_LAYER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    f46df49fb645978f2941baa822b11976a1570ae597570b75483b2e98527f345f
+    2ad6e558c952fb62de6428fb8d627bcd21ddf37aa8aabb43a8620d98e922a163
     "
 ));
 
