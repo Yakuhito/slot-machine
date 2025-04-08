@@ -61,6 +61,19 @@
     ;     )
     ; )
 
+    ; (defun reduce_and_verify_proofs (
+    ;     MERKLE_ROOT
+    ;     puzzles
+    ;     selectors_so_far
+    ;     (@ pending_selectors_and_proofs ((selector . proof) . remaining_pending_selectors_and_proofs))
+    ; )
+    ;     (if pending_selectors_and_proofs
+    ;         (reduce_and_verify_proofs MERKLE_ROOT puzzles (c selector selectors_so_far) remaining_pending_selectors_and_proofs)
+    ;         ; else
+    ;         selectors_so_far
+    ;     )
+    ; )
+
     (defun reduce_and_verify_proofs (
         MERKLE_ROOT
         puzzles
@@ -68,14 +81,9 @@
         (@ pending_selectors_and_proofs ((selector . proof) . remaining_pending_selectors_and_proofs))
     )
         (if pending_selectors_and_proofs
-            (reduce_and_verify_proofs
-                MERKLE_ROOT
-                puzzles
-                (c selector selectors_so_far)
-                remaining_pending_selectors_and_proofs
-            )
+            (c selector (reduce_and_verify_proofs MERKLE_ROOT puzzles selectors_so_far remaining_pending_selectors_and_proofs))
             ; else
-            selectors_so_far
+            ()
         )
     )
 
@@ -109,7 +117,7 @@
             STATE
             (run_actions
                 puzzles                
-                (list)
+                ()
                 (list (c () STATE))
                 (reduce_and_verify_proofs MERKLE_ROOT puzzles () selectors_and_proofs)
                 solutions
