@@ -6,7 +6,8 @@ use super::{
     catalog_verify_deployment, dig_add_rewards, dig_broadcast_mirror_update, dig_clawback_rewards,
     dig_commit_rewards, dig_initiate_payout, dig_launch, dig_new_epoch, dig_sign_mirror_update,
     dig_sync, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
-    multisig_verify_signature, multisig_view,
+    multisig_verify_signature, multisig_view, verifications_broadcast_launch,
+    verifications_sign_launch,
 };
 
 #[derive(Parser)]
@@ -41,6 +42,11 @@ enum Commands {
     Dig {
         #[command(subcommand)]
         action: DigCliAction,
+    },
+    /// Interact with CATalog verifications
+    Verifications {
+        #[command(subcommand)]
+        action: VerificationsCliAction,
     },
 }
 
@@ -579,6 +585,55 @@ enum DigCliAction {
     },
 }
 
+#[derive(Subcommand)]
+enum VerificationsCliAction {
+    /// Signs the launch of a new CATalog verification (no offer)
+    SignLaunch {
+        /// Multisig launcher id (hex string)
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Pubkey to use for signing (hex string)
+        #[arg(long)]
+        my_pubkey: String,
+
+        /// Use debug signing method (pk prompt)
+        #[arg(long, default_value_t = false)]
+        debug: bool,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
+
+    /// Broadcasts the launch of a new CATalog verification (no offer)
+    BroadcastLaunch {
+        /// Multisig launcher id (hex string)
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Signatures (comma-separated list)
+        #[arg(long)]
+        sigs: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+}
+
 pub async fn run_cli() {
     let args = Cli::parse();
 
@@ -864,6 +919,24 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => dig_initiate_payout(launcher_id, mirror_payout_puzzle_hash, testnet11, fee).await,
+        },
+        Commands::Verifications { action } => match action {
+            VerificationsCliAction::SignLaunch {
+                launcher_id,
+                asset_id,
+                my_pubkey,
+                testnet11,
+                debug,
+            } => {
+                verifications_sign_launch(launcher_id, asset_id, my_pubkey, testnet11, debug).await
+            }
+            VerificationsCliAction::BroadcastLaunch {
+                launcher_id,
+                asset_id,
+                sigs,
+                testnet11,
+                fee,
+            } => verifications_broadcast_launch(launcher_id, asset_id, sigs, testnet11, fee).await,
         },
     };
 

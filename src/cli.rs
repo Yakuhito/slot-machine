@@ -6,6 +6,7 @@ mod dig;
 mod multisig;
 mod sage_client;
 mod utils;
+mod verifications;
 
 pub use catalog::*;
 pub use commands::*;
@@ -15,3 +16,4 @@ pub use dig::*;
 pub use multisig::*;
 pub use sage_client::*;
 pub use utils::*;
+pub use verifications::*;
