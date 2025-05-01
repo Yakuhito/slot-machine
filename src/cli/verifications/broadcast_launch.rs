@@ -39,6 +39,10 @@ pub async fn verifications_broadcast_launch(
     let launcher_memos = Memos::new(ctx.alloc(&verified_data.get_hint())?);
     let launcher = Launcher::with_memos(medieval_vault.coin.coin_id(), 0, launcher_memos)
         .with_singleton_amount(1);
+    println!(
+        "Verification launcher id: {}",
+        hex::encode(launcher.coin().coin_id())
+    );
     let verification = Verification::after_mint(
         medieval_vault.coin.coin_id(),
         VerificationInfo {

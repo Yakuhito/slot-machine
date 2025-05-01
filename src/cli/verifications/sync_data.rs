@@ -5,7 +5,7 @@ use chia::{
 use chia_puzzles::SINGLETON_LAUNCHER_HASH;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{DriverError, Nft, Puzzle, SpendContext},
+    driver::{Nft, Puzzle, SpendContext},
 };
 
 use crate::{
@@ -29,11 +29,7 @@ pub async fn get_latest_data_for_asset_id(
 
     let mut prelauncher_coin_id: Option<Bytes32> = None;
     for possible_prelauncher_record in possible_prelaunchers {
-        println!(
-            "PROCESSING PRELAUNCHER {}",
-            possible_prelauncher_record.confirmed_block_index
-        ); // todo: debug
-           // if child exists, parent must be spent
+        // if child exists, parent must be spent
         let catalog_spend_maybe = client
             .get_puzzle_and_solution(
                 possible_prelauncher_record.coin.parent_coin_info,
@@ -55,8 +51,7 @@ pub async fn get_latest_data_for_asset_id(
             solution_ptr,
             CatalogRegistryConstants::get(testnet11),
         ) {
-            println!("FOUND REGISTRY"); // todo: debug
-            prelauncher_coin_id = Some(catalog_spend_maybe.coin.coin_id());
+            prelauncher_coin_id = Some(possible_prelauncher_record.coin.coin_id());
             break;
         }
     }
@@ -68,44 +63,51 @@ pub async fn get_latest_data_for_asset_id(
 
     let nft_launcher_id =
         Coin::new(prelauncher_coin_id, SINGLETON_LAUNCHER_HASH.into(), 1).coin_id();
+    println!("NFT launcher id: {}", hex::encode(nft_launcher_id));
 
-    let possible_nft_coins = client
-        .get_coin_records_by_hint(nft_launcher_id, None, None, Some(false))
-        .await?
-        .coin_records
-        .ok_or(CliError::Driver(DriverError::MissingHint))?;
+    let mut next_nft_record = Some(
+        client
+            .get_coin_records_by_parent_ids(vec![nft_launcher_id], None, None, Some(true))
+            .await?
+            .coin_records
+            .ok_or(CliError::CoinNotSpent(nft_launcher_id))?[0],
+    );
+    let mut latest_nft = None;
 
-    for possible_nft_coin in possible_nft_coins {
-        if possible_nft_coin.spent {
-            continue;
+    while let Some(nft_record) = next_nft_record {
+        if !nft_record.spent {
+            break;
         }
 
-        let parent_spend = client
+        let coin_spend = client
             .get_puzzle_and_solution(
-                possible_nft_coin.coin.parent_coin_info,
-                Some(possible_nft_coin.confirmed_block_index),
+                nft_record.coin.coin_id(),
+                Some(nft_record.spent_block_index),
             )
             .await?
             .coin_solution
-            .ok_or(CliError::CoinNotSpent(
-                possible_nft_coin.coin.parent_coin_info,
-            ))?;
+            .ok_or(CliError::CoinNotSpent(nft_record.coin.coin_id()))?;
 
-        let puzzle_ptr = ctx.alloc(&parent_spend.puzzle_reveal)?;
+        let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
         let puzzle = Puzzle::parse(ctx, puzzle_ptr);
-        let solution_ptr = ctx.alloc(&parent_spend.puzzle_reveal)?;
-
+        let solution_ptr = ctx.alloc(&coin_spend.solution)?;
         if let Ok(Some(nft)) =
-            Nft::<CatNftMetadata>::parse_child(ctx, possible_nft_coin.coin, puzzle, solution_ptr)
+            Nft::<CatNftMetadata>::parse_child(ctx, nft_record.coin, puzzle, solution_ptr)
         {
-            if nft.info.launcher_id == nft_launcher_id {
-                return Ok(nft.info.metadata);
-            }
+            next_nft_record = client
+                .get_coin_record_by_name(nft.coin.coin_id())
+                .await?
+                .coin_record;
+            latest_nft = Some(nft);
+        } else {
+            break;
         }
     }
 
-    Err(CliError::Custom(format!(
+    let latest_nft = latest_nft.ok_or(CliError::Custom(format!(
         "Could not find NFT associated to asset id {}",
         hex::encode(asset_id)
-    )))
+    )))?;
+
+    Ok(latest_nft.info.metadata)
 }
