@@ -230,4 +230,8 @@ impl VerifiedData {
             comment,
         }
     }
+
+    pub fn get_hint(&self) -> Bytes32 {
+        self.data_hash
+    }
 }

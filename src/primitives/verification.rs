@@ -7,9 +7,12 @@ use chia::{
     },
 };
 use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
+use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
-use crate::{VerificationLayer, VerificationLayer2ndCurryArgs, VerificationLayerSolution};
+use crate::{
+    VerificationLayer, VerificationLayer2ndCurryArgs, VerificationLayerSolution, VerifiedData,
+};
 
 use super::VerificationInfo;
 
@@ -146,6 +149,13 @@ impl Verification {
             ),
         }))
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm)]
+#[clvm(list)]
+pub struct VerificationLauncherKVList {
+    pub revocation_singleton_launcher_id: Bytes32,
+    pub verified_data: VerifiedData,
 }
 
 #[cfg(test)]
