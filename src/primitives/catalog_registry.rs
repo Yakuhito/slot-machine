@@ -50,8 +50,10 @@ impl CatalogRegistry {
     {
         let Some(parent_info) = CatalogRegistryInfo::parse(allocator, parent_puzzle, constants)?
         else {
+            println!("NOPE"); // todo: debug
             return Ok(None);
         };
+        println!("YES"); // todo: debug
 
         let proof = Proof::Lineage(LineageProof {
             parent_parent_coin_info: parent_coin.parent_coin_info,
@@ -59,6 +61,7 @@ impl CatalogRegistry {
             parent_amount: parent_coin.amount,
         });
 
+        println!("YES 1"); // todo: debug
         let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
         let new_state = ActionLayer::<CatalogRegistryState>::get_new_state(
             allocator,

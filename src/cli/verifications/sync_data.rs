@@ -29,7 +29,11 @@ pub async fn get_latest_data_for_asset_id(
 
     let mut prelauncher_coin_id: Option<Bytes32> = None;
     for possible_prelauncher_record in possible_prelaunchers {
-        // if child exists, parent must be spent
+        println!(
+            "PROCESSING PRELAUNCHER {}",
+            possible_prelauncher_record.confirmed_block_index
+        ); // todo: debug
+           // if child exists, parent must be spent
         let catalog_spend_maybe = client
             .get_puzzle_and_solution(
                 possible_prelauncher_record.coin.parent_coin_info,
@@ -43,7 +47,7 @@ pub async fn get_latest_data_for_asset_id(
 
         let puzzle_ptr = ctx.alloc(&catalog_spend_maybe.puzzle_reveal)?;
         let puzzle = Puzzle::parse(ctx, puzzle_ptr);
-        let solution_ptr = ctx.alloc(&catalog_spend_maybe.puzzle_reveal)?;
+        let solution_ptr = ctx.alloc(&catalog_spend_maybe.solution)?;
         if let Ok(Some(_reg)) = CatalogRegistry::from_parent_spend(
             ctx,
             catalog_spend_maybe.coin,
@@ -51,6 +55,7 @@ pub async fn get_latest_data_for_asset_id(
             solution_ptr,
             CatalogRegistryConstants::get(testnet11),
         ) {
+            println!("FOUND REGISTRY"); // todo: debug
             prelauncher_coin_id = Some(catalog_spend_maybe.coin.coin_id());
             break;
         }

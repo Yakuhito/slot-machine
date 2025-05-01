@@ -127,12 +127,14 @@ impl CatalogRegistryInfo {
         constants: CatalogRegistryConstants,
     ) -> Result<Option<Self>, DriverError> {
         let Some(layers) = CatalogRegistryLayers::parse_puzzle(allocator, puzzle)? else {
+            println!("FAIL 1-1"); // todo: debug
             return Ok(None);
         };
 
         let action_puzzle_hashes = Self::action_puzzle_hashes(&constants);
         let merkle_root = MerkleTree::new(&action_puzzle_hashes).root();
         if layers.inner_puzzle.merkle_root != merkle_root {
+            println!("FAIL 1-2"); // todo: debug
             return Ok(None);
         }
 
