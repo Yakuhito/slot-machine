@@ -172,24 +172,20 @@ impl MedievalVault {
         MOfNLayer::ensure_non_replayable(conditions, coin_id, genesis_challenge)
     }
 
-    pub fn spend(
+    // Mark this as unsafe since the transaction may be replayable
+    //  across coin generations and networks if delegated puzzle is not
+    //  properly secured.
+    pub fn spend_sunsafe(
         self,
         ctx: &mut SpendContext,
         used_pubkeys: &[PublicKey],
-        conditions: Conditions,
-        genesis_challenge: Bytes32,
+        delegated_puzzle: NodePtr,
+        delegated_solution: NodePtr,
     ) -> Result<(), DriverError> {
         let lineage_proof = self.proof;
         let coin = self.coin;
 
         let layers = self.info.into_layers();
-
-        let genesis_challenge = ctx.alloc(&genesis_challenge)?;
-        let delegated_puzzle = ctx.alloc(&clvm_quote!(Self::delegated_conditions(
-            conditions,
-            coin.coin_id(),
-            genesis_challenge
-        )))?;
 
         let puzzle = layers.construct_puzzle(ctx)?;
         let solution = layers.construct_solution(
@@ -203,7 +199,7 @@ impl MedievalVault {
                         used_pubkeys,
                     ),
                     delegated_puzzle,
-                    delegated_solution: NodePtr::NIL,
+                    delegated_solution,
                 },
             },
         )?;
@@ -211,6 +207,23 @@ impl MedievalVault {
         ctx.spend(coin, Spend::new(puzzle, solution))?;
 
         Ok(())
+    }
+
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        used_pubkeys: &[PublicKey],
+        conditions: Conditions,
+        genesis_challenge: Bytes32,
+    ) -> Result<(), DriverError> {
+        let genesis_challenge = ctx.alloc(&genesis_challenge)?;
+        let delegated_puzzle = ctx.alloc(&clvm_quote!(Self::delegated_conditions(
+            conditions,
+            self.coin.coin_id(),
+            genesis_challenge
+        )))?;
+
+        self.spend_sunsafe(ctx, used_pubkeys, delegated_puzzle, NodePtr::NIL)
     }
 
     pub fn rekey_create_coin_unsafe(

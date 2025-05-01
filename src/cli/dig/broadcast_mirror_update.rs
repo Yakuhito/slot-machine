@@ -1,15 +1,12 @@
 use chia::protocol::Bytes32;
-use chia::puzzles::singleton::SingletonSolution;
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes};
-use chia_wallet_sdk::driver::{Layer, Spend};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
     find_mirror_slot_for_puzzle_hash, get_constants, get_last_onchain_timestamp,
     hex_string_to_bytes32, multisig_broadcast_thing_finish, multisig_broadcast_thing_start,
     sync_distributor, CliError, Db, DigAddMirrorAction, DigRemoveMirrorAction, DigSyncAction,
-    MedievalVault, P2MOfNDelegateDirectArgs, P2MOfNDelegateDirectSolution,
-    StateSchedulerLayerSolution,
+    MedievalVault, StateSchedulerLayerSolution,
 };
 
 pub async fn dig_broadcast_mirror_update(
@@ -102,27 +99,11 @@ pub async fn dig_broadcast_mirror_update(
         inner_solution: NodePtr::NIL,
     })?;
 
-    let medieval_vault_layers = medieval_vault.info.into_layers();
-    let medieval_vault_puzzle = medieval_vault_layers.construct_puzzle(&mut ctx)?;
-    let medieval_vault_solution = medieval_vault_layers.construct_solution(
+    medieval_vault.spend_sunsafe(
         &mut ctx,
-        SingletonSolution {
-            lineage_proof: medieval_vault.proof,
-            amount: medieval_vault.coin.amount,
-            inner_solution: P2MOfNDelegateDirectSolution {
-                selectors: P2MOfNDelegateDirectArgs::selectors_for_used_pubkeys(
-                    &medieval_vault.info.public_key_list,
-                    &pubkeys,
-                ),
-                delegated_puzzle: delegated_puzzle_ptr,
-                delegated_solution: delegated_solution_ptr,
-            },
-        },
-    )?;
-
-    ctx.spend(
-        medieval_vault.coin,
-        Spend::new(medieval_vault_puzzle, medieval_vault_solution),
+        &pubkeys,
+        delegated_puzzle_ptr,
+        delegated_solution_ptr,
     )?;
 
     if remove_mirror {

@@ -57,8 +57,13 @@ pub async fn verifications_sign_launch(
     )?;
 
     let genesis_challenge = ctx.alloc(&get_constants(testnet11).genesis_challenge)?;
+    let launch_conds_with_recreate = launch_conds.create_coin(
+        medieval_vault.info.inner_puzzle_hash().into(),
+        medieval_vault.coin.amount,
+        Memos::some(ctx.alloc(&medieval_vault.info.launcher_id)?),
+    );
     let delegated_puzzle = ctx.alloc(&clvm_quote!(MedievalVault::delegated_conditions(
-        launch_conds,
+        launch_conds_with_recreate,
         medieval_vault.coin.coin_id(),
         genesis_challenge,
     )))?;
