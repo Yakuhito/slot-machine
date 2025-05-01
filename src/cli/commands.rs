@@ -597,6 +597,10 @@ enum VerificationsCliAction {
         #[arg(long)]
         asset_id: String,
 
+        /// Verification comment (on-chain)
+        #[arg(long)]
+        comment: String,
+
         /// Pubkey to use for signing (hex string)
         #[arg(long)]
         my_pubkey: String,
@@ -619,6 +623,10 @@ enum VerificationsCliAction {
         /// Asset id (hex string)
         #[arg(long)]
         asset_id: String,
+
+        /// Verification comment (on-chain)
+        #[arg(long)]
+        comment: String,
 
         /// Signatures (comma-separated list)
         #[arg(long)]
@@ -924,19 +932,32 @@ pub async fn run_cli() {
             VerificationsCliAction::SignLaunch {
                 launcher_id,
                 asset_id,
+                comment,
                 my_pubkey,
                 testnet11,
                 debug,
             } => {
-                verifications_sign_launch(launcher_id, asset_id, my_pubkey, testnet11, debug).await
+                verifications_sign_launch(
+                    launcher_id,
+                    asset_id,
+                    comment,
+                    my_pubkey,
+                    testnet11,
+                    debug,
+                )
+                .await
             }
             VerificationsCliAction::BroadcastLaunch {
                 launcher_id,
                 asset_id,
+                comment,
                 sigs,
                 testnet11,
                 fee,
-            } => verifications_broadcast_launch(launcher_id, asset_id, sigs, testnet11, fee).await,
+            } => {
+                verifications_broadcast_launch(launcher_id, asset_id, comment, sigs, testnet11, fee)
+                    .await
+            }
         },
     };
 

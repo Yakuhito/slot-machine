@@ -205,16 +205,14 @@ pub struct VerifiedData {
     pub version: u32,
     pub asset_id: Bytes32,
     pub data_hash: Bytes32,
-    pub category: String,
-    pub subcategory: String,
+    pub comment: String,
 }
 
 impl VerifiedData {
     pub fn from_cat_nft_metadata(
         asset_id: Bytes32,
         metadata: &CatNftMetadata,
-        category: String,
-        subcategory: String,
+        comment: String,
     ) -> Self {
         Self {
             version: 1,
@@ -229,8 +227,7 @@ impl VerifiedData {
             )
             .tree_hash()
             .into(),
-            category,
-            subcategory,
+            comment,
         }
     }
 }

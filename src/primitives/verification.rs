@@ -190,8 +190,7 @@ mod tests {
                 version: 1,
                 asset_id: Bytes32::new([2; 32]),
                 data_hash: Bytes32::new([3; 32]),
-                category: "cat".to_string(),
-                subcategory: "subcat".to_string(),
+                comment: "Test verification for test testing purposes only.".to_string(),
             },
         );
         let verification =
