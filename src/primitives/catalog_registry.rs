@@ -67,7 +67,6 @@ impl CatalogRegistry {
         )?;
 
         let new_info = parent_info.with_state(new_state);
-
         let new_coin = Coin::new(parent_coin.coin_id(), new_info.puzzle_hash().into(), 1);
 
         Ok(Some(CatalogRegistry {
