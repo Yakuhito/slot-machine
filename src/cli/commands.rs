@@ -7,7 +7,7 @@ use super::{
     dig_commit_rewards, dig_initiate_payout, dig_launch, dig_new_epoch, dig_sign_mirror_update,
     dig_sync, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
     multisig_verify_signature, multisig_view, verifications_broadcast_launch,
-    verifications_sign_launch, verifications_view,
+    verifications_sign_launch, verifications_sign_revocation, verifications_view,
 };
 
 #[derive(Parser)]
@@ -655,6 +655,29 @@ enum VerificationsCliAction {
         #[arg(long, default_value_t = false)]
         testnet11: bool,
     },
+
+    /// Sign an attestation revocation
+    SignRevocation {
+        /// Multisig launcher id (hex string)
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Pubkey to use for signing (hex string)
+        #[arg(long)]
+        my_pubkey: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Use debug signing method (pk prompt)
+        #[arg(long, default_value_t = false)]
+        debug: bool,
+    },
 }
 
 pub async fn run_cli() {
@@ -978,6 +1001,16 @@ pub async fn run_cli() {
                 filter,
                 testnet11,
             } => verifications_view(asset_id, filter, testnet11).await,
+            VerificationsCliAction::SignRevocation {
+                launcher_id,
+                asset_id,
+                my_pubkey,
+                testnet11,
+                debug,
+            } => {
+                verifications_sign_revocation(launcher_id, asset_id, my_pubkey, testnet11, debug)
+                    .await
+            }
         },
     };
 
