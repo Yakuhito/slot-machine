@@ -53,12 +53,10 @@ pub async fn verifications_view(
     };
 
     for coin_record in possible_coin_records {
-        println!("coin_record: {:?}", coin_record); // todo: debug
         if coin_record.coin.puzzle_hash != SINGLETON_LAUNCHER_HASH.into()
-            || coin_record.coin.amount != 1
+            || coin_record.coin.amount != 0
             || !coin_record.spent
         {
-            println!("SKIP 1"); // todo: debug
             continue;
         }
 
@@ -70,7 +68,6 @@ pub async fn verifications_view(
             .await?
             .coin_solution
         else {
-            println!("SKIP 2"); // todo: debug
             continue;
         };
 
@@ -88,20 +85,18 @@ pub async fn verifications_view(
         );
 
         if verification.coin.puzzle_hash != solution.singleton_puzzle_hash {
-            println!("SKIP 3"); // todo: debug
             continue;
         }
 
         // Lastly, also check parent is singleton with launcher id = revocation launcher id
         let Some(parent_coin_spend) = client
             .get_puzzle_and_solution(
-                verification.coin.parent_coin_info,
+                coin_record.coin.parent_coin_info,
                 Some(coin_record.confirmed_block_index),
             )
             .await?
             .coin_solution
         else {
-            println!("SKIP 4"); // todo: debug
             continue;
         };
 
@@ -109,17 +104,14 @@ pub async fn verifications_view(
         let parent_puzzle = Puzzle::parse(&ctx, parent_puzzle_ptr);
         let Some(parent_puzzle) = SingletonLayer::<NodePtr>::parse_puzzle(&ctx, parent_puzzle)?
         else {
-            println!("SKIP 5"); // todo: debug
             continue;
         };
 
         if parent_puzzle.launcher_id != verification.info.revocation_singleton_launcher_id {
-            println!("SKIP 6"); // todo: debug
             continue;
         }
 
         if !filters.is_empty() && !filters.contains(&verification.info.verified_data.data_hash) {
-            println!("SKIP 7"); // todo: debug
             continue;
         }
 
@@ -144,6 +136,10 @@ pub async fn verifications_view(
             .await?
             .coin_records
             .unwrap_or_default();
+        if coin_records.is_empty() {
+            // Just launched
+            revoked = false;
+        }
 
         for coin_record in coin_records {
             if coin_record.coin.puzzle_hash != verification.coin.puzzle_hash
