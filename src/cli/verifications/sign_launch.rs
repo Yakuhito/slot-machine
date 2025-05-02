@@ -3,11 +3,10 @@ use clvm_traits::clvm_quote;
 
 use crate::{
     get_constants, get_latest_data_for_asset_id, hex_string_to_bytes32, multisig_sign_thing_finish,
-    multisig_sign_thing_start, CliError, MedievalVault, Verification, VerificationInfo,
-    VerificationLauncherKVList, VerifiedData,
+    multisig_sign_thing_start, CliError, MedievalVault, Verification, VerificationLauncherKVList,
+    VerifiedData,
 };
 
-#[allow(unused_variables)]
 pub async fn verifications_sign_launch(
     launcher_id_str: String,
     asset_id_str: String,
@@ -41,14 +40,6 @@ pub async fn verifications_sign_launch(
     println!(
         "Verification launcher id: {}",
         hex::encode(launcher.coin().coin_id())
-    );
-    let verification = Verification::after_mint(
-        medieval_vault.coin.coin_id(),
-        VerificationInfo {
-            launcher_id: launcher.coin().coin_id(),
-            revocation_singleton_launcher_id: launcher_id,
-            verified_data: verified_data.clone(),
-        },
     );
 
     let (launch_conds, _coin) = launcher.spend(

@@ -7,7 +7,7 @@ use super::{
     dig_commit_rewards, dig_initiate_payout, dig_launch, dig_new_epoch, dig_sign_mirror_update,
     dig_sync, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
     multisig_verify_signature, multisig_view, verifications_broadcast_launch,
-    verifications_sign_launch,
+    verifications_sign_launch, verifications_view,
 };
 
 #[derive(Parser)]
@@ -640,6 +640,21 @@ enum VerificationsCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+
+    /// View attestation(s)
+    View {
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Filter by issuer launcher ids (comma-separated list of hex launcher ids)
+        #[arg(long)]
+        filter: Option<String>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
 }
 
 pub async fn run_cli() {
@@ -958,6 +973,11 @@ pub async fn run_cli() {
                 verifications_broadcast_launch(launcher_id, asset_id, comment, sigs, testnet11, fee)
                     .await
             }
+            VerificationsCliAction::View {
+                asset_id,
+                filter,
+                testnet11,
+            } => verifications_view(asset_id, filter, testnet11).await,
         },
     };
 

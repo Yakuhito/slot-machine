@@ -209,6 +209,19 @@ pub struct VerifiedData {
 }
 
 impl VerifiedData {
+    pub fn data_hash_from_cat_nft_metadata(metadata: &CatNftMetadata) -> Bytes32 {
+        clvm_list!(
+            metadata.ticker.clone(),
+            metadata.name.clone(),
+            metadata.description.clone(),
+            metadata.image_hash,
+            metadata.metadata_hash,
+            metadata.license_hash,
+        )
+        .tree_hash()
+        .into()
+    }
+
     pub fn from_cat_nft_metadata(
         asset_id: Bytes32,
         metadata: &CatNftMetadata,
@@ -217,16 +230,7 @@ impl VerifiedData {
         Self {
             version: 1,
             asset_id,
-            data_hash: clvm_list!(
-                metadata.ticker.clone(),
-                metadata.name.clone(),
-                metadata.description.clone(),
-                metadata.image_hash,
-                metadata.metadata_hash,
-                metadata.license_hash,
-            )
-            .tree_hash()
-            .into(),
+            data_hash: Self::data_hash_from_cat_nft_metadata(metadata),
             comment,
         }
     }
