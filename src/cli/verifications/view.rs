@@ -132,7 +132,7 @@ pub async fn verifications_view(
         let mut revoked = true;
 
         let coin_records = client
-            .get_coin_records_by_hint(verification.info.launcher_id, None, None, Some(false))
+            .get_coin_records_by_hint(verification.info.launcher_id, None, None, Some(true))
             .await?
             .coin_records
             .unwrap_or_default();
@@ -157,7 +157,9 @@ pub async fn verifications_view(
                 continue;
             };
 
-            if parent.coin.puzzle_hash != verification.coin.puzzle_hash {
+            if parent.coin.puzzle_hash != verification.coin.puzzle_hash
+                && parent.coin.coin_id() != verification.info.launcher_id
+            {
                 continue;
             }
 
