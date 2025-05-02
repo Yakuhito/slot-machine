@@ -1,4 +1,4 @@
-use chia_wallet_sdk::{driver::Launcher, prelude::Memos};
+use chia_wallet_sdk::driver::Launcher;
 use clvm_traits::clvm_quote;
 
 use crate::{
@@ -34,9 +34,12 @@ pub async fn verifications_sign_launch(
 
     let verified_data = VerifiedData::from_cat_nft_metadata(asset_id, &latest_data, comment);
 
-    let launcher_memos = Memos::new(ctx.alloc(&verified_data.get_hint())?);
-    let launcher = Launcher::with_memos(medieval_vault.coin.coin_id(), 0, launcher_memos)
-        .with_singleton_amount(1);
+    let launcher = Launcher::with_memos(
+        medieval_vault.coin.coin_id(),
+        0,
+        ctx.hint(verified_data.get_hint())?,
+    )
+    .with_singleton_amount(1);
     println!(
         "Verification launcher id: {}",
         hex::encode(launcher.coin().coin_id())
@@ -55,7 +58,7 @@ pub async fn verifications_sign_launch(
     let launch_conds_with_recreate = launch_conds.create_coin(
         medieval_vault.info.inner_puzzle_hash().into(),
         medieval_vault.coin.amount,
-        Memos::some(ctx.alloc(&medieval_vault.info.launcher_id)?),
+        Some(ctx.hint(medieval_vault.info.launcher_id)?),
     );
     let delegated_puzzle = ctx.alloc(&clvm_quote!(MedievalVault::delegated_conditions(
         launch_conds_with_recreate,

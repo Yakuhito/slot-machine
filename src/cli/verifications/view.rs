@@ -43,17 +43,22 @@ pub async fn verifications_view(
         .coin_records
         .ok_or(CliError::Driver(DriverError::MissingHint))?;
 
-    let filters = filter
-        .unwrap_or_default()
-        .split(",")
-        .map(hex_string_to_bytes32)
-        .collect::<Result<Vec<Bytes32>, _>>()?;
+    let filters = if let Some(filter) = filter {
+        filter
+            .split(",")
+            .map(hex_string_to_bytes32)
+            .collect::<Result<Vec<Bytes32>, _>>()?
+    } else {
+        vec![]
+    };
 
     for coin_record in possible_coin_records {
+        println!("coin_record: {:?}", coin_record); // todo: debug
         if coin_record.coin.puzzle_hash != SINGLETON_LAUNCHER_HASH.into()
             || coin_record.coin.amount != 1
             || !coin_record.spent
         {
+            println!("SKIP 1"); // todo: debug
             continue;
         }
 
@@ -65,6 +70,7 @@ pub async fn verifications_view(
             .await?
             .coin_solution
         else {
+            println!("SKIP 2"); // todo: debug
             continue;
         };
 
@@ -82,6 +88,7 @@ pub async fn verifications_view(
         );
 
         if verification.coin.puzzle_hash != solution.singleton_puzzle_hash {
+            println!("SKIP 3"); // todo: debug
             continue;
         }
 
@@ -94,6 +101,7 @@ pub async fn verifications_view(
             .await?
             .coin_solution
         else {
+            println!("SKIP 4"); // todo: debug
             continue;
         };
 
@@ -101,14 +109,17 @@ pub async fn verifications_view(
         let parent_puzzle = Puzzle::parse(&ctx, parent_puzzle_ptr);
         let Some(parent_puzzle) = SingletonLayer::<NodePtr>::parse_puzzle(&ctx, parent_puzzle)?
         else {
+            println!("SKIP 5"); // todo: debug
             continue;
         };
 
         if parent_puzzle.launcher_id != verification.info.revocation_singleton_launcher_id {
+            println!("SKIP 6"); // todo: debug
             continue;
         }
 
         if !filters.is_empty() && !filters.contains(&verification.info.verified_data.data_hash) {
+            println!("SKIP 7"); // todo: debug
             continue;
         }
 
@@ -120,6 +131,8 @@ pub async fn verifications_view(
             "  Revocation singleton launcher id: 0x{}",
             hex::encode(verification.info.revocation_singleton_launcher_id)
         );
+        println!("  Version: {}", verification.info.verified_data.version);
+        println!("  Comment: {}", verification.info.verified_data.comment);
 
         // Warning: Anyone can create an 'unspent revocation' with the correct puzzle hash and amount.
         // For this fast check to be secure, we need to ensure the parent has the same puzzle hash as well
@@ -157,6 +170,8 @@ pub async fn verifications_view(
 
         println!("  Revoked: {}", revoked);
     }
+
+    println!("Done.");
 
     Ok(())
 }
