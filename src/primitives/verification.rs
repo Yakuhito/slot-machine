@@ -96,7 +96,7 @@ impl Verification {
         self,
         ctx: &mut SpendContext,
         revocation_singleton_inner_puzzle_hash: Option<Bytes32>,
-    ) -> Result<CoinSpend, DriverError> {
+    ) -> Result<(), DriverError> {
         let sol = SingletonSolution {
             lineage_proof: self.proof,
             amount: self.coin.amount,
@@ -114,7 +114,9 @@ impl Verification {
         let puzzle_reveal = ctx.serialize(&puzzle_reveal)?;
         let solution = ctx.serialize(&solution)?;
 
-        Ok(CoinSpend::new(my_coin, puzzle_reveal, solution))
+        ctx.insert(CoinSpend::new(my_coin, puzzle_reveal, solution));
+
+        Ok(())
     }
 }
 
@@ -219,13 +221,12 @@ mod tests {
         assert_eq!(new_coin, verification.coin);
 
         // spend the verification coin in oracle mode
-        let oracle_spend = verification.spend(ctx, None)?;
-        ctx.insert(oracle_spend.clone());
+        verification.clone().spend(ctx, None)?;
 
-        let parent_puzzle = ctx.alloc(&oracle_spend.puzzle_reveal)?;
+        let parent_puzzle = verification.construct_puzzle(ctx)?;
         let parent_puzzle = Puzzle::parse(ctx, parent_puzzle);
         let verification =
-            Verification::from_parent_spend(ctx, oracle_spend.coin, parent_puzzle)?.unwrap();
+            Verification::from_parent_spend(ctx, verification.coin, parent_puzzle)?.unwrap();
 
         // create verification payment and spend it
         let verification_inner_puzzle_hash = Verification::inner_puzzle_hash(
@@ -262,8 +263,7 @@ mod tests {
             Conditions::new().send_message(18, Bytes::default(), vec![msg_data]),
         )?;
 
-        let melt_spend = verification.spend(ctx, Some(revocation_singleton_inner_ph))?;
-        ctx.insert(melt_spend);
+        verification.spend(ctx, Some(revocation_singleton_inner_ph))?;
 
         sim.spend_coins(ctx.take(), &[bls.sk])?;
 

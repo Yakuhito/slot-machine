@@ -3,7 +3,7 @@ use clvmr::NodePtr;
 use crate::{
     get_constants, get_latest_data_for_asset_id, hex_string_to_bytes32,
     multisig_broadcast_thing_finish, multisig_broadcast_thing_start, sync_verifications, CliError,
-    MedievalVault, VerifiedData,
+    MedievalVault, StateSchedulerLayerSolution, Verification, VerifiedData,
 };
 
 pub async fn verifications_broadcast_revocation(
@@ -41,7 +41,6 @@ pub async fn verifications_broadcast_revocation(
     }
 
     let verification = verifications[0].clone();
-    let verification_launcher_id = verification.info.launcher_id;
     verification.spend(
         &mut ctx,
         Some(medieval_vault.info.inner_puzzle_hash().into()),
@@ -50,15 +49,24 @@ pub async fn verifications_broadcast_revocation(
     let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<()>(
         &mut ctx,
         (),
-        verification_launcher_id,
+        verifications[0].info.launcher_id,
         medieval_vault.coin,
         &medieval_vault.info,
         get_constants(testnet11).genesis_challenge,
     )
     .map_err(CliError::Driver)?;
 
+    let delegated_solution_ptr = ctx.alloc(&StateSchedulerLayerSolution {
+        other_singleton_inner_puzzle_hash: Verification::inner_puzzle_hash(
+            verifications[0].info.revocation_singleton_launcher_id,
+            verifications[0].info.verified_data.clone(),
+        )
+        .into(),
+        inner_solution: NodePtr::NIL,
+    })?;
+
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
-    medieval_vault.spend_sunsafe(&mut ctx, &pubkeys, delegated_puzzle, NodePtr::NIL)?;
+    medieval_vault.spend_sunsafe(&mut ctx, &pubkeys, delegated_puzzle, delegated_solution_ptr)?;
 
     multisig_broadcast_thing_finish(
         client,
