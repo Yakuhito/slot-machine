@@ -88,7 +88,7 @@ pub async fn sync_verifications(
         }
 
         if let Some(filters) = &issuer_launcher_ids_filter {
-            if !filters.contains(&verification.info.launcher_id) {
+            if !filters.contains(&verification.info.revocation_singleton_launcher_id) {
                 continue;
             }
         }

@@ -145,7 +145,7 @@ pub async fn multisig_broadcast_thing_finish(
         sb.coin_spends.clone(),
         sb.aggregated_signature.clone(),
         "sb.debug",
-    );
+    ); // todo: debug
     let resp = client.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);
