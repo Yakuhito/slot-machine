@@ -116,10 +116,6 @@ pub async fn sync_verifications(
             .await?
             .coin_records
             .unwrap_or_default();
-        if coin_records.is_empty() {
-            // Just launched
-            revoked = false;
-        }
 
         for coin_record in coin_records {
             if coin_record.coin.puzzle_hash != verification.coin.puzzle_hash

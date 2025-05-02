@@ -40,7 +40,7 @@ pub async fn verifications_sign_revocation(
     let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<()>(
         &mut ctx,
         (),
-        launcher_id,
+        verifications[0].info.launcher_id,
         medieval_vault.coin,
         &medieval_vault.info,
         get_constants(testnet11).genesis_challenge,
