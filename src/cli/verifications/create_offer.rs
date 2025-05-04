@@ -1,5 +1,10 @@
 use bech32::{u5, Variant};
-use chia::{protocol::SpendBundle, traits::Streamable};
+use chia::{
+    clvm_utils::ToTreeHash,
+    protocol::{Bytes32, Coin, SpendBundle},
+    traits::Streamable,
+};
+use chia_puzzle_types::singleton::SingletonStruct;
 use chia_wallet_sdk::{
     driver::{compress_offer_bytes, Offer, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
@@ -10,7 +15,8 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
     get_coinset_client, get_latest_data_for_asset_id, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, spend_security_coin, yes_no_prompt, CliError, SageClient,
+    parse_one_sided_offer, spend_security_coin, yes_no_prompt, CliError, SageClient, Verification,
+    VerificationPayments, VerifiedData,
 };
 
 pub async fn verifications_create_offer(
@@ -77,7 +83,26 @@ pub async fn verifications_create_offer(
     let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let mut security_coin_conditions = offer.security_base_conditions;
+    let verified_data =
+        VerifiedData::from_cat_nft_metadata(asset_id, &latest_data, comment.clone());
+    let verification_payment = VerificationPayments::new(
+        SingletonStruct::new(launcher_id).tree_hash().into(),
+        Verification::inner_puzzle_hash(launcher_id, verified_data).into(),
+    );
+    let verification_payment_puzzle_hash: Bytes32 = verification_payment.tree_hash().into();
+
+    let security_coin_conditions = offer
+        .security_base_conditions
+        .reserve_fee(1)
+        .create_coin(verification_payment_puzzle_hash, 0, None)
+        .assert_concurrent_spend(
+            Coin::new(
+                offer.security_coin.coin_id(),
+                verification_payment_puzzle_hash,
+                0,
+            )
+            .coin_id(),
+        );
 
     // TODO: create the verification offer coin :)
 
@@ -97,8 +122,6 @@ pub async fn verifications_create_offer(
     let data = clvm_list!(
         asset_id,
         comment,
-        payment_asset_id,
-        payment_amount,
         SpendBundle::new(ctx.take(), whole_sig)
             .to_bytes()
             .map_err(|_| CliError::Custom(
