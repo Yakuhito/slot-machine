@@ -11,9 +11,9 @@ use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
     get_coinset_client, hex_string_to_bytes32, hex_string_to_signature, new_sk, parse_amount,
-    parse_one_sided_offer, print_medieval_vault_configuration, print_spend_bundle_to_file,
-    spend_security_coin, sync_multisig_singleton, wait_for_coin, yes_no_prompt, CliError,
-    MedievalVault, MultisigSingleton, SageClient, StateSchedulerHintedState,
+    parse_one_sided_offer, print_medieval_vault_configuration, spend_security_coin,
+    sync_multisig_singleton, wait_for_coin, yes_no_prompt, CliError, MedievalVault,
+    MultisigSingleton, SageClient, StateSchedulerHintedState,
 };
 
 pub async fn multisig_broadcast_thing_start(
@@ -141,11 +141,6 @@ pub async fn multisig_broadcast_thing_finish(
     );
 
     println!("Submitting transaction...");
-    print_spend_bundle_to_file(
-        sb.coin_spends.clone(),
-        sb.aggregated_signature.clone(),
-        "sb.debug",
-    ); // todo: debug
     let resp = client.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);

@@ -713,6 +713,10 @@ enum VerificationsCliAction {
         #[arg(long)]
         asset_id: String,
 
+        /// Verification comment (on-chain)
+        #[arg(long)]
+        comment: String,
+
         /// Payment asset id (hex string)
         #[arg(long)]
         payment_asset_id: String,
@@ -1075,6 +1079,7 @@ pub async fn run_cli() {
             VerificationsCliAction::CreateOffer {
                 launcher_id,
                 asset_id,
+                comment,
                 payment_asset_id,
                 payment_amount,
                 testnet11,
@@ -1083,6 +1088,7 @@ pub async fn run_cli() {
                 verifications_create_offer(
                     launcher_id,
                     asset_id,
+                    comment,
                     payment_asset_id,
                     payment_amount,
                     testnet11,
