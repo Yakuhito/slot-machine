@@ -1,8 +1,11 @@
+use bech32::{u5, Variant};
+use chia::{protocol::SpendBundle, traits::Streamable};
 use chia_wallet_sdk::{
-    driver::{Offer, SpendContext},
+    driver::{compress_offer_bytes, Offer, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
 use clvm_traits::clvm_list;
+use clvmr::serde::node_to_bytes;
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
@@ -63,7 +66,7 @@ pub async fn verifications_create_offer(
             fee: Amount::u64(fee),
             receive_address: None,
             expires_at_second: None,
-            auto_import: false,
+            auto_import: true,
         })
         .await?;
 
@@ -75,6 +78,8 @@ pub async fn verifications_create_offer(
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let mut security_coin_conditions = offer.security_base_conditions;
+
+    // TODO: create the verification offer coin :)
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
@@ -94,9 +99,25 @@ pub async fn verifications_create_offer(
         comment,
         payment_asset_id,
         payment_amount,
-        ctx.take(),
-        whole_sig,
+        SpendBundle::new(ctx.take(), whole_sig)
+            .to_bytes()
+            .map_err(|_| CliError::Custom(
+                "Verification request serialization error 2".to_string()
+            ))?,
     );
+    let data = ctx.alloc(&data)?;
+
+    let bytes = node_to_bytes(&ctx, data)?
+        .to_bytes()
+        .map_err(|_| CliError::Custom("Verification request serialization error 2".to_string()))?;
+    let bytes = compress_offer_bytes(&bytes)?;
+    let bytes = bech32::convert_bits(&bytes, 8, 5, true)?
+        .into_iter()
+        .map(u5::try_from_u8)
+        .collect::<Result<Vec<_>, bech32::Error>>()?;
+    let verification_request = bech32::encode("verificationrequest", bytes, Variant::Bech32m)?;
+
+    println!("Verification request: {}", verification_request);
 
     Ok(())
 }
