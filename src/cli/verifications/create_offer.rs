@@ -5,6 +5,7 @@ use chia::{
     traits::Streamable,
 };
 use chia_puzzle_types::singleton::SingletonStruct;
+use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
 use chia_wallet_sdk::{
     driver::{compress_offer_bytes, Offer, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
@@ -45,7 +46,7 @@ pub async fn verifications_create_offer(
     println!("Note: Attestations cover the following: ticker, name, description, image hash, metadata hash, license hash.");
 
     println!(
-        "A one-sided offer offering 1 mojo, {} payment CATs, and {} XCH ({} mojos) as fee will be generated and broadcast.",
+        "A one-sided offer offering 1 mojo, {} payment CATs, and {} XCH ({} mojos) as fee will be generated.",
         payment_amount_str,
         fee_str,
         fee
@@ -80,7 +81,13 @@ pub async fn verifications_create_offer(
 
     let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
+    let offer = parse_one_sided_offer(
+        &mut ctx,
+        offer,
+        security_coin_sk.public_key(),
+        Some(SETTLEMENT_PAYMENT_HASH.into()),
+        false,
+    )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let verified_data =
