@@ -1,11 +1,10 @@
 use bech32::{u5, Variant};
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin, SpendBundle},
+    protocol::{Bytes32, SpendBundle},
     traits::Streamable,
 };
 use chia_puzzle_types::singleton::SingletonStruct;
-use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
 use chia_wallet_sdk::{
     driver::{compress_offer_bytes, Offer, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
@@ -79,39 +78,29 @@ pub async fn verifications_create_offer(
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(
-        &mut ctx,
-        offer,
-        security_coin_sk.public_key(),
-        Some(SETTLEMENT_PAYMENT_HASH.into()),
-        false,
-    )?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
-
     let verified_data =
         VerifiedData::from_cat_nft_metadata(asset_id, &latest_data, comment.clone());
     let verification_payment = VerificationPayments::new(
         SingletonStruct::new(launcher_id).tree_hash().into(),
         Verification::inner_puzzle_hash(launcher_id, verified_data).into(),
     );
-    let verification_payment_puzzle_hash: Bytes32 = verification_payment.tree_hash().into();
+    let verification_payment_inner_puzzle_hash: Bytes32 = verification_payment.tree_hash().into();
+
+    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
+    let security_coin_sk = new_sk()?;
+    let offer = parse_one_sided_offer(
+        &mut ctx,
+        offer,
+        security_coin_sk.public_key(),
+        Some(verification_payment_inner_puzzle_hash),
+        false,
+    )?;
+    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_conditions = offer
         .security_base_conditions
         .reserve_fee(1)
-        .create_coin(verification_payment_puzzle_hash, 0, None)
-        .assert_concurrent_spend(
-            Coin::new(
-                offer.security_coin.coin_id(),
-                verification_payment_puzzle_hash,
-                0,
-            )
-            .coin_id(),
-        );
-
-    // TODO: create the verification offer coin :)
+        .assert_concurrent_spend(offer.created_cat.unwrap().coin.coin_id());
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
