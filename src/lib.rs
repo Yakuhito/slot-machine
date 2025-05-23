@@ -34,7 +34,7 @@ pub trait SpendContextExt {
     fn xchandles_expire_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_oracle_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_refund_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn verification_payments_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn verification_asserter_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_factor_pricing_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_exponential_premium_renew_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn default_cat_maker_puzzle(&mut self) -> Result<NodePtr, DriverError>;
@@ -140,11 +140,11 @@ impl SpendContextExt for SpendContext {
         self.puzzle(XCHANDLES_REFUND_PUZZLE_HASH, &XCHANDLES_REFUND_PUZZLE)
     }
 
-    /// Allocate the verification payments puzzle and return its pointer.
-    fn verification_payments_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+    /// Allocate the verification asserter puzzle and return its pointer.
+    fn verification_asserter_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(
-            VERIFICATION_PAYMENTS_PUZZLE_HASH,
-            &VERIFICATION_PAYMENTS_PUZZLE,
+            VERIFICATION_ASSERTER_PUZZLE_HASH,
+            &VERIFICATION_ASSERTER_PUZZLE,
         )
     }
 
@@ -283,7 +283,7 @@ mod tests {
         assert_puzzle_hash!(XCHANDLES_EXPIRE_PUZZLE => XCHANDLES_EXPIRE_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_ORACLE_PUZZLE => XCHANDLES_ORACLE_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_REFUND_PUZZLE => XCHANDLES_REFUND_PUZZLE_HASH);
-        assert_puzzle_hash!(VERIFICATION_PAYMENTS_PUZZLE => VERIFICATION_PAYMENTS_PUZZLE_HASH);
+        assert_puzzle_hash!(VERIFICATION_ASSERTER_PUZZLE => VERIFICATION_ASSERTER_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_FACTOR_PRICING_PUZZLE => XCHANDLES_FACTOR_PRICING_PUZZLE_HASH);
         assert_puzzle_hash!(XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE => XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH);
         assert_puzzle_hash!(DEFAULT_CAT_MAKER_PUZZLE => DEFAULT_CAT_MAKER_PUZZLE_HASH);

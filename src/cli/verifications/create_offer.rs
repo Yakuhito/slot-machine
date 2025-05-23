@@ -5,6 +5,7 @@ use chia::{
     traits::Streamable,
 };
 use chia_puzzle_types::singleton::SingletonStruct;
+use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
 use chia_wallet_sdk::{
     driver::{compress_offer_bytes, Offer, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
@@ -16,7 +17,7 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 use crate::{
     get_coinset_client, get_latest_data_for_asset_id, hex_string_to_bytes32, new_sk, parse_amount,
     parse_one_sided_offer, spend_security_coin, yes_no_prompt, CliError, SageClient, Verification,
-    VerificationPayments, VerifiedData,
+    VerificationAsserter, VerifiedData,
 };
 
 pub async fn verifications_create_offer(
@@ -80,11 +81,11 @@ pub async fn verifications_create_offer(
 
     let verified_data =
         VerifiedData::from_cat_nft_metadata(asset_id, &latest_data, comment.clone());
-    let verification_payment = VerificationPayments::new(
+    let verification_asserter = VerificationAsserter::new(
         SingletonStruct::new(launcher_id).tree_hash().into(),
         Verification::inner_puzzle_hash(launcher_id, verified_data).into(),
     );
-    let verification_payment_inner_puzzle_hash: Bytes32 = verification_payment.tree_hash().into();
+    let verification_asserter_puzzle_hash: Bytes32 = verification_asserter.tree_hash().into();
 
     let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
     let security_coin_sk = new_sk()?;
@@ -92,7 +93,7 @@ pub async fn verifications_create_offer(
         &mut ctx,
         offer,
         security_coin_sk.public_key(),
-        Some(verification_payment_inner_puzzle_hash),
+        Some(SETTLEMENT_PAYMENT_HASH.into()),
         false,
     )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
@@ -100,7 +101,9 @@ pub async fn verifications_create_offer(
     let security_coin_conditions = offer
         .security_base_conditions
         .reserve_fee(1)
-        .assert_concurrent_spend(offer.created_cat.unwrap().coin.coin_id());
+        .assert_concurrent_spend(offer.created_cat.unwrap().coin.coin_id())
+        .create_coin(verification_asserter_puzzle_hash, 0, None)
+        .assert_concurrent_puzzle(verification_asserter_puzzle_hash);
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,

@@ -1,4 +1,4 @@
-; verification_payments.clsp by yakuhito
+; verification_asserter.clsp by yakuhito
 ;; This puzzle allows CAT issuers to create 'verification offers',
 ;;  which are essentially offers where one side just wants to see
 ;;  a verification be created.
@@ -11,17 +11,14 @@
     LAUNCHER_PUZZLE_HASH
     VERIFIER_SINGLETON_STRUCT_HASH
     VERIFICATION_INNER_PUZZLE_HASH
-    (verifier_parent_info verifier_inner_puzzle_hash verifier_amount) ; verifier launcher proof
-    payout_puzzle_hash
-    my_amount
+    verifier_parent_info
+    verifier_inner_puzzle_hash
+    verifier_amount
 )
     (include condition_codes.clib)
     (include curry.clib)
 
     (list
-        (list ASSERT_MY_AMOUNT my_amount)
-        (list CREATE_COIN_ANNOUNCEMENT payout_puzzle_hash)
-        (list CREATE_COIN payout_puzzle_hash my_amount (list payout_puzzle_hash))
         (list
             ASSERT_PUZZLE_ANNOUNCEMENT
             (sha256
@@ -38,7 +35,7 @@
                                             verifier_inner_puzzle_hash
                                         )
                                         verifier_amount
-                                    ) ; launcher parent must be verifier DID
+                                    ) ; launcher parent must be verifier singleton
                                     LAUNCHER_PUZZLE_HASH
                                     0
                                 ) ; verification launcher id is used to check that the intended

@@ -171,7 +171,7 @@ mod tests {
         types::Conditions,
     };
 
-    use crate::{VerificationPayments, VerifiedData};
+    use crate::{VerificationAsserter, VerifiedData};
 
     use super::*;
 
@@ -234,24 +234,24 @@ mod tests {
             verification.info.verified_data.clone(),
         )
         .into();
-        let verification_payment = VerificationPayments::new(
+        let verification_asserter = VerificationAsserter::new(
             SingletonStruct::new(did.info.launcher_id)
                 .tree_hash()
                 .into(),
             verification_inner_puzzle_hash,
         );
 
-        let payment_coin = sim.new_coin(verification_payment.tree_hash().into(), 1337);
-        let verification_payment_spend = verification_payment.inner_spend(
+        let payment_coin = sim.new_coin(verification_asserter.tree_hash().into(), 1337);
+        let verification_asserter_spend = verification_asserter.inner_spend(
             ctx,
-            &crate::VerificationPaymentsSolution {
-                verifier_proof,
-                payout_puzzle_hash: Bytes32::default(),
-                my_amount: 1337,
+            &crate::VerificationAsserterSolution {
+                verifier_parent_info: verifier_proof.parent_parent_coin_info,
+                verifier_inner_puzzle_hash: verifier_proof.parent_inner_puzzle_hash,
+                verifier_amount: verifier_proof.parent_amount,
             },
         )?;
 
-        ctx.spend(payment_coin, verification_payment_spend)?;
+        ctx.spend(payment_coin, verification_asserter_spend)?;
 
         // melt verification coin
         let revocation_singleton_inner_ph = did.info.inner_puzzle_hash().into();
