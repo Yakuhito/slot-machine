@@ -1,0 +1,17 @@
+(mod (
+    VERIFICATION_INNER_PUZZLE_SELF_HASH
+    (VERSION ASSET_ID_HASH . DATA_HASH_HASH) ; verification 'locked params'
+    comment_hash ; verifier free to comment anything
+)
+    (include curry.clib)
+
+    (curry_hashes_inline VERIFICATION_INNER_PUZZLE_SELF_HASH
+        (sha256 1 VERIFICATION_INNER_PUZZLE_SELF_HASH) ; SELF_HASH
+        (sha256 2
+            (sha256 1 VERSION)
+            (sha256 2 ASSET_ID_HASH
+                (sha256 2 DATA_HASH_HASH comment_hash)
+            )
+        ) ; VERIFIED_DATA
+    )
+)

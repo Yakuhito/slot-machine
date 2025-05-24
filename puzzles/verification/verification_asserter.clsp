@@ -10,7 +10,8 @@
     SINGLETON_MOD_HASH
     LAUNCHER_PUZZLE_HASH
     VERIFIER_SINGLETON_STRUCT_HASH
-    VERIFICATION_INNER_PUZZLE_HASH
+    VERIFICATION_INNER_PUZZLE_MAKER
+    verification_inner_puzzle_maker_solution
     verifier_parent_info
     verifier_inner_puzzle_hash
     verifier_amount
@@ -44,7 +45,7 @@
                             (sha256 1 LAUNCHER_PUZZLE_HASH)
                         )
                     ) ; verification SINGLETON_STRUCT hash
-                    VERIFICATION_INNER_PUZZLE_HASH ; verification inner puzzle hash
+                    (a VERIFICATION_INNER_PUZZLE_MAKER verification_inner_puzzle_maker_solution) ; verification inner puzzle hash
                 ) ; full verification singleton puzzle hash
                 ()
             )
