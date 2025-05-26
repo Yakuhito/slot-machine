@@ -163,7 +163,7 @@ pub struct VerificationLauncherKVList {
 #[cfg(test)]
 mod tests {
     use anyhow::Ok;
-    use chia::{protocol::Bytes, puzzles::singleton::SingletonStruct};
+    use chia::protocol::Bytes;
     use chia_puzzles::SINGLETON_LAUNCHER_HASH;
     use chia_wallet_sdk::{
         driver::{Launcher, StandardLayer},
@@ -171,12 +171,12 @@ mod tests {
         types::Conditions,
     };
 
-    use crate::{VerificationAsserter, VerifiedData};
+    use crate::VerifiedData;
 
     use super::*;
 
     #[test]
-    fn test_verifications_and_verification_payments() -> anyhow::Result<()> {
+    fn test_verifications() -> anyhow::Result<()> {
         let mut sim = Simulator::new();
         let ctx = &mut SpendContext::new();
         let bls = sim.bls(1);
@@ -186,7 +186,6 @@ mod tests {
         let (create_did, did) = did_launcher.create_simple_did(ctx, &p2)?;
         p2.spend(ctx, bls.coin, create_did)?;
 
-        let verifier_proof = did.child_lineage_proof();
         let did = did.update(
             ctx,
             &p2,
@@ -227,31 +226,6 @@ mod tests {
         let parent_puzzle = Puzzle::parse(ctx, parent_puzzle);
         let verification =
             Verification::from_parent_spend(ctx, verification.coin, parent_puzzle)?.unwrap();
-
-        // create verification payment and spend it
-        let verification_inner_puzzle_hash = Verification::inner_puzzle_hash(
-            did.info.launcher_id,
-            verification.info.verified_data.clone(),
-        )
-        .into();
-        let verification_asserter = VerificationAsserter::new(
-            SingletonStruct::new(did.info.launcher_id)
-                .tree_hash()
-                .into(),
-            verification_inner_puzzle_hash,
-        );
-
-        let payment_coin = sim.new_coin(verification_asserter.tree_hash().into(), 1337);
-        let verification_asserter_spend = verification_asserter.inner_spend(
-            ctx,
-            &crate::VerificationAsserterSolution {
-                verifier_parent_info: verifier_proof.parent_parent_coin_info,
-                verifier_inner_puzzle_hash: verifier_proof.parent_inner_puzzle_hash,
-                verifier_amount: verifier_proof.parent_amount,
-            },
-        )?;
-
-        ctx.spend(payment_coin, verification_asserter_spend)?;
 
         // melt verification coin
         let revocation_singleton_inner_ph = did.info.inner_puzzle_hash().into();

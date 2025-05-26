@@ -7,8 +7,8 @@ use super::{
     dig_commit_rewards, dig_initiate_payout, dig_launch, dig_new_epoch, dig_sign_mirror_update,
     dig_sync, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
     multisig_verify_signature, multisig_view, verifications_broadcast_launch,
-    verifications_broadcast_revocation, verifications_create_offer, verifications_sign_launch,
-    verifications_sign_revocation, verifications_view,
+    verifications_broadcast_revocation, verifications_sign_launch, verifications_sign_revocation,
+    verifications_view,
 };
 
 #[derive(Parser)]
@@ -702,37 +702,6 @@ enum VerificationsCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
-
-    /// Create a verification offer
-    CreateOffer {
-        /// Verifier multisig launcher id (hex string)
-        #[arg(long)]
-        launcher_id: String,
-
-        /// Asset id (hex string)
-        #[arg(long)]
-        asset_id: String,
-
-        /// Verification comment (on-chain)
-        #[arg(long)]
-        comment: String,
-
-        /// Payment asset id (hex string)
-        #[arg(long)]
-        payment_asset_id: String,
-
-        /// Payment asset amount
-        #[arg(long)]
-        payment_amount: String,
-
-        /// Use testnet11
-        #[arg(long, default_value_t = false)]
-        testnet11: bool,
-
-        /// Fee to use, in XCH
-        #[arg(long, default_value = "0.0025")]
-        fee: String,
-    },
 }
 
 pub async fn run_cli() {
@@ -1075,26 +1044,6 @@ pub async fn run_cli() {
             } => {
                 verifications_broadcast_revocation(launcher_id, asset_id, sigs, testnet11, fee)
                     .await
-            }
-            VerificationsCliAction::CreateOffer {
-                launcher_id,
-                asset_id,
-                comment,
-                payment_asset_id,
-                payment_amount,
-                testnet11,
-                fee,
-            } => {
-                verifications_create_offer(
-                    launcher_id,
-                    asset_id,
-                    comment,
-                    payment_asset_id,
-                    payment_amount,
-                    testnet11,
-                    fee,
-                )
-                .await
             }
         },
     };
