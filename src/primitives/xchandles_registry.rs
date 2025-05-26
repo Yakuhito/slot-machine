@@ -113,7 +113,10 @@ impl XchandlesRegistry {
             parent_amount: launcher_coin.amount,
         });
 
-        let info = XchandlesRegistryInfo::new(initial_state, constants);
+        let info = XchandlesRegistryInfo::new(
+            initial_state,
+            constants.with_launcher_id(launcher_coin.coin_id()),
+        );
         let registry_full_puzzle_hash: Bytes32 = info.puzzle_hash().into();
 
         if registry_full_puzzle_hash != launcher_solution.singleton_puzzle_hash {

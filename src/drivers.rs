@@ -1625,32 +1625,38 @@ mod tests {
 
         // Check XCHandlesRegistry::from_launcher_solution
         let spends = ctx.take();
+        let mut found_launcher = false;
         for spend in spends {
             if spend.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into() {
                 let launcher_solution = ctx.alloc(&spend.solution)?;
 
-                let Some((registry, initial_registration_asset_id)) =
+                if let Some((registry, initial_registration_asset_id)) =
                     XchandlesRegistry::from_launcher_solution(ctx, spend.coin, launcher_solution)?
-                else {
-                    panic!("Failed to parse XCH registry launcher solution");
-                };
-
-                assert_eq!(initial_registration_asset_id, payment_cat.asset_id);
-                assert_eq!(
-                    registry.info.constants,
-                    xchandles_constants
-                        .with_price_singleton(price_singleton_launcher_id)
-                        .with_launcher_id(spend.coin.coin_id())
-                );
-                assert_eq!(
-                    registry.info.state.pricing_puzzle_hash,
-                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(initial_registration_price)
+                {
+                    assert_eq!(initial_registration_asset_id, payment_cat.asset_id);
+                    assert_eq!(
+                        registry.info.constants,
+                        xchandles_constants
+                            .with_price_singleton(price_singleton_launcher_id)
+                            .with_launcher_id(spend.coin.coin_id())
+                    );
+                    assert_eq!(
+                        registry.info.state.pricing_puzzle_hash,
+                        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+                            initial_registration_price
+                        )
                         .into()
-                );
+                    );
+
+                    found_launcher = true;
+                };
             }
 
             ctx.insert(spend);
         }
+
+        // This will fail if we didn't find (or were not able to parse) the XCHandles launcher
+        assert!(found_launcher);
 
         // sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
         benchmark.add_spends(ctx, &mut sim, "launch", &[launcher_bls.sk, security_sk])?;
