@@ -8,7 +8,7 @@ use chia_wallet_sdk::{
     types::run_puzzle,
 };
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
 
 use crate::{Action, ActionLayer, ActionLayerSolution, Registry};
 
@@ -93,17 +93,15 @@ impl XchandlesRegistry {
     where
         Self: Sized,
     {
-        /*
-        clvm_list!(
-                initial_registration_asset_id,
-                initial_state,
-                target_xchandles_info.constants
-            )
-         */
         let Ok(launcher_solution) = LauncherSolution::<(
             Bytes32,
             (XchandlesRegistryState, (XchandlesConstants, ())),
         )>::from_clvm(allocator, launcher_solution) else {
+            println!("oof1"); // todo: debug
+            println!(
+                "launcher_solution: {:?}",
+                hex::encode(node_to_bytes(allocator, launcher_solution)?)
+            );
             return Ok(None);
         };
 
@@ -119,6 +117,7 @@ impl XchandlesRegistry {
         let registry_full_puzzle_hash: Bytes32 = info.puzzle_hash().into();
 
         if registry_full_puzzle_hash != launcher_solution.singleton_puzzle_hash {
+            println!("oof2"); // todo: debug
             return Ok(None);
         }
 

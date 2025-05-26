@@ -1623,6 +1623,35 @@ mod tests {
             &TESTNET11_CONSTANTS,
         )?;
 
+        // Check XCHandlesRegistry::from_launcher_solution
+        let spends = ctx.take();
+        for spend in spends {
+            if spend.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into() {
+                let launcher_solution = ctx.alloc(&spend.solution)?;
+
+                let Some((registry, initial_registration_asset_id)) =
+                    XchandlesRegistry::from_launcher_solution(ctx, spend.coin, launcher_solution)?
+                else {
+                    panic!("Failed to parse XCH registry launcher solution");
+                };
+
+                assert_eq!(initial_registration_asset_id, payment_cat.asset_id);
+                assert_eq!(
+                    registry.info.constants,
+                    xchandles_constants
+                        .with_price_singleton(price_singleton_launcher_id)
+                        .with_launcher_id(spend.coin.coin_id())
+                );
+                assert_eq!(
+                    registry.info.state.pricing_puzzle_hash,
+                    XchandlesFactorPricingPuzzleArgs::curry_tree_hash(initial_registration_price)
+                        .into()
+                );
+            }
+
+            ctx.insert(spend);
+        }
+
         // sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
         benchmark.add_spends(ctx, &mut sim, "launch", &[launcher_bls.sk, security_sk])?;
 
