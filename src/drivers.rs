@@ -23,7 +23,7 @@ use chia_wallet_sdk::{
     signer::{AggSigConstants, RequiredBlsSignature},
     types::{announcement_id, puzzles::SettlementPayment, Condition, Conditions},
 };
-use clvm_traits::{clvm_quote, clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{clvm_list, clvm_quote, clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
@@ -640,9 +640,10 @@ pub fn launch_xchandles_registry(
                 registry_launcher_id,
             ),
             (),
-            clvm_tuple!(
+            clvm_list!(
                 initial_registration_asset_id,
-                clvm_tuple!(initial_state, target_xchandles_info.constants)
+                initial_state,
+                target_xchandles_info.constants
             ),
         )?;
 

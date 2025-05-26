@@ -2,6 +2,7 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
+use chia_puzzle_types::{singleton::LauncherSolution, EveProof};
 use chia_wallet_sdk::{
     driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
     types::run_puzzle,
@@ -81,6 +82,57 @@ impl XchandlesRegistry {
             info: new_info,
             pending_actions: vec![],
         }))
+    }
+
+    // Also returns initial registration asset id
+    pub fn from_launcher_solution(
+        allocator: &mut Allocator,
+        launcher_coin: Coin,
+        launcher_solution: NodePtr,
+    ) -> Result<Option<(Self, Bytes32)>, DriverError>
+    where
+        Self: Sized,
+    {
+        /*
+        clvm_list!(
+                initial_registration_asset_id,
+                initial_state,
+                target_xchandles_info.constants
+            )
+         */
+        let Ok(launcher_solution) = LauncherSolution::<(
+            Bytes32,
+            (XchandlesRegistryState, (XchandlesConstants, ())),
+        )>::from_clvm(allocator, launcher_solution) else {
+            return Ok(None);
+        };
+
+        let (initial_registration_asset_id, (initial_state, (constants, ()))) =
+            launcher_solution.key_value_list;
+
+        let proof = Proof::Eve(EveProof {
+            parent_parent_coin_info: launcher_coin.parent_coin_info,
+            parent_amount: launcher_coin.amount,
+        });
+
+        let info = XchandlesRegistryInfo::new(initial_state, constants);
+        let registry_full_puzzle_hash: Bytes32 = info.puzzle_hash().into();
+
+        if registry_full_puzzle_hash != launcher_solution.singleton_puzzle_hash {
+            return Ok(None);
+        }
+
+        let registry_coin = Coin::new(launcher_coin.coin_id(), registry_full_puzzle_hash, 1);
+
+        Ok(Some((
+            XchandlesRegistry {
+                coin: registry_coin,
+                proof,
+                info,
+                pending_actions: vec![],
+            },
+            initial_registration_asset_id,
+        )))
     }
 }
 
