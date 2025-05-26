@@ -388,17 +388,19 @@ pub fn sign_standard_transaction(
 //   slot 'premine' (leftmost and rightmost slots) and
 //   transition to the actual registry puzzle
 #[allow(clippy::type_complexity)]
-fn spend_eve_coin_and_create_registry<S, M>(
+fn spend_eve_coin_and_create_registry<S, M, KV>(
     ctx: &mut SpendContext,
     launcher: Launcher,
     target_inner_puzzle_hash: Bytes32,
     left_slot_value: S,
     right_slot_value: S,
     memos_after_hint: M,
+    launcher_kv_list: KV,
 ) -> Result<(Conditions, Coin, Proof, [Slot<S>; 2]), DriverError>
 where
     S: Copy + ToTreeHash,
     M: ToClvm<Allocator>,
+    KV: ToClvm<Allocator>,
 {
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
@@ -426,10 +428,11 @@ where
         parent_amount: launcher_coin.amount,
     });
 
-    let (security_coin_conditions, eve_coin) =
-        launcher
-            .with_singleton_amount(1)
-            .spend(ctx, eve_singleton_inner_puzzle_hash.into(), ())?;
+    let (security_coin_conditions, eve_coin) = launcher.with_singleton_amount(1).spend(
+        ctx,
+        eve_singleton_inner_puzzle_hash.into(),
+        launcher_kv_list,
+    )?;
 
     let eve_coin_solution = SingletonSolution {
         lineage_proof: eve_singleton_proof,
@@ -542,6 +545,7 @@ pub fn launch_catalog_registry<V>(
                 initial_registration_asset_id,
                 clvm_tuple!(initial_state, ())
             ),
+            (),
         )?;
 
     let catalog_registry = CatalogRegistry::new(
@@ -635,9 +639,10 @@ pub fn launch_xchandles_registry(
                 registry_launcher_id,
                 registry_launcher_id,
             ),
+            (),
             clvm_tuple!(
                 initial_registration_asset_id,
-                clvm_tuple!(initial_state, ())
+                clvm_tuple!(initial_state, target_xchandles_info.constants)
             ),
         )?;
 
