@@ -3,8 +3,9 @@
 ;;  which are essentially offers where one side just wants to see
 ;;  a verification be created.
 
-;; In other words, funds locked in this puzzle can only be unlocked
-;;  by issuing the desired verification.
+;; In other words, funds can be locked locked in this puzzle
+;;  so they're spendable only after a desired verification
+;;  is issued.
 
 (mod (
     SINGLETON_MOD_HASH
