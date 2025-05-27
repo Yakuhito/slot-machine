@@ -113,7 +113,7 @@ impl RewardDistributorInitiatePayoutAction {
         let mut initiate_payout_announcement: Vec<u8> = initiate_payout_announcement.to_vec();
         initiate_payout_announcement.insert(0, b'p');
 
-        // spend mirror slot
+        // spend entry slot
         entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         // spend self
