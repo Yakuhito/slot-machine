@@ -1,9 +1,9 @@
 mod catalog;
 mod delegated_state;
-mod dig;
+mod reward_distributor;
 mod xchandles;
 
 pub use catalog::*;
 pub use delegated_state::*;
-pub use dig::*;
+pub use reward_distributor::*;
 pub use xchandles::*;

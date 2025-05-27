@@ -37,14 +37,18 @@ pub trait SpendContextExt {
     fn xchandles_factor_pricing_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn xchandles_exponential_premium_renew_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn default_cat_maker_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn dig_add_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn dig_commit_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn dig_initiate_payout_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn dig_new_epoch_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn dig_remove_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn dig_sync_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
-    fn dig_withdraw_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn reward_distributor_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn reward_distributor_add_entry_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn reward_distributor_commit_incentives_action_puzzle(
+        &mut self,
+    ) -> Result<NodePtr, DriverError>;
+    fn reward_distributor_initiate_payout_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn reward_distributor_new_epoch_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn reward_distributor_remove_entry_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn reward_distributor_sync_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn reward_distributor_withdraw_incentives_action_puzzle(
+        &mut self,
+    ) -> Result<NodePtr, DriverError>;
     fn reserve_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn p2_delegated_by_singleton_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn state_scheduler_puzzle(&mut self) -> Result<NodePtr, DriverError>;
@@ -160,46 +164,53 @@ impl SpendContextExt for SpendContext {
         self.puzzle(DEFAULT_CAT_MAKER_PUZZLE_HASH, &DEFAULT_CAT_MAKER_PUZZLE)
     }
 
-    /// Allocate the dig add incentives action puzzle and return its pointer.
-    fn dig_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+    /// Allocate the reward distributor add incentives action puzzle and return its pointer.
+    fn reward_distributor_add_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(DIG_ADD_INCENTIVES_PUZZLE_HASH, &DIG_ADD_INCENTIVES_PUZZLE)
     }
 
-    /// Allocate the dig add mirror action puzzle and return its pointer.
-    fn dig_add_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(DIG_ADD_MIRROR_PUZZLE_HASH, &DIG_ADD_MIRROR_PUZZLE)
+    /// Allocate the reward distributor add entry action puzzle and return its pointer.
+    fn reward_distributor_add_entry_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            REWARD_DISTRIBUTOR_ADD_ENTRY_PUZZLE_HASH,
+            &REWARD_DISTRIBUTOR_ADD_ENTRY_PUZZLE,
+        )
     }
 
-    /// Allocate the dig commit incentives action puzzle and return its pointer.
-    fn dig_commit_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+    /// Allocate the reward distributor commit incentives action puzzle and return its pointer.
+    fn reward_distributor_commit_incentives_action_puzzle(
+        &mut self,
+    ) -> Result<NodePtr, DriverError> {
         self.puzzle(
             DIG_COMMIT_INCENTIVES_PUZZLE_HASH,
             &DIG_COMMIT_INCENTIVES_PUZZLE,
         )
     }
 
-    /// Allocate the dig initiate payout action puzzle and return its pointer.
-    fn dig_initiate_payout_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+    /// Allocate the reward distributor initiate payout action puzzle and return its pointer.
+    fn reward_distributor_initiate_payout_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(DIG_INITIATE_PAYOUT_PUZZLE_HASH, &DIG_INITIATE_PAYOUT_PUZZLE)
     }
 
-    /// Allocate the dig new epoch action puzzle and return its pointer.
-    fn dig_new_epoch_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+    /// Allocate the reward distributor new epoch action puzzle and return its pointer.
+    fn reward_distributor_new_epoch_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(DIG_NEW_EPOCH_PUZZLE_HASH, &DIG_NEW_EPOCH_PUZZLE)
     }
 
-    /// Allocate the dig remove mirror action puzzle and return its pointer.
-    fn dig_remove_mirror_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
-        self.puzzle(DIG_REMOVE_MIRROR_PUZZLE_HASH, &DIG_REMOVE_MIRROR_PUZZLE)
+    /// Allocate the reward distributor remove entry action puzzle and return its pointer.
+    fn reward_distributor_remove_entry_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(DIG_REMOVE_ENTRY_PUZZLE_HASH, &DIG_REMOVE_ENTRY_PUZZLE)
     }
 
-    /// Allocate the dig sync action puzzle and return its pointer.
-    fn dig_sync_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+    /// Allocate the reward distributor sync action puzzle and return its pointer.
+    fn reward_distributor_sync_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(DIG_SYNC_PUZZLE_HASH, &DIG_SYNC_PUZZLE)
     }
 
-    /// Allocate the dig withdraw incentives action puzzle and return its pointer.
-    fn dig_withdraw_incentives_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+    /// Allocate the reward distributor withdraw incentives action puzzle and return its pointer.
+    fn reward_distributor_withdraw_incentives_action_puzzle(
+        &mut self,
+    ) -> Result<NodePtr, DriverError> {
         self.puzzle(
             DIG_WITHDRAW_INCENTIVES_PUZZLE_HASH,
             &DIG_WITHDRAW_INCENTIVES_PUZZLE,
@@ -278,7 +289,7 @@ mod tests {
         assert_puzzle_hash!(XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE => XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH);
         assert_puzzle_hash!(DEFAULT_CAT_MAKER_PUZZLE => DEFAULT_CAT_MAKER_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_ADD_INCENTIVES_PUZZLE => DIG_ADD_INCENTIVES_PUZZLE_HASH);
-        assert_puzzle_hash!(DIG_ADD_MIRROR_PUZZLE => DIG_ADD_MIRROR_PUZZLE_HASH);
+        assert_puzzle_hash!(REWARD_DISTRIBUTOR_ADD_MIRROR_PUZZLE => REWARD_DISTRIBUTOR_ADD_MIRROR_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_COMMIT_INCENTIVES_PUZZLE => DIG_COMMIT_INCENTIVES_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_INITIATE_PAYOUT_PUZZLE => DIG_INITIATE_PAYOUT_PUZZLE_HASH);
         assert_puzzle_hash!(DIG_NEW_EPOCH_PUZZLE => DIG_NEW_EPOCH_PUZZLE_HASH);

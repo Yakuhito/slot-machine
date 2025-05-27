@@ -11,17 +11,14 @@ use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    Action, ActionLayer, ActionLayerArgs, DigAddIncentivesAction, DigAddMirrorAction,
-    DigCommitIncentivesAction, DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction,
-    DigSyncAction, DigWithdrawIncentivesAction, Finalizer, P2DelegatedBySingletonLayerArgs,
+    ActionLayer, ActionLayerArgs, Finalizer, P2DelegatedBySingletonLayerArgs,
     ReserveFinalizer2ndCurryArgs, SpendContextExt,
     RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM_HASH,
 };
 
 use super::Reserveful;
 
-pub type DigRewardDistributorLayers =
-    SingletonLayer<ActionLayer<DigRewardDistributorState, NodePtr>>;
+pub type RewardDistributorLayers = SingletonLayer<ActionLayer<RewardDistributorState, NodePtr>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
 #[clvm(list)]
@@ -42,14 +39,14 @@ pub struct RoundTimeInfo {
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm, Copy)]
 #[clvm(list)]
-pub struct DigRewardDistributorState {
+pub struct RewardDistributorState {
     pub total_reserves: u64,
     pub active_shares: u64,
     pub round_reward_info: RoundRewardInfo,
     pub round_time_info: RoundTimeInfo,
 }
 
-impl DigRewardDistributorState {
+impl RewardDistributorState {
     pub fn initial(first_epoch_start: u64) -> Self {
         Self {
             total_reserves: 0,
@@ -66,7 +63,7 @@ impl DigRewardDistributorState {
     }
 }
 
-impl Reserveful for DigRewardDistributorState {
+impl Reserveful for RewardDistributorState {
     fn reserve_amount(&self, index: u64) -> u64 {
         if index == 0 {
             self.total_reserves
@@ -79,40 +76,40 @@ impl Reserveful for DigRewardDistributorState {
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy, ToClvm, FromClvm)]
 #[clvm(list)]
-pub struct DigRewardDistributorConstants {
+pub struct RewardDistributorConstants {
     pub launcher_id: Bytes32,
-    pub validator_launcher_id: Bytes32,
-    pub validator_payout_puzzle_hash: Bytes32,
+    pub manager_launcher_id: Bytes32,
+    pub fee_payout_puzzle_hash: Bytes32,
     pub epoch_seconds: u64,
     pub max_seconds_offset: u64,
     pub payout_threshold: u64,
-    pub validator_fee_bps: u64,
+    pub fee_bps: u64,
     pub withdrawal_share_bps: u64,
     pub reserve_asset_id: Bytes32,
     pub reserve_inner_puzzle_hash: Bytes32,
     pub reserve_full_puzzle_hash: Bytes32,
 }
 
-impl DigRewardDistributorConstants {
+impl RewardDistributorConstants {
     #[allow(clippy::too_many_arguments)]
     pub fn without_launcher_id(
-        validator_launcher_id: Bytes32,
-        validator_payout_puzzle_hash: Bytes32,
+        manager_launcher_id: Bytes32,
+        fee_payout_puzzle_hash: Bytes32,
         epoch_seconds: u64,
         max_seconds_offset: u64,
         payout_threshold: u64,
-        validator_fee_bps: u64,
+        fee_bps: u64,
         withdrawal_share_bps: u64,
         reserve_asset_id: Bytes32,
     ) -> Self {
         Self {
             launcher_id: Bytes32::default(),
-            validator_launcher_id,
-            validator_payout_puzzle_hash,
+            manager_launcher_id,
+            fee_payout_puzzle_hash,
             epoch_seconds,
             max_seconds_offset,
             payout_threshold,
-            validator_fee_bps,
+            fee_bps,
             withdrawal_share_bps,
             reserve_asset_id,
             reserve_inner_puzzle_hash: Bytes32::default(),
@@ -134,44 +131,46 @@ impl DigRewardDistributorConstants {
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub struct DigRewardDistributorInfo {
-    pub state: DigRewardDistributorState,
+pub struct RewardDistributorInfo {
+    pub state: RewardDistributorState,
 
-    pub constants: DigRewardDistributorConstants,
+    pub constants: RewardDistributorConstants,
 }
 
-impl DigRewardDistributorInfo {
-    pub fn new(state: DigRewardDistributorState, constants: DigRewardDistributorConstants) -> Self {
+impl RewardDistributorInfo {
+    pub fn new(state: RewardDistributorState, constants: RewardDistributorConstants) -> Self {
         Self { state, constants }
     }
 
-    pub fn with_state(mut self, state: DigRewardDistributorState) -> Self {
+    pub fn with_state(mut self, state: RewardDistributorState) -> Self {
         self.state = state;
         self
     }
 
-    pub fn action_puzzle_hashes(constants: &DigRewardDistributorConstants) -> [Bytes32; 8] {
+    pub fn action_puzzle_hashes(constants: &RewardDistributorConstants) -> [Bytes32; 8] {
         [
-            DigAddIncentivesAction::from_constants(constants)
+            RewardDistributorAddIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigAddMirrorAction::from_constants(constants)
+            RewardDistributorAddEntryAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigCommitIncentivesAction::from_constants(constants)
+            RewardDistributorCommitIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigInitiatePayoutAction::from_constants(constants)
+            RewardDistributorInitiatePayoutAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigNewEpochAction::from_constants(constants)
+            RewardDistributorNewEpochAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigRemoveMirrorAction::from_constants(constants)
+            RewardDistributorRemoveEntryAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            DigSyncAction::from_constants(constants).tree_hash().into(),
-            DigWithdrawIncentivesAction::from_constants(constants)
+            RewardDistributorSyncAction::from_constants(constants)
+                .tree_hash()
+                .into(),
+            RewardDistributorWithdrawIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
         ]
@@ -180,10 +179,10 @@ impl DigRewardDistributorInfo {
     pub fn into_layers(
         self,
         ctx: &mut SpendContext,
-    ) -> Result<DigRewardDistributorLayers, DriverError> {
+    ) -> Result<RewardDistributorLayers, DriverError> {
         Ok(SingletonLayer::new(
             self.constants.launcher_id,
-            ActionLayer::<DigRewardDistributorState, NodePtr>::from_action_puzzle_hashes(
+            ActionLayer::<RewardDistributorState, NodePtr>::from_action_puzzle_hashes(
                 &Self::action_puzzle_hashes(&self.constants),
                 self.state,
                 Finalizer::Reserve {
@@ -200,9 +199,9 @@ impl DigRewardDistributorInfo {
     pub fn parse(
         allocator: &mut Allocator,
         puzzle: Puzzle,
-        constants: DigRewardDistributorConstants,
+        constants: RewardDistributorConstants,
     ) -> Result<Option<Self>, DriverError> {
-        let Some(layers) = DigRewardDistributorLayers::parse_puzzle(allocator, puzzle)? else {
+        let Some(layers) = RewardDistributorLayers::parse_puzzle(allocator, puzzle)? else {
             return Ok(None);
         };
 
@@ -216,8 +215,8 @@ impl DigRewardDistributorInfo {
     }
 
     pub fn from_layers(
-        layers: DigRewardDistributorLayers,
-        constants: DigRewardDistributorConstants,
+        layers: RewardDistributorLayers,
+        constants: RewardDistributorConstants,
     ) -> Self {
         Self {
             state: layers.inner_puzzle.state,

@@ -26,7 +26,7 @@ use super::{
 };
 
 #[derive(Debug, Clone, Default)]
-pub struct DigPendingItems {
+pub struct RewardDistributorPendingItems {
     pub pending_actions: Vec<Spend>,
 
     pub pending_spent_slots: Vec<(DigSlotNonce, Bytes32)>, // (nonce, value hash)
@@ -38,40 +38,39 @@ pub struct DigPendingItems {
 
 #[derive(Debug, Clone)]
 #[must_use]
-pub struct DigRewardDistributor {
+pub struct RewardDistributor {
     pub coin: Coin,
     pub proof: Proof,
-    pub info: DigRewardDistributorInfo,
+    pub info: RewardDistributorInfo,
     pub reserve: Reserve,
 
     pub pending_items: DigPendingItems,
 }
 
-impl DigRewardDistributor {
-    pub fn new(coin: Coin, proof: Proof, info: DigRewardDistributorInfo, reserve: Reserve) -> Self {
+impl RewardDistributor {
+    pub fn new(coin: Coin, proof: Proof, info: RewardDistributorInfo, reserve: Reserve) -> Self {
         Self {
             coin,
             proof,
             info,
             reserve,
-            pending_items: DigPendingItems::default(),
+            pending_items: RewardDistributorPendingItems::default(),
         }
     }
 }
 
-impl DigRewardDistributor {
+impl RewardDistributor {
     pub fn from_parent_spend(
         allocator: &mut Allocator,
         parent_coin: Coin,
         parent_puzzle: Puzzle,
         parent_solution: NodePtr,
-        constants: DigRewardDistributorConstants,
+        constants: RewardDistributorConstants,
     ) -> Result<Option<Self>, DriverError>
     where
         Self: Sized,
     {
-        let Some(parent_info) =
-            DigRewardDistributorInfo::parse(allocator, parent_puzzle, constants)?
+        let Some(parent_info) = RewardDistributorInfo::parse(allocator, parent_puzzle, constants)?
         else {
             return Ok(None);
         };
@@ -83,7 +82,7 @@ impl DigRewardDistributor {
         });
 
         let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
-        let new_state = ActionLayer::<DigRewardDistributorState>::get_new_state(
+        let new_state = ActionLayer::<RewardDistributorState>::get_new_state(
             allocator,
             parent_info.state,
             parent_solution.inner_solution,
@@ -118,22 +117,22 @@ impl DigRewardDistributor {
             new_state.total_reserves,
         );
 
-        Ok(Some(DigRewardDistributor {
+        Ok(Some(RewardDistributor {
             coin: new_coin,
             proof,
             info: new_info,
             reserve,
-            pending_items: DigPendingItems::default(),
+            pending_items: RewardDistributorPendingItems::default(),
         }))
     }
 }
 
-impl Registry for DigRewardDistributor {
-    type State = DigRewardDistributorState;
-    type Constants = DigRewardDistributorConstants;
+impl Registry for RewardDistributor {
+    type State = RewardDistributorState;
+    type Constants = RewardDistributorConstants;
 }
 
-impl DigRewardDistributor {
+impl RewardDistributor {
     pub fn finish_spend(
         self,
         ctx: &mut SpendContext,
@@ -163,7 +162,7 @@ impl DigRewardDistributor {
                     proofs: layers
                         .inner_puzzle
                         .get_proofs(
-                            &DigRewardDistributorInfo::action_puzzle_hashes(&self.info.constants),
+                            &RewardDistributorInfo::action_puzzle_hashes(&self.info.constants),
                             &action_puzzle_hashes,
                         )
                         .ok_or(DriverError::Custom(
@@ -190,7 +189,7 @@ impl DigRewardDistributor {
         Cat::spend_all(ctx, &cat_spends)?;
 
         let my_puzzle = Puzzle::parse(ctx, my_spend.puzzle);
-        let new_reward_distributor = DigRewardDistributor::from_parent_spend(
+        let new_reward_distributor = RewardDistributor::from_parent_spend(
             ctx,
             self.coin,
             my_puzzle,
@@ -248,14 +247,14 @@ impl DigRewardDistributor {
     pub fn get_latest_pending_state(
         &self,
         allocator: &mut Allocator,
-    ) -> Result<DigRewardDistributorState, DriverError> {
+    ) -> Result<RewardDistributorState, DriverError> {
         let mut state = (NodePtr::NIL, self.info.state);
 
         for action in self.pending_items.pending_actions.iter() {
             let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
 
             let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
-            (state, _) = <match_tuple!((NodePtr, DigRewardDistributorState), NodePtr)>::from_clvm(
+            (state, _) = <match_tuple!((NodePtr, RewardDistributorState), NodePtr)>::from_clvm(
                 allocator, output,
             )?;
         }
@@ -267,37 +266,41 @@ impl DigRewardDistributor {
         &self,
         ctx: &mut SpendContext,
         solution: NodePtr,
-    ) -> Result<DigPendingItems, DriverError> {
+    ) -> Result<RewardDistributorPendingItems, DriverError> {
         let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
-        let inner_solution = ActionLayer::<DigRewardDistributorState, NodePtr>::parse_solution(
+        let inner_solution = ActionLayer::<RewardDistributorState, NodePtr>::parse_solution(
             ctx,
             solution.inner_solution,
         )?;
 
         let mut actions: Vec<Spend> = vec![];
-        let mut reward_slot_values: Vec<DigRewardSlotValue> = vec![];
-        let mut commitment_slot_values: Vec<DigCommitmentSlotValue> = vec![];
-        let mut mirror_slot_values: Vec<DigMirrorSlotValue> = vec![];
-        let mut spent_slots: Vec<(DigSlotNonce, Bytes32)> = vec![];
+        let mut reward_slot_values: Vec<RewardSlotValue> = vec![];
+        let mut commitment_slot_values: Vec<CommitmentSlotValue> = vec![];
+        let mut mirror_slot_values: Vec<MirrorSlotValue> = vec![];
+        let mut spent_slots: Vec<(RewardDistributor, Bytes32)> = vec![];
 
-        let new_epoch_action = DigNewEpochAction::from_constants(&self.info.constants);
+        let new_epoch_action =
+            RewardDistributorNewEpochAction::from_constants(&self.info.constants);
         let new_epoch_hash = new_epoch_action.tree_hash();
 
         let commit_incentives_action =
-            DigCommitIncentivesAction::from_constants(&self.info.constants);
+            RewardDistributorCommitIncentivesAction::from_constants(&self.info.constants);
         let commit_incentives_hash = commit_incentives_action.tree_hash();
 
-        let add_mirror_action = DigAddMirrorAction::from_constants(&self.info.constants);
+        let add_mirror_action =
+            RewardDistributorAddMirrorAction::from_constants(&self.info.constants);
         let add_mirror_hash = add_mirror_action.tree_hash();
 
-        let remove_mirror_action = DigRemoveMirrorAction::from_constants(&self.info.constants);
+        let remove_mirror_action =
+            RewardDistributorRemoveMirrorAction::from_constants(&self.info.constants);
         let remove_mirror_hash = remove_mirror_action.tree_hash();
 
         let withdraw_incentives_action =
-            DigWithdrawIncentivesAction::from_constants(&self.info.constants);
+            RewardDistributorWithdrawIncentivesAction::from_constants(&self.info.constants);
         let withdraw_incentives_hash = withdraw_incentives_action.tree_hash();
 
-        let initiate_payout_action = DigInitiatePayoutAction::from_constants(&self.info.constants);
+        let initiate_payout_action =
+            RewardDistributorInitiatePayoutAction::from_constants(&self.info.constants);
         let initiate_payout_hash = initiate_payout_action.tree_hash();
 
         let mut current_state = (NodePtr::NIL, self.info.state);
@@ -308,7 +311,7 @@ impl DigRewardDistributor {
 
             let action_output = run_puzzle(ctx, raw_action.puzzle, actual_solution)?;
             (current_state, _) = ctx
-                .extract::<match_tuple!((NodePtr, DigRewardDistributorState), NodePtr)>(
+                .extract::<match_tuple!((NodePtr, RewardDistributorState), NodePtr)>(
                     action_output,
                 )?;
 
@@ -363,7 +366,7 @@ impl DigRewardDistributor {
             }
         }
 
-        Ok(DigPendingItems {
+        Ok(RewardDistributorPendingItems {
             pending_actions: actions,
             pending_spent_slots: spent_slots,
             pending_reward_slot_values: reward_slot_values,

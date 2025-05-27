@@ -239,18 +239,18 @@ impl PartialOrd for XchandlesSlotValue {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DigSlotNonce {
+pub enum RewardDistributorSlotNonce {
     REWARD = 1,
     COMMITMENT = 2,
-    MIRROR = 3,
+    ENTRY = 3,
 }
 
-impl DigSlotNonce {
+impl RewardDistributorSlotNonce {
     pub fn from_u64(value: u64) -> Option<Self> {
         match value {
             1 => Some(Self::REWARD),
             2 => Some(Self::COMMITMENT),
-            3 => Some(Self::MIRROR),
+            3 => Some(Self::ENTRY),
             _ => None,
         }
     }
@@ -259,14 +259,14 @@ impl DigSlotNonce {
         match self {
             Self::REWARD => 1,
             Self::COMMITMENT => 2,
-            Self::MIRROR => 3,
+            Self::ENTRY => 3,
         }
     }
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct DigRewardSlotValue {
+pub struct RewardDistributorRewardSlotValue {
     pub epoch_start: u64,
     pub next_epoch_initialized: bool,
     #[clvm(rest)]
@@ -275,7 +275,7 @@ pub struct DigRewardSlotValue {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct DigCommitmentSlotValue {
+pub struct RewardDistributorCommitmentSlotValue {
     pub epoch_start: u64,
     pub clawback_ph: Bytes32,
     #[clvm(rest)]
@@ -284,7 +284,7 @@ pub struct DigCommitmentSlotValue {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct DigMirrorSlotValue {
+pub struct RewardDistributorEntrySlotValue {
     pub payout_puzzle_hash: Bytes32,
     pub initial_cumulative_payout: u64,
     #[clvm(rest)]
