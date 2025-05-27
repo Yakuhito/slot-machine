@@ -18,15 +18,15 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RewardDistributorAddMirrorAction {
+pub struct RewardDistributorAddEntryAction {
     pub launcher_id: Bytes32,
     pub manager_launcher_id: Bytes32,
     pub max_second_offset: u64,
 }
 
-impl ToTreeHash for RewardDistributorAddMirrorAction {
+impl ToTreeHash for RewardDistributorAddEntryAction {
     fn tree_hash(&self) -> TreeHash {
-        RewardDistributorAddMirrorActionArgs::curry_tree_hash(
+        RewardDistributorAddEntryActionArgs::curry_tree_hash(
             self.launcher_id,
             self.manager_launcher_id,
             self.max_second_offset,
@@ -34,7 +34,7 @@ impl ToTreeHash for RewardDistributorAddMirrorAction {
     }
 }
 
-impl Action<RewardDistributor> for RewardDistributorAddMirrorAction {
+impl Action<RewardDistributor> for RewardDistributorAddEntryAction {
     fn from_constants(constants: &RewardDistributorConstants) -> Self {
         Self {
             launcher_id: constants.launcher_id,
@@ -44,11 +44,11 @@ impl Action<RewardDistributor> for RewardDistributorAddMirrorAction {
     }
 }
 
-impl RewardDistributorAddMirrorAction {
+impl RewardDistributorAddEntryAction {
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.reward_distributor_add_entry_action_puzzle()?,
-            args: RewardDistributorAddMirrorActionArgs::new(
+            args: RewardDistributorAddEntryActionArgs::new(
                 self.launcher_id,
                 self.manager_launcher_id,
                 self.max_second_offset,
@@ -64,7 +64,7 @@ impl RewardDistributorAddMirrorAction {
         state: &RewardDistributorState,
         solution: NodePtr,
     ) -> Result<RewardDistributorEntrySlotValue, DriverError> {
-        let solution = ctx.extract::<RewardDistributorAddMirrorActionSolution>(solution)?;
+        let solution = ctx.extract::<RewardDistributorAddEntryActionSolution>(solution)?;
 
         Ok(RewardDistributorEntrySlotValue {
             payout_puzzle_hash: solution.entry_payout_puzzle_hash,
@@ -92,7 +92,7 @@ impl RewardDistributorAddMirrorAction {
         );
 
         // spend self
-        let action_solution = ctx.alloc(&RewardDistributorAddMirrorActionSolution {
+        let action_solution = ctx.alloc(&RewardDistributorAddEntryActionSolution {
             manager_singleton_inner_puzzle_hash,
             entry_payout_puzzle_hash: payout_puzzle_hash,
             entry_shares: shares,
@@ -121,14 +121,14 @@ pub const REWARD_DISTRIBUTOR_ADD_ENTRY_PUZZLE_HASH: TreeHash = TreeHash::new(hex
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
-pub struct RewardDistributorAddMirrorActionArgs {
+pub struct RewardDistributorAddEntryActionArgs {
     pub singleton_mod_hash: Bytes32,
     pub manager_singleton_struct_hash: Bytes32,
     pub entry_slot_1st_curry_hash: Bytes32,
     pub max_second_offset: u64,
 }
 
-impl RewardDistributorAddMirrorActionArgs {
+impl RewardDistributorAddEntryActionArgs {
     pub fn new(launcher_id: Bytes32, manager_launcher_id: Bytes32, max_second_offset: u64) -> Self {
         Self {
             singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
@@ -145,7 +145,7 @@ impl RewardDistributorAddMirrorActionArgs {
     }
 }
 
-impl RewardDistributorAddMirrorActionArgs {
+impl RewardDistributorAddEntryActionArgs {
     pub fn curry_tree_hash(
         launcher_id: Bytes32,
         manager_launcher_id: Bytes32,
@@ -153,7 +153,7 @@ impl RewardDistributorAddMirrorActionArgs {
     ) -> TreeHash {
         CurriedProgram {
             program: REWARD_DISTRIBUTOR_ADD_ENTRY_PUZZLE_HASH,
-            args: RewardDistributorAddMirrorActionArgs::new(
+            args: RewardDistributorAddEntryActionArgs::new(
                 launcher_id,
                 manager_launcher_id,
                 max_second_offset,
@@ -165,7 +165,7 @@ impl RewardDistributorAddMirrorActionArgs {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct RewardDistributorAddMirrorActionSolution {
+pub struct RewardDistributorAddEntryActionSolution {
     pub manager_singleton_inner_puzzle_hash: Bytes32,
     pub entry_payout_puzzle_hash: Bytes32,
     #[clvm(rest)]

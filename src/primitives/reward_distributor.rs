@@ -15,25 +15,28 @@ use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    Action, ActionLayer, ActionLayerSolution, DigAddMirrorAction, DigCommitIncentivesAction,
-    DigInitiatePayoutAction, DigNewEpochAction, DigRemoveMirrorAction, DigWithdrawIncentivesAction,
-    RawActionLayerSolution, Registry, ReserveFinalizerSolution, Slot, SlotInfo, SlotProof,
+    Action, ActionLayer, ActionLayerSolution, RawActionLayerSolution, Registry,
+    ReserveFinalizerSolution, RewardDistributorAddEntryAction,
+    RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
+    RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
+    RewardDistributorWithdrawIncentivesAction, Slot, SlotInfo, SlotProof,
 };
 
 use super::{
-    DigCommitmentSlotValue, DigMirrorSlotValue, DigRewardDistributorConstants,
-    DigRewardDistributorInfo, DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce, Reserve,
+    Reserve, RewardDistributorCommitmentSlotValue, RewardDistributorConstants,
+    RewardDistributorEntrySlotValue, RewardDistributorInfo, RewardDistributorRewardSlotValue,
+    RewardDistributorSlotNonce, RewardDistributorState,
 };
 
 #[derive(Debug, Clone, Default)]
 pub struct RewardDistributorPendingItems {
     pub pending_actions: Vec<Spend>,
 
-    pub pending_spent_slots: Vec<(DigSlotNonce, Bytes32)>, // (nonce, value hash)
+    pub pending_spent_slots: Vec<(RewardDistributorSlotNonce, Bytes32)>, // (nonce, value hash)
 
-    pub pending_reward_slot_values: Vec<DigRewardSlotValue>,
-    pub pending_commitment_slot_values: Vec<DigCommitmentSlotValue>,
-    pub pending_mirror_slot_values: Vec<DigMirrorSlotValue>,
+    pub pending_reward_slot_values: Vec<RewardDistributorRewardSlotValue>,
+    pub pending_commitment_slot_values: Vec<RewardDistributorCommitmentSlotValue>,
+    pub pending_mirror_slot_values: Vec<RewardDistributorEntrySlotValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -44,7 +47,7 @@ pub struct RewardDistributor {
     pub info: RewardDistributorInfo,
     pub reserve: Reserve,
 
-    pub pending_items: DigPendingItems,
+    pub pending_items: RewardDistributorPendingItems,
 }
 
 impl RewardDistributor {
@@ -219,7 +222,7 @@ impl RewardDistributor {
     pub fn created_slot_values_to_slots<SlotValue>(
         &self,
         slot_values: Vec<SlotValue>,
-        nonce: DigSlotNonce,
+        nonce: RewardDistributorSlotNonce,
     ) -> Vec<Slot<SlotValue>>
     where
         SlotValue: Copy + ToTreeHash,
@@ -274,10 +277,10 @@ impl RewardDistributor {
         )?;
 
         let mut actions: Vec<Spend> = vec![];
-        let mut reward_slot_values: Vec<RewardSlotValue> = vec![];
-        let mut commitment_slot_values: Vec<CommitmentSlotValue> = vec![];
-        let mut mirror_slot_values: Vec<MirrorSlotValue> = vec![];
-        let mut spent_slots: Vec<(RewardDistributor, Bytes32)> = vec![];
+        let mut reward_slot_values: Vec<RewardDistributorRewardSlotValue> = vec![];
+        let mut commitment_slot_values: Vec<RewardDistributorCommitmentSlotValue> = vec![];
+        let mut mirror_slot_values: Vec<RewardDistributorEntrySlotValue> = vec![];
+        let mut spent_slots: Vec<(RewardDistributorSlotNonce, Bytes32)> = vec![];
 
         let new_epoch_action =
             RewardDistributorNewEpochAction::from_constants(&self.info.constants);
@@ -287,13 +290,13 @@ impl RewardDistributor {
             RewardDistributorCommitIncentivesAction::from_constants(&self.info.constants);
         let commit_incentives_hash = commit_incentives_action.tree_hash();
 
-        let add_mirror_action =
-            RewardDistributorAddMirrorAction::from_constants(&self.info.constants);
-        let add_mirror_hash = add_mirror_action.tree_hash();
+        let add_entry_action =
+            RewardDistributorAddEntryAction::from_constants(&self.info.constants);
+        let add_entry_hash = add_entry_action.tree_hash();
 
-        let remove_mirror_action =
-            RewardDistributorRemoveMirrorAction::from_constants(&self.info.constants);
-        let remove_mirror_hash = remove_mirror_action.tree_hash();
+        let remove_entry_action =
+            RewardDistributorRemoveEntryAction::from_constants(&self.info.constants);
+        let remove_entry_hash = remove_entry_action.tree_hash();
 
         let withdraw_incentives_action =
             RewardDistributorWithdrawIncentivesAction::from_constants(&self.info.constants);
@@ -334,15 +337,15 @@ impl RewardDistributor {
                 commitment_slot_values.push(comm);
                 reward_slot_values.extend(rews);
                 spent_slots.push(spent_slot);
-            } else if raw_action_hash == add_mirror_hash {
-                mirror_slot_values.push(add_mirror_action.get_slot_value_from_solution(
+            } else if raw_action_hash == add_entry_hash {
+                mirror_slot_values.push(add_entry_action.get_slot_value_from_solution(
                     ctx,
                     &current_state.1,
                     raw_action.solution,
                 )?);
-            } else if raw_action_hash == remove_mirror_hash {
+            } else if raw_action_hash == remove_entry_hash {
                 spent_slots.push(
-                    remove_mirror_action
+                    remove_entry_action
                         .get_spent_slot_value_from_solution(ctx, raw_action.solution)?,
                 );
             } else if raw_action_hash == withdraw_incentives_hash {
