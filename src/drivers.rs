@@ -383,6 +383,36 @@ pub fn sign_standard_transaction(
     Ok(sign(sk, required_signature.message()))
 }
 
+pub fn eve_singleton_inner_puzzle<S>(
+    ctx: &mut SpendContext,
+    launcher_id: Bytes32,
+    left_slot_value: S,
+    right_slot_value: S,
+    memos_after_hint: NodePtr,
+    target_inner_puzzle_hash: Bytes32,
+) -> Result<NodePtr, DriverError>
+where
+    S: Copy + ToTreeHash,
+{
+    let left_slot_info = SlotInfo::from_value(launcher_id, 0, left_slot_value);
+    let left_slot_puzzle_hash = Slot::<S>::puzzle_hash(&left_slot_info);
+
+    let right_slot_info = SlotInfo::from_value(launcher_id, 0, right_slot_value);
+    let right_slot_puzzle_hash = Slot::<S>::puzzle_hash(&right_slot_info);
+
+    let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id, 0).into();
+    let slot_memos = ctx.hint(slot_hint)?;
+    let launcher_id_ptr = ctx.alloc(&launcher_id)?;
+    let launcher_memos = ctx.memos(&clvm_tuple!(launcher_id_ptr, memos_after_hint))?;
+
+    clvm_quote!(Conditions::new()
+        .create_coin(left_slot_puzzle_hash.into(), 0, Some(slot_memos))
+        .create_coin(right_slot_puzzle_hash.into(), 0, Some(slot_memos))
+        .create_coin(target_inner_puzzle_hash, 1, Some(launcher_memos)))
+    .to_clvm(ctx)
+    .map_err(DriverError::ToClvm)
+}
+
 // Spends the eve signleton, whose only job is to create the
 //   slot 'premine' (leftmost and rightmost slots) and
 //   transition to the actual registry puzzle
@@ -404,22 +434,15 @@ where
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
 
-    let left_slot_info = SlotInfo::from_value(launcher_id, 0, left_slot_value);
-    let left_slot_puzzle_hash = Slot::<S>::puzzle_hash(&left_slot_info);
-
-    let right_slot_info = SlotInfo::from_value(launcher_id, 0, right_slot_value);
-    let right_slot_puzzle_hash = Slot::<S>::puzzle_hash(&right_slot_info);
-
-    let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id, 0).into();
-    let slot_memos = ctx.hint(slot_hint)?;
-    let launcher_id_ptr = ctx.alloc(&launcher_id)?;
-    let memos_ptr = ctx.alloc(&memos_after_hint)?;
-    let launcher_memos = ctx.memos(&clvm_tuple!(launcher_id_ptr, memos_ptr))?;
-    let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
-        .create_coin(left_slot_puzzle_hash.into(), 0, Some(slot_memos))
-        .create_coin(right_slot_puzzle_hash.into(), 0, Some(slot_memos))
-        .create_coin(target_inner_puzzle_hash, 1, Some(launcher_memos)))
-    .to_clvm(ctx)?;
+    let memos_after_hint = ctx.alloc(&memos_after_hint)?;
+    let eve_singleton_inner_puzzle = eve_singleton_inner_puzzle(
+        ctx,
+        launcher_id,
+        left_slot_value,
+        right_slot_value,
+        memos_after_hint,
+        target_inner_puzzle_hash,
+    )?;
 
     let eve_singleton_inner_puzzle_hash = ctx.tree_hash(eve_singleton_inner_puzzle);
     let eve_singleton_proof = Proof::Eve(EveProof {
@@ -460,8 +483,14 @@ where
         parent_parent_info: eve_coin.parent_coin_info,
         parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
     };
-    let left_slot = Slot::new(slot_proof, left_slot_info);
-    let right_slot = Slot::new(slot_proof, right_slot_info);
+    let left_slot = Slot::new(
+        slot_proof,
+        SlotInfo::from_value(launcher_id, 0, left_slot_value),
+    );
+    let right_slot = Slot::new(
+        slot_proof,
+        SlotInfo::from_value(launcher_id, 0, right_slot_value),
+    );
 
     Ok((
         security_coin_conditions.assert_concurrent_spend(eve_coin.coin_id()),
@@ -616,10 +645,6 @@ pub fn launch_xchandles_registry(
         initial_state,
         xchandles_constants.with_launcher_id(registry_launcher_id),
     );
-    println!(
-        "target_xchandles_info constants: {:?}",
-        target_xchandles_info.constants
-    ); // todo: debug
 
     let target_xchandles_inner_puzzle_hash = target_xchandles_info.clone().inner_puzzle_hash();
     let (new_security_coin_conditions, new_xchandles_coin, xchandles_proof, slots) =

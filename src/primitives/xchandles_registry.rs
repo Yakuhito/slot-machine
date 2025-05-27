@@ -3,15 +3,15 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
-use chia_puzzle_types::{singleton::LauncherSolution, EveProof};
+use chia_puzzle_types::singleton::{LauncherSolution, SingletonArgs};
 use chia_wallet_sdk::{
     driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
     types::run_puzzle,
 };
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
-use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
+use clvmr::{Allocator, NodePtr};
 
-use crate::{Action, ActionLayer, ActionLayerSolution, Registry};
+use crate::{eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, Registry};
 
 use super::{
     Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesRegistryInfo, XchandlesRegistryState,
@@ -87,39 +87,28 @@ impl XchandlesRegistry {
 
     // Also returns initial registration asset id
     pub fn from_launcher_solution(
-        allocator: &mut Allocator,
+        ctx: &mut SpendContext,
         launcher_coin: Coin,
         launcher_solution: NodePtr,
     ) -> Result<Option<(Self, Bytes32, u64)>, DriverError>
     where
         Self: Sized,
     {
-        let Ok(launcher_solution) = LauncherSolution::<(
+        let Ok(launcher_solution) = ctx.extract::<LauncherSolution<(
             Bytes32,
             (u64, (XchandlesRegistryState, (XchandlesConstants, ()))),
-        )>::from_clvm(allocator, launcher_solution) else {
-            println!("oof1"); // todo: debug
-            println!(
-                "launcher_solution: {:?}",
-                hex::encode(node_to_bytes(allocator, launcher_solution)?)
-            );
+        )>>(launcher_solution) else {
             return Ok(None);
         };
 
+        let launcher_id = launcher_coin.coin_id();
         let (initial_registration_asset_id, (initial_base_price, (initial_state, (constants, ())))) =
             launcher_solution.key_value_list;
-
-        let proof = Proof::Eve(EveProof {
-            parent_parent_coin_info: launcher_coin.parent_coin_info,
-            parent_amount: launcher_coin.amount,
-        });
 
         let info = XchandlesRegistryInfo::new(
             initial_state,
             constants.with_launcher_id(launcher_coin.coin_id()),
         );
-        let registry_full_puzzle_hash: Bytes32 = info.puzzle_hash().into();
-
         if info.state
             != XchandlesRegistryState::from(
                 initial_registration_asset_id.tree_hash().into(),
@@ -128,13 +117,39 @@ impl XchandlesRegistry {
         {
             return Ok(None);
         }
-        if registry_full_puzzle_hash != launcher_solution.singleton_puzzle_hash {
-            println!("oof2"); // todo: debug
-            println!("registry constants: {:?}", info.constants);
+
+        let registry_inner_puzzle_hash: Bytes32 = info.inner_puzzle_hash().into();
+        let eve_singleton_inner_puzzle = eve_singleton_inner_puzzle(
+            ctx,
+            launcher_id,
+            XchandlesSlotValue::initial_left_end(),
+            XchandlesSlotValue::initial_right_end(),
+            NodePtr::NIL,
+            registry_inner_puzzle_hash,
+        )?;
+        let eve_singleton_inner_puzzle_hash = ctx.tree_hash(eve_singleton_inner_puzzle);
+
+        let eve_coin = Coin::new(
+            launcher_id,
+            SingletonArgs::curry_tree_hash(launcher_id, eve_singleton_inner_puzzle_hash).into(),
+            1,
+        );
+        let registry_coin = Coin::new(
+            eve_coin.coin_id(),
+            SingletonArgs::curry_tree_hash(launcher_id, registry_inner_puzzle_hash.into()).into(),
+            1,
+        );
+
+        if eve_coin.puzzle_hash != launcher_solution.singleton_puzzle_hash {
             return Ok(None);
         }
 
-        let registry_coin = Coin::new(launcher_coin.coin_id(), registry_full_puzzle_hash, 1);
+        // proof for registry, which is created by eve singleton
+        let proof = Proof::Lineage(LineageProof {
+            parent_parent_coin_info: eve_coin.parent_coin_info,
+            parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
+            parent_amount: eve_coin.amount,
+        });
 
         Ok(Some((
             XchandlesRegistry {
