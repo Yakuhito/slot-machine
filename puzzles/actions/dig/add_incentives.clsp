@@ -2,8 +2,8 @@
 ;; Adds incentives for the current epoch
 
 (mod (
-    VALIDATOR_PAYOUT_PUZZLE_HASH
-    VALIDATOR_FEE_BPS ; * amount / 10000 will be given to the validator - rest is distributed to mirrors
+    FEE_PAYOUT_PUZZLE_HASH
+    FEE_BPS ; * amount / 10000 will be given to the validator - rest is distributed to mirrors
     (
         Ephemeral_State . ; not used
         (@
@@ -18,20 +18,20 @@
     ) ; Truth
     (
         amount .
-        validator_fee
+        manager_fee
     )
 )
     (include condition_codes.clib)
 
-    (if (all (> epoch_end last_update) (> amount 0) (= validator_fee (/ (* amount VALIDATOR_FEE_BPS) 10000)))
+    (if (all (> epoch_end last_update) (> amount 0) (= manager_fee (/ (* amount FEE_BPS) 10000)))
         (c
             (list
                 () ; new ephemeral state
-                (+ total_reserves (- amount validator_fee))
+                (+ total_reserves (- amount manager_fee))
                 active_shares
                 (c
                     cumulative_payout
-                    (+ remaining_rewards (- amount validator_fee))
+                    (+ remaining_rewards (- amount manager_fee))
                 )
                 Round_Time_Info
             ) ; new state 
@@ -48,9 +48,9 @@
                 ; condition prepended with -42 -> condition will be returned by the reserve
                 (list -42
                     CREATE_COIN
-                    VALIDATOR_PAYOUT_PUZZLE_HASH
-                    validator_fee
-                    (list VALIDATOR_PAYOUT_PUZZLE_HASH)
+                    FEE_PAYOUT_PUZZLE_HASH
+                    manager_fee
+                    (list FEE_PAYOUT_PUZZLE_HASH)
                 )
             ) ; conditions
         )

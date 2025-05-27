@@ -2,9 +2,7 @@
 ;; Initiates a payout for a mirror.
 
 (mod (
-    SINGLETON_MOD_HASH
-    VALIDATOR_SINGLETON_STRUCT_HASH ; (sha256 SINGLETON_STRUCT) for validator singleton
-    MIRROR_SLOT_1ST_CURRY_HASH ; after 1st curry
+    ENTRY_SLOT_1ST_CURRY_HASH ; after 1st curry
     PAYOUT_THRESHOLD ; to prevent spam, payout needs to be >= PAYOUT_THRESHOLD
     (
         Ephemeral_State . ; not used
@@ -21,10 +19,10 @@
         )
     ) ; Truth
     (
-        mirror_payout_amount
-        mirror_payout_puzzle_hash
-        mirror_initial_cumulative_payout .
-        mirror_shares
+        entry_payout_amount
+        entry_payout_puzzle_hash
+        entry_initial_cumulative_payout .
+        entry_shares
     )
 )
     (include condition_codes.clib)
@@ -42,48 +40,48 @@
     )
 
     (if (all
-        (= (* (- cumulative_payout mirror_initial_cumulative_payout) mirror_shares) mirror_payout_amount)
-        (not (> PAYOUT_THRESHOLD mirror_payout_amount))
+        (= (* (- cumulative_payout entry_initial_cumulative_payout) entry_shares) entry_payout_amount)
+        (not (> PAYOUT_THRESHOLD entry_payout_amount))
     )
         (c
             (c 
                 () ; new ephemeral state
                 (c
-                    (- total_reserves mirror_payout_amount)
+                    (- total_reserves entry_payout_amount)
                     Current_State_Rest
                 ) ; new state
             ) 
             (list
-                (spend_slot_inline MIRROR_SLOT_1ST_CURRY_HASH
-                    (get_slot_data_hash mirror_payout_puzzle_hash mirror_initial_cumulative_payout mirror_shares)
+                (spend_slot_inline ENTRY_SLOT_1ST_CURRY_HASH
+                    (get_slot_data_hash entry_payout_puzzle_hash entry_initial_cumulative_payout entry_shares)
                 )
 
-                (create_slot_inline MIRROR_SLOT_1ST_CURRY_HASH
-                    (get_slot_data_hash mirror_payout_puzzle_hash cumulative_payout mirror_shares)
-                    mirror_payout_puzzle_hash
+                (create_slot_inline ENTRY_SLOT_1ST_CURRY_HASH
+                    (get_slot_data_hash entry_payout_puzzle_hash cumulative_payout entry_shares)
+                    entry_payout_puzzle_hash
                 )
 
                 (list CREATE_PUZZLE_ANNOUNCEMENT
                     (concat 'p'
                         (sha256 2
                             (sha256 2
-                                (sha256 1 mirror_payout_puzzle_hash)
-                                (sha256 1 mirror_shares)
+                                (sha256 1 entry_payout_puzzle_hash)
+                                (sha256 1 entry_shares)
                             )
                             (sha256 2
-                                (sha256 1 mirror_initial_cumulative_payout)
+                                (sha256 1 entry_initial_cumulative_payout)
                                 (sha256 1 cumulative_payout)
                             )
-                        ) ; (sha256tree ((mirror_payout_puzzle_hash . mirror_shares) . (mirror_initial_cumulative_payout new_mirror_initial_cumulative_payout)))
+                        ) ; (sha256tree ((entry_payout_puzzle_hash . entry_shares) . (entry_initial_cumulative_payout new_entry_initial_cumulative_payout)))
                     ) 
                 )
 
                 ; leading -42 -> condition will be returned by the reserve
                 (list -42
                     CREATE_COIN
-                    mirror_payout_puzzle_hash
-                    mirror_payout_amount
-                    (list mirror_payout_puzzle_hash)
+                    entry_payout_puzzle_hash
+                    entry_payout_amount
+                    (list entry_payout_puzzle_hash)
                 )
             ) ; conditions
         )
