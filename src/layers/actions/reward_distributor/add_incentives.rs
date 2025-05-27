@@ -10,39 +10,39 @@ use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{Action, DigRewardDistributor, DigRewardDistributorConstants, SpendContextExt};
+use crate::{Action, RewardDistributor, RewardDistributorConstants, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DigAddIncentivesAction {
-    pub validator_payout_puzzle_hash: Bytes32,
-    pub validator_fee_bps: u64,
+pub struct RewardDistributorAddIncentivesAction {
+    pub fee_payout_puzzle_hash: Bytes32,
+    pub fee_bps: u64,
 }
 
-impl ToTreeHash for DigAddIncentivesAction {
+impl ToTreeHash for RewardDistributorAddIncentivesAction {
     fn tree_hash(&self) -> TreeHash {
-        DigAddIncentivesActionArgs::curry_tree_hash(
-            self.validator_payout_puzzle_hash,
-            self.validator_fee_bps,
+        RewardDistributorAddIncentivesActionArgs::curry_tree_hash(
+            self.fee_payout_puzzle_hash,
+            self.fee_bps,
         )
     }
 }
 
-impl Action<DigRewardDistributor> for DigAddIncentivesAction {
-    fn from_constants(constants: &DigRewardDistributorConstants) -> Self {
+impl Action<RewardDistributor> for RewardDistributorAddIncentivesAction {
+    fn from_constants(constants: &RewardDistributorConstants) -> Self {
         Self {
-            validator_payout_puzzle_hash: constants.validator_payout_puzzle_hash,
-            validator_fee_bps: constants.validator_fee_bps,
+            fee_payout_puzzle_hash: constants.fee_payout_puzzle_hash,
+            fee_bps: constants.fee_bps,
         }
     }
 }
 
-impl DigAddIncentivesAction {
+impl RewardDistributorAddIncentivesAction {
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
-            program: ctx.dig_add_incentives_action_puzzle()?,
-            args: DigAddIncentivesActionArgs {
-                validator_payout_puzzle_hash: self.validator_payout_puzzle_hash,
-                validator_fee_bps: self.validator_fee_bps,
+            program: ctx.reward_distributor_add_incentives_action_puzzle()?,
+            args: RewardDistributorAddIncentivesActionArgs {
+                fee_payout_puzzle_hash: self.fee_payout_puzzle_hash,
+                fee_bps: self.fee_bps,
             },
         }
         .to_clvm(ctx)
@@ -52,7 +52,7 @@ impl DigAddIncentivesAction {
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        distributor: &mut DigRewardDistributor,
+        distributor: &mut RewardDistributor,
         amount: u64,
     ) -> Result<Conditions, DriverError> {
         let my_state = distributor.get_latest_pending_state(ctx)?;
@@ -68,9 +68,9 @@ impl DigAddIncentivesAction {
         );
 
         // spend self
-        let action_solution = ctx.alloc(&DigAddIncentivesActionSolution {
+        let action_solution = ctx.alloc(&RewardDistributorAddIncentivesActionSolution {
             amount,
-            validator_fee: amount * distributor.info.constants.validator_fee_bps / 10000,
+            manager_fee: amount * distributor.info.constants.fee_bps / 10000,
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
@@ -79,9 +79,9 @@ impl DigAddIncentivesAction {
     }
 }
 
-pub const DIG_ADD_INCENTIVES_PUZZLE: [u8; 261] = hex!("ff02ffff01ff02ffff03ffff22ffff15ff8206f7ff8204f780ffff15ff4fff8080ffff09ff6fffff05ffff14ffff12ff4fff0b80ffff0182271080808080ffff01ff04ffff04ff80ffff04ffff10ff57ffff11ff4fff6f8080ffff04ff81b7ffff04ffff04ff820277ffff10ff820377ffff11ff4fff6f808080ffff04ff8202f7ff808080808080ffff04ffff04ff06ffff04ffff0effff0169ffff0bffff0102ffff0bffff0101ff4f80ffff0bffff0101ff8206f7808080ff808080ffff04ffff04ffff0181d6ffff04ff04ffff04ff05ffff04ff6fffff04ffff04ff05ff8080ff808080808080ff80808080ffff01ff088080ff0180ffff04ffff01ff333eff018080");
+pub const REWARD_DISTRIBUTOR_ADD_INCENTIVES_PUZZLE: [u8; 261] = hex!("ff02ffff01ff02ffff03ffff22ffff15ff8206f7ff8204f780ffff15ff4fff8080ffff09ff6fffff05ffff14ffff12ff4fff0b80ffff0182271080808080ffff01ff04ffff04ff80ffff04ffff10ff57ffff11ff4fff6f8080ffff04ff81b7ffff04ffff04ff820277ffff10ff820377ffff11ff4fff6f808080ffff04ff8202f7ff808080808080ffff04ffff04ff06ffff04ffff0effff0169ffff0bffff0102ffff0bffff0101ff4f80ffff0bffff0101ff8206f7808080ff808080ffff04ffff04ffff0181d6ffff04ff04ffff04ff05ffff04ff6fffff04ffff04ff05ff8080ff808080808080ff80808080ffff01ff088080ff0180ffff04ffff01ff333eff018080");
 
-pub const DIG_ADD_INCENTIVES_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
+pub const REWARD_DISTRIBUTOR_ADD_INCENTIVES_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
     f413a14d94806e086d2cdd95e7bc58aa0519b578a683134224cc9aab93e96f61
     "
@@ -89,21 +89,18 @@ pub const DIG_ADD_INCENTIVES_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
-pub struct DigAddIncentivesActionArgs {
-    pub validator_payout_puzzle_hash: Bytes32,
-    pub validator_fee_bps: u64,
+pub struct RewardDistributorAddIncentivesActionArgs {
+    pub fee_payout_puzzle_hash: Bytes32,
+    pub fee_bps: u64,
 }
 
-impl DigAddIncentivesActionArgs {
-    pub fn curry_tree_hash(
-        validator_payout_puzzle_hash: Bytes32,
-        validator_fee_bps: u64,
-    ) -> TreeHash {
+impl RewardDistributorAddIncentivesActionArgs {
+    pub fn curry_tree_hash(fee_payout_puzzle_hash: Bytes32, fee_bps: u64) -> TreeHash {
         CurriedProgram {
-            program: DIG_ADD_INCENTIVES_PUZZLE_HASH,
-            args: DigAddIncentivesActionArgs {
-                validator_payout_puzzle_hash,
-                validator_fee_bps,
+            program: REWARD_DISTRIBUTOR_ADD_INCENTIVES_PUZZLE_HASH,
+            args: RewardDistributorAddIncentivesActionArgs {
+                fee_payout_puzzle_hash,
+                fee_bps,
             },
         }
         .tree_hash()
@@ -112,8 +109,8 @@ impl DigAddIncentivesActionArgs {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct DigAddIncentivesActionSolution {
+pub struct RewardDistributorAddIncentivesActionSolution {
     pub amount: u64,
     #[clvm(rest)]
-    pub validator_fee: u64,
+    pub manager_fee: u64,
 }
