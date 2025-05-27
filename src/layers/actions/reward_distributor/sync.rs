@@ -7,32 +7,32 @@ use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
-use crate::{Action, DigRewardDistributor, DigRewardDistributorConstants, SpendContextExt};
+use crate::{Action, RewardDistributor, RewardDistributorConstants, SpendContextExt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DigSyncAction {}
+pub struct RewardDistributorSyncAction {}
 
-impl ToTreeHash for DigSyncAction {
+impl ToTreeHash for RewardDistributorSyncAction {
     fn tree_hash(&self) -> TreeHash {
-        DigSyncActionArgs::curry_tree_hash()
+        RewardDistributorSyncActionArgs::curry_tree_hash()
     }
 }
 
-impl Action<DigRewardDistributor> for DigSyncAction {
-    fn from_constants(_constants: &DigRewardDistributorConstants) -> Self {
+impl Action<RewardDistributor> for RewardDistributorSyncAction {
+    fn from_constants(_constants: &RewardDistributorConstants) -> Self {
         Self {}
     }
 }
 
-impl DigSyncAction {
+impl RewardDistributorSyncAction {
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        ctx.dig_sync_action_puzzle()
+        ctx.reward_distributor_sync_action_puzzle()
     }
 
     pub fn spend(
         self,
         ctx: &mut SpendContext,
-        distributor: &mut DigRewardDistributor,
+        distributor: &mut RewardDistributor,
         update_time: u64,
     ) -> Result<Conditions, DriverError> {
         // calculate announcement needed to ensure everything's happening as expected
@@ -48,7 +48,7 @@ impl DigSyncAction {
         ));
 
         // spend self
-        let action_solution = ctx.alloc(&DigSyncActionSolution { update_time })?;
+        let action_solution = ctx.alloc(&RewardDistributorSyncActionSolution { update_time })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         distributor.insert(Spend::new(action_puzzle, action_solution));
@@ -56,23 +56,23 @@ impl DigSyncAction {
     }
 }
 
-pub const DIG_SYNC_PUZZLE: [u8; 308] = hex!("ff02ffff01ff02ffff03ffff22ffff20ffff15ff13ff8201bd8080ffff15ff13ff82013d8080ffff01ff04ffff04ff80ffff04ff15ffff04ff2dffff04ffff02ff0effff04ff02ffff04ff2dffff04ff819dffff04ff81ddffff04ffff02ffff03ffff15ff2dff8080ffff01ff05ffff14ffff12ff81ddffff11ff13ff82013d8080ffff12ff2dffff11ff8201bdff82013d80808080ff8080ff0180ff80808080808080ffff04ffff04ff13ff8201bd80ff808080808080ffff04ffff04ff04ffff04ff13ff808080ffff04ffff04ff0affff04ffff0effff0173ffff0bffff0102ffff0bffff0101ff1380ffff0bffff0101ff8201bd808080ff808080ff80808080ffff01ff088080ff0180ffff04ffff01ff51ff3eff04ffff10ff0bff2f80ffff11ff17ffff12ff2fff05808080ff018080");
+pub const REWARD_DISTRIBUTOR_SYNC_PUZZLE: [u8; 308] = hex!("ff02ffff01ff02ffff03ffff22ffff20ffff15ff13ff8201bd8080ffff15ff13ff82013d8080ffff01ff04ffff04ff80ffff04ff15ffff04ff2dffff04ffff02ff0effff04ff02ffff04ff2dffff04ff819dffff04ff81ddffff04ffff02ffff03ffff15ff2dff8080ffff01ff05ffff14ffff12ff81ddffff11ff13ff82013d8080ffff12ff2dffff11ff8201bdff82013d80808080ff8080ff0180ff80808080808080ffff04ffff04ff13ff8201bd80ff808080808080ffff04ffff04ff04ffff04ff13ff808080ffff04ffff04ff0affff04ffff0effff0173ffff0bffff0102ffff0bffff0101ff1380ffff0bffff0101ff8201bd808080ff808080ff80808080ffff01ff088080ff0180ffff04ffff01ff51ff3eff04ffff10ff0bff2f80ffff11ff17ffff12ff2fff05808080ff018080");
 
-pub const DIG_SYNC_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
+pub const REWARD_DISTRIBUTOR_SYNC_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
     23de53c947105cc16af0a4d8e229d80ed6a6d39d89d60dbca274deb789ed189e
     "
 ));
 
-pub struct DigSyncActionArgs {}
-impl DigSyncActionArgs {
+pub struct RewardDistributorSyncActionArgs {}
+impl RewardDistributorSyncActionArgs {
     pub fn curry_tree_hash() -> TreeHash {
-        DIG_SYNC_PUZZLE_HASH
+        REWARD_DISTRIBUTOR_SYNC_PUZZLE_HASH
     }
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct DigSyncActionSolution {
+pub struct RewardDistributorSyncActionSolution {
     pub update_time: u64,
 }
