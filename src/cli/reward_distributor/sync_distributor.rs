@@ -15,9 +15,8 @@ use chia_wallet_sdk::{
 use clvmr::NodePtr;
 
 use crate::{
-    CliError, Db, DigRewardDistributor, DigRewardDistributorConstants, DigRewardDistributorInfo,
-    DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce, P2DelegatedBySingletonLayerArgs,
-    Reserve, Slot, SlotInfo, SlotProof,
+    CliError, Db, P2DelegatedBySingletonLayerArgs, Reserve, RewardDistributor,
+    RewardDistributorConstants, Slot, SlotInfo, SlotProof,
 };
 
 pub async fn sync_distributor(
@@ -25,7 +24,7 @@ pub async fn sync_distributor(
     db: &Db,
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
-) -> Result<DigRewardDistributor, CliError> {
+) -> Result<RewardDistributor, CliError> {
     let last_unspent_coin_info = db.get_last_unspent_singleton_coin(launcher_id).await?;
 
     let (last_spent_coin_id, constants, mut skip_db_save, prev_distributor) =

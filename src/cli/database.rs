@@ -11,7 +11,7 @@ use sqlx::{
 };
 use std::time::Duration;
 
-use crate::{DigRewardDistributorConstants, Slot, SlotInfo, SlotProof};
+use crate::{RewardDistributorConstants, Slot, SlotInfo, SlotProof};
 
 use super::CliError;
 pub struct Db {
@@ -541,7 +541,7 @@ impl Db {
         &self,
         allocator: &mut Allocator,
         launcher_id: Bytes32,
-        constants: DigRewardDistributorConstants,
+        constants: RewardDistributorConstants,
     ) -> Result<(), CliError> {
         let constants_ptr = constants.to_clvm(allocator).map_err(DriverError::ToClvm)?;
         let constants_bytes = node_to_bytes(allocator, constants_ptr)?;
@@ -565,7 +565,7 @@ impl Db {
         &self,
         allocator: &mut Allocator,
         launcher_id: Bytes32,
-    ) -> Result<Option<DigRewardDistributorConstants>, CliError> {
+    ) -> Result<Option<RewardDistributorConstants>, CliError> {
         let row = sqlx::query(
             "
             SELECT constants FROM reward_distributor_configurations WHERE launcher_id = ?1
@@ -581,7 +581,7 @@ impl Db {
         };
 
         let constants = node_from_bytes(allocator, row.get::<&[u8], _>("constants"))?;
-        let constants = DigRewardDistributorConstants::from_clvm(allocator, constants)
+        let constants = RewardDistributorConstants::from_clvm(allocator, constants)
             .map_err(DriverError::FromClvm)?;
 
         Ok(Some(constants))
