@@ -82,18 +82,18 @@ impl CatalogSlotValue {
         }
     }
 
-    pub fn left_end(right_asset_id: Bytes32) -> Self {
+    pub fn initial_left_end() -> Self {
         Self::new(
             SLOT32_MIN_VALUE.into(),
             SLOT32_MIN_VALUE.into(),
-            right_asset_id,
+            SLOT32_MAX_VALUE.into(),
         )
     }
 
-    pub fn right_end(left_asset_id: Bytes32) -> Self {
+    pub fn initial_right_end() -> Self {
         Self::new(
             SLOT32_MAX_VALUE.into(),
-            left_asset_id,
+            SLOT32_MIN_VALUE.into(),
             SLOT32_MAX_VALUE.into(),
         )
     }
@@ -143,21 +143,26 @@ impl XchandlesSlotValue {
         }
     }
 
-    pub fn edge(
-        handle_hash: Bytes32,
-        left_handle_hash: Bytes32,
-        right_handle_hash: Bytes32,
-    ) -> Self {
-        Self {
-            handle_hash,
-            neighbors: SlotNeigborsInfo {
-                left_value: left_handle_hash,
-                right_value: right_handle_hash,
-            },
-            expiration: 0,
-            owner_launcher_id: Bytes32::default(),
-            resolved_launcher_id: Bytes32::default(),
-        }
+    pub fn initial_left_end() -> Self {
+        XchandlesSlotValue::new(
+            SLOT32_MIN_VALUE.into(),
+            SLOT32_MIN_VALUE.into(),
+            SLOT32_MAX_VALUE.into(),
+            u64::MAX,
+            Bytes32::default(),
+            Bytes32::default(),
+        )
+    }
+
+    pub fn initial_right_end() -> Self {
+        XchandlesSlotValue::new(
+            SLOT32_MAX_VALUE.into(),
+            SLOT32_MIN_VALUE.into(),
+            SLOT32_MAX_VALUE.into(),
+            u64::MAX,
+            Bytes32::default(),
+            Bytes32::default(),
+        )
     }
 
     pub fn with_neighbors(&self, left_handle_hash: Bytes32, right_handle_hash: Bytes32) -> Self {

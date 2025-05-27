@@ -1,4 +1,5 @@
 use chia::{
+    clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
@@ -89,13 +90,13 @@ impl XchandlesRegistry {
         allocator: &mut Allocator,
         launcher_coin: Coin,
         launcher_solution: NodePtr,
-    ) -> Result<Option<(Self, Bytes32)>, DriverError>
+    ) -> Result<Option<(Self, Bytes32, u64)>, DriverError>
     where
         Self: Sized,
     {
         let Ok(launcher_solution) = LauncherSolution::<(
             Bytes32,
-            (XchandlesRegistryState, (XchandlesConstants, ())),
+            (u64, (XchandlesRegistryState, (XchandlesConstants, ()))),
         )>::from_clvm(allocator, launcher_solution) else {
             println!("oof1"); // todo: debug
             println!(
@@ -105,7 +106,7 @@ impl XchandlesRegistry {
             return Ok(None);
         };
 
-        let (initial_registration_asset_id, (initial_state, (constants, ()))) =
+        let (initial_registration_asset_id, (initial_base_price, (initial_state, (constants, ())))) =
             launcher_solution.key_value_list;
 
         let proof = Proof::Eve(EveProof {
@@ -119,8 +120,17 @@ impl XchandlesRegistry {
         );
         let registry_full_puzzle_hash: Bytes32 = info.puzzle_hash().into();
 
+        if info.state
+            != XchandlesRegistryState::from(
+                initial_registration_asset_id.tree_hash().into(),
+                initial_base_price,
+            )
+        {
+            return Ok(None);
+        }
         if registry_full_puzzle_hash != launcher_solution.singleton_puzzle_hash {
             println!("oof2"); // todo: debug
+            println!("registry constants: {:?}", info.constants);
             return Ok(None);
         }
 
@@ -134,6 +144,7 @@ impl XchandlesRegistry {
                 pending_actions: vec![],
             },
             initial_registration_asset_id,
+            initial_base_price,
         )))
     }
 }

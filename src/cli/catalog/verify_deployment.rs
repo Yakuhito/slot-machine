@@ -17,7 +17,7 @@ use crate::{
     load_catalog_state_schedule_csv, print_medieval_vault_configuration, CatalogRegistry,
     CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue,
     CliError, DefaultCatMakerArgs, MultisigSingleton, Slot, SlotInfo, UniquenessPrelauncher,
-    ANY_METADATA_UPDATER_HASH, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+    ANY_METADATA_UPDATER_HASH,
 };
 
 use crate::sync_multisig_singleton;
@@ -127,12 +127,12 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
     let left_slot_info = SlotInfo::from_value(
         catalog_constants.launcher_id,
         0,
-        CatalogSlotValue::left_end(SLOT32_MAX_VALUE.into()),
+        CatalogSlotValue::initial_left_end(),
     );
     let right_slot_info = SlotInfo::from_value(
         catalog_constants.launcher_id,
         0,
-        CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into()),
+        CatalogSlotValue::initial_right_end(),
     );
 
     if left_slot_cc.puzzle_hash != Slot::puzzle_hash(&left_slot_info).into()

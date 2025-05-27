@@ -32,7 +32,6 @@ use crate::{
     DigRewardDistributorInfo, DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce,
     P2DelegatedBySingletonLayerArgs, Reserve, Slot, SlotInfo, SlotProof, XchandlesConstants,
     XchandlesRegistry, XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue,
-    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
 };
 
 pub struct SecuredOneSidedOffer {
@@ -539,8 +538,8 @@ pub fn launch_catalog_registry<V>(
             ctx,
             registry_launcher,
             catalog_inner_puzzle_hash.into(),
-            CatalogSlotValue::left_end(SLOT32_MAX_VALUE.into()),
-            CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into()),
+            CatalogSlotValue::initial_left_end(),
+            CatalogSlotValue::initial_right_end(),
             clvm_tuple!(
                 initial_registration_asset_id,
                 clvm_tuple!(initial_state, ())
@@ -617,31 +616,23 @@ pub fn launch_xchandles_registry(
         initial_state,
         xchandles_constants.with_launcher_id(registry_launcher_id),
     );
+    println!(
+        "target_xchandles_info constants: {:?}",
+        target_xchandles_info.constants
+    ); // todo: debug
+
     let target_xchandles_inner_puzzle_hash = target_xchandles_info.clone().inner_puzzle_hash();
     let (new_security_coin_conditions, new_xchandles_coin, xchandles_proof, slots) =
         spend_eve_coin_and_create_registry(
             ctx,
             registry_launcher,
             target_xchandles_inner_puzzle_hash.into(),
-            XchandlesSlotValue::new(
-                SLOT32_MIN_VALUE.into(),
-                SLOT32_MIN_VALUE.into(),
-                SLOT32_MAX_VALUE.into(),
-                u64::MAX,
-                registry_launcher_id,
-                registry_launcher_id,
-            ),
-            XchandlesSlotValue::new(
-                SLOT32_MAX_VALUE.into(),
-                SLOT32_MIN_VALUE.into(),
-                SLOT32_MAX_VALUE.into(),
-                u64::MAX,
-                registry_launcher_id,
-                registry_launcher_id,
-            ),
+            XchandlesSlotValue::initial_left_end(),
+            XchandlesSlotValue::initial_right_end(),
             (),
             clvm_list!(
                 initial_registration_asset_id,
+                initial_base_registration_price,
                 initial_state,
                 target_xchandles_info.constants
             ),
@@ -1630,7 +1621,7 @@ mod tests {
             if spend.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into() {
                 let launcher_solution = ctx.alloc(&spend.solution)?;
 
-                if let Some((registry, initial_registration_asset_id)) =
+                if let Some((registry, initial_registration_asset_id, initial_base_price)) =
                     XchandlesRegistry::from_launcher_solution(ctx, spend.coin, launcher_solution)?
                 {
                     assert_eq!(initial_registration_asset_id, payment_cat.asset_id);
@@ -1640,13 +1631,7 @@ mod tests {
                             .with_price_singleton(price_singleton_launcher_id)
                             .with_launcher_id(spend.coin.coin_id())
                     );
-                    assert_eq!(
-                        registry.info.state.pricing_puzzle_hash,
-                        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
-                            initial_registration_price
-                        )
-                        .into()
-                    );
+                    assert_eq!(initial_registration_price, initial_base_price);
 
                     found_launcher = true;
                 };
