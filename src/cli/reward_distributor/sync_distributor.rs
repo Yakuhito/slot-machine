@@ -16,7 +16,8 @@ use clvmr::NodePtr;
 
 use crate::{
     CliError, Db, P2DelegatedBySingletonLayerArgs, Reserve, RewardDistributor,
-    RewardDistributorConstants, Slot, SlotInfo, SlotProof,
+    RewardDistributorConstants, RewardDistributorInfo, RewardDistributorRewardSlotValue,
+    RewardDistributorSlotNonce, RewardDistributorState, Slot, SlotInfo, SlotProof,
 };
 
 pub async fn sync_distributor(
@@ -62,7 +63,7 @@ pub async fn sync_distributor(
 
             let launcher_solution_ptr = ctx.alloc(&launcher_coin_spend.solution)?;
             let launcher_solution = ctx
-                .extract::<LauncherSolution<(u64, DigRewardDistributorConstants)>>(
+                .extract::<LauncherSolution<(u64, RewardDistributorConstants)>>(
                     launcher_solution_ptr,
                 )?;
 
@@ -111,7 +112,7 @@ pub async fn sync_distributor(
             };
 
             let first_epoch_start = launcher_solution.key_value_list.0;
-            let initial_state = DigRewardDistributorState::initial(first_epoch_start);
+            let initial_state = RewardDistributorState::initial(first_epoch_start);
             let constants = launcher_solution.key_value_list.1;
             if constants != constants.with_launcher_id(launcher_id) {
                 return Err(CliError::Custom(
@@ -139,10 +140,10 @@ pub async fn sync_distributor(
                 true,
             )
             .await?;
-            let new_distributor = DigRewardDistributor::new(
+            let new_distributor = RewardDistributor::new(
                 new_coin,
                 Proof::Lineage(lineage_proof),
-                DigRewardDistributorInfo::new(initial_state, constants),
+                RewardDistributorInfo::new(initial_state, constants),
                 reserve,
             );
 
@@ -160,7 +161,7 @@ pub async fn sync_distributor(
                 parent_parent_info: lineage_proof.parent_parent_coin_info,
                 parent_inner_puzzle_hash: lineage_proof.parent_inner_puzzle_hash,
             };
-            let slot_value = DigRewardSlotValue {
+            let slot_value = RewardDistributorRewardSlotValue {
                 epoch_start: first_epoch_start,
                 next_epoch_initialized: false,
                 rewards: 0,
@@ -172,7 +173,7 @@ pub async fn sync_distributor(
                     slot_proof,
                     SlotInfo::from_value(
                         constants.launcher_id,
-                        DigSlotNonce::REWARD.to_u64(),
+                        RewardDistributorSlotNonce::REWARD.to_u64(),
                         slot_value,
                     ),
                 ),
@@ -181,7 +182,7 @@ pub async fn sync_distributor(
             .await?;
             db.save_dig_indexed_slot_value_by_epoch_start(
                 slot_value.epoch_start,
-                DigSlotNonce::REWARD.to_u64(),
+                RewardDistributorSlotNonce::REWARD.to_u64(),
                 slot_value.tree_hash().into(),
             )
             .await?;
@@ -208,7 +209,7 @@ pub async fn sync_distributor(
         };
 
     let mut last_coin_id = last_spent_coin_id;
-    let mut distributor: Option<DigRewardDistributor> = prev_distributor;
+    let mut distributor: Option<RewardDistributor> = prev_distributor;
     loop {
         let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
         let Some(coin_record) = coin_record_response.coin_record else {
@@ -258,18 +259,18 @@ pub async fn sync_distributor(
 
                 for slot in prev_distributor.created_slot_values_to_slots(
                     pending_items.pending_commitment_slot_values,
-                    DigSlotNonce::COMMITMENT,
+                    RewardDistributorSlotNonce::COMMITMENT,
                 ) {
                     db.save_slot(ctx, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_epoch_start(
                         slot.info.value.epoch_start,
-                        DigSlotNonce::COMMITMENT.to_u64(),
+                        RewardDistributorSlotNonce::COMMITMENT.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
                     db.save_dig_indexed_slot_value_by_puzzle_hash(
                         slot.info.value.clawback_ph,
-                        DigSlotNonce::COMMITMENT.to_u64(),
+                        RewardDistributorSlotNonce::COMMITMENT.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
@@ -277,12 +278,12 @@ pub async fn sync_distributor(
 
                 for slot in prev_distributor.created_slot_values_to_slots(
                     pending_items.pending_mirror_slot_values,
-                    DigSlotNonce::MIRROR,
+                    RewardDistributorSlotNonce::ENTRY,
                 ) {
                     db.save_slot(ctx, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_puzzle_hash(
                         slot.info.value.payout_puzzle_hash,
-                        DigSlotNonce::MIRROR.to_u64(),
+                        RewardDistributorSlotNonce::ENTRY.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
@@ -290,12 +291,12 @@ pub async fn sync_distributor(
 
                 for slot in prev_distributor.created_slot_values_to_slots(
                     pending_items.pending_reward_slot_values,
-                    DigSlotNonce::REWARD,
+                    RewardDistributorSlotNonce::REWARD,
                 ) {
                     db.save_slot(ctx, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_epoch_start(
                         slot.info.value.epoch_start,
-                        DigSlotNonce::REWARD.to_u64(),
+                        RewardDistributorSlotNonce::REWARD.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
@@ -303,7 +304,7 @@ pub async fn sync_distributor(
             }
         }
 
-        if let Some(some_distributor) = DigRewardDistributor::from_parent_spend(
+        if let Some(some_distributor) = RewardDistributor::from_parent_spend(
             ctx,
             coin_record.coin,
             parent_puzzle,

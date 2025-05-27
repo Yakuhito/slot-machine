@@ -7,20 +7,20 @@ use chia_wallet_sdk::{
 use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    find_mirror_slot_for_puzzle_hash, get_coinset_client, get_constants,
-    get_last_onchain_timestamp, hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer,
-    spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
-    DigInitiatePayoutAction, DigSyncAction, SageClient,
+    find_entry_slot_for_puzzle_hash, get_coinset_client, get_constants, get_last_onchain_timestamp,
+    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
+    sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
+    RewardDistributorInitiatePayoutAction, RewardDistributorSyncAction, SageClient,
 };
 
-pub async fn dig_initiate_payout(
+pub async fn reward_distributor_initiate_payout(
     launcher_id_str: String,
-    mirror_payout_puzzle_hash_str: String,
+    payout_puzzle_hash_str: String,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
-    let mirror_payout_puzzle_hash = hex_string_to_bytes32(&mirror_payout_puzzle_hash_str)?;
+    let payout_puzzle_hash = hex_string_to_bytes32(&payout_puzzle_hash_str)?;
     let fee = parse_amount(&fee_str, false)?;
 
     println!("Syncing reward distributor...");
@@ -45,16 +45,11 @@ pub async fn dig_initiate_payout(
         );
     }
 
-    println!("Finding mirror reward slot...");
-    let slot = find_mirror_slot_for_puzzle_hash(
-        &mut ctx,
-        &db,
-        launcher_id,
-        mirror_payout_puzzle_hash,
-        None,
-    )
-    .await?
-    .ok_or(CliError::SlotNotFound("Mirror reward"))?;
+    println!("Finding reward slot...");
+    let slot =
+        find_entry_slot_for_puzzle_hash(&mut ctx, &db, launcher_id, payout_puzzle_hash, None)
+            .await?
+            .ok_or(CliError::SlotNotFound("Mirror reward"))?;
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  1 mojo",);
@@ -91,14 +86,14 @@ pub async fn dig_initiate_payout(
 
     let mut sec_conds = if also_sync {
         distributor
-            .new_action::<DigSyncAction>()
+            .new_action::<RewardDistributorSyncAction>()
             .spend(&mut ctx, &mut distributor, update_time)?
     } else {
         Conditions::new()
     };
 
     let (new_conds, _new_slot, payout_amount) = distributor
-        .new_action::<DigInitiatePayoutAction>()
+        .new_action::<RewardDistributorInitiatePayoutAction>()
         .spend(&mut ctx, &mut distributor, slot)?;
     sec_conds = sec_conds.extend(new_conds);
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;

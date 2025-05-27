@@ -12,10 +12,10 @@ use crate::{
     find_commitment_slot_for_puzzle_hash, find_reward_slot_for_epoch, get_coin_public_key,
     get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, new_sk,
     parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, DigWithdrawIncentivesAction, SageClient,
+    yes_no_prompt, CliError, Db, RewardDistributorWithdrawIncentivesAction, SageClient,
 };
 
-pub async fn dig_clawback_rewards(
+pub async fn reward_distributor_clawback_rewards(
     launcher_id_str: String,
     clawback_address: String,
     epoch_start: Option<u64>,
@@ -97,7 +97,7 @@ pub async fn dig_clawback_rewards(
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let (send_message_conds, _slot1, returned_amount) = distributor
-        .new_action::<DigWithdrawIncentivesAction>()
+        .new_action::<RewardDistributorWithdrawIncentivesAction>()
         .spend(&mut ctx, &mut distributor, commitment_slot, reward_slot)?;
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
 

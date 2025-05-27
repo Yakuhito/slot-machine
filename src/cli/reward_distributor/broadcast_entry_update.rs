@@ -3,23 +3,23 @@ use chia::{clvm_utils::ToTreeHash, protocol::Bytes};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    find_mirror_slot_for_puzzle_hash, get_constants, get_last_onchain_timestamp,
+    find_entry_slot_for_puzzle_hash, get_constants, get_last_onchain_timestamp,
     hex_string_to_bytes32, multisig_broadcast_thing_finish, multisig_broadcast_thing_start,
-    sync_distributor, CliError, Db, DigAddMirrorAction, DigRemoveMirrorAction, DigSyncAction,
-    MedievalVault, StateSchedulerLayerSolution,
+    sync_distributor, CliError, Db, MedievalVault, RewardDistributorAddEntryAction,
+    RewardDistributorRemoveEntryAction, RewardDistributorSyncAction, StateSchedulerLayerSolution,
 };
 
-pub async fn dig_broadcast_mirror_update(
+pub async fn reward_distributor_broadcast_entry_update(
     launcher_id_str: String,
-    mirror_payout_puzzle_hash_str: String,
-    mirror_shares: u64,
+    entry_payout_puzzle_hash_str: String,
+    entry_shares: u64,
     signatures_str: String,
-    remove_mirror: bool,
+    remove_entry: bool,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
-    let mirror_payout_puzzle_hash = hex_string_to_bytes32(&mirror_payout_puzzle_hash_str)?;
+    let entry_payout_puzzle_hash = hex_string_to_bytes32(&entry_payout_puzzle_hash_str)?;
 
     println!("\nGetting distributor constants... ");
     let db = Db::new(true).await?;
@@ -35,7 +35,7 @@ pub async fn dig_broadcast_mirror_update(
     let (signature_from_signers, pubkeys, client, mut ctx, medieval_vault) =
         multisig_broadcast_thing_start(
             signatures_str,
-            hex::encode(distributor_constants.validator_launcher_id),
+            hex::encode(distributor_constants.manager_launcher_id),
             testnet11,
         )
         .await?;
@@ -47,35 +47,31 @@ pub async fn dig_broadcast_mirror_update(
     if reward_distributor.info.state.round_time_info.last_update < update_time - 180 {
         if update_time > reward_distributor.info.state.round_time_info.epoch_end {
             return Err(CliError::Custom(
-                "You need to start a new epoch before you can broadcast a mirror update"
+                "You need to start a new epoch before you can broadcast an entry update"
                     .to_string(),
             ));
         }
 
         println!("Will also sync reward distributor to {}", update_time);
-        let _conds = reward_distributor.new_action::<DigSyncAction>().spend(
-            &mut ctx,
-            &mut reward_distributor,
-            update_time,
-        )?;
+        let _conds = reward_distributor
+            .new_action::<RewardDistributorSyncAction>()
+            .spend(&mut ctx, &mut reward_distributor, update_time)?;
     }
 
-    if remove_mirror {
-        println!("You'll *REMOVE* the following mirror from the rewarded mirror lists:");
+    if remove_entry {
+        println!("You'll *REMOVE* the following entry from the reward list:");
     } else {
-        println!("You'll *ADD* a new mirror reward entry with the following parameters:");
+        println!("You'll *ADD* a new entry with the following parameters:");
     }
     println!(
-        "  Mirror payout puzzle hash: {}",
-        hex::encode(mirror_payout_puzzle_hash)
+        "  Entry payout puzzle hash: {}",
+        hex::encode(entry_payout_puzzle_hash)
     );
-    println!("  Mirror shares: {}", mirror_shares);
+    println!("  Entry shares: {}", entry_shares);
 
-    let message: Bytes32 = (mirror_payout_puzzle_hash, mirror_shares)
-        .tree_hash()
-        .into();
+    let message: Bytes32 = (entry_payout_puzzle_hash, entry_shares).tree_hash().into();
     let mut message: Vec<u8> = message.to_vec();
-    if remove_mirror {
+    if remove_entry {
         message.insert(0, b'r');
     } else {
         message.insert(0, b'a');
@@ -106,38 +102,38 @@ pub async fn dig_broadcast_mirror_update(
         delegated_solution_ptr,
     )?;
 
-    if remove_mirror {
-        println!("Finding mirror slot...");
-        let mirror_slot = find_mirror_slot_for_puzzle_hash(
+    if remove_entry {
+        println!("Finding entry slot...");
+        let entry_slot = find_entry_slot_for_puzzle_hash(
             &mut ctx,
             &db,
             launcher_id,
-            mirror_payout_puzzle_hash,
-            Some(mirror_shares),
+            entry_payout_puzzle_hash,
+            Some(entry_shares),
         )
         .await?
         .ok_or(CliError::SlotNotFound("Mirror"))?;
 
         let (_conds, last_payment_amount) = reward_distributor
-            .new_action::<DigRemoveMirrorAction>()
+            .new_action::<RewardDistributorRemoveEntryAction>()
             .spend(
                 &mut ctx,
                 &mut reward_distributor,
-                mirror_slot,
+                entry_slot,
                 medieval_vault_inner_ph.into(),
             )?;
         println!(
-            "Last payment ammount to mirror: {} CAT mojos",
+            "Last payment ammount to entry: {} CAT mojos",
             last_payment_amount
         );
     } else {
         let (_conds, _new_slot) = reward_distributor
-            .new_action::<DigAddMirrorAction>()
+            .new_action::<RewardDistributorAddEntryAction>()
             .spend(
                 &mut ctx,
                 &mut reward_distributor,
-                mirror_payout_puzzle_hash,
-                mirror_shares,
+                entry_payout_puzzle_hash,
+                entry_shares,
                 medieval_vault_inner_ph.into(),
             )?;
     }

@@ -3,12 +3,13 @@ use clap::{Parser, Subcommand};
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
     catalog_listen, catalog_register, catalog_sign_state_update, catalog_unroll_state_scheduler,
-    catalog_verify_deployment, dig_add_rewards, dig_broadcast_mirror_update, dig_clawback_rewards,
-    dig_commit_rewards, dig_initiate_payout, dig_launch, dig_new_epoch, dig_sign_mirror_update,
-    dig_sync, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
-    multisig_verify_signature, multisig_view, verifications_broadcast_launch,
-    verifications_broadcast_revocation, verifications_sign_launch, verifications_sign_revocation,
-    verifications_view,
+    catalog_verify_deployment, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
+    multisig_verify_signature, multisig_view, reward_distributor_add_rewards,
+    reward_distributor_broadcast_entry_update, reward_distributor_clawback_rewards,
+    reward_distributor_commit_rewards, reward_distributor_initiate_payout,
+    reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_sign_entry_update,
+    reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
+    verifications_sign_launch, verifications_sign_revocation, verifications_view,
 };
 
 #[derive(Parser)]
@@ -39,10 +40,10 @@ enum Commands {
         #[command(subcommand)]
         action: MultisigCliAction,
     },
-    /// Interact with DIG Reward Distributors
-    Dig {
+    /// Interact with Reward Distributors
+    RewardDistributor {
         #[command(subcommand)]
-        action: DigCliAction,
+        action: RewardDistributorCliAction,
     },
     /// Interact with CATalog verifications
     Verifications {
@@ -353,16 +354,16 @@ enum XchandlesCliAction {
 }
 
 #[derive(Subcommand)]
-enum DigCliAction {
+enum RewardDistributorCliAction {
     /// Launches a new DIG Reward Distributor deployment
     Launch {
-        /// Validator singleton launcher id
+        /// Manager singleton launcher id
         #[arg(long)]
-        validator_launcher_id: String,
+        manager_launcher_id: String,
 
-        /// Validator payout address
+        /// Fee payout address
         #[arg(long)]
-        validator_payout_address: String,
+        fee_payout_address: String,
 
         /// First epoch start timestamp
         #[arg(long)]
@@ -388,9 +389,9 @@ enum DigCliAction {
         #[arg(long, default_value = "0.1")]
         payout_threshold: String,
 
-        /// Validator fee (in basis points)
+        /// Fee (in basis points)
         #[arg(long, default_value = "700")]
-        validator_fee_bps: u64,
+        fee_bps: u64,
 
         /// Withdrawal share (how much of a clawed back commitment the recipient gets back)
         #[arg(long, default_value = "9000")]
@@ -488,27 +489,27 @@ enum DigCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
-    /// Signs a mirror update action
-    SignMirrorUpdate {
+    /// Signs an entry update action
+    SignEntryUpdate {
         /// Reward distributor singleton launcher id
         #[arg(long)]
         launcher_id: String,
 
-        /// Mirror payout puzzle hash
+        /// Entry payout puzzle hash
         #[arg(long)]
-        mirror_payout_puzzle_hash: String,
+        entry_payout_puzzle_hash: String,
 
-        /// Mirror shares
+        /// Entry shares
         #[arg(long, default_value = "1")]
-        mirror_shares: u64,
+        entry_shares: u64,
 
         /// Pubkey to sign with (hex string)
         #[arg(long)]
         my_pubkey: String,
 
-        /// Remove mirror (if not provided, mirror will be added)
+        /// Remove entry (if not provided, entry will be added)
         #[arg(long, default_value_t = false)]
-        remove_mirror: bool,
+        remove_entry: bool,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -518,27 +519,27 @@ enum DigCliAction {
         #[arg(long, default_value_t = false)]
         debug: bool,
     },
-    /// Broadcasts a mirror update action
-    BroadcastMirrorUpdate {
+    /// Broadcasts an entry update action
+    BroadcastEntryUpdate {
         /// Reward distributor singleton launcher id
         #[arg(long)]
         launcher_id: String,
 
-        /// Mirror payout puzzle hash
+        /// Entry payout puzzle hash
         #[arg(long)]
-        mirror_payout_puzzle_hash: String,
+        entry_payout_puzzle_hash: String,
 
-        /// Mirror shares
+        /// Entry shares
         #[arg(long, default_value = "1")]
-        mirror_shares: u64,
+        entry_shares: u64,
 
         /// Signatures (comma-separated list)
         #[arg(long)]
         sigs: String,
 
-        /// Remove mirror (if not provided, mirror will be added)
+        /// Remove entry (if not provided, entry will be added)
         #[arg(long, default_value_t = false)]
-        remove_mirror: bool,
+        remove_entry: bool,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -572,9 +573,9 @@ enum DigCliAction {
         #[arg(long)]
         launcher_id: String,
 
-        /// Mirror payout puzzle hash
+        /// Entry payout puzzle hash
         #[arg(long)]
-        mirror_payout_puzzle_hash: String,
+        payout_puzzle_hash: String,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -859,29 +860,29 @@ pub async fn run_cli() {
                 todo!("not yet implemented");
             }
         },
-        Commands::Dig { action } => match action {
-            DigCliAction::Launch {
-                validator_launcher_id,
-                validator_payout_address,
+        Commands::RewardDistributor { action } => match action {
+            RewardDistributorCliAction::Launch {
+                manager_launcher_id,
+                fee_payout_address,
                 first_epoch_start_timestamp,
                 epoch_seconds,
                 max_seconds_offset,
                 payout_threshold,
-                validator_fee_bps,
+                fee_bps,
                 withdrawal_share_bps,
                 reserve_asset_id,
                 comment,
                 testnet11,
                 fee,
             } => {
-                dig_launch(
-                    validator_launcher_id,
-                    validator_payout_address,
+                reward_distributor_launch(
+                    manager_launcher_id,
+                    fee_payout_address,
                     first_epoch_start_timestamp,
                     epoch_seconds,
                     max_seconds_offset,
                     payout_threshold,
-                    validator_fee_bps,
+                    fee_bps,
                     withdrawal_share_bps,
                     reserve_asset_id,
                     comment,
@@ -890,7 +891,7 @@ pub async fn run_cli() {
                 )
                 .await
             }
-            DigCliAction::CommitRewards {
+            RewardDistributorCliAction::CommitRewards {
                 launcher_id,
                 reward_amount,
                 epoch_start,
@@ -898,7 +899,7 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => {
-                dig_commit_rewards(
+                reward_distributor_commit_rewards(
                     launcher_id,
                     reward_amount,
                     epoch_start,
@@ -908,7 +909,7 @@ pub async fn run_cli() {
                 )
                 .await
             }
-            DigCliAction::ClawbackRewards {
+            RewardDistributorCliAction::ClawbackRewards {
                 launcher_id,
                 clawback_address,
                 epoch_start,
@@ -916,7 +917,7 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => {
-                dig_clawback_rewards(
+                reward_distributor_clawback_rewards(
                     launcher_id,
                     clawback_address,
                     epoch_start,
@@ -926,69 +927,72 @@ pub async fn run_cli() {
                 )
                 .await
             }
-            DigCliAction::Sync {
+            RewardDistributorCliAction::Sync {
                 launcher_id,
                 update_time,
                 testnet11,
                 fee,
-            } => dig_sync(launcher_id, update_time, testnet11, fee).await,
-            DigCliAction::NewEpoch {
+            } => reward_distributor_sync(launcher_id, update_time, testnet11, fee).await,
+            RewardDistributorCliAction::NewEpoch {
                 launcher_id,
                 testnet11,
                 fee,
-            } => dig_new_epoch(launcher_id, testnet11, fee).await,
-            DigCliAction::SignMirrorUpdate {
+            } => reward_distributor_new_epoch(launcher_id, testnet11, fee).await,
+            RewardDistributorCliAction::SignEntryUpdate {
                 launcher_id,
-                mirror_payout_puzzle_hash,
-                mirror_shares,
+                entry_payout_puzzle_hash,
+                entry_shares,
                 my_pubkey,
-                remove_mirror,
+                remove_entry,
                 testnet11,
                 debug,
             } => {
-                dig_sign_mirror_update(
+                reward_distributor_sign_entry_update(
                     launcher_id,
-                    mirror_payout_puzzle_hash,
-                    mirror_shares,
+                    entry_payout_puzzle_hash,
+                    entry_shares,
                     my_pubkey,
-                    remove_mirror,
+                    remove_entry,
                     testnet11,
                     debug,
                 )
                 .await
             }
-            DigCliAction::BroadcastMirrorUpdate {
+            RewardDistributorCliAction::BroadcastEntryUpdate {
                 launcher_id,
-                mirror_payout_puzzle_hash,
-                mirror_shares,
+                entry_payout_puzzle_hash,
+                entry_shares,
                 sigs,
-                remove_mirror,
+                remove_entry,
                 testnet11,
                 fee,
             } => {
-                dig_broadcast_mirror_update(
+                reward_distributor_broadcast_entry_update(
                     launcher_id,
-                    mirror_payout_puzzle_hash,
-                    mirror_shares,
+                    entry_payout_puzzle_hash,
+                    entry_shares,
                     sigs,
-                    remove_mirror,
+                    remove_entry,
                     testnet11,
                     fee,
                 )
                 .await
             }
-            DigCliAction::AddRewards {
+            RewardDistributorCliAction::AddRewards {
                 launcher_id,
                 reward_amount,
                 testnet11,
                 fee,
-            } => dig_add_rewards(launcher_id, reward_amount, testnet11, fee).await,
-            DigCliAction::InitiatePayout {
+            } => reward_distributor_add_rewards(launcher_id, reward_amount, testnet11, fee).await,
+            RewardDistributorCliAction::InitiatePayout {
                 launcher_id,
-                mirror_payout_puzzle_hash,
+                payout_puzzle_hash,
                 testnet11,
                 fee,
-            } => dig_initiate_payout(launcher_id, mirror_payout_puzzle_hash, testnet11, fee).await,
+            } => {
+                reward_distributor_initiate_payout(launcher_id, payout_puzzle_hash, testnet11, fee)
+                    .await
+            }
         },
         Commands::Verifications { action } => match action {
             VerificationsCliAction::SignLaunch {

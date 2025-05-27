@@ -10,10 +10,11 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 use crate::{
     get_coinset_client, get_constants, get_last_onchain_timestamp, hex_string_to_bytes32, new_sk,
     parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, DigAddIncentivesAction, DigSyncAction, SageClient,
+    yes_no_prompt, CliError, Db, RewardDistributorAddIncentivesAction, RewardDistributorSyncAction,
+    SageClient,
 };
 
-pub async fn dig_add_rewards(
+pub async fn reward_distributor_add_rewards(
     launcher_id_str: String,
     reward_amount_str: String,
     testnet11: bool,
@@ -93,20 +94,18 @@ pub async fn dig_add_rewards(
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let mut sec_conds = if also_sync {
-        distributor.new_action::<DigSyncAction>().spend(
-            &mut ctx,
-            &mut distributor,
-            latest_timestamp,
-        )?
+        distributor
+            .new_action::<RewardDistributorSyncAction>()
+            .spend(&mut ctx, &mut distributor, latest_timestamp)?
     } else {
         Conditions::new()
     };
 
-    sec_conds = sec_conds.extend(distributor.new_action::<DigAddIncentivesAction>().spend(
-        &mut ctx,
-        &mut distributor,
-        reward_amount,
-    )?);
+    sec_conds = sec_conds.extend(
+        distributor
+            .new_action::<RewardDistributorAddIncentivesAction>()
+            .spend(&mut ctx, &mut distributor, reward_amount)?,
+    );
     let _new_distributor = distributor.finish_spend(
         &mut ctx,
         vec![CatSpend {

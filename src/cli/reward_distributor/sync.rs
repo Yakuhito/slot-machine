@@ -8,10 +8,10 @@ use sage_api::{Amount, Assets, MakeOffer};
 use crate::{
     get_coinset_client, get_constants, get_last_onchain_timestamp, hex_string_to_bytes32, new_sk,
     parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, DigSyncAction, SageClient,
+    yes_no_prompt, CliError, Db, RewardDistributorSyncAction, SageClient,
 };
 
-pub async fn dig_sync(
+pub async fn reward_distributor_sync(
     launcher_id_str: String,
     update_time: Option<u64>,
     testnet11: bool,
@@ -79,10 +79,9 @@ pub async fn dig_sync(
     let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let sec_conds =
-        distributor
-            .new_action::<DigSyncAction>()
-            .spend(&mut ctx, &mut distributor, update_time)?;
+    let sec_conds = distributor
+        .new_action::<RewardDistributorSyncAction>()
+        .spend(&mut ctx, &mut distributor, update_time)?;
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
 
     let security_coin_sig = spend_security_coin(

@@ -8,10 +8,11 @@ use sage_api::{Amount, Assets, MakeOffer};
 use crate::{
     find_reward_slot_for_epoch, get_coinset_client, get_constants, hex_string_to_bytes32, new_sk,
     parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, DigNewEpochAction, DigSyncAction, SageClient,
+    yes_no_prompt, CliError, Db, RewardDistributorNewEpochAction, RewardDistributorSyncAction,
+    SageClient,
 };
 
-pub async fn dig_new_epoch(
+pub async fn reward_distributor_new_epoch(
     launcher_id_str: String,
     testnet11: bool,
     fee_str: String,
@@ -35,11 +36,9 @@ pub async fn dig_new_epoch(
 
         // no reason to assert this as the next action would fail if the
         // distributor was not synced
-        let _conds = distributor.new_action::<DigSyncAction>().spend(
-            &mut ctx,
-            &mut distributor,
-            next_epoch_start,
-        )?;
+        let _conds = distributor
+            .new_action::<RewardDistributorSyncAction>()
+            .spend(&mut ctx, &mut distributor, next_epoch_start)?;
     }
 
     println!("Finding appropriate reward slot...");
@@ -86,12 +85,12 @@ pub async fn dig_new_epoch(
     let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let (sec_conds, _new_slot, validator_fee) = distributor
-        .new_action::<DigNewEpochAction>()
+    let (sec_conds, _new_slot, fee) = distributor
+        .new_action::<RewardDistributorNewEpochAction>()
         .spend(&mut ctx, &mut distributor, reward_slot)?;
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
 
-    println!("Validator fee for new epoch: {} CAT mojos", validator_fee);
+    println!("Fee for new epoch: {} CAT mojos", fee);
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,

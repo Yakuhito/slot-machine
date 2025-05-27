@@ -10,10 +10,10 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 use crate::{
     find_reward_slot_for_epoch, get_coinset_client, get_constants, hex_string_to_bytes32, new_sk,
     parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, DigCommitIncentivesAction, SageClient,
+    yes_no_prompt, CliError, Db, RewardDistributorCommitIncentivesAction, SageClient,
 };
 
-pub async fn dig_commit_rewards(
+pub async fn reward_distributor_commit_rewards(
     launcher_id_str: String,
     reward_amount_str: String,
     epoch_start: u64,
@@ -92,7 +92,7 @@ pub async fn dig_commit_rewards(
     .ok_or(CliError::SlotNotFound("Reward"))?;
 
     let (sec_conds, _slot1, _slot2) = distributor
-        .new_action::<DigCommitIncentivesAction>()
+        .new_action::<RewardDistributorCommitIncentivesAction>()
         .spend(
             &mut ctx,
             &mut distributor,
