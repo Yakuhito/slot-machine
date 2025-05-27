@@ -2311,8 +2311,8 @@ mod tests {
         Ok(())
     }
 
-    // Spends the validator singleton
-    fn spend_validator_singleton(
+    // Spends the manager singleton
+    fn spend_manager_singleton(
         ctx: &mut SpendContext,
         test_singleton_coin: Coin,
         test_singleton_proof: Proof,
@@ -2334,7 +2334,7 @@ mod tests {
         let test_singleton_spend = Spend::new(test_singleton_puzzle, test_singleton_solution);
         ctx.spend(test_singleton_coin, test_singleton_spend)?;
 
-        // compute validator singleton info for next spend
+        // compute manager singleton info for next spend
         let next_test_singleton_proof = Proof::Lineage(LineageProof {
             parent_parent_coin_info: test_singleton_coin.parent_coin_info,
             parent_inner_puzzle_hash: test_singleton_inner_puzzle_hash.into(),
@@ -2397,8 +2397,8 @@ mod tests {
         };
 
         // Create source offer
-        let mirror1_bls = sim.bls(0);
-        let mirror2_bls = sim.bls(0);
+        let entry1_bls = sim.bls(0);
+        let entry2_bls = sim.bls(0);
 
         let offer_amount = 1;
         let launcher_bls = sim.bls(offer_amount);
@@ -2501,19 +2501,19 @@ mod tests {
             .wrapped_child(cat_minter.puzzle_hash, source_cat.coin.amount);
         assert!(sim.coin_state(source_cat.coin.coin_id()).is_some());
 
-        // add the 1st mirror before reward epoch ('first epoch') begins
-        let (manager_conditions, mirror1_slot) = registry
+        // add the 1st entry before reward epoch ('first epoch') begins
+        let (manager_conditions, entry1_slot) = registry
             .new_action::<RewardDistributorAddEntryAction>()
             .spend(
                 ctx,
                 &mut registry,
-                mirror1_bls.puzzle_hash,
+                entry1_bls.puzzle_hash,
                 1,
                 manager_singleton_inner_puzzle_hash,
             )?;
         registry = registry.finish_spend(ctx, vec![])?;
 
-        (manager_coin, manager_singleton_proof) = spend_validator_singleton(
+        (manager_coin, manager_singleton_proof) = spend_manager_singleton(
             ctx,
             manager_coin,
             manager_singleton_proof,
@@ -2522,7 +2522,7 @@ mod tests {
         )?;
 
         // sim.spend_coins(ctx.take(), &[])?;
-        benchmark.add_spends(ctx, &mut sim, "add_mirror", &[])?;
+        benchmark.add_spends(ctx, &mut sim, "add_entry", &[])?;
 
         // commit incentives for first epoch
         let rewards_to_add = constants.epoch_seconds;
@@ -2870,17 +2870,17 @@ mod tests {
             source_cat.coin.amount - incentives_amount,
         );
 
-        // add mirror2
-        let (manager_conditions, mirror2_slot) = registry
+        // add entry2
+        let (manager_conditions, entry2_slot) = registry
             .new_action::<RewardDistributorAddEntryAction>()
             .spend(
                 ctx,
                 &mut registry,
-                mirror2_bls.puzzle_hash,
+                entry2_bls.puzzle_hash,
                 2,
                 manager_singleton_inner_puzzle_hash,
             )?;
-        (manager_coin, manager_singleton_proof) = spend_validator_singleton(
+        (manager_coin, manager_singleton_proof) = spend_manager_singleton(
             ctx,
             manager_coin,
             manager_singleton_proof,
@@ -2891,7 +2891,7 @@ mod tests {
         registry = registry.finish_spend(ctx, vec![])?;
         sim.pass_time(250);
         // sim.spend_coins(ctx.take(), &[])?;
-        benchmark.add_spends(ctx, &mut sim, "add_mirror", &[])?;
+        benchmark.add_spends(ctx, &mut sim, "add_entry", &[])?;
         assert_eq!(registry.info.state.active_shares, 3);
 
         // sync to 75% (so + 25%)
@@ -2918,37 +2918,37 @@ mod tests {
                 == initial_reward_info.cumulative_payout + cumulative_payout_delta
         );
 
-        // remove mirror2
+        // remove entry2
         let reserve_cat = registry.reserve.to_cat();
-        let (remove_mirror_validator_conditions, mirror2_payout_amount) = registry
+        let (remove_entry_manager_conditions, entry2_payout_amount) = registry
             .new_action::<RewardDistributorRemoveEntryAction>()
             .spend(
                 ctx,
                 &mut registry,
-                mirror2_slot,
+                entry2_slot,
                 manager_singleton_inner_puzzle_hash,
             )?;
 
-        let (_manager_coin, _manager_singleton_proof) = spend_validator_singleton(
+        let (_manager_coin, _manager_singleton_proof) = spend_manager_singleton(
             ctx,
             manager_coin,
             manager_singleton_proof,
             manager_singleton_puzzle,
-            remove_mirror_validator_conditions,
+            remove_entry_manager_conditions,
         )?;
 
         registry = registry.finish_spend(ctx, vec![])?;
         // sim.spend_coins(ctx.take(), &[])?;
-        benchmark.add_spends(ctx, &mut sim, "remove_mirror", &[])?;
+        benchmark.add_spends(ctx, &mut sim, "remove_entry", &[])?;
         let payout_coin_id = reserve_cat
-            .wrapped_child(mirror2_bls.puzzle_hash, mirror2_payout_amount)
+            .wrapped_child(entry2_bls.puzzle_hash, entry2_payout_amount)
             .coin
             .coin_id();
 
         assert!(registry.info.state.active_shares == 1);
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert!(sim
-            .coin_state(mirror2_slot.coin.coin_id())
+            .coin_state(entry2_slot.coin.coin_id())
             .unwrap()
             .spent_height
             .is_some());
@@ -2978,7 +2978,7 @@ mod tests {
                 })
                 .unwrap();
 
-            let (new_epoch_conditions, new_reward_slot, _validator_fee) = registry
+            let (new_epoch_conditions, new_reward_slot, _manager_fee) = registry
                 .new_action::<RewardDistributorNewEpochAction>()
                 .spend(ctx, &mut registry, reward_slot)?;
             incentive_slots
@@ -3062,7 +3062,7 @@ mod tests {
                     s.info.value.epoch_start == first_epoch_start + epoch * constants.epoch_seconds
                 })
                 .unwrap();
-            let (new_epoch_conditions, new_reward_slot, _validator_fee) = registry
+            let (new_epoch_conditions, new_reward_slot, _manager_fee) = registry
                 .new_action::<RewardDistributorNewEpochAction>()
                 .spend(
                     ctx,
@@ -3094,11 +3094,11 @@ mod tests {
             update_time,
         )?;
 
-        // payout mirror
+        // payout entry
         let reserve_cat = registry.reserve.to_cat();
-        let (payout_conditions, _mirror1_slot, withdrawal_amount) = registry
+        let (payout_conditions, _entry1_slot, withdrawal_amount) = registry
             .new_action::<RewardDistributorInitiatePayoutAction>()
-            .spend(ctx, &mut registry, mirror1_slot)?;
+            .spend(ctx, &mut registry, entry1_slot)?;
 
         ensure_conditions_met(ctx, &mut sim, payout_conditions.extend(sync_conditions), 0)?;
 
@@ -3108,7 +3108,7 @@ mod tests {
         benchmark.add_spends(ctx, &mut sim, "initiate_payout", &[])?;
 
         let payout_coin_id = reserve_cat
-            .wrapped_child(mirror1_bls.puzzle_hash, withdrawal_amount)
+            .wrapped_child(entry1_bls.puzzle_hash, withdrawal_amount)
             .coin
             .coin_id();
 

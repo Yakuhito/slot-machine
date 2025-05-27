@@ -64,7 +64,7 @@ enum MultisigCliAction {
         #[arg(long, default_value_t = false)]
         testnet11: bool,
     },
-    /// Launch a standalone multisig (e.g., for a validator)
+    /// Launch a standalone multisig (e.g., for a manager)
     Launch {
         /// Comma-separated list of price singleton pubkeys (no spaces)
         #[arg(long)]
