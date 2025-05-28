@@ -143,3 +143,24 @@ pub fn load_catalog_state_schedule_csv<P: AsRef<Path>>(
 
     Ok(records)
 }
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct XchandlesPremineRecord {
+    pub handle: String,
+    pub owner_nft: String,
+}
+
+pub fn load_xchandles_premine_csv<P: AsRef<Path>>(
+    path: P,
+) -> Result<Vec<XchandlesPremineRecord>, CliError> {
+    let file = File::open(path)?;
+    let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
+
+    let mut records = Vec::new();
+    for result in rdr.deserialize() {
+        let record: XchandlesPremineRecord = result.map_err(CliError::Csv)?;
+        records.push(record);
+    }
+
+    Ok(records)
+}

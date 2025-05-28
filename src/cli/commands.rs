@@ -10,6 +10,7 @@ use super::{
     reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_sign_entry_update,
     reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
     verifications_sign_launch, verifications_sign_revocation, verifications_view,
+    xchandles_initiate_launch,
 };
 
 #[derive(Parser)]
@@ -346,11 +347,57 @@ enum CatalogCliAction {
 #[derive(Subcommand)]
 enum XchandlesCliAction {
     /// Launches a new XCHandles deployment
-    InitiateLaunch,
+    InitiateLaunch {
+        /// Comma-separated list of price singleton pubkeys (no spaces)
+        #[arg(long)]
+        pubkeys: String,
+
+        /// Threshold required for price singleton spends (m from m-of-n)
+        #[arg(short)]
+        m: usize,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use for the launch, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     /// Continues/finishes an existing launch
-    ContinueLaunch,
+    ContinueLaunch {
+        /// Payment asset id (payment CAT tail hash from launch initiation)
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// How many handles to deploy for this spend
+        #[arg(long)]
+        handles_per_spend: usize,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Unrolls the state scheduler
+    UnrollStateScheduler {
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     /// Verifies the built-in deployment is valid
-    VerifyDeployment,
+    VerifyDeployment {
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -850,15 +897,20 @@ pub async fn run_cli() {
             }
         },
         Commands::Xchandles { action } => match action {
-            XchandlesCliAction::InitiateLaunch => {
-                todo!("not yet implemented");
-            }
-            XchandlesCliAction::ContinueLaunch => {
-                todo!("not yet implemented");
-            }
-            XchandlesCliAction::VerifyDeployment => {
-                todo!("not yet implemented");
-            }
+            XchandlesCliAction::InitiateLaunch {
+                pubkeys,
+                m,
+                testnet11,
+                fee,
+            } => xchandles_initiate_launch(pubkeys, m, testnet11, fee).await,
+            XchandlesCliAction::ContinueLaunch {
+                payment_asset_id,
+                handles_per_spend,
+                testnet11,
+                fee,
+            } => todo!("TODO"),
+            XchandlesCliAction::UnrollStateScheduler { testnet11, fee } => todo!("TODO"),
+            XchandlesCliAction::VerifyDeployment { testnet11 } => todo!("TODO"),
         },
         Commands::RewardDistributor { action } => match action {
             RewardDistributorCliAction::Launch {

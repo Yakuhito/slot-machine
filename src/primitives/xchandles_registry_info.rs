@@ -9,6 +9,7 @@ use chia_wallet_sdk::{
 };
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::Allocator;
+use hex_literal::hex;
 
 use crate::{
     Action, ActionLayer, ActionLayerArgs, DefaultFinalizer2ndCurryArgs, DelegatedStateAction,
@@ -55,6 +56,25 @@ pub struct XchandlesConstants {
 }
 
 impl XchandlesConstants {
+    pub fn get(testnet11: bool) -> Self {
+        if testnet11 {
+            return XchandlesConstants {
+                launcher_id: Bytes32::from(hex!(
+                    "0000000000000000000000000000000000000000000000000000000000000000"
+                )),
+                precommit_payout_puzzle_hash: Bytes32::from(hex!(
+                    "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
+                )),
+                relative_block_height: 8,
+                price_singleton_launcher_id: Bytes32::from(hex!(
+                    "0000000000000000000000000000000000000000000000000000000000000000"
+                )),
+            };
+        }
+
+        todo!("oops - xchandles constants for mainnet are not yet available");
+    }
+
     pub fn new(
         launcher_id: Bytes32,
         precommit_payout_puzzle_hash: Bytes32,
