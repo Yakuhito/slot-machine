@@ -7,6 +7,7 @@ mod reward_distributor;
 mod sage_client;
 mod utils;
 mod verifications;
+mod xchandles;
 
 pub use catalog::*;
 pub use commands::*;
@@ -17,3 +18,4 @@ pub use reward_distributor::*;
 pub use sage_client::*;
 pub use utils::*;
 pub use verifications::*;
+pub use xchandles::*;
