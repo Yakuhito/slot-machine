@@ -11,7 +11,7 @@ use sqlx::{
 };
 use std::time::Duration;
 
-use crate::{RewardDistributorConstants, Slot, SlotInfo, SlotProof};
+use crate::{RewardDistributorConstants, Slot, SlotInfo, SlotProof, XchandlesConstants};
 
 use super::CliError;
 pub struct Db {
@@ -48,6 +48,17 @@ impl Db {
                 "
                 CREATE TABLE IF NOT EXISTS catalog_indexed_slot_values (
                     asset_id BLOB PRIMARY KEY,
+                    slot_value_hash BLOB NOT NULL
+                )
+                ",
+            )
+            .execute(&pool)
+            .await?;
+
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS xchandles_indexed_slot_values (
+                    handle_hash BLOB PRIMARY KEY,
                     slot_value_hash BLOB NOT NULL
                 )
                 ",
@@ -123,6 +134,17 @@ impl Db {
             .execute(&pool)
             .await?;
         }
+
+        sqlx::query(
+            "
+            CREATE TABLE IF NOT EXISTS xchandles_configurations (
+                launcher_id BLOB PRIMARY KEY,
+                constants BLOB NOT NULL
+            )
+            ",
+        )
+        .execute(&pool)
+        .await?;
 
         Ok(Self { pool })
     }
@@ -299,6 +321,19 @@ impl Db {
         Ok(())
     }
 
+    pub async fn delete_all_xchandles_indexed_slot_values(&self) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM xchandles_indexed_slot_values
+            ",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
     pub async fn mark_slot_as_spent(
         &self,
         singleton_launcher_id: Bytes32,
@@ -343,6 +378,27 @@ impl Db {
         Ok(())
     }
 
+    pub async fn save_xchandles_indexed_slot_value(
+        &self,
+        handle_hash: Bytes32,
+        slot_value_hash: Bytes32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            INSERT INTO xchandles_indexed_slot_values (handle_hash, slot_value_hash) 
+            VALUES (?1, ?2)
+            ON CONFLICT(handle_hash) DO UPDATE SET slot_value_hash = excluded.slot_value_hash
+            ",
+        )
+        .bind(handle_hash.to_vec())
+        .bind(slot_value_hash.to_vec())
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
     pub async fn get_catalog_indexed_slot_value(
         &self,
         asset_id: Bytes32,
@@ -353,6 +409,29 @@ impl Db {
             ",
         )
         .bind(asset_id.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        Ok(Some(column_to_bytes32(
+            row.get::<&[u8], _>("slot_value_hash"),
+        )?))
+    }
+
+    pub async fn get_xchandles_indexed_slot_value(
+        &self,
+        handle_hash: Bytes32,
+    ) -> Result<Option<Bytes32>, CliError> {
+        let row = sqlx::query(
+            "
+            SELECT slot_value_hash FROM xchandles_indexed_slot_values WHERE handle_hash = ?1
+            ",
+        )
+        .bind(handle_hash.to_vec())
         .fetch_optional(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
@@ -406,6 +485,69 @@ impl Db {
         )
         .bind(launcher_id.to_vec())
         .bind(asset_id.to_vec());
+
+        let rows = query.fetch_all(&self.pool).await.map_err(CliError::Sqlx)?;
+
+        let mut left_slots = Vec::new();
+        let mut right_slots = Vec::new();
+
+        for row in rows {
+            let side: String = row.get("side");
+            let slot = Self::row_to_slot(allocator, &row)?;
+            if side == "left" {
+                left_slots.push(slot);
+            } else if side == "right" {
+                right_slots.push(slot);
+            }
+        }
+
+        if left_slots.is_empty() || right_slots.is_empty() {
+            return Err(CliError::DbColumnNotFound());
+        }
+
+        Ok((left_slots[0], right_slots[0]))
+    }
+
+    pub async fn get_xchandles_neighbors<SV>(
+        &self,
+        allocator: &mut Allocator,
+        launcher_id: Bytes32,
+        handle_hash: Bytes32,
+    ) -> Result<(Slot<SV>, Slot<SV>), CliError>
+    where
+        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+    {
+        let query = sqlx::query(
+            "
+            SELECT 'left' AS side, s.* 
+            FROM slots s
+            WHERE s.singleton_launcher_id = ?1
+              AND s.nonce = 0
+              AND s.spent_block_height = 0
+              AND s.slot_value_hash = (
+                  SELECT slot_value_hash 
+                  FROM xchandles_indexed_slot_values 
+                  WHERE handle_hash < ?2 
+                  ORDER BY handle_hash DESC 
+                  LIMIT 1
+              )
+            UNION ALL
+            SELECT 'right' AS side, s.* 
+            FROM slots s
+            WHERE s.singleton_launcher_id = ?1
+              AND s.nonce = 0
+              AND s.spent_block_height = 0
+              AND s.slot_value_hash = (
+                  SELECT slot_value_hash 
+                  FROM xchandles_indexed_slot_values 
+                  WHERE handle_hash > ?2 
+                  ORDER BY handle_hash ASC 
+                  LIMIT 1
+              )
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .bind(handle_hash.to_vec());
 
         let rows = query.fetch_all(&self.pool).await.map_err(CliError::Sqlx)?;
 
@@ -561,6 +703,30 @@ impl Db {
         Ok(())
     }
 
+    pub async fn save_xchandles_configuration(
+        &self,
+        allocator: &mut Allocator,
+        launcher_id: Bytes32,
+        constants: XchandlesConstants,
+    ) -> Result<(), CliError> {
+        let constants_ptr = constants.to_clvm(allocator).map_err(DriverError::ToClvm)?;
+        let constants_bytes = node_to_bytes(allocator, constants_ptr)?;
+
+        sqlx::query(
+            "
+            INSERT INTO xchandles_configurations (launcher_id, constants) VALUES (?1, ?2)
+            ON CONFLICT(launcher_id) DO UPDATE SET constants = excluded.constants
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .bind(constants_bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        Ok(())
+    }
+
     pub async fn get_reward_distributor_configuration(
         &self,
         allocator: &mut Allocator,
@@ -583,6 +749,32 @@ impl Db {
         let constants = node_from_bytes(allocator, row.get::<&[u8], _>("constants"))?;
         let constants = RewardDistributorConstants::from_clvm(allocator, constants)
             .map_err(DriverError::FromClvm)?;
+
+        Ok(Some(constants))
+    }
+
+    pub async fn get_xchandles_configuration(
+        &self,
+        allocator: &mut Allocator,
+        launcher_id: Bytes32,
+    ) -> Result<Option<XchandlesConstants>, CliError> {
+        let row = sqlx::query(
+            "
+            SELECT constants FROM xchandles_configurations WHERE launcher_id = ?1
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let constants = node_from_bytes(allocator, row.get::<&[u8], _>("constants"))?;
+        let constants =
+            XchandlesConstants::from_clvm(allocator, constants).map_err(DriverError::FromClvm)?;
 
         Ok(Some(constants))
     }
