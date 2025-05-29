@@ -2,6 +2,7 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
+    sha2::Sha256,
 };
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
@@ -54,6 +55,28 @@ impl XchandlesRefundAction {
             ),
         }
         .to_clvm(ctx)?)
+    }
+
+    pub fn get_spent_slot_value_hash_from_solution(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<Option<Bytes32>, DriverError> {
+        let solution =
+            XchandlesRefundActionSolution::<NodePtr, NodePtr, NodePtr, NodePtr>::from_clvm(
+                ctx, solution,
+            )?;
+
+        let Some(rest_hash) = solution.rest_hash else {
+            return Ok(None);
+        };
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(solution.handle_hash.tree_hash());
+        hasher.update(rest_hash);
+
+        Ok(Some(hasher.finalize().into()))
     }
 
     pub fn get_slot_value(&self, spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
@@ -118,11 +141,7 @@ impl XchandlesRefundAction {
             precommit_value_rest_hash: precommit_coin.value.after_secret_and_handle_hash().into(),
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
             precommit_amount: precommit_coin.coin.amount,
-            rest_hash: if let Some(slot) = slot {
-                slot.info.value.after_handle_data_hash().into()
-            } else {
-                Bytes32::default()
-            },
+            rest_hash: slot.map(|s| s.info.value.after_handle_data_hash().into()),
         }
         .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
@@ -210,5 +229,5 @@ pub struct XchandlesRefundActionSolution<CMP, CMS, PP, PS> {
     pub refund_puzzle_hash_hash: Bytes32,
     pub precommit_amount: u64,
     #[clvm(rest)]
-    pub rest_hash: Bytes32,
+    pub rest_hash: Option<Bytes32>,
 }

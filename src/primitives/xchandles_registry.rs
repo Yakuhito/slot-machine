@@ -5,13 +5,17 @@ use chia::{
 };
 use chia_puzzle_types::singleton::{LauncherSolution, SingletonArgs};
 use chia_wallet_sdk::{
-    coinset::CoinsetClient, driver::{DriverError, Layer, Puzzle, Spend, SpendContext}, types::{run_puzzle, Conditions}
+    coinset::CoinsetClient,
+    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
+    types::{run_puzzle, Conditions},
 };
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, Db, DelegatedStateAction, Registry, XchandlesExpireAction, XchandlesExtendAction, XchandlesOracleAction, XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction
+    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, Db, DelegatedStateAction,
+    Registry, XchandlesExpireAction, XchandlesExtendAction, XchandlesOracleAction,
+    XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
 };
 
 use super::{
@@ -360,7 +364,7 @@ impl XchandlesRegistry {
             }
 
             if raw_action_hash == extend_action_hash {
-                extend_action.get_slot_value_from_solution(ctx, old_slot_value, solution)
+                // extend_action.get_slot_value_from_solution(ctx, old_slot_value, solution)
                 todo!("requires slot");
             } else if raw_action_hash == oracle_action_hash {
                 todo!("requires slot");

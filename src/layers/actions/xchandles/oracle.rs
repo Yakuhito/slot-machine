@@ -43,7 +43,6 @@ impl XchandlesOracleAction {
         .to_clvm(ctx)?)
     }
 
-    // TODO: test
     pub fn get_spent_slot_value_hash_from_solution(
         &self,
         ctx: &SpendContext,

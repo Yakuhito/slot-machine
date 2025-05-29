@@ -1567,6 +1567,7 @@ mod tests {
         )?;
 
         let mut registry = registry;
+        let used_slot_value_hash = slot.map(|s| s.info.value_hash);
         let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
             ctx,
             &mut registry,
@@ -1575,6 +1576,17 @@ mod tests {
             pricing_solution,
             slot,
         )?;
+        assert_eq!(
+            used_slot_value_hash,
+            registry
+                .new_action::<XchandlesRefundAction>()
+                .get_spent_slot_value_hash_from_solution(
+                    ctx,
+                    registry.pending_items.actions[registry.pending_items.actions.len() - 1]
+                        .solution
+                )?
+        );
+
         let new_registry = registry.finish_spend(ctx)?;
 
         ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
@@ -1872,6 +1884,7 @@ mod tests {
                 benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
             };
 
+            let spent_value_hashes = [left_slot.info.value_hash, right_slot.info.value_hash];
             let (secure_cond, new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
                 ctx,
                 &mut registry,
@@ -1883,6 +1896,16 @@ mod tests {
 
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
+            assert_eq!(
+                spent_value_hashes,
+                registry
+                    .new_action::<XchandlesRegisterAction>()
+                    .get_spent_slot_value_hashes_from_solution(
+                        ctx,
+                        registry.pending_items.actions[registry.pending_items.actions.len() - 1]
+                            .solution
+                    )?
+            );
             registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
 
@@ -1895,6 +1918,7 @@ mod tests {
             slots.extend(new_slots);
 
             // test on-chain oracle for current handle
+            let spent_slot_value_hash = oracle_slot.info.value_hash;
             let (oracle_conds, new_slot) = registry.new_action::<XchandlesOracleAction>().spend(
                 ctx,
                 &mut registry,
@@ -1903,6 +1927,16 @@ mod tests {
 
             ensure_conditions_met(ctx, &mut sim, oracle_conds, 0)?;
 
+            assert_eq!(
+                spent_slot_value_hash,
+                registry
+                    .new_action::<XchandlesOracleAction>()
+                    .get_spent_slot_value_hash_from_solution(
+                        ctx,
+                        registry.pending_items.actions[registry.pending_items.actions.len() - 1]
+                            .solution
+                    )?
+            );
             registry = registry.finish_spend(ctx)?;
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
@@ -1917,6 +1951,7 @@ mod tests {
             let pay_for_extension: u64 =
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, extension_years);
 
+            let spent_slot_value_hash = extension_slot.info.value_hash;
             let (notarized_payment, extend_conds, new_slot) =
                 registry.new_action::<XchandlesExtendAction>().spend(
                     ctx,
@@ -1927,6 +1962,17 @@ mod tests {
                     base_price,
                     extension_years,
                 )?;
+
+            assert_eq!(
+                spent_slot_value_hash,
+                registry
+                    .new_action::<XchandlesExtendAction>()
+                    .get_spent_slot_value_hash_from_solution(
+                        ctx,
+                        registry.pending_items.actions[registry.pending_items.actions.len() - 1]
+                            .solution
+                    )?
+            );
 
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
                 ctx,
@@ -1981,6 +2027,7 @@ mod tests {
             let new_owner_launcher_id = Bytes32::new([4 + i as u8; 32]);
             let new_resolved_launcher_id = Bytes32::new([u8::MAX - i as u8 - 1; 32]);
             let update_slot = new_slot;
+            let update_slot_value_hash = new_slot.info.value_hash;
 
             let (update_conds, new_slot) = registry.new_action::<XchandlesUpdateAction>().spend(
                 ctx,
@@ -1993,6 +2040,16 @@ mod tests {
 
             let _new_did = did.update(ctx, &user_p2, update_conds)?;
 
+            assert_eq!(
+                update_slot_value_hash,
+                registry
+                    .new_action::<XchandlesUpdateAction>()
+                    .get_spent_slot_value_hash_from_solution(
+                        ctx,
+                        registry.pending_items.actions[registry.pending_items.actions.len() - 1]
+                            .solution
+                    )?
+            );
             registry = registry.finish_spend(ctx)?;
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;

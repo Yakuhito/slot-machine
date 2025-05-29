@@ -77,7 +77,6 @@ impl XchandlesRegisterAction {
         hasher.finalize().into()
     }
 
-    // TODO: test
     pub fn get_spent_slot_value_hashes_from_solution(
         &self,
         ctx: &SpendContext,

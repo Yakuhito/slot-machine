@@ -55,8 +55,9 @@ pub async fn sync_xchandles(
         let solution_ptr = ctx.alloc(&coin_spend.solution)?;
         if !skip_db_save {
             if let Some(ref prev_registry) = registry {
-                let pending_items =
-                    prev_registry.get_pending_items_from_spend(ctx, solution_ptr)?;
+                let pending_items = prev_registry
+                    .get_pending_items_from_spend(ctx, db, client, solution_ptr)
+                    .await?;
 
                 for value_hash in pending_items.spent_slots.iter() {
                     db.mark_slot_as_spent(
