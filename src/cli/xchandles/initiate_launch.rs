@@ -157,7 +157,7 @@ pub async fn xchandles_initiate_launch(
     );
     for record in handles_to_launch.iter().take(7) {
         println!(
-            "  handle: {:?}, owner_nft: {:?}",
+            "  handle: {:}, owner_nft: {:}",
             record.handle, record.owner_nft
         );
     }
