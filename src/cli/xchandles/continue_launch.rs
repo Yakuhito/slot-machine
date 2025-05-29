@@ -16,15 +16,14 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    hex_string_to_bytes32, load_xchandles_premine_csv, new_sk, parse_amount, parse_one_sided_offer,
-    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CatalogPrecommitValue,
-    CatalogRegisterAction, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
-    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
-    XchandlesPremineRecord,
+    get_last_onchain_timestamp, hex_string_to_bytes32, load_xchandles_premine_csv, new_sk,
+    parse_amount, parse_one_sided_offer, spend_security_coin, sync_xchandles, wait_for_coin,
+    yes_no_prompt, CatalogPrecommitValue, CatalogRegisterAction, CliError, Db, PrecommitCoin,
+    PrecommitLayer, SageClient, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
+    XchandlesPrecommitValue, XchandlesPremineRecord, XchandlesRegisterAction,
 };
 
 fn precommit_value_for_handle(
-    ctx: &mut SpendContext,
     handle: &XchandlesPremineRecord,
     payment_asset_id: Bytes32,
     start_time: u64,
@@ -87,10 +86,10 @@ pub async fn xchandles_continue_launch(
 
     println!("Syncing XCHandles registry...");
 
-    let mut catalog = sync_xchandles(&client, &mut db, &mut ctx, constants).await?;
+    let mut registry = sync_xchandles(&client, &mut db, &mut ctx, constants).await?;
     println!(
         "Latest XCHandles registry coin id: {}",
-        catalog.coin.coin_id()
+        registry.coin.coin_id()
     );
 
     println!("Finding last registered handle from list...");
@@ -120,17 +119,21 @@ pub async fn xchandles_continue_launch(
     let sage = SageClient::new()?;
     let fee = parse_amount(&fee_str, false)?;
 
+    // Make sure this is always rounded down to a day
+    let mut start_time = get_last_onchain_timestamp(&client).await? / 8640 * 8640;
+
     if i == 0 {
         println!("No handles registered yet - looking for precommitment coins...");
 
         let inner_puzzle_hashes = handles_to_launch
             .iter()
-            .map(|cat| {
-                let precommit_value = precommit_value_for_cat(&mut ctx, cat, payment_asset_id)?;
+            .map(|handle| {
+                let precommit_value =
+                    precommit_value_for_handle(handle, payment_asset_id, start_time)?;
                 let precommit_value_ptr = ctx.alloc(&precommit_value)?;
                 let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
 
-                Ok::<TreeHash, CliError>(PrecommitLayer::<CatalogPrecommitValue>::puzzle_hash(
+                Ok::<TreeHash, CliError>(PrecommitLayer::<XchandlesPrecommitValue>::puzzle_hash(
                     SingletonStruct::new(constants.launcher_id)
                         .tree_hash()
                         .into(),
@@ -143,7 +146,7 @@ pub async fn xchandles_continue_launch(
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut i = 0;
-        while i < cats_to_launch.len() {
+        while i < handles_to_launch.len() {
             let precommit_inner_puzzle = inner_puzzle_hashes[i];
 
             let precommit_puzzle =
@@ -163,26 +166,27 @@ pub async fn xchandles_continue_launch(
             i += 1;
         }
 
-        if i != cats_to_launch.len() {
+        if i != handles_to_launch.len() {
             // there are unlaunched precommitment coins, launch those first and exit
 
             println!(
-                "Some precommitment coins were not launched yet - they correspond to these CATs:"
+                "Some precommitment coins were not launched yet - they correspond to these handles:"
             );
 
             let mut j = i;
-            while j < cats_to_launch.len() && j - i < cats_per_spend {
+            while j < handles_to_launch.len() && j - i < handles_per_spend {
                 println!(
-                    "  code: {:?}, name: {:?}",
-                    cats_to_launch[j].code, cats_to_launch[j].name
+                    "  handle: {:}, owner NFT: {:}",
+                    handles_to_launch[j].handle, handles_to_launch[j].owner_nft
                 );
                 j += 1;
             }
 
             let mut precommitment_inner_puzzle_hashes_to_launch =
-                Vec::with_capacity(cats_per_spend);
-            j = i;
-            while j < cats_to_launch.len() && j - i < cats_per_spend {
+                Vec::with_capacity(handles_per_spend);
+            TODO: per-registration cost is not 1 :|
+                j = i;
+            while j < handles_to_launch.len() && j - i < handles_per_spend {
                 precommitment_inner_puzzle_hashes_to_launch.push(inner_puzzle_hashes[j]);
                 j += 1;
             }
@@ -307,22 +311,28 @@ pub async fn xchandles_continue_launch(
         }
     }
 
-    let mut cats = Vec::with_capacity(cats_per_spend);
-    while i < cats_to_launch.len() && cats.len() < cats_per_spend {
-        cats.push(cats_to_launch[i].clone());
+    let mut handles = Vec::with_capacity(handles_per_spend);
+    while i < handles_to_launch.len() && handles.len() < handles_per_spend {
+        handles.push(handles_to_launch[i].clone());
         i += 1;
     }
 
-    println!("These cats will be launched (total number={}):", cats.len());
-    for cat in &cats {
-        println!("  code: {:?}, name: {:?}", cat.code, cat.name);
+    println!(
+        "These handles will be launched (total number={}):",
+        handles.len()
+    );
+    for handle in &handles {
+        println!(
+            "  handle: {:}, owner NFT: {:}",
+            handle.handle, handle.owner_nft
+        );
     }
 
     // check if precommitment coins are available and have the appropriate age
     println!("Checking precommitment coins...");
-    let precommit_values = cats
+    let precommit_values = handles
         .iter()
-        .map(|cat| precommit_value_for_cat(&mut ctx, cat, payment_asset_id))
+        .map(|handle| precommit_value_for_handle(handle, payment_asset_id, start_time))
         .collect::<Result<Vec<_>, _>>()?;
 
     let precommit_puzzle_hashes = precommit_values
@@ -446,7 +456,7 @@ pub async fn xchandles_continue_launch(
     println!("Done!");
 
     println!("A one-sided offer will be created; it will consume:");
-    println!("  - {} mojos for minting CAT NFTs", cats.len());
+    println!("  - 1 mojo for the sake of it");
     println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
     yes_no_prompt("Proceed?")?;
 
@@ -458,7 +468,7 @@ pub async fn xchandles_continue_launch(
                 nfts: vec![],
             },
             offered_assets: Assets {
-                xch: Amount::u64(cats.len() as u64),
+                xch: Amount::u64(1),
                 cats: vec![],
                 nfts: vec![],
             },
@@ -476,7 +486,7 @@ pub async fn xchandles_continue_launch(
     let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let mut security_coin_conditions = offer.security_base_conditions;
+    let mut security_coin_conditions = offer.security_base_conditions.reserve_fee(1);
 
     for (i, precommit_value) in precommit_values.iter().enumerate() {
         let precommit_ph = precommit_puzzle_hashes[i];
@@ -488,6 +498,13 @@ pub async fn xchandles_continue_launch(
         let lineage_proof = lineage_proofs
             .get(&precommit_coin_record.coin.parent_coin_info)
             .unwrap();
+
+        let handle_hash = precommit_value
+            .secret_and_handle
+            .handle
+            .clone()
+            .tree_hash()
+            .into();
 
         let precommit_coin = PrecommitCoin::new(
             &mut ctx,
@@ -504,34 +521,25 @@ pub async fn xchandles_continue_launch(
             1,
         )?;
 
-        let tail_hash: Bytes32 = ctx.tree_hash(precommit_value.tail_reveal).into();
-
         let (left_slot, right_slot) = db
-            .get_catalog_neighbors(&mut ctx, constants.launcher_id, tail_hash)
+            .get_xchandles_neighbors(&mut ctx, constants.launcher_id, handle_hash)
             .await?;
 
-        let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);
+        let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
-        let eve_nft_inner_puzzle = initial_cat_inner_puzzle_ptr(&mut ctx, &cats[i])?;
-
-        let (sec_conds, new_slots) = catalog.new_action::<CatalogRegisterAction>().spend(
+        let (sec_conds, new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
             &mut ctx,
-            &mut catalog,
-            tail_hash,
+            &mut registry,
             left_slot,
             right_slot,
             precommit_coin,
-            Spend {
-                puzzle: eve_nft_inner_puzzle,
-                solution: NodePtr::NIL,
-            },
+            1,
         )?;
 
         security_coin_conditions = security_coin_conditions.extend(sec_conds);
-        catalog.add_pending_slots(new_slots);
     }
 
-    let _new_catalog = catalog.finish_spend(&mut ctx)?;
+    let _new_registry = registry.finish_spend(&mut ctx)?;
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
