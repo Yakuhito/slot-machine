@@ -2,6 +2,7 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
+    sha2::Sha256,
 };
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
@@ -54,6 +55,55 @@ impl XchandlesRegisterAction {
             ),
         }
         .to_clvm(ctx)?)
+    }
+
+    pub fn get_spent_slot_value_hash(
+        handle_hash: Bytes32,
+        left_value: Bytes32,
+        right_value: Bytes32,
+        data_hash: Bytes32,
+    ) -> Bytes32 {
+        let mut hasher = Sha256::new();
+
+        hasher.update(b"\x02");
+        hasher.update(clvm_tuple!(left_value, right_value).tree_hash());
+        hasher.update(data_hash);
+        let after_handle_hash = hasher.finalize();
+
+        hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(handle_hash.tree_hash());
+        hasher.update(after_handle_hash);
+        hasher.finalize().into()
+    }
+
+    // TODO: test
+    pub fn get_spent_slot_value_hashes_from_solution(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<[Bytes32; 2], DriverError> {
+        let solution = XchandlesRegisterActionSolution::<
+            NodePtr,
+            XchandlesFactorPricingSolution,
+            NodePtr,
+            NodePtr,
+        >::from_clvm(ctx, solution)?;
+
+        Ok([
+            Self::get_spent_slot_value_hash(
+                solution.left_value,
+                solution.left_left_value,
+                solution.right_value,
+                solution.left_data_hash,
+            ),
+            Self::get_spent_slot_value_hash(
+                solution.right_value,
+                solution.left_value,
+                solution.right_right_value,
+                solution.right_data_hash,
+            ),
+        ])
     }
 
     pub fn get_slot_values_from_solution(

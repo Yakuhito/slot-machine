@@ -2,6 +2,7 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
+    sha2::Sha256,
 };
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
@@ -56,6 +57,49 @@ impl XchandlesExpireAction {
             ),
         }
         .to_clvm(ctx)?)
+    }
+
+    // TODO: test
+    pub fn get_spent_slot_value_hash_from_solution(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<Bytes32, DriverError> {
+        let solution = XchandlesExpireActionSolution::<
+            NodePtr,
+            XchandlesFactorPricingSolution,
+            NodePtr,
+            XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
+        >::from_clvm(ctx, solution)?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(
+            solution
+                .cat_maker_puzzle_solution
+                .current_expiration
+                .tree_hash(),
+        );
+        hasher.update(solution.old_rest_hash);
+        let expiration_rest_hash = hasher.finalize();
+
+        hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(solution.neighbors_hash);
+        hasher.update(expiration_rest_hash);
+        let neighbors_expiration_rest_hash = hasher.finalize();
+
+        let handle_hash = solution
+            .expired_handle_pricing_puzzle_solution
+            .pricing_program_solution
+            .handle
+            .tree_hash();
+        hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(handle_hash.tree_hash());
+        hasher.update(neighbors_expiration_rest_hash);
+
+        Ok(hasher.finalize().into())
     }
 
     pub fn get_slot_value_from_solution(

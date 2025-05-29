@@ -50,21 +50,7 @@ impl XchandlesExtendAction {
         .to_clvm(ctx)?)
     }
 
-    /*
-    (get_slot_value_hash handle_hash neighbors_hash expiration rest_hash)
-
-
-    (sha256 2
-           (sha256 1 handle_hash) ; value = handle_hash; we need (sha256tree value) here
-           (sha256 2
-               neighbors_hash
-               (sha256 2
-                   (sha256 1 expiration)
-                   rest_hash
-               )
-           )
-       )
-    */
+    // TODO: test
     pub fn get_spent_slot_value_hash_from_solution(
         &self,
         ctx: &SpendContext,
@@ -91,7 +77,7 @@ impl XchandlesExtendAction {
 
         hasher = Sha256::new();
         hasher.update(b"\x02");
-        hasher.update(solution.handle_hash);
+        hasher.update(solution.handle_hash.tree_hash());
         hasher.update(neighbors_expiration_rest_hash);
 
         Ok(hasher.finalize().into())

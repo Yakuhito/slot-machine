@@ -1,6 +1,7 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
+    sha2::Sha256,
 };
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
@@ -40,6 +41,22 @@ impl XchandlesOracleAction {
             args: XchandlesOracleActionArgs::new(self.launcher_id),
         }
         .to_clvm(ctx)?)
+    }
+
+    // TODO: test
+    pub fn get_spent_slot_value_hash_from_solution(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<Bytes32, DriverError> {
+        let solution = ctx.extract::<XchandlesOracleActionSolution>(solution)?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(solution.handle_hash.tree_hash());
+        hasher.update(solution.rest_treehash);
+
+        Ok(hasher.finalize().into())
     }
 
     pub fn get_slot_value(&self, old_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {

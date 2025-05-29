@@ -1,6 +1,7 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
+    sha2::Sha256,
 };
 use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
 use chia_wallet_sdk::{
@@ -41,6 +42,37 @@ impl XchandlesUpdateAction {
             args: XchandlesUpdateActionArgs::new(self.launcher_id),
         }
         .to_clvm(ctx)?)
+    }
+
+    // TODO: test
+    pub fn get_spent_slot_value_hash_from_solution(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<Bytes32, DriverError> {
+        let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(solution.neighbors_hash);
+        hasher.update(
+            clvm_tuple!(
+                solution.expiration,
+                clvm_tuple!(
+                    solution.current_owner_launcher_id,
+                    solution.current_resolved_launcher_id
+                )
+            )
+            .tree_hash(),
+        );
+        let after_handle_hash = hasher.finalize();
+
+        hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(solution.handle_hash.tree_hash());
+        hasher.update(after_handle_hash);
+
+        Ok(hasher.finalize().into())
     }
 
     pub fn get_slot_value_from_solution(
