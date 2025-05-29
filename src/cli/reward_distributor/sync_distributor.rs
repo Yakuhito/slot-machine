@@ -242,18 +242,18 @@ pub async fn sync_distributor(
                 let pending_items =
                     prev_distributor.get_pending_items_from_spend(ctx, solution_ptr)?;
 
-                for (nonce, value_hash) in pending_items.pending_spent_slots {
+                for (nonce, value_hash) in pending_items.pending_spent_slots.iter() {
                     db.mark_slot_as_spent(
                         constants.launcher_id,
                         nonce.to_u64(),
-                        value_hash,
+                        *value_hash,
                         coin_record.spent_block_index,
                     )
                     .await?;
 
-                    db.delete_dig_indexed_slot_values_by_epoch_start_using_value_hash(value_hash)
+                    db.delete_dig_indexed_slot_values_by_epoch_start_using_value_hash(*value_hash)
                         .await?;
-                    db.delete_dig_indexed_slot_values_by_puzzle_hash_using_value_hash(value_hash)
+                    db.delete_dig_indexed_slot_values_by_puzzle_hash_using_value_hash(*value_hash)
                         .await?;
                 }
 
@@ -261,19 +261,32 @@ pub async fn sync_distributor(
                     pending_items.pending_commitment_slot_values,
                     RewardDistributorSlotNonce::COMMITMENT,
                 ) {
-                    db.save_slot(ctx, slot, 0).await?;
-                    db.save_dig_indexed_slot_value_by_epoch_start(
-                        slot.info.value.epoch_start,
-                        RewardDistributorSlotNonce::COMMITMENT.to_u64(),
+                    let spent_block_index = if pending_items.pending_spent_slots.contains(&(
+                        RewardDistributorSlotNonce::from_u64(slot.info.nonce).unwrap(),
                         slot.info.value_hash,
-                    )
-                    .await?;
-                    db.save_dig_indexed_slot_value_by_puzzle_hash(
-                        slot.info.value.clawback_ph,
-                        RewardDistributorSlotNonce::COMMITMENT.to_u64(),
-                        slot.info.value_hash,
-                    )
-                    .await?;
+                    )) {
+                        coin_record.spent_block_index
+                    } else {
+                        0
+                    };
+
+                    db.save_slot(ctx, slot, spent_block_index).await?;
+
+                    if spent_block_index == 0 {
+                        // ephemeral slot for this spend
+                        db.save_dig_indexed_slot_value_by_epoch_start(
+                            slot.info.value.epoch_start,
+                            RewardDistributorSlotNonce::COMMITMENT.to_u64(),
+                            slot.info.value_hash,
+                        )
+                        .await?;
+                        db.save_dig_indexed_slot_value_by_puzzle_hash(
+                            slot.info.value.clawback_ph,
+                            RewardDistributorSlotNonce::COMMITMENT.to_u64(),
+                            slot.info.value_hash,
+                        )
+                        .await?;
+                    }
                 }
 
                 for slot in prev_distributor.created_slot_values_to_slots(

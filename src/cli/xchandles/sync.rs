@@ -55,28 +55,37 @@ pub async fn sync_xchandles(
         let solution_ptr = ctx.alloc(&coin_spend.solution)?;
         if !skip_db_save {
             if let Some(ref prev_registry) = registry {
-                let new_slots = prev_registry.get_new_slots_from_spend(ctx, solution_ptr)?;
+                let pending_items =
+                    prev_registry.get_pending_items_from_spend(ctx, solution_ptr)?;
 
-                for slot in new_slots.iter() {
-                    let asset_id = slot.info.value.asset_id;
+                for value_hash in pending_items.spent_slots.iter() {
+                    db.mark_slot_as_spent(
+                        constants.launcher_id,
+                        0,
+                        *value_hash,
+                        coin_record.spent_block_index,
+                    )
+                    .await?;
 
-                    if let Some(previous_value_hash) =
-                        db.get_catalog_indexed_slot_value(asset_id).await?
-                    {
-                        db.mark_slot_as_spent(
-                            constants.launcher_id,
-                            0,
-                            previous_value_hash,
-                            coin_record.spent_block_index,
-                        )
-                        .await?;
-                    }
+                    // no need to actually delete handle indexed value, as
+                    //   all actions will overwrite (not remove) the handle
+                    //   from the list
                 }
 
-                for slot in new_slots {
-                    db.save_slot(ctx, slot, 0).await?;
-                    db.save_catalog_indexed_slot_value(
-                        slot.info.value.asset_id,
+                for slot in prev_registry.created_slot_values_to_slots(pending_items.slot_values) {
+                    db.save_slot(
+                        ctx,
+                        slot,
+                        if pending_items.spent_slots.contains(&slot.info.value_hash) {
+                            coin_record.spent_block_index
+                        } else {
+                            0
+                        },
+                    )
+                    .await?;
+                    db.save_xchandles_indexed_slot_value(
+                        slot.info.launcher_id,
+                        slot.info.value.handle_hash,
                         slot.info.value_hash,
                     )
                     .await?;
@@ -97,8 +106,8 @@ pub async fn sync_xchandles(
             let Some((
                 new_registry,
                 initial_slots,
-                initial_registration_asset_id,
-                initial_base_price,
+                _initial_registration_asset_id,
+                _initial_base_price,
             )) = XchandlesRegistry::from_launcher_solution(ctx, coin_record.coin, solution_ptr)?
             else {
                 return Err(CliError::CoinNotFound(last_coin_id));
