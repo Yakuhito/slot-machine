@@ -73,7 +73,12 @@ impl XchandlesExpireAction {
         >::from_clvm(ctx, solution)?;
 
         Ok(XchandlesSlotValue {
-            handle_hash: old_slot_value.handle_hash,
+            handle_hash: solution
+                .expired_handle_pricing_puzzle_solution
+                .pricing_program_solution
+                .handle
+                .tree_hash()
+                .into(),
             neighbors: old_slot_value.neighbors,
             expiration: precommit_coin_value.start_time
                 + 366

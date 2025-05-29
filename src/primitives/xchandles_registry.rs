@@ -11,12 +11,25 @@ use chia_wallet_sdk::{
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
-use crate::{eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, Registry};
+use crate::{
+    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, DelegatedStateAction,
+    Registry, XchandlesExpireAction, XchandlesExtendAction, XchandlesOracleAction,
+    XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
+};
 
 use super::{
     Slot, SlotInfo, SlotProof, XchandlesConstants, XchandlesRegistryInfo, XchandlesRegistryState,
     XchandlesSlotValue,
 };
+
+#[derive(Debug, Clone, Default)]
+pub struct XchandlesRegistryPendingItems {
+    pub actions: Vec<Spend>,
+
+    pub spent_slots: Vec<Bytes32>, // (value hash)
+
+    pub slot_values: Vec<XchandlesSlotValue>,
+}
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -25,7 +38,7 @@ pub struct XchandlesRegistry {
     pub proof: Proof,
     pub info: XchandlesRegistryInfo,
 
-    pub pending_actions: Vec<Spend>,
+    pub pending_items: XchandlesRegistryPendingItems,
 }
 
 impl XchandlesRegistry {
@@ -34,7 +47,7 @@ impl XchandlesRegistry {
             coin,
             proof,
             info,
-            pending_actions: vec![],
+            pending_items: XchandlesRegistryPendingItems::default(),
         }
     }
 }
@@ -81,7 +94,7 @@ impl XchandlesRegistry {
             coin: new_coin,
             proof,
             info: new_info,
-            pending_actions: vec![],
+            pending_items: XchandlesRegistryPendingItems::default(),
         }))
     }
 
@@ -171,7 +184,7 @@ impl XchandlesRegistry {
                 coin: registry_coin,
                 proof,
                 info,
-                pending_actions: vec![],
+                pending_items: XchandlesRegistryPendingItems::default(),
             },
             slots,
             initial_registration_asset_id,
@@ -187,7 +200,8 @@ impl XchandlesRegistry {
         let puzzle = layers.construct_puzzle(ctx)?;
 
         let action_puzzle_hashes = self
-            .pending_actions
+            .pending_items
+            .actions
             .iter()
             .map(|a| ctx.tree_hash(a.puzzle).into())
             .collect::<Vec<Bytes32>>();
@@ -207,7 +221,7 @@ impl XchandlesRegistry {
                         .ok_or(DriverError::Custom(
                             "Couldn't build proofs for one or more actions".to_string(),
                         ))?,
-                    action_spends: self.pending_actions,
+                    action_spends: self.pending_items.actions,
                     finalizer_solution: NodePtr::NIL,
                 },
             },
@@ -232,11 +246,11 @@ impl XchandlesRegistry {
     }
 
     pub fn insert(&mut self, action_spend: Spend) {
-        self.pending_actions.push(action_spend);
+        self.pending_items.actions.push(action_spend);
     }
 
     pub fn insert_multiple(&mut self, action_spends: Vec<Spend>) {
-        self.pending_actions.extend(action_spends);
+        self.pending_items.actions.extend(action_spends);
     }
 
     pub fn new_action<A>(&self) -> A
@@ -272,7 +286,7 @@ impl XchandlesRegistry {
     ) -> Result<XchandlesRegistryState, DriverError> {
         let mut state = (NodePtr::NIL, self.info.state);
 
-        for action in self.pending_actions.iter() {
+        for action in self.pending_items.actions.iter() {
             let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
 
             let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
@@ -282,5 +296,89 @@ impl XchandlesRegistry {
         }
 
         Ok(state.1)
+    }
+
+    pub fn get_pending_items_from_spend(
+        &self,
+        ctx: &mut SpendContext,
+        solution: NodePtr,
+    ) -> Result<XchandlesRegistryPendingItems, DriverError> {
+        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
+        let inner_solution = ActionLayer::<XchandlesRegistryState, NodePtr>::parse_solution(
+            ctx,
+            solution.inner_solution,
+        )?;
+
+        let mut actions: Vec<Spend> = vec![];
+        let spent_slots: Vec<Bytes32> = vec![];
+        let slot_values: Vec<XchandlesSlotValue> = vec![];
+
+        let expire_action = XchandlesExpireAction::from_constants(&self.info.constants);
+        let expire_action_hash = expire_action.tree_hash().into();
+
+        let extend_action = XchandlesExtendAction::from_constants(&self.info.constants);
+        let extend_action_hash = extend_action.tree_hash().into();
+
+        let oracle_action = XchandlesOracleAction::from_constants(&self.info.constants);
+        let oracle_action_hash = oracle_action.tree_hash().into();
+
+        let register_action = XchandlesRegisterAction::from_constants(&self.info.constants);
+        let register_action_hash = register_action.tree_hash().into();
+
+        let update_action = XchandlesUpdateAction::from_constants(&self.info.constants);
+        let update_action_hash = update_action.tree_hash().into();
+
+        let refund_action = XchandlesRefundAction::from_constants(&self.info.constants);
+        let refund_action_hash = refund_action.tree_hash().into();
+
+        let delegated_state_action =
+            <DelegatedStateAction as Action<XchandlesRegistry>>::from_constants(
+                &self.info.constants,
+            );
+        let delegated_state_action_hash = delegated_state_action.tree_hash().into();
+
+        let mut current_state = (NodePtr::NIL, self.info.state);
+        for raw_action in inner_solution.action_spends {
+            actions.push(Spend::new(raw_action.puzzle, raw_action.solution));
+
+            let actual_solution = ctx.alloc(&clvm_list!(current_state, raw_action.solution))?;
+
+            let action_output = run_puzzle(ctx, raw_action.puzzle, actual_solution)?;
+            (current_state, _) = ctx
+                .extract::<match_tuple!((NodePtr, XchandlesRegistryState), NodePtr)>(
+                    action_output,
+                )?;
+
+            let raw_action_hash = ctx.tree_hash(raw_action.puzzle);
+
+            if raw_action_hash == expire_action_hash {
+                // let (rew, spent) =
+                //     expire_action.get_slot_value_from_solution(ctx, raw_action.solution)?;
+
+                // reward_slot_values.push(rew);
+                // spent_slots.push(spent);
+                todo!("requires slot and precommit coin");
+            } else if raw_action_hash == extend_action_hash {
+                todo!("requires slot");
+            } else if raw_action_hash == oracle_action_hash {
+                todo!("requires slot");
+            } else if raw_action_hash == register_action_hash {
+                todo!("requires precommitment coin and neighbor slots");
+            } else if raw_action_hash == update_action_hash {
+                todo!("requires slot");
+            } else if raw_action_hash == refund_action_hash {
+                continue;
+            } else if raw_action_hash == delegated_state_action_hash {
+                continue;
+            } else {
+                return Err(DriverError::Custom("Unknown action".to_string()));
+            }
+        }
+
+        Ok(XchandlesRegistryPendingItems {
+            actions,
+            spent_slots,
+            slot_values,
+        })
     }
 }
