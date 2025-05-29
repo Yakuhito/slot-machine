@@ -532,7 +532,7 @@ pub async fn xchandles_continue_launch(
             .get_xchandles_neighbors(&mut ctx, constants.launcher_id, handle_hash)
             .await?;
 
-        // let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
+        let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
         let (sec_conds, _new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
             &mut ctx,

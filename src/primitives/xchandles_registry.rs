@@ -99,6 +99,7 @@ impl XchandlesRegistry {
     }
 
     // Also returns initial registration asset id
+    #[allow(clippy::type_complexity)]
     pub fn from_launcher_solution(
         ctx: &mut SpendContext,
         launcher_coin: Coin,
@@ -314,28 +315,28 @@ impl XchandlesRegistry {
         let slot_values: Vec<XchandlesSlotValue> = vec![];
 
         let expire_action = XchandlesExpireAction::from_constants(&self.info.constants);
-        let expire_action_hash = expire_action.tree_hash().into();
+        let expire_action_hash = expire_action.tree_hash();
 
         let extend_action = XchandlesExtendAction::from_constants(&self.info.constants);
-        let extend_action_hash = extend_action.tree_hash().into();
+        let extend_action_hash = extend_action.tree_hash();
 
         let oracle_action = XchandlesOracleAction::from_constants(&self.info.constants);
-        let oracle_action_hash = oracle_action.tree_hash().into();
+        let oracle_action_hash = oracle_action.tree_hash();
 
         let register_action = XchandlesRegisterAction::from_constants(&self.info.constants);
-        let register_action_hash = register_action.tree_hash().into();
+        let register_action_hash = register_action.tree_hash();
 
         let update_action = XchandlesUpdateAction::from_constants(&self.info.constants);
-        let update_action_hash = update_action.tree_hash().into();
+        let update_action_hash = update_action.tree_hash();
 
         let refund_action = XchandlesRefundAction::from_constants(&self.info.constants);
-        let refund_action_hash = refund_action.tree_hash().into();
+        let refund_action_hash = refund_action.tree_hash();
 
         let delegated_state_action =
             <DelegatedStateAction as Action<XchandlesRegistry>>::from_constants(
                 &self.info.constants,
             );
-        let delegated_state_action_hash = delegated_state_action.tree_hash().into();
+        let delegated_state_action_hash = delegated_state_action.tree_hash();
 
         let mut current_state = (NodePtr::NIL, self.info.state);
         for raw_action in inner_solution.action_spends {
@@ -366,9 +367,9 @@ impl XchandlesRegistry {
                 todo!("requires precommitment coin and neighbor slots");
             } else if raw_action_hash == update_action_hash {
                 todo!("requires slot");
-            } else if raw_action_hash == refund_action_hash {
-                continue;
-            } else if raw_action_hash == delegated_state_action_hash {
+            } else if raw_action_hash == refund_action_hash
+                || raw_action_hash == delegated_state_action_hash
+            {
                 continue;
             } else {
                 return Err(DriverError::Custom("Unknown action".to_string()));
@@ -380,5 +381,40 @@ impl XchandlesRegistry {
             spent_slots,
             slot_values,
         })
+    }
+
+    pub fn actual_neigbors(
+        &self,
+        new_handle_hash: Bytes32,
+        on_chain_left_slot: Slot<XchandlesSlotValue>,
+        on_chain_right_slot: Slot<XchandlesSlotValue>,
+    ) -> (Slot<XchandlesSlotValue>, Slot<XchandlesSlotValue>) {
+        let mut left = on_chain_left_slot;
+        let mut right = on_chain_right_slot;
+
+        let new_slot_value = XchandlesSlotValue::new(
+            new_handle_hash,
+            Bytes32::default(),
+            Bytes32::default(),
+            0,
+            Bytes32::default(),
+            Bytes32::default(),
+        );
+
+        for slot_value in self.pending_items.slot_values.iter() {
+            if slot_value.handle_hash < new_slot_value.handle_hash
+                && slot_value.handle_hash >= left.info.value.handle_hash
+            {
+                left = self.created_slot_values_to_slots(vec![*slot_value])[0];
+            }
+
+            if slot_value.handle_hash > new_slot_value.handle_hash
+                && slot_value.handle_hash <= right.info.value.handle_hash
+            {
+                right = self.created_slot_values_to_slots(vec![*slot_value])[0];
+            }
+        }
+
+        (left, right)
     }
 }
