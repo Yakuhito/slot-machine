@@ -18,9 +18,9 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 use crate::{
     get_last_onchain_timestamp, hex_string_to_bytes32, load_xchandles_premine_csv, new_sk,
     parse_amount, parse_one_sided_offer, spend_security_coin, sync_xchandles, wait_for_coin,
-    yes_no_prompt, CatalogPrecommitValue, CatalogRegisterAction, CliError, Db, PrecommitCoin,
-    PrecommitLayer, SageClient, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
-    XchandlesPrecommitValue, XchandlesPremineRecord, XchandlesRegisterAction,
+    yes_no_prompt, CatalogPrecommitValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
+    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
+    XchandlesPremineRecord, XchandlesRegisterAction,
 };
 
 fn precommit_value_for_handle(
@@ -120,7 +120,7 @@ pub async fn xchandles_continue_launch(
     let fee = parse_amount(&fee_str, false)?;
 
     // Make sure this is always rounded down to a day
-    let mut start_time = get_last_onchain_timestamp(&client).await? / 8640 * 8640;
+    let start_time = get_last_onchain_timestamp(&client).await? / 8640 * 8640;
 
     if i == 0 {
         println!("No handles registered yet - looking for precommitment coins...");
@@ -182,19 +182,24 @@ pub async fn xchandles_continue_launch(
                 j += 1;
             }
 
-            let mut precommitment_inner_puzzle_hashes_to_launch =
-                Vec::with_capacity(handles_per_spend);
-            TODO: per-registration cost is not 1 :|
-                j = i;
+            // (inner puzzle hash, amount)
+            let mut handles_payment_total = 0;
+            let mut precommitment_info_to_launch = Vec::with_capacity(handles_per_spend);
+            j = i;
             while j < handles_to_launch.len() && j - i < handles_per_spend {
-                precommitment_inner_puzzle_hashes_to_launch.push(inner_puzzle_hashes[j]);
+                let handle_reg_price =
+                    XchandlesFactorPricingPuzzleArgs::get_price(1, &handles_to_launch[j].handle, 1);
+
+                precommitment_info_to_launch.push((inner_puzzle_hashes[j], handle_reg_price));
+                handles_payment_total += handle_reg_price;
+
                 j += 1;
             }
 
             println!("A one-sided offer will be created; it will consume:");
             println!(
                 "  - {} payment CAT mojos for creating precommitment coins",
-                precommitment_inner_puzzle_hashes_to_launch.len()
+                handles_payment_total,
             );
             println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
             println!("  - 1 mojo for the sake of it");
@@ -211,9 +216,7 @@ pub async fn xchandles_continue_launch(
                         xch: Amount::u64(1),
                         cats: vec![CatAmount {
                             asset_id: payment_asset_id_str,
-                            amount: Amount::u64(
-                                precommitment_inner_puzzle_hashes_to_launch.len() as u64
-                            ),
+                            amount: Amount::u64(handles_payment_total),
                         }],
                         nfts: vec![],
                     },
@@ -226,10 +229,10 @@ pub async fn xchandles_continue_launch(
             println!("Offer with id {} generated.", offer_resp.offer_id);
 
             let mut cat_creator_conds = Conditions::new();
-            for inner_ph in precommitment_inner_puzzle_hashes_to_launch {
+            for (inner_ph, amount) in precommitment_info_to_launch {
                 cat_creator_conds = cat_creator_conds.create_coin(
                     inner_ph.into(),
-                    1,
+                    amount,
                     Some(ctx.hint(inner_ph.into())?),
                 );
             }
@@ -517,17 +520,21 @@ pub async fn xchandles_continue_launch(
             constants.relative_block_height,
             constants.precommit_payout_puzzle_hash,
             Bytes32::default(),
-            *precommit_value,
-            1,
+            precommit_value.clone(),
+            XchandlesFactorPricingPuzzleArgs::get_price(
+                1,
+                &precommit_value.secret_and_handle.handle,
+                1,
+            ),
         )?;
 
         let (left_slot, right_slot) = db
             .get_xchandles_neighbors(&mut ctx, constants.launcher_id, handle_hash)
             .await?;
 
-        let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
+        // let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
-        let (sec_conds, new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
+        let (sec_conds, _new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
             &mut ctx,
             &mut registry,
             left_slot,
