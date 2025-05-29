@@ -607,20 +607,31 @@ pub fn launch_catalog_registry<V>(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
-pub fn launch_xchandles_registry(
+pub fn launch_xchandles_registry<V>(
     ctx: &mut SpendContext,
     offer: Offer,
     initial_base_registration_price: u64,
-    initial_registration_asset_id: Bytes32,
-    xchandles_constants: XchandlesConstants,
+    // (registry launcher id, security coin, additional_args) -> (additional conditions, registry constants, initial_registration_asset_id)
+    get_additional_info: fn(
+        ctx: &mut SpendContext,
+        Bytes32,
+        Coin,
+        V,
+    ) -> Result<
+        (Conditions<NodePtr>, XchandlesConstants, Bytes32),
+        DriverError,
+    >,
     consensus_constants: &ConsensusConstants,
+    additional_args: V,
 ) -> Result<
     (
         Signature,
         SecretKey,
         XchandlesRegistry,
         [Slot<XchandlesSlotValue>; 2],
+        Coin, // security coin
     ),
     DriverError,
 > {
@@ -636,6 +647,14 @@ pub fn launch_xchandles_registry(
     let registry_launcher = Launcher::new(security_coin_id, 1);
     let registry_launcher_coin = registry_launcher.coin();
     let registry_launcher_id = registry_launcher_coin.coin_id();
+
+    let (additional_security_coin_conditions, xchandles_constants, initial_registration_asset_id) =
+        get_additional_info(
+            ctx,
+            registry_launcher_id,
+            offer.security_coin,
+            additional_args,
+        )?;
 
     // Spend intermediary coin and create registry
     let initial_state = XchandlesRegistryState::from(
@@ -665,7 +684,9 @@ pub fn launch_xchandles_registry(
         )?;
 
     // this creates the launcher & secures the spend
-    security_coin_conditions = security_coin_conditions.extend(new_security_coin_conditions);
+    security_coin_conditions = security_coin_conditions
+        .extend(new_security_coin_conditions)
+        .extend(additional_security_coin_conditions);
 
     let xchandles_registry =
         XchandlesRegistry::new(new_xchandles_coin, xchandles_proof, target_xchandles_info);
@@ -685,6 +706,7 @@ pub fn launch_xchandles_registry(
         security_coin_sk,
         xchandles_registry,
         slots,
+        offer.security_coin,
     ))
 }
 
@@ -1633,13 +1655,18 @@ mod tests {
         ) = launch_test_singleton(ctx, &mut sim)?;
 
         // Launch XCHandles
-        let (_, security_sk, mut registry, slots) = launch_xchandles_registry(
+        let (_, security_sk, mut registry, slots, _security_coin) = launch_xchandles_registry(
             ctx,
             offer,
             initial_registration_price,
-            payment_cat.asset_id,
-            xchandles_constants.with_price_singleton(price_singleton_launcher_id),
+            |_ctx, _launcher_id, _coin, (xchandles_constants, payment_cat_asset_id)| {
+                Ok((Conditions::new(), xchandles_constants, payment_cat_asset_id))
+            },
             &TESTNET11_CONSTANTS,
+            (
+                xchandles_constants.with_price_singleton(price_singleton_launcher_id),
+                payment_cat.asset_id,
+            ),
         )?;
 
         // Check XCHandlesRegistry::from_launcher_solution

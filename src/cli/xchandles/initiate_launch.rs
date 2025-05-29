@@ -1,13 +1,13 @@
 use crate::{
     cli::{
-        csv::load_catalog_premine_csv,
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    get_coinset_client, get_prefix, launch_catalog_registry, load_catalog_state_schedule_csv,
+    get_coinset_client, get_prefix, launch_xchandles_registry, load_catalog_state_schedule_csv,
     load_xchandles_premine_csv, parse_amount, print_medieval_vault_configuration, wait_for_coin,
-    CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint,
-    MedievalVaultInfo, SageClient, StateSchedulerInfo, XchandlesConstants,
+    CatalogRegistryConstants, CatalogRegistryState, MedievalVaultHint, MedievalVaultInfo,
+    SageClient, StateSchedulerInfo, XchandlesConstants, XchandlesFactorPricingPuzzleArgs,
+    XchandlesRegistryState,
 };
 use chia::{
     bls::PublicKey,
@@ -184,18 +184,11 @@ pub async fn xchandles_initiate_launch(
         db.delete_all_singleton_coins(constants.launcher_id).await?;
     }
 
-    // TODO: pick up from here
     let prefix = get_prefix(testnet11);
-    let royalty_address = Address::new(constants.royalty_address, prefix.clone()).encode()?;
     let precommit_payout_address =
         Address::new(constants.precommit_payout_puzzle_hash, prefix).encode()?;
 
     println!("Default constants will be used:");
-    println!("  royalty address: {}", royalty_address);
-    println!(
-        "  royalty ten thousandths: {}",
-        constants.royalty_ten_thousandths
-    );
     println!("  precommit payout address: {}", precommit_payout_address);
     println!(
         "  relative block height: {}",
@@ -204,12 +197,18 @@ pub async fn xchandles_initiate_launch(
     println!("  price singleton id: (will be launched as well)");
     yes_no_prompt("Do the constants above have the correct values?")?;
 
-    println!("A one-sided offer ({} mojos) will be needed for launch. The value will be distributed as follows:", 2 + cats_to_launch.len());
-    println!("  CATalog registry singleton - 1 mojo");
-    println!("  CATalog price singleton - 1 mojo");
+    let mut value_needed_for_registration = 0;
+    for handle_record in handles_to_launch.iter() {
+        value_needed_for_registration +=
+            XchandlesFactorPricingPuzzleArgs::get_price(1, &handle_record.handle, 1);
+    }
+
+    println!("A one-sided offer ({} mojos) will be needed for launch. The value will be distributed as follows:", 2 + value_needed_for_registration);
+    println!("  XCHandles registry singleton - 1 mojo");
+    println!("  XCHandles price singleton - 1 mojo");
     println!(
-        "  CATalog premine registration CAT - {} mojos",
-        cats_to_launch.len()
+        "  XCHandles premine registration CAT - {} mojos",
+        value_needed_for_registration
     );
     println!(
         "The offer will also use {} XCH ({} mojos) as fee.",
@@ -239,7 +238,7 @@ pub async fn xchandles_initiate_launch(
                 nfts: vec![],
             },
             offered_assets: Assets {
-                xch: Amount::u64(2 + cats_to_launch.len() as u64),
+                xch: Amount::u64(2 + value_needed_for_registration as u64),
                 cats: vec![],
                 nfts: vec![],
             },
@@ -254,7 +253,7 @@ pub async fn xchandles_initiate_launch(
 
     let mut ctx = SpendContext::new();
 
-    let (sig, _, _registry, slots, security_coin) = launch_catalog_registry(
+    let (sig, _, _registry, slots, security_coin) = launch_xchandles_registry(
         &mut ctx,
         Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
         1,
@@ -265,25 +264,22 @@ pub async fn xchandles_initiate_launch(
             &MAINNET_CONSTANTS
         },
         (
-            CatalogRegistryConstants::get(testnet11),
+            XchandlesConstants::get(testnet11),
             price_schedule
                 .into_iter()
                 .map(|ps| {
                     (
                         ps.block_height,
-                        CatalogRegistryState {
-                            cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
-                                ps.asset_id.tree_hash().into(),
-                            )
-                            .into(),
-                            registration_price: ps.registration_price,
-                        },
+                        XchandlesRegistryState::from(
+                            ps.asset_id.tree_hash().into(),
+                            ps.registration_price,
+                        ),
                     )
                 })
                 .collect(),
             pubkeys,
             m,
-            cats_to_launch.len() as u64,
+            value_needed_for_registration,
             Address::decode(&derivation_resp.derivations[0].address)?.puzzle_hash,
         ),
     )
@@ -300,7 +296,7 @@ pub async fn xchandles_initiate_launch(
 
     for slot in slots {
         db.save_slot(&mut ctx, slot, 0).await?;
-        db.save_catalog_indexed_slot_value(slot.info.value.asset_id, slot.info.value_hash)
+        db.save_xchandles_indexed_slot_value(slot.info.value.handle_hash, slot.info.value_hash)
             .await?;
     }
 
