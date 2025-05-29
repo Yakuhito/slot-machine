@@ -293,6 +293,8 @@ pub async fn xchandles_initiate_launch(
 
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
+    db.save_xchandles_configuration(&mut ctx, constants).await?;
+
     for slot in slots {
         db.save_slot(&mut ctx, slot, 0).await?;
         db.save_xchandles_indexed_slot_value(slot.info.value.handle_hash, slot.info.value_hash)

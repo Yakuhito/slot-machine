@@ -706,7 +706,6 @@ impl Db {
     pub async fn save_xchandles_configuration(
         &self,
         allocator: &mut Allocator,
-        launcher_id: Bytes32,
         constants: XchandlesConstants,
     ) -> Result<(), CliError> {
         let constants_ptr = constants.to_clvm(allocator).map_err(DriverError::ToClvm)?;
@@ -718,7 +717,7 @@ impl Db {
             ON CONFLICT(launcher_id) DO UPDATE SET constants = excluded.constants
             ",
         )
-        .bind(launcher_id.to_vec())
+        .bind(constants.launcher_id.to_vec())
         .bind(constants_bytes)
         .execute(&self.pool)
         .await

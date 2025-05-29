@@ -66,11 +66,13 @@ fn precommit_value_for_cat(
 }
 
 pub async fn xchandles_continue_launch(
+    launcher_id_str: String,
     payment_asset_id_str: String,
     handles_per_spend: usize,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
+    let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
     println!("Time to unroll an XCHandles registry! Yee-haw!");
 
     let premine_csv_filename = if testnet11 {
@@ -91,16 +93,16 @@ pub async fn xchandles_continue_launch(
 
     println!("Opening database...");
     let mut db = Db::new(false).await?;
+    let mut ctx = SpendContext::new();
 
-    let constants = XchandlesConstants::get(testnet11);
-    if constants.price_singleton_launcher_id == Bytes32::default()
-        || constants.launcher_id == Bytes32::default()
-    {
+    let Some(constants) = db
+        .get_xchandles_configuration(&mut ctx, launcher_id)
+        .await?
+    else {
         return Err(CliError::ConstantsNotSet);
-    }
+    };
 
     println!("Syncing XCHandles registry...");
-    let mut ctx = SpendContext::new();
 
     // TODO: resume modifying after this point
     let mut catalog = sync_catalog(&client, &mut db, &mut ctx, constants).await?;

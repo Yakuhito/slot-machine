@@ -366,6 +366,10 @@ enum XchandlesCliAction {
     },
     /// Continues/finishes an existing launch
     ContinueLaunch {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
         /// Payment asset id (payment CAT tail hash from launch initiation)
         #[arg(long)]
         payment_asset_id: String,
@@ -909,7 +913,14 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => {
-                xchandles_continue_launch(payment_asset_id, handles_per_spend, testnet11, fee).await
+                xchandles_continue_launch(
+                    launcher_id,
+                    payment_asset_id,
+                    handles_per_spend,
+                    testnet11,
+                    fee,
+                )
+                .await
             }
             XchandlesCliAction::UnrollStateScheduler { testnet11, fee } => todo!("TODO"),
             XchandlesCliAction::VerifyDeployment { testnet11 } => todo!("TODO"),
