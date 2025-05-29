@@ -7,8 +7,9 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{CatLayer, DriverError, Layer, Offer, Puzzle, SingleCatSpend, Spend, SpendContext},
+    driver::{CatLayer, Layer, Offer, Puzzle, SingleCatSpend, Spend, SpendContext},
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
+    utils::Address,
 };
 use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
@@ -16,51 +17,34 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
     hex_string_to_bytes32, load_xchandles_premine_csv, new_sk, parse_amount, parse_one_sided_offer,
-    spend_security_coin, sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata,
-    CatalogPrecommitValue, CatalogPremineRecord, CatalogRegisterAction, CliError, Db,
-    PrecommitCoin, PrecommitLayer, SageClient, XchandlesConstants,
+    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CatalogPrecommitValue,
+    CatalogRegisterAction, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
+    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
+    XchandlesPremineRecord,
 };
 
-pub fn initial_cat_inner_puzzle_ptr(
+fn precommit_value_for_handle(
     ctx: &mut SpendContext,
-    cat: &CatalogPremineRecord,
-) -> Result<NodePtr, DriverError> {
-    CatalogPrecommitValue::<()>::initial_inner_puzzle(
-        ctx,
-        cat.owner,
-        CatNftMetadata {
-            ticker: cat.code.clone(),
-            name: cat.name.clone(),
-            description: "".to_string(),
-            precision: cat.precision,
-            image_uris: cat.image_uris.clone(),
-            image_hash: cat.image_hash,
-            metadata_uris: vec![],
-            metadata_hash: None,
-            license_uris: vec![],
-            license_hash: None,
-        },
-    )
-}
-
-fn precommit_value_for_cat(
-    ctx: &mut SpendContext,
-    cat: &CatalogPremineRecord,
+    handle: &XchandlesPremineRecord,
     payment_asset_id: Bytes32,
-) -> Result<CatalogPrecommitValue, CliError> {
-    let tail_ptr = node_from_bytes(ctx, &cat.tail)?;
-    let tail_hash = ctx.tree_hash(tail_ptr);
-    if tail_hash != cat.asset_id.into() {
-        eprintln!("CAT {} has a tail hash mismatch - aborting", cat.asset_id);
-        return Err(CliError::Custom("TAIL hash mismatch".to_string()));
-    }
+    start_time: u64,
+) -> Result<XchandlesPrecommitValue, CliError> {
+    let owner_nft_launcher_id = Address::decode(&handle.owner_nft)?.puzzle_hash;
 
-    let initial_inner_puzzle_ptr = initial_cat_inner_puzzle_ptr(ctx, cat)?;
-
-    Ok(CatalogPrecommitValue::with_default_cat_maker(
+    Ok(XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
-        ctx.tree_hash(initial_inner_puzzle_ptr).into(),
-        tail_ptr,
+        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(1),
+        XchandlesFactorPricingSolution {
+            current_expiration: 0,
+            handle: handle.handle.clone(),
+            num_years: 1,
+        }
+        .tree_hash(),
+        Bytes32::default(),
+        handle.handle.clone(),
+        start_time,
+        owner_nft_launcher_id,
+        owner_nft_launcher_id,
     ))
 }
 
@@ -103,18 +87,22 @@ pub async fn xchandles_continue_launch(
 
     println!("Syncing XCHandles registry...");
 
-    // TODO: resume modifying after this point
-    let mut catalog = sync_catalog(&client, &mut db, &mut ctx, constants).await?;
+    let mut catalog = sync_xchandles(&client, &mut db, &mut ctx, constants).await?;
     println!(
         "Latest XCHandles registry coin id: {}",
         catalog.coin.coin_id()
     );
 
-    println!("Finding last registered CAT from list...");
+    println!("Finding last registered handle from list...");
     let mut i = 0;
-    while i < cats_to_launch.len() {
-        let cat = &cats_to_launch[i];
-        let resp = db.get_catalog_indexed_slot_value(cat.asset_id).await?;
+    while i < handles_to_launch.len() {
+        let handle = &handles_to_launch[i];
+        let resp = db
+            .get_xchandles_indexed_slot_value(
+                constants.launcher_id,
+                handle.handle.tree_hash().into(),
+            )
+            .await?;
         if resp.is_none() {
             break;
         }
@@ -122,8 +110,8 @@ pub async fn xchandles_continue_launch(
         i += 1;
     }
 
-    if i == cats_to_launch.len() {
-        eprintln!("All CATs have already been registered - nothing to do!");
+    if i == handles_to_launch.len() {
+        eprintln!("All handles have already been registered - nothing to do!");
         return Ok(());
     }
 
@@ -133,9 +121,9 @@ pub async fn xchandles_continue_launch(
     let fee = parse_amount(&fee_str, false)?;
 
     if i == 0 {
-        println!("No CATs registered yet - looking for precommitment coins...");
+        println!("No handles registered yet - looking for precommitment coins...");
 
-        let inner_puzzle_hashes = cats_to_launch
+        let inner_puzzle_hashes = handles_to_launch
             .iter()
             .map(|cat| {
                 let precommit_value = precommit_value_for_cat(&mut ctx, cat, payment_asset_id)?;
