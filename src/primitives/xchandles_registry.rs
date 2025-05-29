@@ -5,16 +5,13 @@ use chia::{
 };
 use chia_puzzle_types::singleton::{LauncherSolution, SingletonArgs};
 use chia_wallet_sdk::{
-    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
-    types::run_puzzle,
+    coinset::CoinsetClient, driver::{DriverError, Layer, Puzzle, Spend, SpendContext}, types::{run_puzzle, Conditions}
 };
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, DelegatedStateAction,
-    Registry, XchandlesExpireAction, XchandlesExtendAction, XchandlesOracleAction,
-    XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
+    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, Db, DelegatedStateAction, Registry, XchandlesExpireAction, XchandlesExtendAction, XchandlesOracleAction, XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction
 };
 
 use super::{
@@ -299,9 +296,11 @@ impl XchandlesRegistry {
         Ok(state.1)
     }
 
-    pub fn get_pending_items_from_spend(
+    pub async fn get_pending_items_from_spend(
         &self,
         ctx: &mut SpendContext,
+        db: &mut Db,
+        client: &CoinsetClient,
         solution: NodePtr,
     ) -> Result<XchandlesRegistryPendingItems, DriverError> {
         let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
@@ -339,38 +338,39 @@ impl XchandlesRegistry {
         let delegated_state_action_hash = delegated_state_action.tree_hash();
 
         let mut current_state = (NodePtr::NIL, self.info.state);
+        let mut output_conditions: Conditions<NodePtr>;
         for raw_action in inner_solution.action_spends {
             actions.push(Spend::new(raw_action.puzzle, raw_action.solution));
 
             let actual_solution = ctx.alloc(&clvm_list!(current_state, raw_action.solution))?;
 
             let action_output = run_puzzle(ctx, raw_action.puzzle, actual_solution)?;
-            (current_state, _) = ctx
-                .extract::<match_tuple!((NodePtr, XchandlesRegistryState), NodePtr)>(
+            (current_state, output_conditions) = ctx
+                .extract::<match_tuple!((NodePtr, XchandlesRegistryState), Conditions<NodePtr>)>(
                     action_output,
                 )?;
 
             let raw_action_hash = ctx.tree_hash(raw_action.puzzle);
 
-            if raw_action_hash == expire_action_hash {
-                // let (rew, spent) =
-                //     expire_action.get_slot_value_from_solution(ctx, raw_action.solution)?;
+            if raw_action_hash == refund_action_hash
+                || raw_action_hash == delegated_state_action_hash
+            {
+                // slots were not created or spent
+                continue;
+            }
 
-                // reward_slot_values.push(rew);
-                // spent_slots.push(spent);
-                todo!("requires slot and precommit coin");
-            } else if raw_action_hash == extend_action_hash {
+            if raw_action_hash == extend_action_hash {
+                extend_action.get_slot_value_from_solution(ctx, old_slot_value, solution)
                 todo!("requires slot");
             } else if raw_action_hash == oracle_action_hash {
                 todo!("requires slot");
-            } else if raw_action_hash == register_action_hash {
-                todo!("requires precommitment coin and neighbor slots");
             } else if raw_action_hash == update_action_hash {
                 todo!("requires slot");
-            } else if raw_action_hash == refund_action_hash
-                || raw_action_hash == delegated_state_action_hash
+            } else if raw_action_hash == expire_action_hash
+                || raw_action_hash == register_action_hash
             {
-                continue;
+                // these actions also need a precommit coin
+                todo!("logic here");
             } else {
                 return Err(DriverError::Custom("Unknown action".to_string()));
             }
