@@ -356,12 +356,16 @@ impl XchandlesRegistry {
 
             let raw_action_hash = ctx.tree_hash(raw_action.puzzle);
 
-            if raw_action_hash == refund_action_hash
-                || raw_action_hash == delegated_state_action_hash
-            {
+            if raw_action_hash == delegated_state_action_hash {
                 // slots were not created or spent
                 continue;
             }
+
+            // TODO: reminder for tomorrow
+            // note that the slot value should first be searched for in pending slots
+            // (i.e., an earlier action created the slot)
+            // if not, use the db
+            // use the client for precommitment coins where needed ('register' - working registration)
 
             if raw_action_hash == extend_action_hash {
                 // extend_action.get_slot_value_from_solution(ctx, old_slot_value, solution)
@@ -369,6 +373,8 @@ impl XchandlesRegistry {
             } else if raw_action_hash == oracle_action_hash {
                 todo!("requires slot");
             } else if raw_action_hash == update_action_hash {
+                todo!("requires slot");
+            } else if raw_action_hash == refund_action_hash {
                 todo!("requires slot");
             } else if raw_action_hash == expire_action_hash
                 || raw_action_hash == register_action_hash
