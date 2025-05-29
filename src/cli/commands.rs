@@ -10,7 +10,7 @@ use super::{
     reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_sign_entry_update,
     reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
     verifications_sign_launch, verifications_sign_revocation, verifications_view,
-    xchandles_initiate_launch,
+    xchandles_continue_launch, xchandles_initiate_launch,
 };
 
 #[derive(Parser)]
@@ -908,7 +908,9 @@ pub async fn run_cli() {
                 handles_per_spend,
                 testnet11,
                 fee,
-            } => todo!("TODO"),
+            } => {
+                xchandles_continue_launch(payment_asset_id, handles_per_spend, testnet11, fee).await
+            }
             XchandlesCliAction::UnrollStateScheduler { testnet11, fee } => todo!("TODO"),
             XchandlesCliAction::VerifyDeployment { testnet11 } => todo!("TODO"),
         },
