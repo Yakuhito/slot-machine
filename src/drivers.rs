@@ -1655,23 +1655,24 @@ mod tests {
         ) = launch_test_singleton(ctx, &mut sim)?;
 
         // Launch XCHandles
-        let (_, security_sk, mut registry, slots, _security_coin) = launch_xchandles_registry(
-            ctx,
-            offer,
-            initial_registration_price,
-            |_ctx, _launcher_id, _coin, (xchandles_constants, payment_cat_asset_id)| {
-                Ok((Conditions::new(), xchandles_constants, payment_cat_asset_id))
-            },
-            &TESTNET11_CONSTANTS,
-            (
-                xchandles_constants.with_price_singleton(price_singleton_launcher_id),
-                payment_cat.asset_id,
-            ),
-        )?;
+        let (_, security_sk, mut registry, slots_returned_by_launch, _security_coin) =
+            launch_xchandles_registry(
+                ctx,
+                offer,
+                initial_registration_price,
+                |_ctx, _launcher_id, _coin, (xchandles_constants, payment_cat_asset_id)| {
+                    Ok((Conditions::new(), xchandles_constants, payment_cat_asset_id))
+                },
+                &TESTNET11_CONSTANTS,
+                (
+                    xchandles_constants.with_price_singleton(price_singleton_launcher_id),
+                    payment_cat.asset_id,
+                ),
+            )?;
 
         // Check XCHandlesRegistry::from_launcher_solution
         let spends = ctx.take();
-        let mut found_launcher = false;
+        let mut initial_slots = None;
         for spend in spends {
             if spend.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into() {
                 let launcher_solution = ctx.alloc(&spend.solution)?;
@@ -1679,8 +1680,7 @@ mod tests {
                 if let Some((registry, slots, initial_registration_asset_id, initial_base_price)) =
                     XchandlesRegistry::from_launcher_solution(ctx, spend.coin, launcher_solution)?
                 {
-                    assert!(sim.coin_state(slots[0].coin.coin_id()).is_some());
-                    assert!(sim.coin_state(slots[1].coin.coin_id()).is_some());
+                    initial_slots = Some(slots);
                     assert_eq!(initial_registration_asset_id, payment_cat.asset_id);
                     assert_eq!(
                         registry.info.constants,
@@ -1689,8 +1689,6 @@ mod tests {
                             .with_launcher_id(spend.coin.coin_id())
                     );
                     assert_eq!(initial_registration_price, initial_base_price);
-
-                    found_launcher = true;
                 };
             }
 
@@ -1698,10 +1696,15 @@ mod tests {
         }
 
         // This will fail if we didn't find (or were not able to parse) the XCHandles launcher
-        assert!(found_launcher);
+        assert!(initial_slots.is_some());
 
         // sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
         benchmark.add_spends(ctx, &mut sim, "launch", &[launcher_bls.sk, security_sk])?;
+
+        let slots = initial_slots.unwrap();
+        assert!(sim.coin_state(slots[0].coin.coin_id()).is_some());
+        assert!(sim.coin_state(slots[1].coin.coin_id()).is_some());
+        assert_eq!(slots, slots_returned_by_launch);
 
         // Register 7 handles
 
