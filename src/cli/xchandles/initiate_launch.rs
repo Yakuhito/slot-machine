@@ -5,9 +5,8 @@ use crate::{
     },
     get_coinset_client, get_prefix, launch_xchandles_registry, load_catalog_state_schedule_csv,
     load_xchandles_premine_csv, parse_amount, print_medieval_vault_configuration, wait_for_coin,
-    CatalogRegistryConstants, CatalogRegistryState, MedievalVaultHint, MedievalVaultInfo,
-    SageClient, StateSchedulerInfo, XchandlesConstants, XchandlesFactorPricingPuzzleArgs,
-    XchandlesRegistryState,
+    MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo, XchandlesConstants,
+    XchandlesFactorPricingPuzzleArgs, XchandlesRegistryState,
 };
 use chia::{
     bls::PublicKey,
@@ -28,20 +27,20 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 #[allow(clippy::type_complexity)]
 fn get_additional_info_for_launch(
     ctx: &mut SpendContext,
-    catalog_launcher_id: Bytes32,
+    xchandles_launcher_id: Bytes32,
     security_coin: Coin,
-    (catalog_constants, state_schedule, pubkeys, m, cat_amount, cat_destination_puzzle_hash): (
-        CatalogRegistryConstants,
-        Vec<(u32, CatalogRegistryState)>,
+    (xchandles_constants, state_schedule, pubkeys, m, cat_amount, cat_destination_puzzle_hash): (
+        XchandlesConstants,
+        Vec<(u32, XchandlesRegistryState)>,
         Vec<PublicKey>,
         usize,
         u64,
         Bytes32,
     ),
-) -> Result<(Conditions<NodePtr>, CatalogRegistryConstants, Bytes32), DriverError> {
+) -> Result<(Conditions<NodePtr>, XchandlesConstants, Bytes32), DriverError> {
     println!(
-        "CATalog registry launcher id (SAVE THIS): {}",
-        hex::encode(catalog_launcher_id)
+        "XCHandles registry launcher id (SAVE THIS): {}",
+        hex::encode(xchandles_launcher_id)
     );
 
     let mut conditions = Conditions::new();
@@ -60,7 +59,7 @@ fn get_additional_info_for_launch(
     let multisig_info = MedievalVaultInfo::from_hint(medieval_vault_memos);
     let state_scheduler_info = StateSchedulerInfo::new(
         price_singleton_launcher_id,
-        catalog_launcher_id,
+        xchandles_launcher_id,
         state_schedule,
         0,
         multisig_info.inner_puzzle_hash().into(),
@@ -92,9 +91,9 @@ fn get_additional_info_for_launch(
 
     Ok((
         conditions,
-        catalog_constants
+        xchandles_constants
             .with_price_singleton(price_singleton_launcher_id)
-            .with_launcher_id(catalog_launcher_id),
+            .with_launcher_id(xchandles_launcher_id),
         eve_cat.asset_id,
     ))
 }
@@ -238,7 +237,7 @@ pub async fn xchandles_initiate_launch(
                 nfts: vec![],
             },
             offered_assets: Assets {
-                xch: Amount::u64(2 + value_needed_for_registration as u64),
+                xch: Amount::u64(2 + value_needed_for_registration),
                 cats: vec![],
                 nfts: vec![],
             },
