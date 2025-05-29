@@ -356,6 +356,14 @@ enum XchandlesCliAction {
         #[arg(short)]
         m: usize,
 
+        /// Payout address for precommits
+        #[arg(long)]
+        payout_address: String,
+
+        /// Relative block height for precommits
+        #[arg(long, default_value = "8")]
+        relative_block_height: u32,
+
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
@@ -904,10 +912,23 @@ pub async fn run_cli() {
             XchandlesCliAction::InitiateLaunch {
                 pubkeys,
                 m,
+                payout_address,
+                relative_block_height,
                 testnet11,
                 fee,
-            } => xchandles_initiate_launch(pubkeys, m, testnet11, fee).await,
+            } => {
+                xchandles_initiate_launch(
+                    pubkeys,
+                    m,
+                    payout_address,
+                    relative_block_height,
+                    testnet11,
+                    fee,
+                )
+                .await
+            }
             XchandlesCliAction::ContinueLaunch {
+                launcher_id,
                 payment_asset_id,
                 handles_per_spend,
                 testnet11,

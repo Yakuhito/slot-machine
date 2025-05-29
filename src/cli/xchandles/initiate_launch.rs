@@ -101,9 +101,13 @@ fn get_additional_info_for_launch(
 pub async fn xchandles_initiate_launch(
     pubkeys_str: String,
     m: usize,
+    payout_address: String,
+    relative_block_height: u32,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
+    let payout_info = Address::decode(&payout_address)?;
+
     println!("Welcome to the XCHandles (sub)registry launch setup, deployer.");
 
     let mut pubkeys = Vec::new();
@@ -170,20 +174,20 @@ pub async fn xchandles_initiate_launch(
     println!("Opening database...");
     let db = Db::new(false).await?;
 
-    let constants = XchandlesConstants::get(testnet11);
-    let singleton_coin_maybe = db
-        .get_last_unspent_singleton_coin(constants.launcher_id)
-        .await?;
-    if singleton_coin_maybe.is_some() {
-        yes_no_prompt("Previous deployment found in db - do you wish to override?")?;
-
-        db.delete_all_slots_for_singleton(constants.launcher_id)
-            .await?;
-        db.delete_all_xchandles_indexed_slot_values().await?;
-        db.delete_all_singleton_coins(constants.launcher_id).await?;
-    }
+    let constants = XchandlesConstants {
+        launcher_id: Bytes32::default(),
+        precommit_payout_puzzle_hash: payout_info.puzzle_hash,
+        relative_block_height,
+        price_singleton_launcher_id: Bytes32::default(),
+    };
 
     let prefix = get_prefix(testnet11);
+    if prefix != payout_info.prefix {
+        return Err(CliError::Custom(format!(
+            "Wrong prefix in payout address: expected {}, got {}",
+            prefix, payout_info.prefix
+        )));
+    }
     let precommit_payout_address =
         Address::new(constants.precommit_payout_puzzle_hash, prefix).encode()?;
 
@@ -252,7 +256,7 @@ pub async fn xchandles_initiate_launch(
 
     let mut ctx = SpendContext::new();
 
-    let (sig, _, _registry, slots, security_coin) = launch_xchandles_registry(
+    let (sig, _, registry, slots, security_coin) = launch_xchandles_registry(
         &mut ctx,
         Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
         1,
@@ -263,7 +267,7 @@ pub async fn xchandles_initiate_launch(
             &MAINNET_CONSTANTS
         },
         (
-            XchandlesConstants::get(testnet11),
+            constants,
             price_schedule
                 .into_iter()
                 .map(|ps| {
@@ -293,12 +297,17 @@ pub async fn xchandles_initiate_launch(
 
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
-    db.save_xchandles_configuration(&mut ctx, constants).await?;
+    db.save_xchandles_configuration(&mut ctx, registry.info.constants)
+        .await?;
 
     for slot in slots {
         db.save_slot(&mut ctx, slot, 0).await?;
-        db.save_xchandles_indexed_slot_value(slot.info.value.handle_hash, slot.info.value_hash)
-            .await?;
+        db.save_xchandles_indexed_slot_value(
+            registry.info.constants.launcher_id,
+            slot.info.value.handle_hash,
+            slot.info.value_hash,
+        )
+        .await?;
     }
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);

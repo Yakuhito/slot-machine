@@ -58,8 +58,10 @@ impl Db {
             sqlx::query(
                 "
                 CREATE TABLE IF NOT EXISTS xchandles_indexed_slot_values (
-                    handle_hash BLOB PRIMARY KEY,
-                    slot_value_hash BLOB NOT NULL
+                    launcher_id BLOB NOT NULL,
+                    handle_hash BLOB NOT NULL,
+                    slot_value_hash BLOB NOT NULL,
+                    PRIMARY KEY (launcher_id, handle_hash)
                 )
                 ",
             )
@@ -321,12 +323,17 @@ impl Db {
         Ok(())
     }
 
-    pub async fn delete_all_xchandles_indexed_slot_values(&self) -> Result<(), CliError> {
+    pub async fn delete_all_xchandles_indexed_slot_values(
+        &self,
+        launcher_id: Bytes32,
+    ) -> Result<(), CliError> {
         sqlx::query(
             "
             DELETE FROM xchandles_indexed_slot_values
+            WHERE launcher_id = ?1
             ",
         )
+        .bind(launcher_id.to_vec())
         .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
@@ -380,16 +387,18 @@ impl Db {
 
     pub async fn save_xchandles_indexed_slot_value(
         &self,
+        launcher_id: Bytes32,
         handle_hash: Bytes32,
         slot_value_hash: Bytes32,
     ) -> Result<(), CliError> {
         sqlx::query(
             "
-            INSERT INTO xchandles_indexed_slot_values (handle_hash, slot_value_hash) 
-            VALUES (?1, ?2)
-            ON CONFLICT(handle_hash) DO UPDATE SET slot_value_hash = excluded.slot_value_hash
+            INSERT INTO xchandles_indexed_slot_values (launcher_id, handle_hash, slot_value_hash) 
+            VALUES (?1, ?2, ?3)
+            ON CONFLICT(launcher_id, handle_hash) DO UPDATE SET slot_value_hash = excluded.slot_value_hash
             ",
         )
+        .bind(launcher_id.to_vec())
         .bind(handle_hash.to_vec())
         .bind(slot_value_hash.to_vec())
         .execute(&self.pool)
@@ -424,13 +433,15 @@ impl Db {
 
     pub async fn get_xchandles_indexed_slot_value(
         &self,
+        launcher_id: Bytes32,
         handle_hash: Bytes32,
     ) -> Result<Option<Bytes32>, CliError> {
         let row = sqlx::query(
             "
-            SELECT slot_value_hash FROM xchandles_indexed_slot_values WHERE handle_hash = ?1
+            SELECT slot_value_hash FROM xchandles_indexed_slot_values WHERE launcher_id = ?1 AND handle_hash = ?2
             ",
         )
+        .bind(launcher_id.to_vec())
         .bind(handle_hash.to_vec())
         .fetch_optional(&self.pool)
         .await
@@ -527,7 +538,7 @@ impl Db {
               AND s.slot_value_hash = (
                   SELECT slot_value_hash 
                   FROM xchandles_indexed_slot_values 
-                  WHERE handle_hash < ?2 
+                  WHERE launcher_id = ?1 AND handle_hash < ?2 
                   ORDER BY handle_hash DESC 
                   LIMIT 1
               )
@@ -540,7 +551,7 @@ impl Db {
               AND s.slot_value_hash = (
                   SELECT slot_value_hash 
                   FROM xchandles_indexed_slot_values 
-                  WHERE handle_hash > ?2 
+                  WHERE launcher_id = ?1 AND handle_hash > ?2 
                   ORDER BY handle_hash ASC 
                   LIMIT 1
               )
