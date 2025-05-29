@@ -1676,9 +1676,11 @@ mod tests {
             if spend.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into() {
                 let launcher_solution = ctx.alloc(&spend.solution)?;
 
-                if let Some((registry, initial_registration_asset_id, initial_base_price)) =
+                if let Some((registry, slots, initial_registration_asset_id, initial_base_price)) =
                     XchandlesRegistry::from_launcher_solution(ctx, spend.coin, launcher_solution)?
                 {
+                    assert!(sim.coin_state(slots[0].coin.coin_id()).is_some());
+                    assert!(sim.coin_state(slots[1].coin.coin_id()).is_some());
                     assert_eq!(initial_registration_asset_id, payment_cat.asset_id);
                     assert_eq!(
                         registry.info.constants,

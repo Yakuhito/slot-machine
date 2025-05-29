@@ -90,7 +90,7 @@ impl XchandlesRegistry {
         ctx: &mut SpendContext,
         launcher_coin: Coin,
         launcher_solution: NodePtr,
-    ) -> Result<Option<(Self, Bytes32, u64)>, DriverError>
+    ) -> Result<Option<(Self, [Slot<XchandlesSlotValue>; 2], Bytes32, u64)>, DriverError>
     where
         Self: Sized,
     {
@@ -151,6 +151,21 @@ impl XchandlesRegistry {
             parent_amount: eve_coin.amount,
         });
 
+        let slot_proof = SlotProof {
+            parent_parent_info: eve_coin.parent_coin_info,
+            parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
+        };
+        let slots = [
+            Slot::new(
+                slot_proof,
+                SlotInfo::from_value(launcher_id, 0, XchandlesSlotValue::initial_left_end()),
+            ),
+            Slot::new(
+                slot_proof,
+                SlotInfo::from_value(launcher_id, 0, XchandlesSlotValue::initial_right_end()),
+            ),
+        ];
+
         Ok(Some((
             XchandlesRegistry {
                 coin: registry_coin,
@@ -158,6 +173,7 @@ impl XchandlesRegistry {
                 info,
                 pending_actions: vec![],
             },
+            slots,
             initial_registration_asset_id,
             initial_base_price,
         )))
