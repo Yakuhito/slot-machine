@@ -10,7 +10,7 @@ use super::{
     reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_sign_entry_update,
     reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
     verifications_sign_launch, verifications_sign_revocation, verifications_view,
-    xchandles_continue_launch, xchandles_initiate_launch,
+    xchandles_continue_launch, xchandles_initiate_launch, xchandles_unroll_state_scheduler,
 };
 
 #[derive(Parser)]
@@ -396,6 +396,10 @@ enum XchandlesCliAction {
     },
     /// Unrolls the state scheduler
     UnrollStateScheduler {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
@@ -943,7 +947,11 @@ pub async fn run_cli() {
                 )
                 .await
             }
-            XchandlesCliAction::UnrollStateScheduler { testnet11, fee } => todo!("TODO"),
+            XchandlesCliAction::UnrollStateScheduler {
+                launcher_id,
+                testnet11,
+                fee,
+            } => xchandles_unroll_state_scheduler(launcher_id, testnet11, fee).await,
             XchandlesCliAction::VerifyDeployment { testnet11 } => todo!("TODO"),
         },
         Commands::RewardDistributor { action } => match action {

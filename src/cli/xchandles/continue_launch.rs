@@ -17,11 +17,10 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
     get_last_onchain_timestamp, hex_string_to_bytes32, load_xchandles_premine_csv, new_sk,
-    parse_amount, parse_one_sided_offer, print_spend_bundle_to_file, spend_security_coin,
-    sync_xchandles, wait_for_coin, yes_no_prompt, CatalogPrecommitValue, CliError, Db,
-    PrecommitCoin, PrecommitLayer, SageClient, XchandlesFactorPricingPuzzleArgs,
-    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesPremineRecord,
-    XchandlesRegisterAction,
+    parse_amount, parse_one_sided_offer, spend_security_coin, sync_xchandles, wait_for_coin,
+    yes_no_prompt, CatalogPrecommitValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
+    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
+    XchandlesPremineRecord, XchandlesRegisterAction,
 };
 
 fn precommit_value_for_handle(
@@ -78,16 +77,9 @@ pub async fn xchandles_continue_launch(
     let mut db = Db::new(false).await?;
     let mut ctx = SpendContext::new();
 
-    let Some(constants) = db
-        .get_xchandles_configuration(&mut ctx, launcher_id)
-        .await?
-    else {
-        return Err(CliError::ConstantsNotSet);
-    };
-
     println!("Syncing XCHandles registry...");
 
-    let mut registry = sync_xchandles(&client, &mut db, &mut ctx, constants).await?;
+    let mut registry = sync_xchandles(&client, &mut db, &mut ctx, launcher_id).await?;
     println!(
         "Latest XCHandles registry coin id: {}",
         registry.coin.coin_id()
@@ -98,10 +90,7 @@ pub async fn xchandles_continue_launch(
     while i < handles_to_launch.len() {
         let handle = &handles_to_launch[i];
         let resp = db
-            .get_xchandles_indexed_slot_value(
-                constants.launcher_id,
-                handle.handle.tree_hash().into(),
-            )
+            .get_xchandles_indexed_slot_value(launcher_id, handle.handle.tree_hash().into())
             .await?;
         if resp.is_none() {
             break;
@@ -121,6 +110,7 @@ pub async fn xchandles_continue_launch(
     let fee = parse_amount(&fee_str, false)?;
 
     // Make sure this is always rounded down to a day
+    let constants = registry.info.constants;
     let start_time = get_last_onchain_timestamp(&client).await? / 8640 * 8640;
 
     if i == 0 {
@@ -566,11 +556,6 @@ pub async fn xchandles_continue_launch(
     let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
 
     println!("Submitting transaction...");
-    print_spend_bundle_to_file(
-        sb.coin_spends.clone(),
-        sb.aggregated_signature.clone(),
-        "sb.debug",
-    );
     let resp = client.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);

@@ -10,21 +10,20 @@ pub async fn sync_xchandles(
     client: &CoinsetClient,
     db: &mut Db,
     ctx: &mut SpendContext,
-    constants: XchandlesConstants,
+    launcher_id: Bytes32,
 ) -> Result<XchandlesRegistry, CliError> {
-    let last_unspent_coin_info = db
-        .get_last_unspent_singleton_coin(constants.launcher_id)
-        .await?;
+    let last_unspent_coin_info = db.get_last_unspent_singleton_coin(launcher_id).await?;
 
     let last_spent_coin_id: Bytes32 =
         if let Some((_coin_id, parent_coin_id)) = last_unspent_coin_info {
             parent_coin_id
         } else {
-            constants.launcher_id
+            launcher_id
         };
 
     let mut last_coin_id = last_spent_coin_id;
     let mut registry: Option<XchandlesRegistry> = None;
+    let mut constants: Option<XchandlesConstants> = None;
     loop {
         let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
         let Some(coin_record) = coin_record_response.coin_record else {
@@ -36,8 +35,7 @@ pub async fn sync_xchandles(
 
         let skip_db_save = last_coin_id == last_spent_coin_id;
         if !skip_db_save {
-            db.save_singleton_coin(constants.launcher_id, coin_record)
-                .await?;
+            db.save_singleton_coin(launcher_id, coin_record).await?;
         }
 
         let puzzle_and_solution_resp = client
@@ -61,7 +59,7 @@ pub async fn sync_xchandles(
 
                 for value_hash in pending_items.spent_slots.iter() {
                     db.mark_slot_as_spent(
-                        constants.launcher_id,
+                        launcher_id,
                         0,
                         *value_hash,
                         coin_record.spent_block_index,
@@ -94,16 +92,7 @@ pub async fn sync_xchandles(
             }
         }
 
-        if let Some(some_registry) = XchandlesRegistry::from_parent_spend(
-            ctx,
-            coin_record.coin,
-            parent_puzzle,
-            solution_ptr,
-            constants,
-        )? {
-            last_coin_id = some_registry.coin.coin_id();
-            registry = Some(some_registry);
-        } else if coin_record.coin.coin_id() == constants.launcher_id {
+        if coin_record.coin.coin_id() == launcher_id {
             let Some((
                 new_registry,
                 initial_slots,
@@ -131,7 +120,7 @@ pub async fn sync_xchandles(
             .await?;
 
             db.save_singleton_coin(
-                constants.launcher_id,
+                launcher_id,
                 CoinRecord {
                     coin: new_registry.coin,
                     coinbase: false,
@@ -144,9 +133,56 @@ pub async fn sync_xchandles(
             .await?;
 
             last_coin_id = new_registry.coin.coin_id();
+            constants = Some(new_registry.info.constants);
             registry = Some(new_registry);
-        } else if coin_record.coin.parent_coin_info == constants.launcher_id {
-            last_coin_id = constants.launcher_id;
+            continue;
+        } else if coin_record.coin.parent_coin_info == launcher_id {
+            last_coin_id = launcher_id;
+            continue;
+        }
+
+        let constants = if let Some(cts) = constants {
+            cts
+        } else {
+            // look for constants from launcher spend
+            let launcher_record = client
+                .get_coin_record_by_name(launcher_id)
+                .await?
+                .coin_record
+                .ok_or(CliError::CoinNotFound(launcher_id))?;
+
+            let launcher_spend = client
+                .get_puzzle_and_solution(launcher_id, Some(launcher_record.spent_block_index))
+                .await?
+                .coin_solution
+                .ok_or(CliError::CoinNotSpent(launcher_id))?;
+
+            let solution_ptr = ctx.alloc(&launcher_spend.solution)?;
+
+            if let Some((
+                new_registry,
+                _initial_slots,
+                _initial_registration_asset_id,
+                _initial_base_price,
+            )) =
+                XchandlesRegistry::from_launcher_solution(ctx, launcher_record.coin, solution_ptr)?
+            {
+                constants = Some(new_registry.info.constants);
+                new_registry.info.constants
+            } else {
+                return Err(CliError::ConstantsNotSet);
+            }
+        };
+
+        if let Some(some_registry) = XchandlesRegistry::from_parent_spend(
+            ctx,
+            coin_record.coin,
+            parent_puzzle,
+            solution_ptr,
+            constants,
+        )? {
+            last_coin_id = some_registry.coin.coin_id();
+            registry = Some(some_registry);
         } else {
             break;
         };
