@@ -112,6 +112,10 @@ impl XchandlesExtendAction {
         // spend slots
         let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
+        registry
+            .pending_items
+            .spent_slots
+            .push(slot.info.value_hash);
         slot.spend(ctx, spender_inner_puzzle_hash)?;
 
         // finally, spend self
@@ -155,6 +159,7 @@ impl XchandlesExtendAction {
 
         let new_slot_value =
             Self::get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
+        registry.pending_items.slot_values.push(new_slot_value);
 
         Ok((
             notarized_payment,

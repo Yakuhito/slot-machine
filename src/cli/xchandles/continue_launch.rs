@@ -17,10 +17,11 @@ use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
     get_last_onchain_timestamp, hex_string_to_bytes32, load_xchandles_premine_csv, new_sk,
-    parse_amount, parse_one_sided_offer, spend_security_coin, sync_xchandles, wait_for_coin,
-    yes_no_prompt, CatalogPrecommitValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
-    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
-    XchandlesPremineRecord, XchandlesRegisterAction,
+    parse_amount, parse_one_sided_offer, print_spend_bundle_to_file, spend_security_coin,
+    sync_xchandles, wait_for_coin, yes_no_prompt, CatalogPrecommitValue, CliError, Db,
+    PrecommitCoin, PrecommitLayer, SageClient, XchandlesFactorPricingPuzzleArgs,
+    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesPremineRecord,
+    XchandlesRegisterAction,
 };
 
 fn precommit_value_for_handle(
@@ -376,7 +377,9 @@ pub async fn xchandles_continue_launch(
         .max()
         .unwrap_or(0);
 
-    let target_block_height = max_confirmed_block_index + constants.relative_block_height + 7;
+    let target_block_height = max_confirmed_block_index
+        + constants.relative_block_height
+        + constants.relative_block_height / 4;
     println!(
         "Last precommitment coin created at block #{}; target spendable block height is #{}",
         max_confirmed_block_index, target_block_height
@@ -563,6 +566,11 @@ pub async fn xchandles_continue_launch(
     let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
 
     println!("Submitting transaction...");
+    print_spend_bundle_to_file(
+        sb.coin_spends.clone(),
+        sb.aggregated_signature.clone(),
+        "sb.debug",
+    );
     let resp = client.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);

@@ -108,6 +108,10 @@ impl XchandlesRefundAction {
 
         // if there's a slot, spend it
         if let Some(slot) = slot {
+            registry
+                .pending_items
+                .spent_slots
+                .push(slot.info.value_hash);
             slot.spend(ctx, my_inner_puzzle_hash)?;
         }
 
@@ -149,11 +153,15 @@ impl XchandlesRefundAction {
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
-        let new_slot_value = slot.map(|slot| {
-            registry.created_slot_values_to_slots(vec![
-                Self::get_slot_value(Some(slot.info.value)).unwrap()
-            ])[0]
-        });
+        let new_slot_value = if let Some(slot) = slot {
+            let slot_value = Self::get_slot_value(Some(slot.info.value)).unwrap();
+
+            registry.pending_items.slot_values.push(slot_value);
+
+            Some(registry.created_slot_values_to_slots(vec![slot_value])[0])
+        } else {
+            None
+        };
 
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(

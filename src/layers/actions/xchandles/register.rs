@@ -152,6 +152,15 @@ impl XchandlesRegisterAction {
         // spend slots
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
+        registry
+            .pending_items
+            .spent_slots
+            .push(left_slot.info.value_hash);
+        registry
+            .pending_items
+            .spent_slots
+            .push(right_slot.info.value_hash);
+
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
         right_slot.spend(ctx, my_inner_puzzle_hash)?;
 
@@ -233,6 +242,10 @@ impl XchandlesRegisterAction {
             precommit_coin.value,
             action_solution,
         )?;
+
+        registry.pending_items.slot_values.push(new_slots_values[0]);
+        registry.pending_items.slot_values.push(new_slots_values[1]);
+        registry.pending_items.slot_values.push(new_slots_values[2]);
 
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(

@@ -67,7 +67,11 @@ impl XchandlesOracleAction {
         registry: &mut XchandlesRegistry,
         slot: Slot<XchandlesSlotValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
-        // spend slots
+        // spend slot
+        registry
+            .pending_items
+            .spent_slots
+            .push(slot.info.value_hash);
         slot.spend(ctx, registry.info.inner_puzzle_hash().into())?;
 
         // finally, spend self
@@ -80,6 +84,7 @@ impl XchandlesOracleAction {
         registry.insert(Spend::new(action_puzzle, action_solution));
 
         let new_slot = Self::get_slot_value(slot.info.value);
+        registry.pending_items.slot_values.push(new_slot);
 
         let mut oracle_ann = slot.info.value.tree_hash().to_vec();
         oracle_ann.insert(0, b'o');
