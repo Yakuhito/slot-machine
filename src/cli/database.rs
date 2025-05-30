@@ -246,6 +246,36 @@ impl Db {
         Ok(Some(Self::row_to_slot(allocator, &row)?))
     }
 
+    pub async fn get_slot_value<SV>(
+        &self,
+        allocator: &mut Allocator,
+        singleton_launcher_id: Bytes32,
+        nonce: u64,
+        slot_value_hash: Bytes32,
+    ) -> Result<Option<SV>, CliError>
+    where
+        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+    {
+        let row = sqlx::query(
+            "
+            SELECT * FROM slots 
+            WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3
+            ",
+        )
+        .bind(singleton_launcher_id.to_vec())
+        .bind(nonce as i64)
+        .bind(slot_value_hash.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        Ok(Some(Self::row_to_slot(allocator, &row)?.info.value))
+    }
+
     pub async fn get_slots<SV>(
         &self,
         allocator: &mut Allocator,

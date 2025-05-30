@@ -316,17 +316,16 @@ impl XchandlesRegistry {
             return Ok(*slot_value);
         };
 
-        if let Some(slot) = db
-            .get_slot::<XchandlesSlotValue>(
+        if let Some(slot_value) = db
+            .get_slot_value::<XchandlesSlotValue>(
                 ctx,
                 self.info.constants.launcher_id,
                 0,
                 slot_value_hash,
-                0,
             )
             .await?
         {
-            return Ok(slot.info.value);
+            return Ok(slot_value);
         }
 
         Err(CliError::Custom(format!(
