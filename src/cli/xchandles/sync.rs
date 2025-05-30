@@ -72,16 +72,7 @@ pub async fn sync_xchandles(
                 }
 
                 for slot in prev_registry.created_slot_values_to_slots(pending_items.slot_values) {
-                    db.save_slot(
-                        ctx,
-                        slot,
-                        if pending_items.spent_slots.contains(&slot.info.value_hash) {
-                            coin_record.spent_block_index
-                        } else {
-                            0
-                        },
-                    )
-                    .await?;
+                    db.save_slot(ctx, slot, 0).await?;
                     db.save_xchandles_indexed_slot_value(
                         slot.info.launcher_id,
                         slot.info.value.handle_hash,
