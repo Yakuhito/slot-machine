@@ -1,4 +1,4 @@
-use chia::protocol::SpendBundle;
+use chia::{clvm_utils::ToTreeHash, protocol::SpendBundle};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{Offer, SpendContext},
@@ -7,9 +7,12 @@ use chia_wallet_sdk::{
 use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer,
-    spend_security_coin, sync_multisig_singleton, sync_xchandles, wait_for_coin, yes_no_prompt,
-    CatalogRegistryState, CliError, Db, DelegatedStateAction, MultisigSingleton, SageClient,
+    get_coinset_client, hex_string_to_bytes32, load_catalog_state_schedule_csv, new_sk,
+    parse_amount, parse_one_sided_offer, spend_security_coin, sync_multisig_singleton,
+    sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs,
+    DelegatedStateAction, MultisigSingleton, SageClient,
+    XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
+    XchandlesRegistryState,
 };
 
 pub async fn xchandles_unroll_state_scheduler(
@@ -26,7 +29,7 @@ pub async fn xchandles_unroll_state_scheduler(
     let mut registry = sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?;
 
     let (MultisigSingleton::StateScheduler(state_scheduler), _) =
-        sync_multisig_singleton::<CatalogRegistryState>(
+        sync_multisig_singleton::<XchandlesRegistryState>(
             &cli,
             &mut ctx,
             registry.info.constants.price_singleton_launcher_id,
@@ -59,10 +62,42 @@ pub async fn xchandles_unroll_state_scheduler(
     }
 
     println!(
-        "Next state sets a price of {} mojos with CAT maker puzzle hash={}",
-        new_state.registration_price,
+        "Next state sets a pricing puzzle hash of {} and an expired handle pricing puzzle hash of {} with CAT maker puzzle hash={}",
+        hex::encode(new_state.pricing_puzzle_hash),
+        hex::encode(new_state.expired_handle_pricing_puzzle_hash),
         hex::encode(new_state.cat_maker_puzzle_hash)
     );
+
+    let filename = if testnet11 {
+        "xchandles_price_schedule_testnet11.csv"
+    } else {
+        "xchandles_price_schedule_mainnet.csv"
+    };
+    let schedule = load_catalog_state_schedule_csv(filename)?;
+    let mut found = false;
+    for record in schedule.iter() {
+        let cmph = DefaultCatMakerArgs::curry_tree_hash(record.asset_id.tree_hash().into());
+        let pph = XchandlesFactorPricingPuzzleArgs::curry_tree_hash(record.registration_price);
+        let eph = XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
+            record.registration_price,
+            1000,
+        );
+        if cmph == new_state.cat_maker_puzzle_hash.into()
+            && pph == new_state.pricing_puzzle_hash.into()
+            && eph == new_state.expired_handle_pricing_puzzle_hash.into()
+        {
+            println!(
+                "These hashes correspond to a base price of {} mojos of the CAT with asset_id={}",
+                record.registration_price,
+                hex::encode(record.asset_id)
+            );
+            found = true;
+        }
+    }
+    if !found {
+        println!("Could *NOT* figure out what those hashes translate to.");
+        println!("PROCEED WITH CAUTION.\n\n\n")
+    }
 
     println!("An offer will be generated offering:");
     println!(" - 1 mojo");
@@ -75,7 +110,7 @@ pub async fn xchandles_unroll_state_scheduler(
     // which means the right message is consumed
     let (_action_secure_conds, registry_action_spend) = registry
         .new_action::<DelegatedStateAction>()
-        .spend::<CatalogRegistryState>(
+        .spend::<XchandlesRegistryState>(
             &mut ctx,
             registry.coin,
             new_state,
