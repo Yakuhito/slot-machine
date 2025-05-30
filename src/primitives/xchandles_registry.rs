@@ -308,19 +308,12 @@ impl XchandlesRegistry {
         slot_value_hash: Bytes32,
         db: &mut Db,
     ) -> Result<XchandlesSlotValue, CliError> {
-        println!("slot_value_hash: {:}", hex::encode(slot_value_hash)); // todo: debug
-        println!("pending slot hashes:"); // todo: debug
-        for s in pending_slot_values.iter() {
-            // todo: debug
-            println!(" - {}", hex::encode(s.tree_hash())); // todo: debug
-        } // todo: debug
         if let Some(slot_value) = pending_slot_values
             .iter()
             .find(|s| s.tree_hash() == slot_value_hash.into())
         {
             return Ok(*slot_value);
         };
-        println!("not found :|"); // todo: debug
 
         if let Some(slot_value) = db
             .get_slot_value::<XchandlesSlotValue>(
@@ -476,7 +469,6 @@ impl XchandlesRegistry {
             } else if raw_action_hash == expire_action_hash
                 || raw_action_hash == register_action_hash
             {
-                println!("processing register action"); // todo: debug
                 let precommit_message_cond = output_conditions
                     .iter()
                     .filter_map(|c| {
@@ -558,11 +550,6 @@ impl XchandlesRegistry {
                             ctx,
                             raw_action.solution,
                         )?;
-                    println!(
-                        "spent_slot_value_hashes: {:} {:}",
-                        hex::encode(spent_slot_value_hashes[0]),
-                        hex::encode(spent_slot_value_hashes[1])
-                    ); // todo: debug
 
                     let spent_slot_values = [
                         self.get_spent_slot_value(
@@ -580,11 +567,6 @@ impl XchandlesRegistry {
                         )
                         .await?,
                     ];
-                    println!(
-                        "spent_slot_value hashes: {:} {:}",
-                        hex::encode(spent_slot_values[0].tree_hash()),
-                        hex::encode(spent_slot_values[1].tree_hash())
-                    ); // todo: debug
 
                     let new_slot_values = XchandlesRegisterAction::get_slot_values_from_solution(
                         ctx,
@@ -592,12 +574,6 @@ impl XchandlesRegistry {
                         precommit_coin_value,
                         raw_action.solution,
                     )?;
-                    println!(
-                        "new_slot_values: {:} {:} {:}",
-                        hex::encode(new_slot_values[0].tree_hash()),
-                        hex::encode(new_slot_values[1].tree_hash()),
-                        hex::encode(new_slot_values[2].tree_hash())
-                    ); // todo: debug
 
                     spent_slots.extend(spent_slot_value_hashes);
                     slot_values.extend(new_slot_values);
