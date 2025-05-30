@@ -102,7 +102,7 @@ pub async fn xchandles_unroll_state_scheduler(
     println!("An offer will be generated offering:");
     println!(" - 1 mojo");
     println!(" - {} XCH ({} mojos) as fee", fee_str, fee);
-    yes_no_prompt("The state scheduler and the CATalog registry have been synced. This is the last check - do you wish to continue?")?;
+    yes_no_prompt("The state scheduler and the XCHandles registry have been synced. This is the last check - do you wish to continue?")?;
 
     // spend state scheduler & CATalog
 

@@ -11,6 +11,7 @@ use super::{
     reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
     verifications_sign_launch, verifications_sign_revocation, verifications_view,
     xchandles_continue_launch, xchandles_initiate_launch, xchandles_unroll_state_scheduler,
+    xchandles_verify_deployment,
 };
 
 #[derive(Parser)]
@@ -410,6 +411,10 @@ enum XchandlesCliAction {
     },
     /// Verifies the built-in deployment is valid
     VerifyDeployment {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
@@ -952,7 +957,10 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => xchandles_unroll_state_scheduler(launcher_id, testnet11, fee).await,
-            XchandlesCliAction::VerifyDeployment { testnet11 } => todo!("TODO"),
+            XchandlesCliAction::VerifyDeployment {
+                launcher_id,
+                testnet11,
+            } => xchandles_verify_deployment(launcher_id, testnet11).await,
         },
         Commands::RewardDistributor { action } => match action {
             RewardDistributorCliAction::Launch {
