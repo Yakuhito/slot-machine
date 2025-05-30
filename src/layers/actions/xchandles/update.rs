@@ -45,7 +45,6 @@ impl XchandlesUpdateAction {
     }
 
     pub fn get_spent_slot_value_hash_from_solution(
-        &self,
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<Bytes32, DriverError> {
@@ -75,7 +74,6 @@ impl XchandlesUpdateAction {
     }
 
     pub fn get_slot_value_from_solution(
-        &self,
         ctx: &mut SpendContext,
         spent_slot_value: XchandlesSlotValue,
         solution: NodePtr,
@@ -118,7 +116,7 @@ impl XchandlesUpdateAction {
         registry.insert(Spend::new(action_puzzle, action_solution));
 
         let new_slot_value =
-            self.get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
+            Self::get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
 
         let msg: Bytes32 = clvm_tuple!(
             slot.info.value.handle_hash,

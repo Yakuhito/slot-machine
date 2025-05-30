@@ -51,7 +51,6 @@ impl XchandlesExtendAction {
     }
 
     pub fn get_spent_slot_value_hash_from_solution(
-        &self,
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<Bytes32, DriverError> {
@@ -83,7 +82,6 @@ impl XchandlesExtendAction {
     }
 
     pub fn get_slot_value_from_solution(
-        &self,
         ctx: &SpendContext,
         old_slot_value: XchandlesSlotValue,
         solution: NodePtr,
@@ -156,7 +154,7 @@ impl XchandlesExtendAction {
         extend_ann.insert(0, b'e');
 
         let new_slot_value =
-            self.get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
+            Self::get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
 
         Ok((
             notarized_payment,

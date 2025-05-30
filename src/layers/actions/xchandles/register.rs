@@ -78,7 +78,6 @@ impl XchandlesRegisterAction {
     }
 
     pub fn get_spent_slot_value_hashes_from_solution(
-        &self,
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<[Bytes32; 2], DriverError> {

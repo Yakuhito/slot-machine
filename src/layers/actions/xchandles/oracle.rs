@@ -44,7 +44,6 @@ impl XchandlesOracleAction {
     }
 
     pub fn get_spent_slot_value_hash_from_solution(
-        &self,
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<Bytes32, DriverError> {
@@ -58,7 +57,7 @@ impl XchandlesOracleAction {
         Ok(hasher.finalize().into())
     }
 
-    pub fn get_slot_value(&self, old_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
+    pub fn get_slot_value(old_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
         old_slot_value // nothing changed
     }
 
@@ -80,7 +79,7 @@ impl XchandlesOracleAction {
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
-        let new_slot = self.get_slot_value(slot.info.value);
+        let new_slot = Self::get_slot_value(slot.info.value);
 
         let mut oracle_ann = slot.info.value.tree_hash().to_vec();
         oracle_ann.insert(0, b'o');

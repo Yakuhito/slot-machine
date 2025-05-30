@@ -58,7 +58,6 @@ impl XchandlesRefundAction {
     }
 
     pub fn get_spent_slot_value_hash_from_solution(
-        &self,
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<Option<Bytes32>, DriverError> {
@@ -79,7 +78,9 @@ impl XchandlesRefundAction {
         Ok(Some(hasher.finalize().into()))
     }
 
-    pub fn get_slot_value(&self, spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
+    pub fn get_slot_value(
+        spent_slot_value: Option<XchandlesSlotValue>,
+    ) -> Option<XchandlesSlotValue> {
         spent_slot_value // nothing changed; just oracle
     }
 
@@ -149,7 +150,9 @@ impl XchandlesRefundAction {
         registry.insert(Spend::new(action_puzzle, action_solution));
 
         let new_slot_value = slot.map(|slot| {
-            registry.created_slot_values_to_slots(vec![self.get_slot_value(slot.info.value)])[0]
+            registry.created_slot_values_to_slots(vec![
+                Self::get_slot_value(Some(slot.info.value)).unwrap()
+            ])[0]
         });
 
         Ok((
