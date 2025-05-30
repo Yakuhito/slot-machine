@@ -5,17 +5,18 @@ use chia::{
 };
 use chia_puzzle_types::singleton::{LauncherSolution, SingletonArgs};
 use chia_wallet_sdk::{
-    coinset::CoinsetClient,
-    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
-    types::{run_puzzle, Conditions},
+    coinset::{ChiaRpcClient, CoinsetClient},
+    driver::{CatLayer, DriverError, Layer, Puzzle, Spend, SpendContext},
+    types::{run_puzzle, Condition, Conditions},
 };
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
     eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, CliError, Db,
-    DelegatedStateAction, Registry, XchandlesExpireAction, XchandlesExtendAction,
-    XchandlesOracleAction, XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
+    DelegatedStateAction, PrecommitLayer, Registry, XchandlesExpireAction, XchandlesExtendAction,
+    XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRegisterAction,
+    XchandlesUpdateAction,
 };
 
 use super::{
@@ -470,8 +471,105 @@ impl XchandlesRegistry {
             } else if raw_action_hash == expire_action_hash
                 || raw_action_hash == register_action_hash
             {
-                // these actions also need a precommit coin
-                todo!("logic here");
+                let precommit_message_cond = output_conditions
+                    .iter()
+                    .filter_map(|c| {
+                        if let Condition::SendMessage(sm) = c {
+                            if sm.mode == 19 {
+                                Some(sm)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .next()
+                    .ok_or(CliError::Custom(
+                        "No message to precommit found".to_string(),
+                    ))?;
+
+                let precommit_coin_puzzle_hash =
+                    ctx.extract::<Bytes32>(precommit_message_cond.data[0])?;
+                let precommit_amount = ctx.extract::<u64>(precommit_message_cond.data[1])?;
+                let precommit_coin_record = client
+                    .get_coin_records_by_puzzle_hash(
+                        precommit_coin_puzzle_hash,
+                        None,
+                        None,
+                        Some(true),
+                    )
+                    .await?
+                    .coin_records
+                    .ok_or(CliError::CoinNotFound(precommit_coin_puzzle_hash))?
+                    .into_iter()
+                    .find(|c| c.coin.amount == precommit_amount && c.spent)
+                    .ok_or(CliError::CoinNotFound(precommit_coin_puzzle_hash))?;
+
+                let precommit_coin_spend = client
+                    .get_puzzle_and_solution(
+                        precommit_coin_record.coin.coin_id(),
+                        Some(precommit_coin_record.spent_block_index),
+                    )
+                    .await?
+                    .coin_solution
+                    .ok_or(CliError::CoinNotSpent(precommit_coin_record.coin.coin_id()))?;
+
+                let precommit_coin_puzzle_ptr = ctx.alloc(&precommit_coin_spend.puzzle_reveal)?;
+                let precommit_coin_puzzle = Puzzle::parse(ctx, precommit_coin_puzzle_ptr);
+
+                let parsed_layers =
+                    CatLayer::<PrecommitLayer<XchandlesPrecommitValue>>::parse_puzzle(
+                        ctx,
+                        precommit_coin_puzzle,
+                    )?;
+                let precommit_coin_value = parsed_layers.unwrap().inner_puzzle.value;
+
+                if raw_action_hash == expire_action_hash {
+                    let spent_slot_value_hash =
+                        XchandlesExpireAction::get_spent_slot_value_hash_from_solution(
+                            ctx,
+                            raw_action.solution,
+                        )?;
+
+                    let spent_slot_value = self
+                        .get_spent_slot_value(ctx, spent_slot_value_hash, db)
+                        .await?;
+
+                    let new_slot_value = XchandlesExpireAction::get_slot_value_from_solution(
+                        ctx,
+                        spent_slot_value,
+                        precommit_coin_value,
+                        raw_action.solution,
+                    )?;
+
+                    spent_slots.push(spent_slot_value_hash);
+                    slot_values.push(new_slot_value);
+                } else {
+                    // register
+                    let spent_slot_value_hashes =
+                        XchandlesRegisterAction::get_spent_slot_value_hashes_from_solution(
+                            ctx,
+                            raw_action.solution,
+                        )?;
+
+                    let spent_slot_values = [
+                        self.get_spent_slot_value(ctx, spent_slot_value_hashes[0], db)
+                            .await?,
+                        self.get_spent_slot_value(ctx, spent_slot_value_hashes[1], db)
+                            .await?,
+                    ];
+
+                    let new_slot_values = XchandlesRegisterAction::get_slot_values_from_solution(
+                        ctx,
+                        spent_slot_values,
+                        precommit_coin_value,
+                        raw_action.solution,
+                    )?;
+
+                    spent_slots.extend(spent_slot_value_hashes);
+                    slot_values.extend(new_slot_values);
+                }
             } else {
                 return Err(CliError::Custom("Unknown action".to_string()));
             }

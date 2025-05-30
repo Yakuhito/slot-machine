@@ -105,7 +105,6 @@ impl XchandlesRegisterAction {
     }
 
     pub fn get_slot_values_from_solution(
-        &self,
         ctx: &mut SpendContext,
         spent_slot_values: [XchandlesSlotValue; 2],
         precommit_coin_value: XchandlesPrecommitValue,
@@ -228,7 +227,7 @@ impl XchandlesRegisterAction {
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
-        let new_slots_values = self.get_slot_values_from_solution(
+        let new_slots_values = Self::get_slot_values_from_solution(
             ctx,
             [left_slot.info.value, right_slot.info.value],
             precommit_coin.value,
