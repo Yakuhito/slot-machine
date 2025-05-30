@@ -59,15 +59,13 @@ impl XchandlesExpireAction {
         .to_clvm(ctx)?)
     }
 
-    // TODO: test
     pub fn get_spent_slot_value_hash_from_solution(
-        &self,
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<Bytes32, DriverError> {
         let solution = XchandlesExpireActionSolution::<
             NodePtr,
-            XchandlesFactorPricingSolution,
+            NodePtr,
             NodePtr,
             XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
         >::from_clvm(ctx, solution)?;
@@ -76,7 +74,8 @@ impl XchandlesExpireAction {
         hasher.update(b"\x02");
         hasher.update(
             solution
-                .cat_maker_puzzle_solution
+                .expired_handle_pricing_puzzle_solution
+                .pricing_program_solution
                 .current_expiration
                 .tree_hash(),
         );
@@ -89,11 +88,12 @@ impl XchandlesExpireAction {
         hasher.update(expiration_rest_hash);
         let neighbors_expiration_rest_hash = hasher.finalize();
 
-        let handle_hash = solution
+        let handle_hash: Bytes32 = solution
             .expired_handle_pricing_puzzle_solution
             .pricing_program_solution
             .handle
-            .tree_hash();
+            .tree_hash()
+            .into();
         hasher = Sha256::new();
         hasher.update(b"\x02");
         hasher.update(handle_hash.tree_hash());
@@ -103,7 +103,6 @@ impl XchandlesExpireAction {
     }
 
     pub fn get_slot_value_from_solution(
-        &self,
         ctx: &SpendContext,
         old_slot_value: XchandlesSlotValue,
         precommit_coin_value: XchandlesPrecommitValue,
@@ -204,7 +203,7 @@ impl XchandlesExpireAction {
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
-        let new_slot_value = self.get_slot_value_from_solution(
+        let new_slot_value = Self::get_slot_value_from_solution(
             ctx,
             slot.info.value,
             precommit_coin.value,

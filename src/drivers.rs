@@ -2149,6 +2149,7 @@ mod tests {
             &[user_bls.sk.clone(), minter_bls.sk.clone()],
         )?;
 
+        let spent_slot_value_hash = initial_slot.info.value_hash;
         let (expire_conds, _new_slot) = registry.new_action::<XchandlesExpireAction>().spend(
             ctx,
             &mut registry,
@@ -2160,6 +2161,14 @@ mod tests {
 
         // assert expire conds
         ensure_conditions_met(ctx, &mut sim, expire_conds, 1)?;
+
+        assert_eq!(
+            spent_slot_value_hash,
+            XchandlesExpireAction::get_spent_slot_value_hash_from_solution(
+                ctx,
+                registry.pending_items.actions[registry.pending_items.actions.len() - 1].solution
+            )?
+        );
         registry = registry.finish_spend(ctx)?;
 
         // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;

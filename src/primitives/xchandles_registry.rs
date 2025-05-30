@@ -368,8 +368,7 @@ impl XchandlesRegistry {
             // use the client for precommitment coins where needed ('register' - working registration)
 
             if raw_action_hash == extend_action_hash {
-                // extend_action.get_slot_value_from_solution(ctx, old_slot_value, solution)
-                todo!("requires slot");
+                let spent_slot = todo!("requires slot");
             } else if raw_action_hash == oracle_action_hash {
                 todo!("requires slot");
             } else if raw_action_hash == update_action_hash {
