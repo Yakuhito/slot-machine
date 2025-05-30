@@ -13,9 +13,9 @@ use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, Db, DelegatedStateAction,
-    Registry, XchandlesExpireAction, XchandlesExtendAction, XchandlesOracleAction,
-    XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
+    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, CliError, Db,
+    DelegatedStateAction, Registry, XchandlesExpireAction, XchandlesExtendAction,
+    XchandlesOracleAction, XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
 };
 
 use super::{
@@ -300,13 +300,47 @@ impl XchandlesRegistry {
         Ok(state.1)
     }
 
+    pub async fn get_spent_slot_value(
+        &self,
+        ctx: &mut SpendContext,
+        slot_value_hash: Bytes32,
+        db: &mut Db,
+    ) -> Result<XchandlesSlotValue, CliError> {
+        if let Some(slot_value) = self
+            .pending_items
+            .slot_values
+            .iter()
+            .find(|s| s.tree_hash() == slot_value_hash.into())
+        {
+            return Ok(*slot_value);
+        };
+
+        if let Some(slot) = db
+            .get_slot::<XchandlesSlotValue>(
+                ctx,
+                self.info.constants.launcher_id,
+                0,
+                slot_value_hash,
+                0,
+            )
+            .await?
+        {
+            return Ok(slot.info.value);
+        }
+
+        Err(CliError::Custom(format!(
+            "Slot value {} not found",
+            slot_value_hash
+        )))
+    }
+
     pub async fn get_pending_items_from_spend(
         &self,
         ctx: &mut SpendContext,
         db: &mut Db,
         client: &CoinsetClient,
         solution: NodePtr,
-    ) -> Result<XchandlesRegistryPendingItems, DriverError> {
+    ) -> Result<XchandlesRegistryPendingItems, CliError> {
         let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
         let inner_solution = ActionLayer::<XchandlesRegistryState, NodePtr>::parse_solution(
             ctx,
@@ -314,8 +348,8 @@ impl XchandlesRegistry {
         )?;
 
         let mut actions: Vec<Spend> = vec![];
-        let spent_slots: Vec<Bytes32> = vec![];
-        let slot_values: Vec<XchandlesSlotValue> = vec![];
+        let mut spent_slots: Vec<Bytes32> = vec![];
+        let mut slot_values: Vec<XchandlesSlotValue> = vec![];
 
         let expire_action = XchandlesExpireAction::from_constants(&self.info.constants);
         let expire_action_hash = expire_action.tree_hash();
@@ -348,7 +382,8 @@ impl XchandlesRegistry {
 
             let actual_solution = ctx.alloc(&clvm_list!(current_state, raw_action.solution))?;
 
-            let action_output = run_puzzle(ctx, raw_action.puzzle, actual_solution)?;
+            let action_output =
+                run_puzzle(ctx, raw_action.puzzle, actual_solution).map_err(DriverError::from)?;
             (current_state, output_conditions) = ctx
                 .extract::<match_tuple!((NodePtr, XchandlesRegistryState), Conditions<NodePtr>)>(
                     action_output,
@@ -361,27 +396,84 @@ impl XchandlesRegistry {
                 continue;
             }
 
-            // TODO: reminder for tomorrow
-            // note that the slot value should first be searched for in pending slots
-            // (i.e., an earlier action created the slot)
-            // if not, use the db
-            // use the client for precommitment coins where needed ('register' - working registration)
-
             if raw_action_hash == extend_action_hash {
-                let spent_slot = todo!("requires slot");
+                let spent_slot_value_hash =
+                    XchandlesExtendAction::get_spent_slot_value_hash_from_solution(
+                        ctx,
+                        raw_action.solution,
+                    )?;
+                let spent_slot_value = self
+                    .get_spent_slot_value(ctx, spent_slot_value_hash, db)
+                    .await?;
+
+                let new_slot_value = XchandlesExtendAction::get_slot_value_from_solution(
+                    ctx,
+                    spent_slot_value,
+                    raw_action.solution,
+                )?;
+
+                spent_slots.push(spent_slot_value_hash);
+                slot_values.push(new_slot_value);
             } else if raw_action_hash == oracle_action_hash {
-                todo!("requires slot");
+                let spent_slot_value_hash =
+                    XchandlesOracleAction::get_spent_slot_value_hash_from_solution(
+                        ctx,
+                        raw_action.solution,
+                    )?;
+
+                let spent_slot_value = self
+                    .get_spent_slot_value(ctx, spent_slot_value_hash, db)
+                    .await?;
+
+                let new_slot_value = XchandlesOracleAction::get_slot_value(spent_slot_value);
+
+                spent_slots.push(spent_slot_value_hash);
+                slot_values.push(new_slot_value);
             } else if raw_action_hash == update_action_hash {
-                todo!("requires slot");
+                let spent_slot_value_hash =
+                    XchandlesUpdateAction::get_spent_slot_value_hash_from_solution(
+                        ctx,
+                        raw_action.solution,
+                    )?;
+
+                let spent_slot_value = self
+                    .get_spent_slot_value(ctx, spent_slot_value_hash, db)
+                    .await?;
+
+                let new_slot_value = XchandlesUpdateAction::get_slot_value_from_solution(
+                    ctx,
+                    spent_slot_value,
+                    raw_action.solution,
+                )?;
+
+                spent_slots.push(spent_slot_value_hash);
+                slot_values.push(new_slot_value);
             } else if raw_action_hash == refund_action_hash {
-                todo!("requires slot");
+                let Some(spent_slot_value_hash) =
+                    XchandlesRefundAction::get_spent_slot_value_hash_from_solution(
+                        ctx,
+                        raw_action.solution,
+                    )?
+                else {
+                    continue;
+                };
+
+                let spent_slot_value = self
+                    .get_spent_slot_value(ctx, spent_slot_value_hash, db)
+                    .await?;
+
+                let new_slot_value = XchandlesRefundAction::get_slot_value(Some(spent_slot_value));
+
+                spent_slots.push(spent_slot_value_hash);
+                // if there's a spent_slot_value_hash, there's also a new_slot_value
+                slot_values.push(new_slot_value.unwrap());
             } else if raw_action_hash == expire_action_hash
                 || raw_action_hash == register_action_hash
             {
                 // these actions also need a precommit coin
                 todo!("logic here");
             } else {
-                return Err(DriverError::Custom("Unknown action".to_string()));
+                return Err(CliError::Custom("Unknown action".to_string()));
             }
         }
 
