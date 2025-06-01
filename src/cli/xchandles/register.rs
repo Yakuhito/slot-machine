@@ -5,7 +5,7 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{CatLayer, DriverError, Layer, Offer, Puzzle, Spend, SpendContext},
+    driver::{CatLayer, DriverError, Layer, Offer, Puzzle, SpendContext},
     utils::Address,
 };
 use clvmr::{serde::node_from_bytes, NodePtr};
@@ -14,11 +14,11 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer, SendCat};
 use crate::{
     get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
     hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, print_spend_bundle_to_file,
-    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CatalogApiClient,
-    CatalogRefundAction, CatalogRegisterAction, CatalogSlotValue, CliError, Db,
+    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db,
     DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
     XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
-    XchandlesFactorPricingSolution, XchandlesPrecommitValue,
+    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesRefundAction,
+    XchandlesRegisterAction, XchandlesSlotValue,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -33,6 +33,7 @@ pub async fn xchandles_register(
     testnet11: bool,
     payment_asset_id_str: String,
     payment_cat_base_price_str: String,
+    log: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
@@ -87,7 +88,7 @@ pub async fn xchandles_register(
         yes_no_prompt("Given payment asset id & base price do not match the current registry. Registration will NOT work unless the price singleton changes the registry's state. Continue at your own risk?")?;
     }
 
-    let mut payment_cat_amount =
+    let payment_cat_amount =
         XchandlesFactorPricingPuzzleArgs::get_price(payment_cat_base_price, &handle, num_years);
     let recipient_puzzle_hash = Address::decode(&recipient_address)?.puzzle_hash;
 
@@ -95,7 +96,7 @@ pub async fn xchandles_register(
 
     let pricing_solution = XchandlesFactorPricingSolution {
         current_expiration: 0,
-        handle,
+        handle: handle.clone(),
         num_years,
     };
 
@@ -115,9 +116,9 @@ pub async fn xchandles_register(
     let precommit_value = XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
         registry.info.state.pricing_puzzle_hash.into(),
-        pricing_solution.tree_hash().into(),
+        pricing_solution.tree_hash(),
         secret,
-        handle,
+        handle.clone(),
         start_time,
         nft_launcher_id,
         nft_launcher_id,
@@ -255,112 +256,80 @@ pub async fn xchandles_register(
         offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
         let sec_conds = if refund {
-            let slot: Option<Slot<CatalogSlotValue>> = if DefaultCatMakerArgs::curry_tree_hash(
+            let slot: Option<Slot<XchandlesSlotValue>> = if DefaultCatMakerArgs::curry_tree_hash(
                 payment_asset_id.tree_hash().into(),
-            ) == catalog
+            ) == registry
                 .info
                 .state
                 .cat_maker_puzzle_hash
                 .into()
-                && payment_cat_amount == catalog.info.state.registration_price
-            {
-                if local {
-                    let db = Db::new(true).await?;
-                    let Some(slot_value_hash) = db
-                        .get_catalog_indexed_slot_value(registered_asset_id)
-                        .await?
-                    else {
-                        return Err(CliError::Custom(
+                && registry.info.state.pricing_puzzle_hash
+                    == XchandlesFactorPricingPuzzleArgs::curry_tree_hash(payment_cat_base_price)
+                        .into()
+                && registry.info.state.expired_handle_pricing_puzzle_hash
+                    == XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
+                        payment_cat_base_price,
+                        1000,
+                    )
+                    .into()
+                && payment_cat_amount
+                    == XchandlesFactorPricingPuzzleArgs::get_price(
+                        payment_cat_base_price,
+                        &handle,
+                        num_years,
+                    ) {
+                let Some(slot_value_hash) = db
+                    .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
+                    .await?
+                else {
+                    return Err(CliError::Custom(
                                 "Refund not available - precommit uses right CAT & amount & tries to register a new CAT".to_string(),
                             ));
-                    };
+                };
 
-                    Some(
-                        db.get_slot::<CatalogSlotValue>(
-                            &mut ctx,
-                            catalog_constants.launcher_id,
-                            0,
-                            slot_value_hash,
-                            0,
-                        )
+                Some(
+                    db.get_slot::<XchandlesSlotValue>(&mut ctx, launcher_id, 0, slot_value_hash, 0)
                         .await?
                         .unwrap(),
-                    )
-                } else {
-                    let mut registered_asset_id_minus_one = registered_asset_id.to_bytes();
-                    let mut index = 31;
-                    while registered_asset_id_minus_one[index] == 0 {
-                        index -= 1;
-                    }
-                    registered_asset_id_minus_one[index] -= 1;
-                    let registered_asset_id_minus_one =
-                        Bytes32::from(registered_asset_id_minus_one);
-
-                    let catalog_api_client = CatalogApiClient::get(testnet11);
-                    let (_left, right) = catalog_api_client
-                        .get_neighbors(catalog_constants.launcher_id, registered_asset_id_minus_one)
-                        .await?;
-
-                    if right.info.value.asset_id == registered_asset_id {
-                        Some(right)
-                    } else {
-                        None
-                    }
-                }
+                )
             } else {
                 None
             };
 
-            catalog
-                .new_action::<CatalogRefundAction>()
+            let precommitted_pricing_puzzle =
+                XchandlesFactorPricingPuzzleArgs::get_puzzle(&mut ctx, payment_cat_base_price)?;
+            let precommitted_pricing_solution = ctx.alloc(&pricing_solution)?;
+            registry
+                .new_action::<XchandlesRefundAction>()
                 .spend(
                     &mut ctx,
-                    &mut catalog,
-                    registered_asset_id,
-                    if let Some(slot) = slot {
-                        slot.info.value.neighbors.tree_hash().into()
-                    } else {
-                        Bytes32::default()
-                    },
+                    &mut registry,
                     precommit_coin,
+                    precommitted_pricing_puzzle,
+                    precommitted_pricing_solution,
                     slot,
                 )?
+                .0
                 .reserve_fee(1)
         } else {
-            let (left_slot, right_slot) = if local {
-                let db = Db::new(true).await?;
-                db.get_catalog_neighbors(
-                    &mut ctx,
-                    catalog_constants.launcher_id,
-                    registered_asset_id,
-                )
-                .await?
-            } else {
-                let catalog_api_client = CatalogApiClient::get(testnet11);
+            let (left_slot, right_slot) = db
+                .get_xchandles_neighbors(&mut ctx, launcher_id, handle.tree_hash().into())
+                .await?;
 
-                catalog_api_client
-                    .get_neighbors(catalog_constants.launcher_id, registered_asset_id)
-                    .await?
-            };
-
-            catalog
-                .new_action::<CatalogRegisterAction>()
+            registry
+                .new_action::<XchandlesRegisterAction>()
                 .spend(
                     &mut ctx,
-                    &mut catalog,
-                    registered_asset_id,
+                    &mut registry,
                     left_slot,
                     right_slot,
                     precommit_coin,
-                    Spend {
-                        puzzle: initial_nft_puzzle_ptr,
-                        solution: NodePtr::NIL,
-                    },
+                    payment_cat_base_price,
                 )?
                 .0
         };
 
-        let _new_catalog = catalog.finish_spend(&mut ctx)?;
+        let _new_registry = registry.finish_spend(&mut ctx)?;
 
         let security_coin_sig = spend_security_coin(
             &mut ctx,
@@ -394,15 +363,15 @@ pub async fn xchandles_register(
         ));
     }
 
-    println!("Registered asset ID: {}", hex::encode(registered_asset_id));
+    println!(
+        "Registered handle hash: {}",
+        hex::encode(handle.tree_hash())
+    );
 
-    println!("Have one last look at the initial metadata:");
-    initial_metadata.pretty_print("  ");
+    println!("The registration will be controlled by the following NFT:");
+    println!("  {}", nft);
 
-    println!("The NFT will be minted to the following address:");
-    println!("  {}", recipient_address);
-
-    println!("\nCONFIRM THE ADDRESS IS CORRECT - NFT CANNOT BE RECOVERED AFTER REGISTRATION\n");
+    println!("\nCONFIRM THE NFT IS CORRECT - HANDLE CANNOT BE RECOVERED AFTER REGISTRATION\n");
 
     println!(
         "Your wallet will send {} mojos of the payment asset with a fee of {} XCH ({} mojos)",
