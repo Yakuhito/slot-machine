@@ -437,9 +437,9 @@ enum XchandlesCliAction {
         #[arg(long)]
         num_years: u64,
 
-        /// Recipient address to register the handle to
+        /// Refund address
         #[arg(long)]
-        recipient_address: Option<String>,
+        refund_address: Option<String>,
 
         /// Secret to register the handle with
         #[arg(long)]
@@ -1016,7 +1016,7 @@ pub async fn run_cli() {
                 handle,
                 nft,
                 num_years,
-                recipient_address,
+                refund_address,
                 secret,
                 refund,
                 testnet11,
@@ -1030,7 +1030,7 @@ pub async fn run_cli() {
                     handle,
                     nft,
                     num_years,
-                    recipient_address,
+                    refund_address,
                     secret,
                     refund,
                     testnet11,

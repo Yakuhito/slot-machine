@@ -27,7 +27,7 @@ pub async fn xchandles_register(
     handle: String,
     nft: String,
     num_years: u64,
-    recipient_address: Option<String>,
+    refund_address: Option<String>,
     secret: Option<String>,
     refund: bool,
     testnet11: bool,
@@ -60,8 +60,8 @@ pub async fn xchandles_register(
     let mut registry = sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?;
     println!("done.");
 
-    let recipient_address = if let Some(provided_recipient_address) = recipient_address {
-        provided_recipient_address
+    let refund_address = if let Some(provided_refund_address) = refund_address {
+        provided_refund_address
     } else {
         let derivation_resp = sage
             .get_derivations(GetDerivations {
@@ -90,7 +90,7 @@ pub async fn xchandles_register(
 
     let payment_cat_amount =
         XchandlesFactorPricingPuzzleArgs::get_price(payment_cat_base_price, &handle, num_years);
-    let recipient_puzzle_hash = Address::decode(&recipient_address)?.puzzle_hash;
+    let refund_puzzle_hash = Address::decode(&refund_address)?.puzzle_hash;
 
     let start_time = get_last_onchain_timestamp(&cli).await?;
 
@@ -129,7 +129,7 @@ pub async fn xchandles_register(
         SingletonStruct::new(launcher_id).tree_hash().into(),
         registry.info.constants.relative_block_height,
         registry.info.constants.precommit_payout_puzzle_hash,
-        recipient_puzzle_hash,
+        refund_puzzle_hash,
         ctx.tree_hash(precommit_value_ptr),
     );
 
@@ -218,7 +218,7 @@ pub async fn xchandles_register(
             SingletonStruct::new(launcher_id).tree_hash().into(),
             registry.info.constants.relative_block_height,
             registry.info.constants.precommit_payout_puzzle_hash,
-            recipient_puzzle_hash,
+            refund_puzzle_hash,
             precommit_value,
             payment_cat_amount,
         )?;
