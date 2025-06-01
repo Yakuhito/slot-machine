@@ -10,8 +10,8 @@ use super::{
     reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_sign_entry_update,
     reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
     verifications_sign_launch, verifications_sign_revocation, verifications_view,
-    xchandles_continue_launch, xchandles_initiate_launch, xchandles_unroll_state_scheduler,
-    xchandles_verify_deployment,
+    xchandles_continue_launch, xchandles_initiate_launch, xchandles_register,
+    xchandles_unroll_state_scheduler, xchandles_verify_deployment,
 };
 
 #[derive(Parser)]
@@ -418,6 +418,56 @@ enum XchandlesCliAction {
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
+    },
+    /// Registers a new handle
+    Register {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Handle to register
+        #[arg(long)]
+        handle: String,
+
+        /// NFT (nft1...) to register the handle to
+        #[arg(long)]
+        nft: String,
+
+        /// Number of years to register the handle for
+        #[arg(long)]
+        num_years: u64,
+
+        /// Recipient address to register the handle to
+        #[arg(long)]
+        recipient_address: Option<String>,
+
+        /// Secret to register the handle with
+        #[arg(long)]
+        secret: Option<String>,
+
+        /// Use the registration 'refund' path
+        #[arg(long)]
+        refund: bool,
+
+        /// Use testnet11
+        #[arg(long)]
+        testnet11: bool,
+
+        /// Payment asset id
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Payment CAT base price
+        #[arg(long)]
+        payment_cat_base_price: String,
+
+        /// Log the final transaction to a file (sb.debug)
+        #[arg(long)]
+        log: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
     },
 }
 
@@ -961,6 +1011,36 @@ pub async fn run_cli() {
                 launcher_id,
                 testnet11,
             } => xchandles_verify_deployment(launcher_id, testnet11).await,
+            XchandlesCliAction::Register {
+                launcher_id,
+                handle,
+                nft,
+                num_years,
+                recipient_address,
+                secret,
+                refund,
+                testnet11,
+                payment_asset_id,
+                payment_cat_base_price,
+                log,
+                fee,
+            } => {
+                xchandles_register(
+                    launcher_id,
+                    handle,
+                    nft,
+                    num_years,
+                    recipient_address,
+                    secret,
+                    refund,
+                    testnet11,
+                    payment_asset_id,
+                    payment_cat_base_price,
+                    log,
+                    fee,
+                )
+                .await
+            }
         },
         Commands::RewardDistributor { action } => match action {
             RewardDistributorCliAction::Launch {
