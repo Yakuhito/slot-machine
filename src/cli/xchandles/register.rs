@@ -105,6 +105,8 @@ pub async fn xchandles_register(
         st
     };
 
+    let precommitted_pricing_puzzle =
+        XchandlesFactorPricingPuzzleArgs::get_puzzle(&mut ctx, payment_cat_base_price)?;
     let pricing_solution = XchandlesFactorPricingSolution {
         current_expiration: 0,
         handle: handle.clone(),
@@ -126,7 +128,7 @@ pub async fn xchandles_register(
 
     let precommit_value = XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
-        registry.info.state.pricing_puzzle_hash.into(),
+        ctx.tree_hash(precommitted_pricing_puzzle),
         pricing_solution.tree_hash(),
         secret,
         handle.clone(),
@@ -283,12 +285,7 @@ pub async fn xchandles_register(
                         1000,
                     )
                     .into()
-                && payment_cat_amount
-                    == XchandlesFactorPricingPuzzleArgs::get_price(
-                        payment_cat_base_price,
-                        &handle,
-                        num_years,
-                    ) {
+            {
                 let Some(slot_value_hash) = db
                     .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
                     .await?
@@ -307,8 +304,6 @@ pub async fn xchandles_register(
                 None
             };
 
-            let precommitted_pricing_puzzle =
-                XchandlesFactorPricingPuzzleArgs::get_puzzle(&mut ctx, payment_cat_base_price)?;
             let precommitted_pricing_solution = ctx.alloc(&pricing_solution)?;
             registry
                 .new_action::<XchandlesRefundAction>()
@@ -414,7 +409,14 @@ pub async fn xchandles_register(
     .await?;
     println!("Confirmed!");
 
-    println!("To spend the precommitment coin, run the same command again");
+    println!(
+        "To spend the precommitment coin, run the same command again with two more arguments:"
+    );
+    println!(
+        "  --secret {} --start-time {}",
+        hex::encode(secret),
+        start_time
+    );
 
     Ok(())
 }
