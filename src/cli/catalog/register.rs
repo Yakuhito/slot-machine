@@ -201,7 +201,7 @@ pub async fn catalog_register(
             + 7;
         println!(
             "Precommitment coin found! It was created at block #{}; target spendable block height is #{}",
-            target_block_height, target_block_height
+            precommit_coin_record.confirmed_block_index, target_block_height
         );
 
         loop {

@@ -445,6 +445,10 @@ enum XchandlesCliAction {
         #[arg(long)]
         secret: Option<String>,
 
+        /// Start time (UNIX timestamp)
+        #[arg(long)]
+        start_time: Option<u64>,
+
         /// Use the registration 'refund' path
         #[arg(long)]
         refund: bool,
@@ -1018,6 +1022,7 @@ pub async fn run_cli() {
                 num_years,
                 refund_address,
                 secret,
+                start_time,
                 refund,
                 testnet11,
                 payment_asset_id,
@@ -1032,6 +1037,7 @@ pub async fn run_cli() {
                     num_years,
                     refund_address,
                     secret,
+                    start_time,
                     refund,
                     testnet11,
                     payment_asset_id,

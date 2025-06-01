@@ -29,6 +29,7 @@ pub async fn xchandles_register(
     num_years: u64,
     refund_address: Option<String>,
     secret: Option<String>,
+    start_time: Option<u64>,
     refund: bool,
     testnet11: bool,
     payment_asset_id_str: String,
@@ -91,8 +92,18 @@ pub async fn xchandles_register(
     let payment_cat_amount =
         XchandlesFactorPricingPuzzleArgs::get_price(payment_cat_base_price, &handle, num_years);
     let refund_puzzle_hash = Address::decode(&refund_address)?.puzzle_hash;
+    println!("Refund address: {}", refund_address);
 
-    let start_time = get_last_onchain_timestamp(&cli).await?;
+    let start_time = if let Some(st) = start_time {
+        st
+    } else {
+        let st = get_last_onchain_timestamp(&cli).await?
+            + registry.info.constants.relative_block_height as u64 * 18;
+
+        println!("Start time (USE IN FOLLOW-UP COMMAND): {}", st);
+
+        st
+    };
 
     let pricing_solution = XchandlesFactorPricingSolution {
         current_expiration: 0,
@@ -156,7 +167,7 @@ pub async fn xchandles_register(
             + registry.info.constants.relative_block_height / 4;
         println!(
             "Precommitment coin found! It was created at block #{}; target spendable block height is #{}",
-            target_block_height, target_block_height
+            precommit_coin_record.confirmed_block_index, target_block_height
         );
 
         loop {
