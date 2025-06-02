@@ -256,6 +256,7 @@ pub async fn catalog_continue_launch(
                         vec![cat_destination_puzzle_hash.into()],
                     )],
                 }),
+                None,
             )?;
 
             let Some(created_cat) = one_sided_offer.created_cat else {
@@ -487,7 +488,7 @@ pub async fn catalog_continue_launch(
 
     let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None)?;
+    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let mut security_coin_conditions = offer.security_base_conditions;

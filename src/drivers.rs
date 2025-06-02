@@ -12,11 +12,11 @@ use chia::{
         CoinProof, EveProof, LineageProof, Proof,
     },
 };
-use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH};
+use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
 use chia_wallet_sdk::{
     driver::{
-        Cat, CatSpend, CurriedPuzzle, DriverError, Launcher, Layer, Offer, SingleCatSpend, Spend,
-        SpendContext, StandardLayer,
+        Cat, CatSpend, CurriedPuzzle, DriverError, HashedPtr, Launcher, Layer, Nft, Offer, Puzzle,
+        SingleCatSpend, Spend, SpendContext, StandardLayer,
     },
     prelude::{AggSig, AggSigKind},
     signer::{AggSigConstants, RequiredBlsSignature},
@@ -40,6 +40,7 @@ pub struct SecuredOneSidedOffer {
     pub security_coin: Coin,
     pub security_base_conditions: Conditions<NodePtr>,
     pub created_cat: Option<Cat>,
+    pub created_nft: Option<Nft<HashedPtr>>,
 }
 
 fn custom_err<T>(e: T) -> DriverError
@@ -64,6 +65,7 @@ pub fn parse_one_sided_offer(
     offer: Offer,
     security_public_key: PublicKey,
     cat_notarized_payment: Option<NotarizedPayment>,
+    nft_notatized_payment: Option<NotarizedPayment>,
 ) -> Result<SecuredOneSidedOffer, DriverError> {
     let offer = offer.parse(ctx).map_err(custom_err)?;
 
@@ -83,12 +85,14 @@ pub fn parse_one_sided_offer(
 
     let mut base_conditions = Conditions::new();
     let mut created_cat: Option<Cat> = None;
+    let mut created_nft: Option<Nft<HashedPtr>> = None;
 
     for coin_spend in offer.coin_spends {
         let puzzle_ptr = coin_spend.puzzle_reveal.to_clvm(ctx)?;
         let solution_ptr = coin_spend.solution.to_clvm(ctx)?;
 
         let curried_puzzle = CurriedPuzzle::parse(ctx, puzzle_ptr);
+
         if let Some(curried_puzzle) = curried_puzzle {
             if curried_puzzle.mod_hash == CAT_PUZZLE_HASH.into() {
                 let cat_args = CatArgs::<NodePtr>::from_clvm(ctx, curried_puzzle.args)?;
@@ -235,6 +239,41 @@ pub fn parse_one_sided_offer(
                         );
                     }
                 }
+            } else if curried_puzzle.mod_hash == SINGLETON_TOP_LAYER_V1_1_HASH.into() {
+                let Some(nft_notatized_payment) = nft_notatized_payment.clone() else {
+                    return Err(DriverError::Custom(
+                        "NFT payment not requested but offered NFT found".to_string(),
+                    ));
+                };
+
+                let parent_puzzle = Puzzle::from_clvm(ctx, puzzle_ptr)?;
+                let Some(nft) = Nft::<HashedPtr>::parse_child(
+                    ctx,
+                    coin_spend.coin,
+                    parent_puzzle,
+                    solution_ptr,
+                )?
+                else {
+                    return Err(DriverError::Custom("Could not parse child NFT".to_string()));
+                };
+
+                let inner_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
+                let inner_solution = ctx.alloc(&SettlementPaymentsSolution {
+                    notarized_payments: vec![nft_notatized_payment.clone()],
+                })?;
+
+                nft.spend(ctx, Spend::new(inner_puzzle, inner_solution))?;
+
+                created_nft = Some(nft.wrapped_child::<HashedPtr>(
+                    nft_notatized_payment.payments[0].puzzle_hash,
+                    nft.info.current_owner,
+                    nft.info.metadata,
+                ));
+                let announcement_msg: Bytes32 = nft_notatized_payment.tree_hash().into();
+                base_conditions = base_conditions.assert_puzzle_announcement(announcement_id(
+                    nft.coin.puzzle_hash,
+                    announcement_msg,
+                ));
             }
         }
 
@@ -310,6 +349,7 @@ pub fn parse_one_sided_offer(
         security_coin,
         security_base_conditions: base_conditions,
         created_cat,
+        created_nft,
     })
 }
 
@@ -521,7 +561,7 @@ pub fn launch_catalog_registry<V>(
     DriverError,
 > {
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None)?;
+    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_id = offer.security_coin.coin_id();
@@ -627,7 +667,7 @@ pub fn launch_xchandles_registry<V>(
     DriverError,
 > {
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None)?;
+    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_id = offer.security_coin.coin_id();
@@ -734,6 +774,7 @@ pub fn launch_dig_reward_distributor(
                 vec![cat_refund_puzzle_hash.into()],
             )],
         }),
+        None,
     )?;
     let dig_reward_distributor_hint: Bytes32 = "DIG Reward Distributor v1".tree_hash().into();
     let launcher_memos = chia_wallet_sdk::prelude::Memos::new(
@@ -761,6 +802,7 @@ pub fn launch_dig_reward_distributor(
                 vec![reserve_inner_ph.into()],
             )],
         }),
+        None,
     )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 

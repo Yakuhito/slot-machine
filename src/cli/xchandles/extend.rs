@@ -110,6 +110,7 @@ pub async fn xchandles_extend(
         offer,
         security_coin_sk.public_key(),
         Some(notarized_payment),
+        None,
     )?;
 
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));

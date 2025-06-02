@@ -85,6 +85,7 @@ pub async fn reward_distributor_commit_rewards(
                 vec![cat_destination_inner_puzzle_hash.into()],
             )],
         }),
+        None,
     )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
