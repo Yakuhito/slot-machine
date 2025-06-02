@@ -23,6 +23,12 @@ use crate::{
     XchandlesUpdateAction,
 };
 
+fn encode_nft(nft_launcher_id: Bytes32) -> Result<String, CliError> {
+    Address::new(nft_launcher_id, "nft".to_string())
+        .encode()
+        .map_err(CliError::from)
+}
+
 pub async fn xchandles_update(
     launcher_id_str: String,
     handle: String,
@@ -77,8 +83,19 @@ pub async fn xchandles_update(
         .address;
 
     println!("Handle: {}", handle);
-    println!("New owner: {}", new_owner_launcher_id);
-    println!("New resolved NFT: {}", new_resolved_launcher_id);
+    println!(
+        "Current owner: {}",
+        encode_nft(slot.info.value.owner_launcher_id)?
+    );
+    println!(
+        "Current resolved NFT: {}",
+        encode_nft(slot.info.value.resolved_launcher_id)?
+    );
+    println!("New owner: {}", encode_nft(new_owner_launcher_id)?);
+    println!(
+        "New resolved NFT: {}",
+        encode_nft(new_resolved_launcher_id)?
+    );
     println!("NFT return address: {}", return_address);
 
     yes_no_prompt("Continue with update?")?;
@@ -93,9 +110,7 @@ pub async fn xchandles_update(
             offered_assets: Assets {
                 xch: Amount::u64(1),
                 cats: vec![],
-                nfts: vec![
-                    Address::new(slot.info.value.owner_launcher_id, "nft".to_string()).encode()?,
-                ],
+                nfts: vec![encode_nft(slot.info.value.owner_launcher_id)?],
             },
             fee: Amount::u64(fee),
             receive_address: None,
