@@ -12,7 +12,6 @@ use chia::{
         CoinProof, EveProof, LineageProof, Proof,
     },
 };
-use chia_puzzle_types::offer::Memos;
 use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH};
 use chia_wallet_sdk::{
     driver::{
@@ -159,16 +158,12 @@ pub fn parse_one_sided_offer(
                         let notarized_payment = NotarizedPayment {
                             nonce: offer_coin_cat.coin_id(),
                             payments: vec![
-                                Payment {
-                                    puzzle_hash: refund_puzzle_hash,
-                                    amount: cc.amount,
-                                    memos: Some(Memos(vec![refund_puzzle_hash.into()])),
-                                },
-                                Payment {
-                                    puzzle_hash: interim_inner_ph,
-                                    amount: 1,
-                                    memos: None,
-                                },
+                                Payment::with_memos(
+                                    refund_puzzle_hash,
+                                    cc.amount,
+                                    vec![refund_puzzle_hash.into()],
+                                ),
+                                Payment::new(interim_inner_ph, 1),
                             ],
                         };
                         let offer_cat_inner_solution = ctx.alloc(&SettlementPaymentsSolution {
@@ -274,11 +269,10 @@ pub fn parse_one_sided_offer(
                 let offer_coin_solution = SettlementPaymentsSolution {
                     notarized_payments: vec![NotarizedPayment {
                         nonce: offer_coin_id,
-                        payments: vec![Payment {
-                            puzzle_hash: security_coin_puzzle_hash,
-                            amount: security_coin_amount,
-                            memos: None,
-                        }],
+                        payments: vec![Payment::new(
+                            security_coin_puzzle_hash,
+                            security_coin_amount,
+                        )],
                     }],
                 };
                 let offer_coin_solution = ctx.serialize(&offer_coin_solution)?;
@@ -734,11 +728,11 @@ pub fn launch_dig_reward_distributor(
         security_coin_sk.public_key(),
         Some(NotarizedPayment {
             nonce: constants.launcher_id,
-            payments: vec![Payment {
-                puzzle_hash: cat_refund_puzzle_hash,
-                amount: 0,
-                memos: Some(Memos(vec![cat_refund_puzzle_hash.into()])),
-            }],
+            payments: vec![Payment::with_memos(
+                cat_refund_puzzle_hash,
+                0,
+                vec![cat_refund_puzzle_hash.into()],
+            )],
         }),
     )?;
     let dig_reward_distributor_hint: Bytes32 = "DIG Reward Distributor v1".tree_hash().into();
@@ -761,11 +755,11 @@ pub fn launch_dig_reward_distributor(
         security_coin_sk.public_key(),
         Some(NotarizedPayment {
             nonce: constants.launcher_id,
-            payments: vec![Payment {
-                puzzle_hash: reserve_inner_ph,
-                amount: 0,
-                memos: Some(Memos(vec![reserve_inner_ph.into()])),
-            }],
+            payments: vec![Payment::with_memos(
+                reserve_inner_ph,
+                0,
+                vec![reserve_inner_ph.into()],
+            )],
         }),
     )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));

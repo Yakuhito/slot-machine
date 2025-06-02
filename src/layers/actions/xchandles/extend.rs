@@ -147,11 +147,10 @@ impl XchandlesExtendAction {
             nonce: clvm_tuple!(handle.clone(), slot.info.value.expiration)
                 .tree_hash()
                 .into(),
-            payments: vec![Payment {
-                puzzle_hash: registry.info.constants.precommit_payout_puzzle_hash,
-                amount: renew_amount,
-                memos: None,
-            }],
+            payments: vec![Payment::new(
+                registry.info.constants.precommit_payout_puzzle_hash,
+                renew_amount,
+            )],
         };
 
         let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, handle).tree_hash().to_vec();

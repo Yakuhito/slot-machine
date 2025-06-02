@@ -117,7 +117,7 @@ pub async fn catalog_unroll_state_scheduler(
     let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
     let security_coin_sk = new_sk()?;
 
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
+    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_conditions = offer

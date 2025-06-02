@@ -5,6 +5,7 @@ use chia::{
     protocol::{Bytes32, SpendBundle},
     puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
 };
+use chia_puzzle_types::offer::{NotarizedPayment, Payment};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{CatLayer, Layer, Offer, Puzzle, SingleCatSpend, Spend, SpendContext},
@@ -228,7 +229,8 @@ pub async fn xchandles_continue_launch(
                 );
             }
             let cat_destination_puzzle_ptr = ctx.alloc(&clvm_quote!(cat_creator_conds))?;
-            let cat_destination_puzzle_hash = ctx.tree_hash(cat_destination_puzzle_ptr);
+            let cat_destination_puzzle_hash: Bytes32 =
+                ctx.tree_hash(cat_destination_puzzle_ptr).into();
 
             let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
             let security_coin_sk = new_sk()?;
@@ -238,8 +240,14 @@ pub async fn xchandles_continue_launch(
                 &mut ctx,
                 offer,
                 security_coin_sk.public_key(),
-                Some(cat_destination_puzzle_hash.into()),
-                false,
+                Some(NotarizedPayment {
+                    nonce: launcher_id,
+                    payments: vec![Payment::with_memos(
+                        cat_destination_puzzle_hash,
+                        handles_payment_total,
+                        vec![cat_destination_puzzle_hash.into()],
+                    )],
+                }),
             )?;
 
             let Some(created_cat) = one_sided_offer.created_cat else {
@@ -479,7 +487,7 @@ pub async fn xchandles_continue_launch(
 
     let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
+    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let mut security_coin_conditions = offer.security_base_conditions.reserve_fee(1);

@@ -1,4 +1,5 @@
 use chia::protocol::{Bytes32, SpendBundle};
+use chia_puzzle_types::offer::{NotarizedPayment, Payment};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{CatSpend, Offer, Spend, SpendContext},
@@ -76,8 +77,14 @@ pub async fn reward_distributor_commit_rewards(
         &mut ctx,
         offer,
         security_coin_sk.public_key(),
-        Some(cat_destination_inner_puzzle_hash),
-        false,
+        Some(NotarizedPayment {
+            nonce: launcher_id,
+            payments: vec![Payment::with_memos(
+                cat_destination_inner_puzzle_hash,
+                reward_amount,
+                vec![cat_destination_inner_puzzle_hash.into()],
+            )],
+        }),
     )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
