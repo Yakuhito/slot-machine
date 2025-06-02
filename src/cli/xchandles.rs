@@ -1,4 +1,5 @@
 mod continue_launch;
+mod extend;
 mod initiate_launch;
 mod register;
 mod sync;
@@ -6,6 +7,7 @@ mod unroll_state_scheduler;
 mod verify_deployment;
 
 pub use continue_launch::*;
+pub use extend::*;
 pub use initiate_launch::*;
 pub use register::*;
 pub use sync::*;

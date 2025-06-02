@@ -64,8 +64,7 @@ pub fn parse_one_sided_offer(
     ctx: &mut SpendContext,
     offer: Offer,
     security_public_key: PublicKey,
-    cat_destination_puzzle_hash: Option<Bytes32>,
-    cat_destination_amount_is_zero: bool,
+    cat_notarized_payment: Option<NotarizedPayment>,
 ) -> Result<SecuredOneSidedOffer, DriverError> {
     let offer = offer.parse(ctx).map_err(custom_err)?;
 
@@ -111,10 +110,9 @@ pub fn parse_one_sided_offer(
                     })
                     .find(|cc| cc.puzzle_hash == SETTLEMENT_PAYMENT_HASH.into())
                 {
-                    let Some(cat_destination_puzzle_hash) = cat_destination_puzzle_hash else {
+                    let Some(cat_notarized_payment) = cat_notarized_payment.clone() else {
                         return Err(DriverError::Custom(
-                            "CAT destination puzzle hash not provided but offered CAT found"
-                                .to_string(),
+                            "CAT payment not requested but offered CAT found".to_string(),
                         ));
                     };
 
@@ -146,13 +144,16 @@ pub fn parse_one_sided_offer(
 
                     // offers don't allow amount 0 coins, so we create an 1-amount coin,
                     //   which creates a 0-amount coin and spend all the CATs together
-                    if cat_destination_amount_is_zero {
+                    if cat_notarized_payment.payments[0].amount == 0 {
                         let memos = Some(chia_wallet_sdk::prelude::Memos::new(
-                            ctx.alloc(&vec![cat_destination_puzzle_hash])?,
+                            ctx.alloc(&cat_notarized_payment.payments[0].memos)?,
                         ));
-                        let interim_inner_puzzle = ctx.alloc(&clvm_quote!(
-                            Conditions::new().create_coin(cat_destination_puzzle_hash, 0, memos)
-                        ))?;
+                        let interim_inner_puzzle = ctx.alloc(&clvm_quote!(Conditions::new()
+                            .create_coin(
+                                cat_notarized_payment.payments[0].puzzle_hash,
+                                0,
+                                memos,
+                            )))?;
                         let interim_inner_ph: Bytes32 = ctx.tree_hash(interim_inner_puzzle).into();
 
                         let notarized_payment = NotarizedPayment {
@@ -197,23 +198,17 @@ pub fn parse_one_sided_offer(
                             ctx.insert(og_spend);
                         }
 
-                        created_cat =
-                            Some(interim_cat.wrapped_child(cat_destination_puzzle_hash, 0));
+                        created_cat = Some(
+                            interim_cat
+                                .wrapped_child(cat_notarized_payment.payments[0].puzzle_hash, 0),
+                        );
                         let announcement_msg: Bytes32 = notarized_payment.tree_hash().into();
                         base_conditions = base_conditions.assert_puzzle_announcement(
                             announcement_id(offer_cat.coin.puzzle_hash, announcement_msg),
                         );
                     } else {
-                        let notarized_payment = NotarizedPayment {
-                            nonce: offer_coin_cat.coin_id(),
-                            payments: vec![Payment {
-                                puzzle_hash: cat_destination_puzzle_hash,
-                                amount: cc.amount,
-                                memos: Some(Memos(vec![cat_destination_puzzle_hash.into()])),
-                            }],
-                        };
                         let offer_cat_inner_solution = ctx.alloc(&SettlementPaymentsSolution {
-                            notarized_payments: vec![notarized_payment.clone()],
+                            notarized_payments: vec![cat_notarized_payment.clone()],
                         })?;
 
                         let offer_cat_inner_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
@@ -235,9 +230,11 @@ pub fn parse_one_sided_offer(
                             },
                         )?;
 
-                        created_cat =
-                            Some(offer_cat.wrapped_child(cat_destination_puzzle_hash, cc.amount));
-                        let announcement_msg: Bytes32 = notarized_payment.tree_hash().into();
+                        created_cat = Some(offer_cat.wrapped_child(
+                            cat_notarized_payment.payments[0].puzzle_hash,
+                            cc.amount,
+                        ));
+                        let announcement_msg: Bytes32 = cat_notarized_payment.tree_hash().into();
                         base_conditions = base_conditions.assert_puzzle_announcement(
                             announcement_id(offer_cat.coin.puzzle_hash, announcement_msg),
                         );
@@ -307,7 +304,7 @@ pub fn parse_one_sided_offer(
         security_coin_amount,
     );
 
-    if cat_destination_puzzle_hash.is_some() && created_cat.is_none() {
+    if cat_notarized_payment.is_some() && created_cat.is_none() {
         return Err(DriverError::Custom(
             "Could not find CAT offered in one-sided offer".to_string(),
         ));
@@ -530,7 +527,7 @@ pub fn launch_catalog_registry<V>(
     DriverError,
 > {
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, false)?;
+    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_id = offer.security_coin.coin_id();
@@ -636,7 +633,7 @@ pub fn launch_xchandles_registry<V>(
     DriverError,
 > {
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, false)?;
+    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_id = offer.security_coin.coin_id();
@@ -735,8 +732,14 @@ pub fn launch_dig_reward_distributor(
         ctx,
         offer.clone(),
         security_coin_sk.public_key(),
-        Some(cat_refund_puzzle_hash),
-        true,
+        Some(NotarizedPayment {
+            nonce: constants.launcher_id,
+            payments: vec![Payment {
+                puzzle_hash: cat_refund_puzzle_hash,
+                amount: 0,
+                memos: Some(Memos(vec![cat_refund_puzzle_hash.into()])),
+            }],
+        }),
     )?;
     let dig_reward_distributor_hint: Bytes32 = "DIG Reward Distributor v1".tree_hash().into();
     let launcher_memos = chia_wallet_sdk::prelude::Memos::new(
@@ -748,15 +751,22 @@ pub fn launch_dig_reward_distributor(
 
     let controller_singleton_struct_hash: Bytes32 =
         SingletonStruct::new(launcher_id).tree_hash().into();
-    let reserve_inner_ph =
-        P2DelegatedBySingletonLayerArgs::curry_tree_hash(controller_singleton_struct_hash, 0);
+    let reserve_inner_ph: Bytes32 =
+        P2DelegatedBySingletonLayerArgs::curry_tree_hash(controller_singleton_struct_hash, 0)
+            .into();
 
     let offer = parse_one_sided_offer(
         ctx,
         offer,
         security_coin_sk.public_key(),
-        Some(reserve_inner_ph.into()),
-        true,
+        Some(NotarizedPayment {
+            nonce: constants.launcher_id,
+            payments: vec![Payment {
+                puzzle_hash: reserve_inner_ph,
+                amount: 0,
+                memos: Some(Memos(vec![reserve_inner_ph.into()])),
+            }],
+        }),
     )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 

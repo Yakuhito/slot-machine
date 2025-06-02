@@ -10,7 +10,7 @@ use super::{
     reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_sign_entry_update,
     reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
     verifications_sign_launch, verifications_sign_revocation, verifications_view,
-    xchandles_continue_launch, xchandles_initiate_launch, xchandles_register,
+    xchandles_continue_launch, xchandles_extend, xchandles_initiate_launch, xchandles_register,
     xchandles_unroll_state_scheduler, xchandles_verify_deployment,
 };
 
@@ -468,6 +468,36 @@ enum XchandlesCliAction {
         /// Log the final transaction to a file (sb.debug)
         #[arg(long)]
         log: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    // Extend the registration of a handle
+    Extend {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Handle to extend
+        #[arg(long)]
+        handle: String,
+
+        /// Number of years to extend the handle for
+        #[arg(long, default_value = "1")]
+        years: u64,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Payment asset id
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Payment CAT base price
+        #[arg(long)]
+        payment_cat_base_price: String,
 
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
@@ -1043,6 +1073,26 @@ pub async fn run_cli() {
                     payment_asset_id,
                     payment_cat_base_price,
                     log,
+                    fee,
+                )
+                .await
+            }
+            XchandlesCliAction::Extend {
+                launcher_id,
+                handle,
+                years,
+                testnet11,
+                payment_asset_id,
+                payment_cat_base_price,
+                fee,
+            } => {
+                xchandles_extend(
+                    launcher_id,
+                    handle,
+                    years,
+                    testnet11,
+                    payment_asset_id,
+                    payment_cat_base_price,
                     fee,
                 )
                 .await
