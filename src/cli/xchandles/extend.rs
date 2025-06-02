@@ -55,7 +55,7 @@ pub async fn xchandles_extend(
         "Payment CAT amount: {:.3}",
         payment_cat_amount as f64 / 1000.0
     );
-    println!("Fee: {:.3}", fee as f64 / 1000.0);
+    println!("Fee: {} XCH", fee_str);
 
     let slot_value_hash = db
         .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
