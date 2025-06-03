@@ -1,0 +1,71 @@
+; add_entry.clsp by yakuhito
+;; Adds a reward entry to the reward distributor. The entry starts accumulating rewards right away.
+
+(mod (
+    SINGLETON_MOD_HASH
+    MANAGER_SINGLETON_STRUCT_HASH ; (sha256 SINGLETON_STRUCT) for manager singleton
+    ENTRY_SLOT_1ST_CURRY_HASH ; after 1st curry
+    MAX_SECONDS_OFFSET ; at most this amount of seconds can pass since last update
+    ; /\ this prevents the reward distributor from 'stealing' earned rewards before MAX_SECONDS_OFFSET by
+    ;    adding a mirror with a gazillion shares during long periods of non-sync
+    (
+        Ephemeral_State . ; not used
+        (@
+            Current_State
+            (
+                total_reserves
+                active_shares
+                (@ Reward_Info (cumulative_payout . remaining_rewards))
+                (@ Round_Time_Info (last_update . epoch_end))
+            )
+        )
+    ) ; Truth
+    (
+        manager_singleton_inner_puzzle_hash
+        entry_payout_puzzle_hash .
+        entry_shares
+    )
+)
+    (include condition_codes.clib)
+    (include curry.clib)
+    (include slots.clib)
+
+    (c
+        (list
+            ()
+            total_reserves
+            (+ active_shares entry_shares)
+            Reward_Info
+            Round_Time_Info
+        ) ; new state  
+        (list
+            ; manager actually wants us to add this entry
+            (list RECEIVE_MESSAGE
+                18 ; puzzle hash - puzzle hash
+                (concat 'a' (sha256 2
+                    (sha256 1 entry_payout_puzzle_hash)
+                    (sha256 1 entry_shares)
+                )) ; message = 'a' + (sha265tree (entry_payout_puzzle_hash . entry_shares))
+                (curry_hashes_inline SINGLETON_MOD_HASH
+                    MANAGER_SINGLETON_STRUCT_HASH
+                    manager_singleton_inner_puzzle_hash
+                )
+            )
+
+            (create_slot_inline ENTRY_SLOT_1ST_CURRY_HASH
+                (sha256 2
+                    (sha256 1 entry_payout_puzzle_hash)
+                    (sha256 2
+                        (sha256 1 cumulative_payout)
+                        (sha256 1 entry_shares)
+                    )
+                ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
+                entry_payout_puzzle_hash
+            )
+
+            ; make sure the reward info is up to date
+            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ last_update MAX_SECONDS_OFFSET))
+        ) ; conditions
+    )
+        
+)

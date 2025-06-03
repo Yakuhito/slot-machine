@@ -82,18 +82,18 @@ impl CatalogSlotValue {
         }
     }
 
-    pub fn left_end(right_asset_id: Bytes32) -> Self {
+    pub fn initial_left_end() -> Self {
         Self::new(
             SLOT32_MIN_VALUE.into(),
             SLOT32_MIN_VALUE.into(),
-            right_asset_id,
+            SLOT32_MAX_VALUE.into(),
         )
     }
 
-    pub fn right_end(left_asset_id: Bytes32) -> Self {
+    pub fn initial_right_end() -> Self {
         Self::new(
             SLOT32_MAX_VALUE.into(),
-            left_asset_id,
+            SLOT32_MIN_VALUE.into(),
             SLOT32_MAX_VALUE.into(),
         )
     }
@@ -143,21 +143,26 @@ impl XchandlesSlotValue {
         }
     }
 
-    pub fn edge(
-        handle_hash: Bytes32,
-        left_handle_hash: Bytes32,
-        right_handle_hash: Bytes32,
-    ) -> Self {
-        Self {
-            handle_hash,
-            neighbors: SlotNeigborsInfo {
-                left_value: left_handle_hash,
-                right_value: right_handle_hash,
-            },
-            expiration: 0,
-            owner_launcher_id: Bytes32::default(),
-            resolved_launcher_id: Bytes32::default(),
-        }
+    pub fn initial_left_end() -> Self {
+        XchandlesSlotValue::new(
+            SLOT32_MIN_VALUE.into(),
+            SLOT32_MIN_VALUE.into(),
+            SLOT32_MAX_VALUE.into(),
+            u64::MAX,
+            Bytes32::default(),
+            Bytes32::default(),
+        )
+    }
+
+    pub fn initial_right_end() -> Self {
+        XchandlesSlotValue::new(
+            SLOT32_MAX_VALUE.into(),
+            SLOT32_MIN_VALUE.into(),
+            SLOT32_MAX_VALUE.into(),
+            u64::MAX,
+            Bytes32::default(),
+            Bytes32::default(),
+        )
     }
 
     pub fn with_neighbors(&self, left_handle_hash: Bytes32, right_handle_hash: Bytes32) -> Self {
@@ -234,18 +239,18 @@ impl PartialOrd for XchandlesSlotValue {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DigSlotNonce {
+pub enum RewardDistributorSlotNonce {
     REWARD = 1,
     COMMITMENT = 2,
-    MIRROR = 3,
+    ENTRY = 3,
 }
 
-impl DigSlotNonce {
+impl RewardDistributorSlotNonce {
     pub fn from_u64(value: u64) -> Option<Self> {
         match value {
             1 => Some(Self::REWARD),
             2 => Some(Self::COMMITMENT),
-            3 => Some(Self::MIRROR),
+            3 => Some(Self::ENTRY),
             _ => None,
         }
     }
@@ -254,14 +259,14 @@ impl DigSlotNonce {
         match self {
             Self::REWARD => 1,
             Self::COMMITMENT => 2,
-            Self::MIRROR => 3,
+            Self::ENTRY => 3,
         }
     }
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct DigRewardSlotValue {
+pub struct RewardDistributorRewardSlotValue {
     pub epoch_start: u64,
     pub next_epoch_initialized: bool,
     #[clvm(rest)]
@@ -270,7 +275,7 @@ pub struct DigRewardSlotValue {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct DigCommitmentSlotValue {
+pub struct RewardDistributorCommitmentSlotValue {
     pub epoch_start: u64,
     pub clawback_ph: Bytes32,
     #[clvm(rest)]
@@ -279,7 +284,7 @@ pub struct DigCommitmentSlotValue {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct DigMirrorSlotValue {
+pub struct RewardDistributorEntrySlotValue {
     pub payout_puzzle_hash: Bytes32,
     pub initial_cumulative_payout: u64,
     #[clvm(rest)]

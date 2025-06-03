@@ -80,6 +80,9 @@ pub enum CliError {
     #[error("coin not found: {0}")]
     CoinNotFound(Bytes32),
 
+    #[error("puzzle hash records not found: {0}")]
+    PuzzleHashRecordsNotFound(Bytes32),
+
     #[error("coin not spent: {0}")]
     CoinNotSpent(Bytes32),
 

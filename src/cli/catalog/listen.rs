@@ -61,6 +61,10 @@ pub async fn catalog_listen(testnet11: bool) -> Result<(), CliError> {
         testnet11,
     };
 
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // API
     let api_state = state.clone();
     tokio::spawn(async move {

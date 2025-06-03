@@ -12,7 +12,7 @@ use clvmr::NodePtr;
 
 use crate::{
     CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
-    CatalogSlotValue, CliError, Db, Slot, SlotInfo, SlotProof, SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+    CatalogSlotValue, CliError, Db, Slot, SlotInfo, SlotProof,
 };
 
 pub async fn sync_catalog(
@@ -173,8 +173,8 @@ pub async fn sync_catalog(
                 parent_parent_info: lineage_proof.parent_parent_coin_info,
                 parent_inner_puzzle_hash: lineage_proof.parent_inner_puzzle_hash,
             };
-            let left_slot_value = CatalogSlotValue::left_end(SLOT32_MAX_VALUE.into());
-            let right_slot_value = CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into());
+            let left_slot_value = CatalogSlotValue::initial_left_end();
+            let right_slot_value = CatalogSlotValue::initial_right_end();
 
             db.save_slot(
                 ctx,

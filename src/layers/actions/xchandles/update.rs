@@ -1,0 +1,193 @@
+use chia::{
+    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
+    protocol::Bytes32,
+    sha2::Sha256,
+};
+use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
+use chia_wallet_sdk::{
+    driver::{DriverError, Spend, SpendContext},
+    types::Conditions,
+};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
+use clvmr::NodePtr;
+use hex_literal::hex;
+
+use crate::{
+    Action, Slot, SpendContextExt, XchandlesConstants, XchandlesRegistry, XchandlesSlotValue,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XchandlesUpdateAction {
+    pub launcher_id: Bytes32,
+}
+
+impl ToTreeHash for XchandlesUpdateAction {
+    fn tree_hash(&self) -> TreeHash {
+        XchandlesUpdateActionArgs::curry_tree_hash(self.launcher_id)
+    }
+}
+
+impl Action<XchandlesRegistry> for XchandlesUpdateAction {
+    fn from_constants(constants: &XchandlesConstants) -> Self {
+        Self {
+            launcher_id: constants.launcher_id,
+        }
+    }
+}
+
+impl XchandlesUpdateAction {
+    fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
+        Ok(CurriedProgram {
+            program: ctx.xchandles_update_puzzle()?,
+            args: XchandlesUpdateActionArgs::new(self.launcher_id),
+        }
+        .to_clvm(ctx)?)
+    }
+
+    pub fn get_spent_slot_value_hash_from_solution(
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<Bytes32, DriverError> {
+        let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(solution.neighbors_hash);
+        hasher.update(
+            clvm_tuple!(
+                solution.expiration,
+                clvm_tuple!(
+                    solution.current_owner_launcher_id,
+                    solution.current_resolved_launcher_id
+                )
+            )
+            .tree_hash(),
+        );
+        let after_handle_hash = hasher.finalize();
+
+        hasher = Sha256::new();
+        hasher.update(b"\x02");
+        hasher.update(solution.handle_hash.tree_hash());
+        hasher.update(after_handle_hash);
+
+        Ok(hasher.finalize().into())
+    }
+
+    pub fn get_slot_value_from_solution(
+        ctx: &mut SpendContext,
+        spent_slot_value: XchandlesSlotValue,
+        solution: NodePtr,
+    ) -> Result<XchandlesSlotValue, DriverError> {
+        let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
+
+        Ok(spent_slot_value.with_launcher_ids(
+            solution.new_owner_launcher_id,
+            solution.new_resolved_launcher_id,
+        ))
+    }
+
+    pub fn spend(
+        self,
+        ctx: &mut SpendContext,
+        registry: &mut XchandlesRegistry,
+        slot: Slot<XchandlesSlotValue>,
+        new_owner_launcher_id: Bytes32,
+        new_resolved_launcher_id: Bytes32,
+        announcer_inner_puzzle_hash: Bytes32,
+    ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
+        // spend slots
+        let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
+
+        registry
+            .pending_items
+            .spent_slots
+            .push(slot.info.value_hash);
+        slot.spend(ctx, my_inner_puzzle_hash)?;
+
+        // spend self
+        let action_solution = ctx.alloc(&XchandlesUpdateActionSolution {
+            handle_hash: slot.info.value.handle_hash,
+            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
+            expiration: slot.info.value.expiration,
+            current_owner_launcher_id: slot.info.value.owner_launcher_id,
+            current_resolved_launcher_id: slot.info.value.resolved_launcher_id,
+            new_owner_launcher_id,
+            new_resolved_launcher_id,
+            announcer_inner_puzzle_hash,
+        })?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        registry.insert(Spend::new(action_puzzle, action_solution));
+
+        let new_slot_value =
+            Self::get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
+
+        registry.pending_items.slot_values.push(new_slot_value);
+
+        let msg: Bytes32 = clvm_tuple!(
+            slot.info.value.handle_hash,
+            clvm_tuple!(new_owner_launcher_id, new_resolved_launcher_id)
+        )
+        .tree_hash()
+        .into();
+        Ok((
+            Conditions::new().send_message(
+                18,
+                msg.into(),
+                vec![ctx.alloc(&registry.coin.puzzle_hash)?],
+            ),
+            registry.created_slot_values_to_slots(vec![new_slot_value])[0],
+        ))
+    }
+}
+
+pub const XCHANDLES_UPDATE_PUZZLE: [u8; 817] = hex!("ff02ffff01ff04ff2fffff04ffff02ff1effff04ff02ffff04ff17ffff04ffff02ff16ffff04ff02ffff04ff819fffff04ff82015fffff04ff8202dfffff04ff8205dfffff04ff820bdfff8080808080808080ff8080808080ffff04ffff02ff1affff04ff02ffff04ff17ffff04ffff02ff16ffff04ff02ffff04ff819fffff04ff82015fffff04ff8202dfffff04ff8217dfffff04ff822fdfff8080808080808080ffff04ff819fff808080808080ffff04ffff04ff18ffff04ffff0112ffff04ffff0bffff0102ffff0bffff0101ff819f80ffff0bffff0102ffff0bffff0101ff8217df80ffff0bffff0101ff822fdf808080ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ffff0bffff0101ff8205df80ff0b808080ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ff823fdf80ffff0bff1cff62ff42808080ff42808080ff42808080ff8080808080ff8080808080ffff04ffff01ffffff3343ff4202ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff04ff10ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0101ff0b8080ffff0bff1cff62ff42808080ff42808080ffff04ff80ffff04ffff04ff17ff8080ff8080808080ffff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ff0bffff0bffff0102ffff0bffff0101ff1780ffff0bffff0102ffff0bffff0101ff2f80ffff0bffff0101ff5f8080808080ff04ff14ffff04ffff0112ffff04ff80ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0101ff0b8080ffff0bff1cff62ff42808080ff42808080ff8080808080ff018080");
+
+pub const XCHANDLES_UPDATE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
+    "
+    83b3d67f1ca1487af1e977b5c1f7b65a108007dadb9ee86ddea9c9ba3790f5a7
+    "
+));
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct XchandlesUpdateActionArgs {
+    pub singleton_mod_hash: Bytes32,
+    pub singleton_launcher_mod_hash_hash: Bytes32,
+    pub slot_1st_curry_hash: Bytes32,
+}
+
+impl XchandlesUpdateActionArgs {
+    pub fn new(launcher_id: Bytes32) -> Self {
+        let singleton_launcher_mod_hash: Bytes32 = SINGLETON_LAUNCHER_HASH.into();
+        Self {
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
+            singleton_launcher_mod_hash_hash: singleton_launcher_mod_hash.tree_hash().into(),
+            slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
+        }
+    }
+}
+
+impl XchandlesUpdateActionArgs {
+    pub fn curry_tree_hash(launcher_id: Bytes32) -> TreeHash {
+        CurriedProgram {
+            program: XCHANDLES_UPDATE_PUZZLE_HASH,
+            args: XchandlesUpdateActionArgs::new(launcher_id),
+        }
+        .tree_hash()
+    }
+}
+
+#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(solution)]
+pub struct XchandlesUpdateActionSolution {
+    pub handle_hash: Bytes32,
+    pub neighbors_hash: Bytes32,
+    pub expiration: u64,
+    pub current_owner_launcher_id: Bytes32,
+    pub current_resolved_launcher_id: Bytes32,
+    pub new_owner_launcher_id: Bytes32,
+    pub new_resolved_launcher_id: Bytes32,
+    #[clvm(rest)]
+    pub announcer_inner_puzzle_hash: Bytes32,
+}

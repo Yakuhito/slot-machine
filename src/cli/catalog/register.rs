@@ -201,7 +201,7 @@ pub async fn catalog_register(
             + 7;
         println!(
             "Precommitment coin found! It was created at block #{}; target spendable block height is #{}",
-            target_block_height, target_block_height
+            precommit_coin_record.confirmed_block_index, target_block_height
         );
 
         loop {
@@ -303,7 +303,7 @@ pub async fn catalog_register(
         let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
         let security_coin_sk = new_sk()?;
         let offer =
-            parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
+            parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
         offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
         let sec_conds = if refund {

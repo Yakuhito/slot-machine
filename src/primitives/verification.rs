@@ -7,9 +7,12 @@ use chia::{
     },
 };
 use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
+use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
-use crate::{VerificationLayer, VerificationLayer2ndCurryArgs, VerificationLayerSolution};
+use crate::{
+    VerificationLayer, VerificationLayer2ndCurryArgs, VerificationLayerSolution, VerifiedData,
+};
 
 use super::VerificationInfo;
 
@@ -93,7 +96,7 @@ impl Verification {
         self,
         ctx: &mut SpendContext,
         revocation_singleton_inner_puzzle_hash: Option<Bytes32>,
-    ) -> Result<CoinSpend, DriverError> {
+    ) -> Result<(), DriverError> {
         let sol = SingletonSolution {
             lineage_proof: self.proof,
             amount: self.coin.amount,
@@ -111,7 +114,9 @@ impl Verification {
         let puzzle_reveal = ctx.serialize(&puzzle_reveal)?;
         let solution = ctx.serialize(&solution)?;
 
-        Ok(CoinSpend::new(my_coin, puzzle_reveal, solution))
+        ctx.insert(CoinSpend::new(my_coin, puzzle_reveal, solution));
+
+        Ok(())
     }
 }
 
@@ -148,10 +153,17 @@ impl Verification {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, ToClvm, FromClvm)]
+#[clvm(list)]
+pub struct VerificationLauncherKVList {
+    pub revocation_singleton_launcher_id: Bytes32,
+    pub verified_data: VerifiedData,
+}
+
 #[cfg(test)]
 mod tests {
     use anyhow::Ok;
-    use chia::{protocol::Bytes, puzzles::singleton::SingletonStruct};
+    use chia::protocol::Bytes;
     use chia_puzzles::SINGLETON_LAUNCHER_HASH;
     use chia_wallet_sdk::{
         driver::{Launcher, StandardLayer},
@@ -159,12 +171,12 @@ mod tests {
         types::Conditions,
     };
 
-    use crate::{VerificationPayments, VerifiedData};
+    use crate::VerifiedData;
 
     use super::*;
 
     #[test]
-    fn test_verifications_and_verification_payments() -> anyhow::Result<()> {
+    fn test_verifications() -> anyhow::Result<()> {
         let mut sim = Simulator::new();
         let ctx = &mut SpendContext::new();
         let bls = sim.bls(1);
@@ -174,7 +186,6 @@ mod tests {
         let (create_did, did) = did_launcher.create_simple_did(ctx, &p2)?;
         p2.spend(ctx, bls.coin, create_did)?;
 
-        let verifier_proof = did.child_lineage_proof();
         let did = did.update(
             ctx,
             &p2,
@@ -190,8 +201,7 @@ mod tests {
                 version: 1,
                 asset_id: Bytes32::new([2; 32]),
                 data_hash: Bytes32::new([3; 32]),
-                category: "cat".to_string(),
-                subcategory: "subcat".to_string(),
+                comment: "Test verification for test testing purposes only.".to_string(),
             },
         );
         let verification =
@@ -210,38 +220,12 @@ mod tests {
         assert_eq!(new_coin, verification.coin);
 
         // spend the verification coin in oracle mode
-        let oracle_spend = verification.spend(ctx, None)?;
-        ctx.insert(oracle_spend.clone());
+        verification.clone().spend(ctx, None)?;
 
-        let parent_puzzle = ctx.alloc(&oracle_spend.puzzle_reveal)?;
+        let parent_puzzle = verification.construct_puzzle(ctx)?;
         let parent_puzzle = Puzzle::parse(ctx, parent_puzzle);
         let verification =
-            Verification::from_parent_spend(ctx, oracle_spend.coin, parent_puzzle)?.unwrap();
-
-        // create verification payment and spend it
-        let verification_inner_puzzle_hash = Verification::inner_puzzle_hash(
-            did.info.launcher_id,
-            verification.info.verified_data.clone(),
-        )
-        .into();
-        let verification_payment = VerificationPayments::new(
-            SingletonStruct::new(did.info.launcher_id)
-                .tree_hash()
-                .into(),
-            verification_inner_puzzle_hash,
-        );
-
-        let payment_coin = sim.new_coin(verification_payment.tree_hash().into(), 1337);
-        let verification_payment_spend = verification_payment.inner_spend(
-            ctx,
-            &crate::VerificationPaymentsSolution {
-                verifier_proof,
-                payout_puzzle_hash: Bytes32::default(),
-                my_amount: 1337,
-            },
-        )?;
-
-        ctx.spend(payment_coin, verification_payment_spend)?;
+            Verification::from_parent_spend(ctx, verification.coin, parent_puzzle)?.unwrap();
 
         // melt verification coin
         let revocation_singleton_inner_ph = did.info.inner_puzzle_hash().into();
@@ -253,8 +237,7 @@ mod tests {
             Conditions::new().send_message(18, Bytes::default(), vec![msg_data]),
         )?;
 
-        let melt_spend = verification.spend(ctx, Some(revocation_singleton_inner_ph))?;
-        ctx.insert(melt_spend);
+        verification.spend(ctx, Some(revocation_singleton_inner_ph))?;
 
         sim.spend_coins(ctx.take(), &[bls.sk])?;
 

@@ -5,6 +5,7 @@ use chia::{
     protocol::{Bytes32, SpendBundle},
     puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
 };
+use chia_puzzle_types::offer::{NotarizedPayment, Payment};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{CatLayer, DriverError, Layer, Offer, Puzzle, SingleCatSpend, Spend, SpendContext},
@@ -193,10 +194,12 @@ pub async fn catalog_continue_launch(
                 j += 1;
             }
 
+            let cat_amount = precommitment_inner_puzzle_hashes_to_launch.len() as u64;
+
             println!("A one-sided offer will be created; it will consume:");
             println!(
                 "  - {} payment CAT mojos for creating precommitment coins",
-                precommitment_inner_puzzle_hashes_to_launch.len()
+                cat_amount
             );
             println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
             println!("  - 1 mojo for the sake of it");
@@ -213,9 +216,7 @@ pub async fn catalog_continue_launch(
                         xch: Amount::u64(1),
                         cats: vec![CatAmount {
                             asset_id: payment_asset_id_str,
-                            amount: Amount::u64(
-                                precommitment_inner_puzzle_hashes_to_launch.len() as u64
-                            ),
+                            amount: Amount::u64(cat_amount),
                         }],
                         nfts: vec![],
                     },
@@ -236,7 +237,8 @@ pub async fn catalog_continue_launch(
                 );
             }
             let cat_destination_puzzle_ptr = ctx.alloc(&clvm_quote!(cat_creator_conds))?;
-            let cat_destination_puzzle_hash = ctx.tree_hash(cat_destination_puzzle_ptr);
+            let cat_destination_puzzle_hash: Bytes32 =
+                ctx.tree_hash(cat_destination_puzzle_ptr).into();
 
             let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
             let security_coin_sk = new_sk()?;
@@ -246,8 +248,15 @@ pub async fn catalog_continue_launch(
                 &mut ctx,
                 offer,
                 security_coin_sk.public_key(),
-                Some(cat_destination_puzzle_hash.into()),
-                false,
+                Some(NotarizedPayment {
+                    nonce: constants.launcher_id,
+                    payments: vec![Payment::with_memos(
+                        cat_destination_puzzle_hash,
+                        cat_amount,
+                        vec![cat_destination_puzzle_hash.into()],
+                    )],
+                }),
+                None,
             )?;
 
             let Some(created_cat) = one_sided_offer.created_cat else {
@@ -479,7 +488,7 @@ pub async fn catalog_continue_launch(
 
     let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, false)?;
+    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let mut security_coin_conditions = offer.security_base_conditions;

@@ -1,0 +1,60 @@
+; add_incentives.clsp by yakuhito
+;; Adds incentives for the current epoch
+
+(mod (
+    FEE_PAYOUT_PUZZLE_HASH
+    FEE_BPS ; * amount / 10000 will be given to the validator - rest is distributed to mirrors
+    (
+        Ephemeral_State . ; not used
+        (@
+            Current_State
+            (
+                total_reserves
+                active_shares
+                (cumulative_payout . remaining_rewards)
+                (@ Round_Time_Info (last_update . epoch_end))
+            )
+        )
+    ) ; Truth
+    (
+        amount .
+        manager_fee
+    )
+)
+    (include condition_codes.clib)
+
+    (if (all (> epoch_end last_update) (> amount 0) (= manager_fee (/ (* amount FEE_BPS) 10000)))
+        (c
+            (list
+                () ; new ephemeral state
+                (+ total_reserves (- amount manager_fee))
+                active_shares
+                (c
+                    cumulative_payout
+                    (+ remaining_rewards (- amount manager_fee))
+                )
+                Round_Time_Info
+            ) ; new state 
+            (list
+                (list
+                    CREATE_PUZZLE_ANNOUNCEMENT
+                    (concat 'i'
+                        (sha256 2 
+                            (sha256 1 amount)
+                            (sha256 1 epoch_end)
+                        ) ; (sha256tree (amount . epoch_end))
+                    ) 
+                )
+                ; condition prepended with -42 -> condition will be returned by the reserve
+                (list -42
+                    CREATE_COIN
+                    FEE_PAYOUT_PUZZLE_HASH
+                    manager_fee
+                    (list FEE_PAYOUT_PUZZLE_HASH)
+                )
+            ) ; conditions
+        )
+        ; else
+        (x)
+    )
+)

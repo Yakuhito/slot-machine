@@ -45,7 +45,8 @@ impl XchandlesRegistryState {
 }
 
 #[must_use]
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, ToClvm, FromClvm)]
+#[clvm(list)]
 pub struct XchandlesConstants {
     pub launcher_id: Bytes32,
     pub precommit_payout_puzzle_hash: Bytes32,

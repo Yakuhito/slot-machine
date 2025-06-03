@@ -62,6 +62,10 @@ pub async fn multisig_sign_thing_finish(
     testnet11: bool,
     debug: bool,
 ) -> Result<(), CliError> {
+    println!(
+        "Current medieval vault coin id: {}",
+        hex::encode(medieval_vault.coin.coin_id())
+    );
     yes_no_prompt("Continue?")?;
 
     let delegated_puzzle_hash = ctx.tree_hash(delegated_puzzle);

@@ -3,10 +3,17 @@ use clap::{Parser, Subcommand};
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
     catalog_listen, catalog_register, catalog_sign_state_update, catalog_unroll_state_scheduler,
-    catalog_verify_deployment, dig_add_rewards, dig_broadcast_mirror_update, dig_clawback_rewards,
-    dig_commit_rewards, dig_initiate_payout, dig_launch, dig_new_epoch, dig_sign_mirror_update,
-    dig_sync, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
-    multisig_verify_signature, multisig_view,
+    catalog_verify_deployment, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
+    multisig_verify_signature, multisig_view, reward_distributor_add_rewards,
+    reward_distributor_broadcast_entry_update, reward_distributor_clawback_rewards,
+    reward_distributor_commit_rewards, reward_distributor_initiate_payout,
+    reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_sign_entry_update,
+    reward_distributor_sync, reward_distributor_view, verifications_broadcast_launch,
+    verifications_broadcast_revocation, verifications_sign_launch, verifications_sign_revocation,
+    verifications_view, xchandles_continue_launch, xchandles_expire, xchandles_extend,
+    xchandles_initiate_launch, xchandles_listen, xchandles_register,
+    xchandles_unroll_state_scheduler, xchandles_update, xchandles_verify_deployment,
+    xchandles_view,
 };
 
 #[derive(Parser)]
@@ -37,10 +44,15 @@ enum Commands {
         #[command(subcommand)]
         action: MultisigCliAction,
     },
-    /// Interact with DIG Reward Distributors
-    Dig {
+    /// Interact with Reward Distributors
+    RewardDistributor {
         #[command(subcommand)]
-        action: DigCliAction,
+        action: RewardDistributorCliAction,
+    },
+    /// Interact with CATalog verifications
+    Verifications {
+        #[command(subcommand)]
+        action: VerificationsCliAction,
     },
 }
 
@@ -56,7 +68,7 @@ enum MultisigCliAction {
         #[arg(long, default_value_t = false)]
         testnet11: bool,
     },
-    /// Launch a standalone multisig (e.g., for a validator)
+    /// Launch a standalone multisig (e.g., for a manager)
     Launch {
         /// Comma-separated list of price singleton pubkeys (no spaces)
         #[arg(long)]
@@ -338,24 +350,306 @@ enum CatalogCliAction {
 #[derive(Subcommand)]
 enum XchandlesCliAction {
     /// Launches a new XCHandles deployment
-    InitiateLaunch,
+    InitiateLaunch {
+        /// Comma-separated list of price singleton pubkeys (no spaces)
+        #[arg(long)]
+        pubkeys: String,
+
+        /// Threshold required for price singleton spends (m from m-of-n)
+        #[arg(short)]
+        m: usize,
+
+        /// Payout address for precommits
+        #[arg(long)]
+        payout_address: String,
+
+        /// Relative block height for precommits
+        #[arg(long, default_value = "8")]
+        relative_block_height: u32,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use for the launch, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     /// Continues/finishes an existing launch
-    ContinueLaunch,
+    ContinueLaunch {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Payment asset id (payment CAT tail hash from launch initiation)
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// How many handles to deploy for this spend
+        #[arg(long)]
+        handles_per_spend: usize,
+
+        /// Start timestamp for premine
+        #[arg(long)]
+        start_time: Option<u64>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Unrolls the state scheduler
+    UnrollStateScheduler {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     /// Verifies the built-in deployment is valid
-    VerifyDeployment,
+    VerifyDeployment {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
+    /// Registers a new handle
+    Register {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Handle to register
+        #[arg(long)]
+        handle: String,
+
+        /// NFT (nft1...) to register the handle to
+        #[arg(long)]
+        nft: String,
+
+        /// Number of years to register the handle for
+        #[arg(long)]
+        num_years: u64,
+
+        /// Refund address
+        #[arg(long)]
+        refund_address: Option<String>,
+
+        /// Secret to register the handle with
+        #[arg(long)]
+        secret: Option<String>,
+
+        /// Start time (UNIX timestamp)
+        #[arg(long)]
+        start_time: Option<u64>,
+
+        /// Use the registration 'refund' path
+        #[arg(long)]
+        refund: bool,
+
+        /// Use testnet11
+        #[arg(long)]
+        testnet11: bool,
+
+        /// Payment asset id
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Payment CAT base price
+        #[arg(long)]
+        payment_cat_base_price: String,
+
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
+
+        /// Log the final transaction to a file (sb.debug)
+        #[arg(long)]
+        log: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    // Extend the registration of a handle
+    Extend {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Handle to extend
+        #[arg(long)]
+        handle: String,
+
+        /// Number of years to extend the handle for
+        #[arg(long, default_value = "1")]
+        years: u64,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Payment asset id
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Payment CAT base price
+        #[arg(long)]
+        payment_cat_base_price: String,
+
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Updates the data associated with a handle
+    Update {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Handle to update
+        #[arg(long)]
+        handle: String,
+
+        /// New owner NFT
+        #[arg(long)]
+        new_owner_nft: Option<String>,
+
+        /// New resolved NFT
+        #[arg(long)]
+        new_resolved_nft: Option<String>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Expires a handle (re-registers after the intial registration expired)
+    Expire {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Handle to expire
+        #[arg(long)]
+        handle: String,
+
+        /// NFT (nft1...) to register the handle to
+        #[arg(long)]
+        nft: String,
+
+        /// Expire time (UNIX timestamp)
+        #[arg(long)]
+        expire_time: Option<u64>,
+
+        /// Number of years to register the handle for
+        #[arg(long)]
+        num_years: u64,
+
+        /// Refund address
+        #[arg(long)]
+        refund_address: Option<String>,
+
+        /// Secret to register the handle with
+        #[arg(long)]
+        secret: Option<String>,
+
+        /// Use the 'refund' path to recover a precommit coin
+        #[arg(long)]
+        refund: bool,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Payment asset id
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Payment CAT base price
+        #[arg(long)]
+        payment_cat_base_price: String,
+
+        /// Committed expiration (old expiration for refunds where someone re-registered the handle before you)
+        #[arg(long)]
+        committed_expiration: Option<u64>,
+
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Listen for XCHandles spends
+    Listen {
+        /// XCHandles (sub)registry launcher ids (comma-separated list)
+        #[arg(long)]
+        launcher_ids: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
+    /// Shows up-to-date information about an XCHandles registry
+    View {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Payment asset id hint
+        #[arg(long)]
+        payment_asset_id: Option<String>,
+
+        /// Payment CAT base price hint
+        #[arg(long)]
+        payment_cat_base_price: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
-enum DigCliAction {
+enum RewardDistributorCliAction {
     /// Launches a new DIG Reward Distributor deployment
     Launch {
-        /// Validator singleton launcher id
+        /// Manager singleton launcher id
         #[arg(long)]
-        validator_launcher_id: String,
+        manager_launcher_id: String,
 
-        /// Validator payout address
+        /// Fee payout address
         #[arg(long)]
-        validator_payout_address: String,
+        fee_payout_address: String,
 
         /// First epoch start timestamp
         #[arg(long)]
@@ -381,9 +675,9 @@ enum DigCliAction {
         #[arg(long, default_value = "0.1")]
         payout_threshold: String,
 
-        /// Validator fee (in basis points)
+        /// Fee (in basis points)
         #[arg(long, default_value = "700")]
-        validator_fee_bps: u64,
+        fee_bps: u64,
 
         /// Withdrawal share (how much of a clawed back commitment the recipient gets back)
         #[arg(long, default_value = "9000")]
@@ -481,27 +775,27 @@ enum DigCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
-    /// Signs a mirror update action
-    SignMirrorUpdate {
+    /// Signs an entry update action
+    SignEntryUpdate {
         /// Reward distributor singleton launcher id
         #[arg(long)]
         launcher_id: String,
 
-        /// Mirror payout puzzle hash
+        /// Entry payout puzzle hash
         #[arg(long)]
-        mirror_payout_puzzle_hash: String,
+        entry_payout_puzzle_hash: String,
 
-        /// Mirror shares
+        /// Entry shares
         #[arg(long, default_value = "1")]
-        mirror_shares: u64,
+        entry_shares: u64,
 
         /// Pubkey to sign with (hex string)
         #[arg(long)]
         my_pubkey: String,
 
-        /// Remove mirror (if not provided, mirror will be added)
+        /// Remove entry (if not provided, entry will be added)
         #[arg(long, default_value_t = false)]
-        remove_mirror: bool,
+        remove_entry: bool,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -511,27 +805,27 @@ enum DigCliAction {
         #[arg(long, default_value_t = false)]
         debug: bool,
     },
-    /// Broadcasts a mirror update action
-    BroadcastMirrorUpdate {
+    /// Broadcasts an entry update action
+    BroadcastEntryUpdate {
         /// Reward distributor singleton launcher id
         #[arg(long)]
         launcher_id: String,
 
-        /// Mirror payout puzzle hash
+        /// Entry payout puzzle hash
         #[arg(long)]
-        mirror_payout_puzzle_hash: String,
+        entry_payout_puzzle_hash: String,
 
-        /// Mirror shares
+        /// Entry shares
         #[arg(long, default_value = "1")]
-        mirror_shares: u64,
+        entry_shares: u64,
 
         /// Signatures (comma-separated list)
         #[arg(long)]
         sigs: String,
 
-        /// Remove mirror (if not provided, mirror will be added)
+        /// Remove entry (if not provided, entry will be added)
         #[arg(long, default_value_t = false)]
-        remove_mirror: bool,
+        remove_entry: bool,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -565,9 +859,137 @@ enum DigCliAction {
         #[arg(long)]
         launcher_id: String,
 
-        /// Mirror payout puzzle hash
+        /// Entry payout puzzle hash
         #[arg(long)]
-        mirror_payout_puzzle_hash: String,
+        payout_puzzle_hash: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Views up-to-date information about a reward distributor
+    View {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum VerificationsCliAction {
+    /// Signs the launch of a new CATalog verification (no offer)
+    SignLaunch {
+        /// Multisig launcher id (hex string)
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Verification comment (on-chain)
+        #[arg(long)]
+        comment: String,
+
+        /// Pubkey to use for signing (hex string)
+        #[arg(long)]
+        my_pubkey: String,
+
+        /// Use debug signing method (pk prompt)
+        #[arg(long, default_value_t = false)]
+        debug: bool,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
+
+    /// Broadcasts the launch of a new CATalog verification (no offer)
+    BroadcastLaunch {
+        /// Multisig launcher id (hex string)
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Verification comment (on-chain)
+        #[arg(long)]
+        comment: String,
+
+        /// Signatures (comma-separated list)
+        #[arg(long)]
+        sigs: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+
+    /// View attestation(s)
+    View {
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Filter by issuer launcher ids (comma-separated list of hex launcher ids)
+        #[arg(long)]
+        filter: Option<String>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
+
+    /// Sign an attestation revocation transaction
+    SignRevocation {
+        /// Multisig launcher id (hex string)
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Pubkey to use for signing (hex string)
+        #[arg(long)]
+        my_pubkey: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Use debug signing method (pk prompt)
+        #[arg(long, default_value_t = false)]
+        debug: bool,
+    },
+
+    /// Broadcasts an attestation revocation transaction
+    BroadcastRevocation {
+        /// Multisig launcher id (hex string)
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Signatures (comma-separated list)
+        #[arg(long)]
+        sigs: String,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -724,39 +1146,204 @@ pub async fn run_cli() {
             }
         },
         Commands::Xchandles { action } => match action {
-            XchandlesCliAction::InitiateLaunch => {
-                todo!("not yet implemented");
+            XchandlesCliAction::InitiateLaunch {
+                pubkeys,
+                m,
+                payout_address,
+                relative_block_height,
+                testnet11,
+                fee,
+            } => {
+                xchandles_initiate_launch(
+                    pubkeys,
+                    m,
+                    payout_address,
+                    relative_block_height,
+                    testnet11,
+                    fee,
+                )
+                .await
             }
-            XchandlesCliAction::ContinueLaunch => {
-                todo!("not yet implemented");
+            XchandlesCliAction::ContinueLaunch {
+                launcher_id,
+                payment_asset_id,
+                handles_per_spend,
+                start_time,
+                testnet11,
+                fee,
+            } => {
+                xchandles_continue_launch(
+                    launcher_id,
+                    payment_asset_id,
+                    handles_per_spend,
+                    start_time,
+                    testnet11,
+                    fee,
+                )
+                .await
             }
-            XchandlesCliAction::VerifyDeployment => {
-                todo!("not yet implemented");
+            XchandlesCliAction::UnrollStateScheduler {
+                launcher_id,
+                testnet11,
+                local,
+                fee,
+            } => xchandles_unroll_state_scheduler(launcher_id, testnet11, local, fee).await,
+            XchandlesCliAction::VerifyDeployment {
+                launcher_id,
+                testnet11,
+            } => xchandles_verify_deployment(launcher_id, testnet11).await,
+            XchandlesCliAction::Register {
+                launcher_id,
+                handle,
+                nft,
+                num_years,
+                refund_address,
+                secret,
+                start_time,
+                refund,
+                testnet11,
+                payment_asset_id,
+                payment_cat_base_price,
+                local,
+                log,
+                fee,
+            } => {
+                xchandles_register(
+                    launcher_id,
+                    handle,
+                    nft,
+                    num_years,
+                    refund_address,
+                    secret,
+                    start_time,
+                    refund,
+                    testnet11,
+                    payment_asset_id,
+                    payment_cat_base_price,
+                    log,
+                    local,
+                    fee,
+                )
+                .await
+            }
+            XchandlesCliAction::Extend {
+                launcher_id,
+                handle,
+                years,
+                testnet11,
+                payment_asset_id,
+                payment_cat_base_price,
+                local,
+                fee,
+            } => {
+                xchandles_extend(
+                    launcher_id,
+                    handle,
+                    years,
+                    testnet11,
+                    payment_asset_id,
+                    payment_cat_base_price,
+                    local,
+                    fee,
+                )
+                .await
+            }
+            XchandlesCliAction::Update {
+                launcher_id,
+                handle,
+                new_owner_nft,
+                new_resolved_nft,
+                testnet11,
+                local,
+                fee,
+            } => {
+                xchandles_update(
+                    launcher_id,
+                    handle,
+                    new_owner_nft,
+                    new_resolved_nft,
+                    testnet11,
+                    local,
+                    fee,
+                )
+                .await
+            }
+            XchandlesCliAction::Expire {
+                launcher_id,
+                handle,
+                nft,
+                refund_address,
+                secret,
+                expire_time,
+                num_years,
+                refund,
+                testnet11,
+                payment_asset_id,
+                payment_cat_base_price,
+                committed_expiration,
+                local,
+                fee,
+            } => {
+                xchandles_expire(
+                    launcher_id,
+                    handle,
+                    nft,
+                    num_years,
+                    refund_address,
+                    secret,
+                    expire_time,
+                    refund,
+                    testnet11,
+                    payment_asset_id,
+                    payment_cat_base_price,
+                    committed_expiration,
+                    local,
+                    fee,
+                )
+                .await
+            }
+            XchandlesCliAction::Listen {
+                testnet11,
+                launcher_ids,
+            } => xchandles_listen(launcher_ids, testnet11).await,
+            XchandlesCliAction::View {
+                launcher_id,
+                testnet11,
+                payment_asset_id,
+                payment_cat_base_price,
+            } => {
+                xchandles_view(
+                    launcher_id,
+                    testnet11,
+                    payment_asset_id,
+                    payment_cat_base_price,
+                )
+                .await
             }
         },
-        Commands::Dig { action } => match action {
-            DigCliAction::Launch {
-                validator_launcher_id,
-                validator_payout_address,
+        Commands::RewardDistributor { action } => match action {
+            RewardDistributorCliAction::Launch {
+                manager_launcher_id,
+                fee_payout_address,
                 first_epoch_start_timestamp,
                 epoch_seconds,
                 max_seconds_offset,
                 payout_threshold,
-                validator_fee_bps,
+                fee_bps,
                 withdrawal_share_bps,
                 reserve_asset_id,
                 comment,
                 testnet11,
                 fee,
             } => {
-                dig_launch(
-                    validator_launcher_id,
-                    validator_payout_address,
+                reward_distributor_launch(
+                    manager_launcher_id,
+                    fee_payout_address,
                     first_epoch_start_timestamp,
                     epoch_seconds,
                     max_seconds_offset,
                     payout_threshold,
-                    validator_fee_bps,
+                    fee_bps,
                     withdrawal_share_bps,
                     reserve_asset_id,
                     comment,
@@ -765,7 +1352,7 @@ pub async fn run_cli() {
                 )
                 .await
             }
-            DigCliAction::CommitRewards {
+            RewardDistributorCliAction::CommitRewards {
                 launcher_id,
                 reward_amount,
                 epoch_start,
@@ -773,7 +1360,7 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => {
-                dig_commit_rewards(
+                reward_distributor_commit_rewards(
                     launcher_id,
                     reward_amount,
                     epoch_start,
@@ -783,7 +1370,7 @@ pub async fn run_cli() {
                 )
                 .await
             }
-            DigCliAction::ClawbackRewards {
+            RewardDistributorCliAction::ClawbackRewards {
                 launcher_id,
                 clawback_address,
                 epoch_start,
@@ -791,7 +1378,7 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => {
-                dig_clawback_rewards(
+                reward_distributor_clawback_rewards(
                     launcher_id,
                     clawback_address,
                     epoch_start,
@@ -801,69 +1388,132 @@ pub async fn run_cli() {
                 )
                 .await
             }
-            DigCliAction::Sync {
+            RewardDistributorCliAction::Sync {
                 launcher_id,
                 update_time,
                 testnet11,
                 fee,
-            } => dig_sync(launcher_id, update_time, testnet11, fee).await,
-            DigCliAction::NewEpoch {
+            } => reward_distributor_sync(launcher_id, update_time, testnet11, fee).await,
+            RewardDistributorCliAction::NewEpoch {
                 launcher_id,
                 testnet11,
                 fee,
-            } => dig_new_epoch(launcher_id, testnet11, fee).await,
-            DigCliAction::SignMirrorUpdate {
+            } => reward_distributor_new_epoch(launcher_id, testnet11, fee).await,
+            RewardDistributorCliAction::SignEntryUpdate {
                 launcher_id,
-                mirror_payout_puzzle_hash,
-                mirror_shares,
+                entry_payout_puzzle_hash,
+                entry_shares,
                 my_pubkey,
-                remove_mirror,
+                remove_entry,
                 testnet11,
                 debug,
             } => {
-                dig_sign_mirror_update(
+                reward_distributor_sign_entry_update(
                     launcher_id,
-                    mirror_payout_puzzle_hash,
-                    mirror_shares,
+                    entry_payout_puzzle_hash,
+                    entry_shares,
                     my_pubkey,
-                    remove_mirror,
+                    remove_entry,
                     testnet11,
                     debug,
                 )
                 .await
             }
-            DigCliAction::BroadcastMirrorUpdate {
+            RewardDistributorCliAction::BroadcastEntryUpdate {
                 launcher_id,
-                mirror_payout_puzzle_hash,
-                mirror_shares,
+                entry_payout_puzzle_hash,
+                entry_shares,
                 sigs,
-                remove_mirror,
+                remove_entry,
                 testnet11,
                 fee,
             } => {
-                dig_broadcast_mirror_update(
+                reward_distributor_broadcast_entry_update(
                     launcher_id,
-                    mirror_payout_puzzle_hash,
-                    mirror_shares,
+                    entry_payout_puzzle_hash,
+                    entry_shares,
                     sigs,
-                    remove_mirror,
+                    remove_entry,
                     testnet11,
                     fee,
                 )
                 .await
             }
-            DigCliAction::AddRewards {
+            RewardDistributorCliAction::AddRewards {
                 launcher_id,
                 reward_amount,
                 testnet11,
                 fee,
-            } => dig_add_rewards(launcher_id, reward_amount, testnet11, fee).await,
-            DigCliAction::InitiatePayout {
+            } => reward_distributor_add_rewards(launcher_id, reward_amount, testnet11, fee).await,
+            RewardDistributorCliAction::InitiatePayout {
                 launcher_id,
-                mirror_payout_puzzle_hash,
+                payout_puzzle_hash,
                 testnet11,
                 fee,
-            } => dig_initiate_payout(launcher_id, mirror_payout_puzzle_hash, testnet11, fee).await,
+            } => {
+                reward_distributor_initiate_payout(launcher_id, payout_puzzle_hash, testnet11, fee)
+                    .await
+            }
+            RewardDistributorCliAction::View {
+                launcher_id,
+                testnet11,
+            } => reward_distributor_view(launcher_id, testnet11).await,
+        },
+        Commands::Verifications { action } => match action {
+            VerificationsCliAction::SignLaunch {
+                launcher_id,
+                asset_id,
+                comment,
+                my_pubkey,
+                testnet11,
+                debug,
+            } => {
+                verifications_sign_launch(
+                    launcher_id,
+                    asset_id,
+                    comment,
+                    my_pubkey,
+                    testnet11,
+                    debug,
+                )
+                .await
+            }
+            VerificationsCliAction::BroadcastLaunch {
+                launcher_id,
+                asset_id,
+                comment,
+                sigs,
+                testnet11,
+                fee,
+            } => {
+                verifications_broadcast_launch(launcher_id, asset_id, comment, sigs, testnet11, fee)
+                    .await
+            }
+            VerificationsCliAction::View {
+                asset_id,
+                filter,
+                testnet11,
+            } => verifications_view(asset_id, filter, testnet11).await,
+            VerificationsCliAction::SignRevocation {
+                launcher_id,
+                asset_id,
+                my_pubkey,
+                testnet11,
+                debug,
+            } => {
+                verifications_sign_revocation(launcher_id, asset_id, my_pubkey, testnet11, debug)
+                    .await
+            }
+            VerificationsCliAction::BroadcastRevocation {
+                launcher_id,
+                asset_id,
+                sigs,
+                testnet11,
+                fee,
+            } => {
+                verifications_broadcast_revocation(launcher_id, asset_id, sigs, testnet11, fee)
+                    .await
+            }
         },
     };
 

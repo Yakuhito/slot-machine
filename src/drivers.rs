@@ -12,27 +12,26 @@ use chia::{
         CoinProof, EveProof, LineageProof, Proof,
     },
 };
-use chia_puzzle_types::offer::Memos;
-use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH};
+use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
 use chia_wallet_sdk::{
     driver::{
-        Cat, CatSpend, CurriedPuzzle, DriverError, Launcher, Layer, Offer, SingleCatSpend, Spend,
-        SpendContext, StandardLayer,
+        Cat, CatSpend, CurriedPuzzle, DriverError, HashedPtr, Launcher, Layer, Nft, Offer, Puzzle,
+        SingleCatSpend, Spend, SpendContext, StandardLayer,
     },
     prelude::{AggSig, AggSigKind},
     signer::{AggSigConstants, RequiredBlsSignature},
     types::{announcement_id, puzzles::SettlementPayment, Condition, Conditions},
 };
-use clvm_traits::{clvm_quote, clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{clvm_list, clvm_quote, clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
     CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
-    CatalogSlotValue, DefaultCatMakerArgs, DigRewardDistributor, DigRewardDistributorConstants,
-    DigRewardDistributorInfo, DigRewardDistributorState, DigRewardSlotValue, DigSlotNonce,
-    P2DelegatedBySingletonLayerArgs, Reserve, Slot, SlotInfo, SlotProof, XchandlesConstants,
-    XchandlesRegistry, XchandlesRegistryInfo, XchandlesRegistryState, XchandlesSlotValue,
-    SLOT32_MAX_VALUE, SLOT32_MIN_VALUE,
+    CatalogSlotValue, DefaultCatMakerArgs, P2DelegatedBySingletonLayerArgs, Reserve,
+    RewardDistributor, RewardDistributorConstants, RewardDistributorInfo,
+    RewardDistributorRewardSlotValue, RewardDistributorSlotNonce, RewardDistributorState, Slot,
+    SlotInfo, SlotProof, XchandlesConstants, XchandlesRegistry, XchandlesRegistryInfo,
+    XchandlesRegistryState, XchandlesSlotValue,
 };
 
 pub struct SecuredOneSidedOffer {
@@ -41,6 +40,7 @@ pub struct SecuredOneSidedOffer {
     pub security_coin: Coin,
     pub security_base_conditions: Conditions<NodePtr>,
     pub created_cat: Option<Cat>,
+    pub created_nft: Option<Nft<HashedPtr>>,
 }
 
 fn custom_err<T>(e: T) -> DriverError
@@ -64,8 +64,8 @@ pub fn parse_one_sided_offer(
     ctx: &mut SpendContext,
     offer: Offer,
     security_public_key: PublicKey,
-    cat_destination_puzzle_hash: Option<Bytes32>,
-    cat_destination_amount_is_zero: bool,
+    cat_notarized_payment: Option<NotarizedPayment>,
+    nft_notatized_payment: Option<NotarizedPayment>,
 ) -> Result<SecuredOneSidedOffer, DriverError> {
     let offer = offer.parse(ctx).map_err(custom_err)?;
 
@@ -85,12 +85,14 @@ pub fn parse_one_sided_offer(
 
     let mut base_conditions = Conditions::new();
     let mut created_cat: Option<Cat> = None;
+    let mut created_nft: Option<Nft<HashedPtr>> = None;
 
     for coin_spend in offer.coin_spends {
         let puzzle_ptr = coin_spend.puzzle_reveal.to_clvm(ctx)?;
         let solution_ptr = coin_spend.solution.to_clvm(ctx)?;
 
         let curried_puzzle = CurriedPuzzle::parse(ctx, puzzle_ptr);
+
         if let Some(curried_puzzle) = curried_puzzle {
             if curried_puzzle.mod_hash == CAT_PUZZLE_HASH.into() {
                 let cat_args = CatArgs::<NodePtr>::from_clvm(ctx, curried_puzzle.args)?;
@@ -111,10 +113,9 @@ pub fn parse_one_sided_offer(
                     })
                     .find(|cc| cc.puzzle_hash == SETTLEMENT_PAYMENT_HASH.into())
                 {
-                    let Some(cat_destination_puzzle_hash) = cat_destination_puzzle_hash else {
+                    let Some(cat_notarized_payment) = cat_notarized_payment.clone() else {
                         return Err(DriverError::Custom(
-                            "CAT destination puzzle hash not provided but offered CAT found"
-                                .to_string(),
+                            "CAT payment not requested but offered CAT found".to_string(),
                         ));
                     };
 
@@ -146,28 +147,27 @@ pub fn parse_one_sided_offer(
 
                     // offers don't allow amount 0 coins, so we create an 1-amount coin,
                     //   which creates a 0-amount coin and spend all the CATs together
-                    if cat_destination_amount_is_zero {
+                    if cat_notarized_payment.payments[0].amount == 0 {
                         let memos = Some(chia_wallet_sdk::prelude::Memos::new(
-                            ctx.alloc(&vec![cat_destination_puzzle_hash])?,
+                            ctx.alloc(&cat_notarized_payment.payments[0].memos)?,
                         ));
-                        let interim_inner_puzzle = ctx.alloc(&clvm_quote!(
-                            Conditions::new().create_coin(cat_destination_puzzle_hash, 0, memos)
-                        ))?;
+                        let interim_inner_puzzle = ctx.alloc(&clvm_quote!(Conditions::new()
+                            .create_coin(
+                                cat_notarized_payment.payments[0].puzzle_hash,
+                                0,
+                                memos,
+                            )))?;
                         let interim_inner_ph: Bytes32 = ctx.tree_hash(interim_inner_puzzle).into();
 
                         let notarized_payment = NotarizedPayment {
                             nonce: offer_coin_cat.coin_id(),
                             payments: vec![
-                                Payment {
-                                    puzzle_hash: refund_puzzle_hash,
-                                    amount: cc.amount,
-                                    memos: Some(Memos(vec![refund_puzzle_hash.into()])),
-                                },
-                                Payment {
-                                    puzzle_hash: interim_inner_ph,
-                                    amount: 1,
-                                    memos: None,
-                                },
+                                Payment::with_memos(
+                                    refund_puzzle_hash,
+                                    cc.amount,
+                                    vec![refund_puzzle_hash.into()],
+                                ),
+                                Payment::new(interim_inner_ph, 1),
                             ],
                         };
                         let offer_cat_inner_solution = ctx.alloc(&SettlementPaymentsSolution {
@@ -197,23 +197,17 @@ pub fn parse_one_sided_offer(
                             ctx.insert(og_spend);
                         }
 
-                        created_cat =
-                            Some(interim_cat.wrapped_child(cat_destination_puzzle_hash, 0));
+                        created_cat = Some(
+                            interim_cat
+                                .wrapped_child(cat_notarized_payment.payments[0].puzzle_hash, 0),
+                        );
                         let announcement_msg: Bytes32 = notarized_payment.tree_hash().into();
                         base_conditions = base_conditions.assert_puzzle_announcement(
                             announcement_id(offer_cat.coin.puzzle_hash, announcement_msg),
                         );
                     } else {
-                        let notarized_payment = NotarizedPayment {
-                            nonce: offer_coin_cat.coin_id(),
-                            payments: vec![Payment {
-                                puzzle_hash: cat_destination_puzzle_hash,
-                                amount: cc.amount,
-                                memos: Some(Memos(vec![cat_destination_puzzle_hash.into()])),
-                            }],
-                        };
                         let offer_cat_inner_solution = ctx.alloc(&SettlementPaymentsSolution {
-                            notarized_payments: vec![notarized_payment.clone()],
+                            notarized_payments: vec![cat_notarized_payment.clone()],
                         })?;
 
                         let offer_cat_inner_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
@@ -235,14 +229,51 @@ pub fn parse_one_sided_offer(
                             },
                         )?;
 
-                        created_cat =
-                            Some(offer_cat.wrapped_child(cat_destination_puzzle_hash, cc.amount));
-                        let announcement_msg: Bytes32 = notarized_payment.tree_hash().into();
+                        created_cat = Some(offer_cat.wrapped_child(
+                            cat_notarized_payment.payments[0].puzzle_hash,
+                            cc.amount,
+                        ));
+                        let announcement_msg: Bytes32 = cat_notarized_payment.tree_hash().into();
                         base_conditions = base_conditions.assert_puzzle_announcement(
                             announcement_id(offer_cat.coin.puzzle_hash, announcement_msg),
                         );
                     }
                 }
+            } else if curried_puzzle.mod_hash == SINGLETON_TOP_LAYER_V1_1_HASH.into() {
+                let Some(nft_notatized_payment) = nft_notatized_payment.clone() else {
+                    return Err(DriverError::Custom(
+                        "NFT payment not requested but offered NFT found".to_string(),
+                    ));
+                };
+
+                let parent_puzzle = Puzzle::from_clvm(ctx, puzzle_ptr)?;
+                let Some(nft) = Nft::<HashedPtr>::parse_child(
+                    ctx,
+                    coin_spend.coin,
+                    parent_puzzle,
+                    solution_ptr,
+                )?
+                else {
+                    return Err(DriverError::Custom("Could not parse child NFT".to_string()));
+                };
+
+                let inner_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
+                let inner_solution = ctx.alloc(&SettlementPaymentsSolution {
+                    notarized_payments: vec![nft_notatized_payment.clone()],
+                })?;
+
+                nft.spend(ctx, Spend::new(inner_puzzle, inner_solution))?;
+
+                created_nft = Some(nft.wrapped_child::<HashedPtr>(
+                    nft_notatized_payment.payments[0].puzzle_hash,
+                    nft.info.current_owner,
+                    nft.info.metadata,
+                ));
+                let announcement_msg: Bytes32 = nft_notatized_payment.tree_hash().into();
+                base_conditions = base_conditions.assert_puzzle_announcement(announcement_id(
+                    nft.coin.puzzle_hash,
+                    announcement_msg,
+                ));
             }
         }
 
@@ -277,11 +308,10 @@ pub fn parse_one_sided_offer(
                 let offer_coin_solution = SettlementPaymentsSolution {
                     notarized_payments: vec![NotarizedPayment {
                         nonce: offer_coin_id,
-                        payments: vec![Payment {
-                            puzzle_hash: security_coin_puzzle_hash,
-                            amount: security_coin_amount,
-                            memos: None,
-                        }],
+                        payments: vec![Payment::new(
+                            security_coin_puzzle_hash,
+                            security_coin_amount,
+                        )],
                     }],
                 };
                 let offer_coin_solution = ctx.serialize(&offer_coin_solution)?;
@@ -307,7 +337,7 @@ pub fn parse_one_sided_offer(
         security_coin_amount,
     );
 
-    if cat_destination_puzzle_hash.is_some() && created_cat.is_none() {
+    if cat_notarized_payment.is_some() && created_cat.is_none() {
         return Err(DriverError::Custom(
             "Could not find CAT offered in one-sided offer".to_string(),
         ));
@@ -319,6 +349,7 @@ pub fn parse_one_sided_offer(
         security_coin,
         security_base_conditions: base_conditions,
         created_cat,
+        created_nft,
     })
 }
 
@@ -384,25 +415,17 @@ pub fn sign_standard_transaction(
     Ok(sign(sk, required_signature.message()))
 }
 
-// Spends the eve signleton, whose only job is to create the
-//   slot 'premine' (leftmost and rightmost slots) and
-//   transition to the actual registry puzzle
-#[allow(clippy::type_complexity)]
-fn spend_eve_coin_and_create_registry<S, M>(
+pub fn eve_singleton_inner_puzzle<S>(
     ctx: &mut SpendContext,
-    launcher: Launcher,
-    target_inner_puzzle_hash: Bytes32,
+    launcher_id: Bytes32,
     left_slot_value: S,
     right_slot_value: S,
-    memos_after_hint: M,
-) -> Result<(Conditions, Coin, Proof, [Slot<S>; 2]), DriverError>
+    memos_after_hint: NodePtr,
+    target_inner_puzzle_hash: Bytes32,
+) -> Result<NodePtr, DriverError>
 where
     S: Copy + ToTreeHash,
-    M: ToClvm<Allocator>,
 {
-    let launcher_coin = launcher.coin();
-    let launcher_id = launcher_coin.coin_id();
-
     let left_slot_info = SlotInfo::from_value(launcher_id, 0, left_slot_value);
     let left_slot_puzzle_hash = Slot::<S>::puzzle_hash(&left_slot_info);
 
@@ -412,13 +435,46 @@ where
     let slot_hint: Bytes32 = Slot::<()>::first_curry_hash(launcher_id, 0).into();
     let slot_memos = ctx.hint(slot_hint)?;
     let launcher_id_ptr = ctx.alloc(&launcher_id)?;
-    let memos_ptr = ctx.alloc(&memos_after_hint)?;
-    let launcher_memos = ctx.memos(&clvm_tuple!(launcher_id_ptr, memos_ptr))?;
-    let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
+    let launcher_memos = ctx.memos(&clvm_tuple!(launcher_id_ptr, memos_after_hint))?;
+
+    clvm_quote!(Conditions::new()
         .create_coin(left_slot_puzzle_hash.into(), 0, Some(slot_memos))
         .create_coin(right_slot_puzzle_hash.into(), 0, Some(slot_memos))
         .create_coin(target_inner_puzzle_hash, 1, Some(launcher_memos)))
-    .to_clvm(ctx)?;
+    .to_clvm(ctx)
+    .map_err(DriverError::ToClvm)
+}
+
+// Spends the eve signleton, whose only job is to create the
+//   slot 'premine' (leftmost and rightmost slots) and
+//   transition to the actual registry puzzle
+#[allow(clippy::type_complexity)]
+fn spend_eve_coin_and_create_registry<S, M, KV>(
+    ctx: &mut SpendContext,
+    launcher: Launcher,
+    target_inner_puzzle_hash: Bytes32,
+    left_slot_value: S,
+    right_slot_value: S,
+    memos_after_hint: M,
+    launcher_kv_list: KV,
+) -> Result<(Conditions, Coin, Proof, [Slot<S>; 2]), DriverError>
+where
+    S: Copy + ToTreeHash,
+    M: ToClvm<Allocator>,
+    KV: ToClvm<Allocator>,
+{
+    let launcher_coin = launcher.coin();
+    let launcher_id = launcher_coin.coin_id();
+
+    let memos_after_hint = ctx.alloc(&memos_after_hint)?;
+    let eve_singleton_inner_puzzle = eve_singleton_inner_puzzle(
+        ctx,
+        launcher_id,
+        left_slot_value,
+        right_slot_value,
+        memos_after_hint,
+        target_inner_puzzle_hash,
+    )?;
 
     let eve_singleton_inner_puzzle_hash = ctx.tree_hash(eve_singleton_inner_puzzle);
     let eve_singleton_proof = Proof::Eve(EveProof {
@@ -426,10 +482,11 @@ where
         parent_amount: launcher_coin.amount,
     });
 
-    let (security_coin_conditions, eve_coin) =
-        launcher
-            .with_singleton_amount(1)
-            .spend(ctx, eve_singleton_inner_puzzle_hash.into(), ())?;
+    let (security_coin_conditions, eve_coin) = launcher.with_singleton_amount(1).spend(
+        ctx,
+        eve_singleton_inner_puzzle_hash.into(),
+        launcher_kv_list,
+    )?;
 
     let eve_coin_solution = SingletonSolution {
         lineage_proof: eve_singleton_proof,
@@ -458,8 +515,14 @@ where
         parent_parent_info: eve_coin.parent_coin_info,
         parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
     };
-    let left_slot = Slot::new(slot_proof, left_slot_info);
-    let right_slot = Slot::new(slot_proof, right_slot_info);
+    let left_slot = Slot::new(
+        slot_proof,
+        SlotInfo::from_value(launcher_id, 0, left_slot_value),
+    );
+    let right_slot = Slot::new(
+        slot_proof,
+        SlotInfo::from_value(launcher_id, 0, right_slot_value),
+    );
 
     Ok((
         security_coin_conditions.assert_concurrent_spend(eve_coin.coin_id()),
@@ -498,7 +561,7 @@ pub fn launch_catalog_registry<V>(
     DriverError,
 > {
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, false)?;
+    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_id = offer.security_coin.coin_id();
@@ -536,12 +599,13 @@ pub fn launch_catalog_registry<V>(
             ctx,
             registry_launcher,
             catalog_inner_puzzle_hash.into(),
-            CatalogSlotValue::left_end(SLOT32_MAX_VALUE.into()),
-            CatalogSlotValue::right_end(SLOT32_MIN_VALUE.into()),
+            CatalogSlotValue::initial_left_end(),
+            CatalogSlotValue::initial_right_end(),
             clvm_tuple!(
                 initial_registration_asset_id,
                 clvm_tuple!(initial_state, ())
             ),
+            (),
         )?;
 
     let catalog_registry = CatalogRegistry::new(
@@ -574,25 +638,36 @@ pub fn launch_catalog_registry<V>(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
-pub fn launch_xchandles_registry(
+pub fn launch_xchandles_registry<V>(
     ctx: &mut SpendContext,
     offer: Offer,
     initial_base_registration_price: u64,
-    initial_registration_asset_id: Bytes32,
-    xchandles_constants: XchandlesConstants,
+    // (registry launcher id, security coin, additional_args) -> (additional conditions, registry constants, initial_registration_asset_id)
+    get_additional_info: fn(
+        ctx: &mut SpendContext,
+        Bytes32,
+        Coin,
+        V,
+    ) -> Result<
+        (Conditions<NodePtr>, XchandlesConstants, Bytes32),
+        DriverError,
+    >,
     consensus_constants: &ConsensusConstants,
+    additional_args: V,
 ) -> Result<
     (
         Signature,
         SecretKey,
         XchandlesRegistry,
         [Slot<XchandlesSlotValue>; 2],
+        Coin, // security coin
     ),
     DriverError,
 > {
     let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, false)?;
+    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let security_coin_id = offer.security_coin.coin_id();
@@ -604,6 +679,14 @@ pub fn launch_xchandles_registry(
     let registry_launcher_coin = registry_launcher.coin();
     let registry_launcher_id = registry_launcher_coin.coin_id();
 
+    let (additional_security_coin_conditions, xchandles_constants, initial_registration_asset_id) =
+        get_additional_info(
+            ctx,
+            registry_launcher_id,
+            offer.security_coin,
+            additional_args,
+        )?;
+
     // Spend intermediary coin and create registry
     let initial_state = XchandlesRegistryState::from(
         initial_registration_asset_id.tree_hash().into(),
@@ -613,36 +696,28 @@ pub fn launch_xchandles_registry(
         initial_state,
         xchandles_constants.with_launcher_id(registry_launcher_id),
     );
+
     let target_xchandles_inner_puzzle_hash = target_xchandles_info.clone().inner_puzzle_hash();
     let (new_security_coin_conditions, new_xchandles_coin, xchandles_proof, slots) =
         spend_eve_coin_and_create_registry(
             ctx,
             registry_launcher,
             target_xchandles_inner_puzzle_hash.into(),
-            XchandlesSlotValue::new(
-                SLOT32_MIN_VALUE.into(),
-                SLOT32_MIN_VALUE.into(),
-                SLOT32_MAX_VALUE.into(),
-                u64::MAX,
-                registry_launcher_id,
-                registry_launcher_id,
-            ),
-            XchandlesSlotValue::new(
-                SLOT32_MAX_VALUE.into(),
-                SLOT32_MIN_VALUE.into(),
-                SLOT32_MAX_VALUE.into(),
-                u64::MAX,
-                registry_launcher_id,
-                registry_launcher_id,
-            ),
-            clvm_tuple!(
+            XchandlesSlotValue::initial_left_end(),
+            XchandlesSlotValue::initial_right_end(),
+            (),
+            clvm_list!(
                 initial_registration_asset_id,
-                clvm_tuple!(initial_state, ())
+                initial_base_registration_price,
+                initial_state,
+                target_xchandles_info.constants
             ),
         )?;
 
     // this creates the launcher & secures the spend
-    security_coin_conditions = security_coin_conditions.extend(new_security_coin_conditions);
+    security_coin_conditions = security_coin_conditions
+        .extend(new_security_coin_conditions)
+        .extend(additional_security_coin_conditions);
 
     let xchandles_registry =
         XchandlesRegistry::new(new_xchandles_coin, xchandles_proof, target_xchandles_info);
@@ -662,6 +737,7 @@ pub fn launch_xchandles_registry(
         security_coin_sk,
         xchandles_registry,
         slots,
+        offer.security_coin,
     ))
 }
 
@@ -671,15 +747,15 @@ pub fn launch_dig_reward_distributor(
     offer: Offer,
     first_epoch_start: u64,
     cat_refund_puzzle_hash: Bytes32,
-    constants: DigRewardDistributorConstants,
+    constants: RewardDistributorConstants,
     consensus_constants: &ConsensusConstants,
     comment: &str,
 ) -> Result<
     (
         Signature,
         SecretKey,
-        DigRewardDistributor,
-        Slot<DigRewardSlotValue>,
+        RewardDistributor,
+        Slot<RewardDistributorRewardSlotValue>,
     ),
     DriverError,
 > {
@@ -690,8 +766,15 @@ pub fn launch_dig_reward_distributor(
         ctx,
         offer.clone(),
         security_coin_sk.public_key(),
-        Some(cat_refund_puzzle_hash),
-        true,
+        Some(NotarizedPayment {
+            nonce: constants.launcher_id,
+            payments: vec![Payment::with_memos(
+                cat_refund_puzzle_hash,
+                0,
+                vec![cat_refund_puzzle_hash.into()],
+            )],
+        }),
+        None,
     )?;
     let dig_reward_distributor_hint: Bytes32 = "DIG Reward Distributor v1".tree_hash().into();
     let launcher_memos = chia_wallet_sdk::prelude::Memos::new(
@@ -703,42 +786,51 @@ pub fn launch_dig_reward_distributor(
 
     let controller_singleton_struct_hash: Bytes32 =
         SingletonStruct::new(launcher_id).tree_hash().into();
-    let reserve_inner_ph =
-        P2DelegatedBySingletonLayerArgs::curry_tree_hash(controller_singleton_struct_hash, 0);
+    let reserve_inner_ph: Bytes32 =
+        P2DelegatedBySingletonLayerArgs::curry_tree_hash(controller_singleton_struct_hash, 0)
+            .into();
 
     let offer = parse_one_sided_offer(
         ctx,
         offer,
         security_coin_sk.public_key(),
-        Some(reserve_inner_ph.into()),
-        true,
+        Some(NotarizedPayment {
+            nonce: constants.launcher_id,
+            payments: vec![Payment::with_memos(
+                reserve_inner_ph,
+                0,
+                vec![reserve_inner_ph.into()],
+            )],
+        }),
+        None,
     )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     let mut security_coin_conditions = offer.security_base_conditions;
 
     // Spend intermediary coin and create registry
-    let target_info = DigRewardDistributorInfo::new(
-        DigRewardDistributorState::initial(first_epoch_start),
+    let target_info = RewardDistributorInfo::new(
+        RewardDistributorState::initial(first_epoch_start),
         constants.with_launcher_id(launcher_id),
     );
 
     let target_inner_puzzle_hash = target_info.clone().inner_puzzle_hash();
 
-    let slot_value = DigRewardSlotValue {
+    let slot_value = RewardDistributorRewardSlotValue {
         epoch_start: first_epoch_start,
         next_epoch_initialized: false,
         rewards: 0,
     };
-    let slot_info = SlotInfo::<DigRewardSlotValue>::from_value(
+    let slot_info = SlotInfo::<RewardDistributorRewardSlotValue>::from_value(
         launcher_id,
-        DigSlotNonce::REWARD.to_u64(),
+        RewardDistributorSlotNonce::REWARD.to_u64(),
         slot_value,
     );
-    let slot_puzzle_hash = Slot::<DigRewardSlotValue>::puzzle_hash(&slot_info);
+    let slot_puzzle_hash = Slot::<RewardDistributorRewardSlotValue>::puzzle_hash(&slot_info);
 
     let slot_hint: Bytes32 =
-        Slot::<()>::first_curry_hash(launcher_id, DigSlotNonce::REWARD.to_u64()).into();
+        Slot::<()>::first_curry_hash(launcher_id, RewardDistributorSlotNonce::REWARD.to_u64())
+            .into();
     let slot_memos = ctx.hint(slot_hint)?;
     let launcher_memos = ctx.hint(launcher_id)?;
     let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
@@ -806,7 +898,7 @@ pub fn launch_dig_reward_distributor(
         0,
         reserve_cat.coin.amount,
     );
-    let registry = DigRewardDistributor::new(new_registry_coin, new_proof, target_info, reserve);
+    let registry = RewardDistributor::new(new_registry_coin, new_proof, target_info, reserve);
 
     // Spend security coin
     let security_coin_sig = spend_security_coin(
@@ -849,10 +941,11 @@ mod tests {
     use crate::{
         benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
         CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
-        DelegatedStateActionSolution, DigAddIncentivesAction, DigAddMirrorAction,
-        DigCommitIncentivesAction, DigInitiatePayoutAction, DigNewEpochAction,
-        DigRemoveMirrorAction, DigRewardDistributorConstants, DigSyncAction,
-        DigWithdrawIncentivesAction, PrecommitCoin, Slot, SpendContextExt, XchandlesExpireAction,
+        DelegatedStateActionSolution, PrecommitCoin, RewardDistributorAddEntryAction,
+        RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
+        RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
+        RewardDistributorRemoveEntryAction, RewardDistributorSyncAction,
+        RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
         XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction,
@@ -1520,6 +1613,7 @@ mod tests {
         )?;
 
         let mut registry = registry;
+        let used_slot_value_hash = slot.map(|s| s.info.value_hash);
         let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
             ctx,
             &mut registry,
@@ -1528,6 +1622,14 @@ mod tests {
             pricing_solution,
             slot,
         )?;
+        assert_eq!(
+            used_slot_value_hash,
+            XchandlesRefundAction::get_spent_slot_value_hash_from_solution(
+                ctx,
+                registry.pending_items.actions[registry.pending_items.actions.len() - 1].solution
+            )?
+        );
+
         let new_registry = registry.finish_spend(ctx)?;
 
         ensure_conditions_met(ctx, sim, secure_cond.clone(), 0)?;
@@ -1608,17 +1710,56 @@ mod tests {
         ) = launch_test_singleton(ctx, &mut sim)?;
 
         // Launch XCHandles
-        let (_, security_sk, mut registry, slots) = launch_xchandles_registry(
-            ctx,
-            offer,
-            initial_registration_price,
-            payment_cat.asset_id,
-            xchandles_constants.with_price_singleton(price_singleton_launcher_id),
-            &TESTNET11_CONSTANTS,
-        )?;
+        let (_, security_sk, mut registry, slots_returned_by_launch, _security_coin) =
+            launch_xchandles_registry(
+                ctx,
+                offer,
+                initial_registration_price,
+                |_ctx, _launcher_id, _coin, (xchandles_constants, payment_cat_asset_id)| {
+                    Ok((Conditions::new(), xchandles_constants, payment_cat_asset_id))
+                },
+                &TESTNET11_CONSTANTS,
+                (
+                    xchandles_constants.with_price_singleton(price_singleton_launcher_id),
+                    payment_cat.asset_id,
+                ),
+            )?;
+
+        // Check XCHandlesRegistry::from_launcher_solution
+        let spends = ctx.take();
+        let mut initial_slots = None;
+        for spend in spends {
+            if spend.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into() {
+                let launcher_solution = ctx.alloc(&spend.solution)?;
+
+                if let Some((registry, slots, initial_registration_asset_id, initial_base_price)) =
+                    XchandlesRegistry::from_launcher_solution(ctx, spend.coin, launcher_solution)?
+                {
+                    initial_slots = Some(slots);
+                    assert_eq!(initial_registration_asset_id, payment_cat.asset_id);
+                    assert_eq!(
+                        registry.info.constants,
+                        xchandles_constants
+                            .with_price_singleton(price_singleton_launcher_id)
+                            .with_launcher_id(spend.coin.coin_id())
+                    );
+                    assert_eq!(initial_registration_price, initial_base_price);
+                };
+            }
+
+            ctx.insert(spend);
+        }
+
+        // This will fail if we didn't find (or were not able to parse) the XCHandles launcher
+        assert!(initial_slots.is_some());
 
         // sim.spend_coins(ctx.take(), &[launcher_bls.sk, security_sk])?;
         benchmark.add_spends(ctx, &mut sim, "launch", &[launcher_bls.sk, security_sk])?;
+
+        let slots = initial_slots.unwrap();
+        assert!(sim.coin_state(slots[0].coin.coin_id()).is_some());
+        assert!(sim.coin_state(slots[1].coin.coin_id()).is_some());
+        assert_eq!(slots, slots_returned_by_launch);
 
         // Register 7 handles
 
@@ -1786,6 +1927,7 @@ mod tests {
                 benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
             };
 
+            let spent_value_hashes = [left_slot.info.value_hash, right_slot.info.value_hash];
             let (secure_cond, new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
                 ctx,
                 &mut registry,
@@ -1797,6 +1939,14 @@ mod tests {
 
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
+            assert_eq!(
+                spent_value_hashes,
+                XchandlesRegisterAction::get_spent_slot_value_hashes_from_solution(
+                    ctx,
+                    registry.pending_items.actions[registry.pending_items.actions.len() - 1]
+                        .solution
+                )?
+            );
             registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
 
@@ -1809,6 +1959,7 @@ mod tests {
             slots.extend(new_slots);
 
             // test on-chain oracle for current handle
+            let spent_slot_value_hash = oracle_slot.info.value_hash;
             let (oracle_conds, new_slot) = registry.new_action::<XchandlesOracleAction>().spend(
                 ctx,
                 &mut registry,
@@ -1817,6 +1968,14 @@ mod tests {
 
             ensure_conditions_met(ctx, &mut sim, oracle_conds, 0)?;
 
+            assert_eq!(
+                spent_slot_value_hash,
+                XchandlesOracleAction::get_spent_slot_value_hash_from_solution(
+                    ctx,
+                    registry.pending_items.actions[registry.pending_items.actions.len() - 1]
+                        .solution
+                )?
+            );
             registry = registry.finish_spend(ctx)?;
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
@@ -1831,6 +1990,7 @@ mod tests {
             let pay_for_extension: u64 =
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, extension_years);
 
+            let spent_slot_value_hash = extension_slot.info.value_hash;
             let (notarized_payment, extend_conds, new_slot) =
                 registry.new_action::<XchandlesExtendAction>().spend(
                     ctx,
@@ -1841,6 +2001,15 @@ mod tests {
                     base_price,
                     extension_years,
                 )?;
+
+            assert_eq!(
+                spent_slot_value_hash,
+                XchandlesExtendAction::get_spent_slot_value_hash_from_solution(
+                    ctx,
+                    registry.pending_items.actions[registry.pending_items.actions.len() - 1]
+                        .solution
+                )?
+            );
 
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
                 ctx,
@@ -1895,6 +2064,7 @@ mod tests {
             let new_owner_launcher_id = Bytes32::new([4 + i as u8; 32]);
             let new_resolved_launcher_id = Bytes32::new([u8::MAX - i as u8 - 1; 32]);
             let update_slot = new_slot;
+            let update_slot_value_hash = new_slot.info.value_hash;
 
             let (update_conds, new_slot) = registry.new_action::<XchandlesUpdateAction>().spend(
                 ctx,
@@ -1907,6 +2077,14 @@ mod tests {
 
             let _new_did = did.update(ctx, &user_p2, update_conds)?;
 
+            assert_eq!(
+                update_slot_value_hash,
+                XchandlesUpdateAction::get_spent_slot_value_hash_from_solution(
+                    ctx,
+                    registry.pending_items.actions[registry.pending_items.actions.len() - 1]
+                        .solution
+                )?
+            );
             registry = registry.finish_spend(ctx)?;
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
@@ -2006,6 +2184,7 @@ mod tests {
             &[user_bls.sk.clone(), minter_bls.sk.clone()],
         )?;
 
+        let spent_slot_value_hash = initial_slot.info.value_hash;
         let (expire_conds, _new_slot) = registry.new_action::<XchandlesExpireAction>().spend(
             ctx,
             &mut registry,
@@ -2017,6 +2196,14 @@ mod tests {
 
         // assert expire conds
         ensure_conditions_met(ctx, &mut sim, expire_conds, 1)?;
+
+        assert_eq!(
+            spent_slot_value_hash,
+            XchandlesExpireAction::get_spent_slot_value_hash_from_solution(
+                ctx,
+                registry.pending_items.actions[registry.pending_items.actions.len() - 1].solution
+            )?
+        );
         registry = registry.finish_spend(ctx)?;
 
         // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
@@ -2257,8 +2444,8 @@ mod tests {
         Ok(())
     }
 
-    // Spends the validator singleton
-    fn spend_validator_singleton(
+    // Spends the manager singleton
+    fn spend_manager_singleton(
         ctx: &mut SpendContext,
         test_singleton_coin: Coin,
         test_singleton_proof: Proof,
@@ -2280,7 +2467,7 @@ mod tests {
         let test_singleton_spend = Spend::new(test_singleton_puzzle, test_singleton_solution);
         ctx.spend(test_singleton_coin, test_singleton_spend)?;
 
-        // compute validator singleton info for next spend
+        // compute manager singleton info for next spend
         let next_test_singleton_proof = Proof::Lineage(LineageProof {
             parent_parent_coin_info: test_singleton_coin.parent_coin_info,
             parent_inner_puzzle_hash: test_singleton_inner_puzzle_hash.into(),
@@ -2317,25 +2504,25 @@ mod tests {
         source_cat = source_cat.wrapped_child(cat_minter.puzzle_hash, cat_amount);
         sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
 
-        // Launch validator singleton
+        // Launch manager singleton
         let (
-            validator_launcher_id,
-            mut validator_coin,
-            mut validator_singleton_proof,
-            _validator_singleton_inner_puzzle,
-            validator_singleton_inner_puzzle_hash,
-            validator_singleton_puzzle,
+            manager_launcher_id,
+            mut manager_coin,
+            mut manager_singleton_proof,
+            _manager_singleton_inner_puzzle,
+            manager_singleton_inner_puzzle_hash,
+            manager_singleton_puzzle,
         ) = launch_test_singleton(ctx, &mut sim)?;
 
         // setup config
-        let constants = DigRewardDistributorConstants {
+        let constants = RewardDistributorConstants {
             launcher_id: Bytes32::from([1; 32]),
-            validator_launcher_id,
-            validator_payout_puzzle_hash: Bytes32::new([1; 32]),
+            manager_launcher_id,
+            fee_payout_puzzle_hash: Bytes32::new([1; 32]),
             epoch_seconds: 1000,
             max_seconds_offset: 300,
             payout_threshold: 42,
-            validator_fee_bps: 420,     // 4.2% fee
+            fee_bps: 420,               // 4.2% fee
             withdrawal_share_bps: 9000, // 90% of the amount deposited will be returned
             reserve_asset_id: source_cat.asset_id,
             reserve_inner_puzzle_hash: Bytes32::default(), // will be overwritten
@@ -2343,8 +2530,8 @@ mod tests {
         };
 
         // Create source offer
-        let mirror1_bls = sim.bls(0);
-        let mirror2_bls = sim.bls(0);
+        let entry1_bls = sim.bls(0);
+        let entry2_bls = sim.bls(0);
 
         let offer_amount = 1;
         let launcher_bls = sim.bls(offer_amount);
@@ -2447,32 +2634,34 @@ mod tests {
             .wrapped_child(cat_minter.puzzle_hash, source_cat.coin.amount);
         assert!(sim.coin_state(source_cat.coin.coin_id()).is_some());
 
-        // add the 1st mirror before reward epoch ('first epoch') begins
-        let (validator_conditions, mirror1_slot) =
-            registry.new_action::<DigAddMirrorAction>().spend(
+        // add the 1st entry before reward epoch ('first epoch') begins
+        let (manager_conditions, entry1_slot) = registry
+            .new_action::<RewardDistributorAddEntryAction>()
+            .spend(
                 ctx,
                 &mut registry,
-                mirror1_bls.puzzle_hash,
+                entry1_bls.puzzle_hash,
                 1,
-                validator_singleton_inner_puzzle_hash,
+                manager_singleton_inner_puzzle_hash,
             )?;
         registry = registry.finish_spend(ctx, vec![])?;
 
-        (validator_coin, validator_singleton_proof) = spend_validator_singleton(
+        (manager_coin, manager_singleton_proof) = spend_manager_singleton(
             ctx,
-            validator_coin,
-            validator_singleton_proof,
-            validator_singleton_puzzle,
-            validator_conditions,
+            manager_coin,
+            manager_singleton_proof,
+            manager_singleton_puzzle,
+            manager_conditions,
         )?;
 
         // sim.spend_coins(ctx.take(), &[])?;
-        benchmark.add_spends(ctx, &mut sim, "add_mirror", &[])?;
+        benchmark.add_spends(ctx, &mut sim, "add_entry", &[])?;
 
         // commit incentives for first epoch
         let rewards_to_add = constants.epoch_seconds;
-        let (secure_conditions, first_epoch_commitment_slot, mut incentive_slots) =
-            registry.new_action::<DigCommitIncentivesAction>().spend(
+        let (secure_conditions, first_epoch_commitment_slot, mut incentive_slots) = registry
+            .new_action::<RewardDistributorCommitIncentivesAction>()
+            .spend(
                 ctx,
                 &mut registry,
                 first_epoch_slot,
@@ -2511,8 +2700,9 @@ mod tests {
         // commit incentives for fifth epoch
         let fifth_epoch_start = first_epoch_start + constants.epoch_seconds * 4;
         let rewards_to_add = constants.epoch_seconds * 10;
-        let (secure_conditions, fifth_epoch_commitment_slot, new_incentive_slots) =
-            registry.new_action::<DigCommitIncentivesAction>().spend(
+        let (secure_conditions, fifth_epoch_commitment_slot, new_incentive_slots) = registry
+            .new_action::<RewardDistributorCommitIncentivesAction>()
+            .spend(
                 ctx,
                 &mut registry,
                 *incentive_slots.last().unwrap(),
@@ -2558,8 +2748,9 @@ mod tests {
 
         // 2nd commit incentives for fifth epoch
         let rewards_to_add = constants.epoch_seconds * 2;
-        let (secure_conditions, fifth_epoch_commitment_slot2, new_incentive_slots) =
-            registry.new_action::<DigCommitIncentivesAction>().spend(
+        let (secure_conditions, fifth_epoch_commitment_slot2, new_incentive_slots) = registry
+            .new_action::<RewardDistributorCommitIncentivesAction>()
+            .spend(
                 ctx,
                 &mut registry,
                 *incentive_slots
@@ -2612,8 +2803,9 @@ mod tests {
             .is_none());
 
         // withdraw the 1st incentives for epoch 5
-        let (withdraw_incentives_conditions, new_reward_slot, withdrawn_amount) =
-            registry.new_action::<DigWithdrawIncentivesAction>().spend(
+        let (withdraw_incentives_conditions, new_reward_slot, withdrawn_amount) = registry
+            .new_action::<RewardDistributorWithdrawIncentivesAction>()
+            .spend(
                 ctx,
                 &mut registry,
                 fifth_epoch_commitment_slot,
@@ -2667,15 +2859,16 @@ mod tests {
             .iter()
             .find(|s| s.info.value.epoch_start == first_epoch_start)
             .unwrap();
-        let (new_epoch_conditions, new_reward_slot, validator_fee) =
-            registry.new_action::<DigNewEpochAction>().spend(
+        let (new_epoch_conditions, new_reward_slot, fee) = registry
+            .new_action::<RewardDistributorNewEpochAction>()
+            .spend(
                 ctx,
                 &mut registry,
                 first_epoch_incentives_slot,
                 // first_epoch_incentives_slot.info.value.rewards,
             )?;
         let payout_coin_id = reserve_cat
-            .wrapped_child(constants.validator_payout_puzzle_hash, validator_fee)
+            .wrapped_child(constants.fee_payout_puzzle_hash, fee)
             .coin
             .coin_id();
 
@@ -2688,11 +2881,11 @@ mod tests {
 
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert_eq!(registry.info.state.active_shares, 1);
-        assert_eq!(registry.info.state.total_reserves, 4000 - validator_fee);
+        assert_eq!(registry.info.state.total_reserves, 4000 - fee);
         assert_eq!(registry.info.state.round_reward_info.cumulative_payout, 0);
         assert_eq!(
             registry.info.state.round_reward_info.remaining_rewards,
-            first_epoch_incentives_slot.info.value.rewards - validator_fee
+            first_epoch_incentives_slot.info.value.rewards - fee
         );
         assert_eq!(
             registry.info.state.round_time_info.last_update,
@@ -2718,7 +2911,7 @@ mod tests {
 
         // sync to 10%
         let initial_reward_info = registry.info.state.round_reward_info;
-        let sync_conditions = registry.new_action::<DigSyncAction>().spend(
+        let sync_conditions = registry.new_action::<RewardDistributorSyncAction>().spend(
             ctx,
             &mut registry,
             first_epoch_start + 100,
@@ -2744,7 +2937,7 @@ mod tests {
 
         // sync to 50% (so + 40%)
         let initial_reward_info = registry.info.state.round_reward_info;
-        let sync_conditions = registry.new_action::<DigSyncAction>().spend(
+        let sync_conditions = registry.new_action::<RewardDistributorSyncAction>().spend(
             ctx,
             &mut registry,
             first_epoch_start + 500,
@@ -2771,11 +2964,9 @@ mod tests {
         let incentives_amount = initial_reward_info.remaining_rewards;
         let registry_info = registry.info;
 
-        let add_incentives_conditions = registry.new_action::<DigAddIncentivesAction>().spend(
-            ctx,
-            &mut registry,
-            incentives_amount,
-        )?;
+        let add_incentives_conditions = registry
+            .new_action::<RewardDistributorAddIncentivesAction>()
+            .spend(ctx, &mut registry, incentives_amount)?;
 
         // spend reserve and source cat together so deltas add up
         let source_cat_spend = CatSpend::new(
@@ -2805,39 +2996,40 @@ mod tests {
         assert_eq!(
             registry.info.state.round_reward_info.remaining_rewards,
             registry_info.state.round_reward_info.remaining_rewards
-                + (incentives_amount - incentives_amount * constants.validator_fee_bps / 10000)
+                + (incentives_amount - incentives_amount * constants.fee_bps / 10000)
         );
         source_cat = source_cat.wrapped_child(
             cat_minter.puzzle_hash,
             source_cat.coin.amount - incentives_amount,
         );
 
-        // add mirror2
-        let (validator_conditions, mirror2_slot) =
-            registry.new_action::<DigAddMirrorAction>().spend(
+        // add entry2
+        let (manager_conditions, entry2_slot) = registry
+            .new_action::<RewardDistributorAddEntryAction>()
+            .spend(
                 ctx,
                 &mut registry,
-                mirror2_bls.puzzle_hash,
+                entry2_bls.puzzle_hash,
                 2,
-                validator_singleton_inner_puzzle_hash,
+                manager_singleton_inner_puzzle_hash,
             )?;
-        (validator_coin, validator_singleton_proof) = spend_validator_singleton(
+        (manager_coin, manager_singleton_proof) = spend_manager_singleton(
             ctx,
-            validator_coin,
-            validator_singleton_proof,
-            validator_singleton_puzzle,
-            validator_conditions,
+            manager_coin,
+            manager_singleton_proof,
+            manager_singleton_puzzle,
+            manager_conditions,
         )?;
 
         registry = registry.finish_spend(ctx, vec![])?;
         sim.pass_time(250);
         // sim.spend_coins(ctx.take(), &[])?;
-        benchmark.add_spends(ctx, &mut sim, "add_mirror", &[])?;
+        benchmark.add_spends(ctx, &mut sim, "add_entry", &[])?;
         assert_eq!(registry.info.state.active_shares, 3);
 
         // sync to 75% (so + 25%)
         let initial_reward_info = registry.info.state.round_reward_info;
-        let sync_conditions = registry.new_action::<DigSyncAction>().spend(
+        let sync_conditions = registry.new_action::<RewardDistributorSyncAction>().spend(
             ctx,
             &mut registry,
             first_epoch_start + 750,
@@ -2859,36 +3051,37 @@ mod tests {
                 == initial_reward_info.cumulative_payout + cumulative_payout_delta
         );
 
-        // remove mirror2
+        // remove entry2
         let reserve_cat = registry.reserve.to_cat();
-        let (remove_mirror_validator_conditions, mirror2_payout_amount) =
-            registry.new_action::<DigRemoveMirrorAction>().spend(
+        let (remove_entry_manager_conditions, entry2_payout_amount) = registry
+            .new_action::<RewardDistributorRemoveEntryAction>()
+            .spend(
                 ctx,
                 &mut registry,
-                mirror2_slot,
-                validator_singleton_inner_puzzle_hash,
+                entry2_slot,
+                manager_singleton_inner_puzzle_hash,
             )?;
 
-        let (_validator_coin, _validator_singleton_proof) = spend_validator_singleton(
+        let (_manager_coin, _manager_singleton_proof) = spend_manager_singleton(
             ctx,
-            validator_coin,
-            validator_singleton_proof,
-            validator_singleton_puzzle,
-            remove_mirror_validator_conditions,
+            manager_coin,
+            manager_singleton_proof,
+            manager_singleton_puzzle,
+            remove_entry_manager_conditions,
         )?;
 
         registry = registry.finish_spend(ctx, vec![])?;
         // sim.spend_coins(ctx.take(), &[])?;
-        benchmark.add_spends(ctx, &mut sim, "remove_mirror", &[])?;
+        benchmark.add_spends(ctx, &mut sim, "remove_entry", &[])?;
         let payout_coin_id = reserve_cat
-            .wrapped_child(mirror2_bls.puzzle_hash, mirror2_payout_amount)
+            .wrapped_child(entry2_bls.puzzle_hash, entry2_payout_amount)
             .coin
             .coin_id();
 
         assert!(registry.info.state.active_shares == 1);
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert!(sim
-            .coin_state(mirror2_slot.coin.coin_id())
+            .coin_state(entry2_slot.coin.coin_id())
             .unwrap()
             .spent_height
             .is_some());
@@ -2897,16 +3090,17 @@ mod tests {
             let update_time = registry.info.state.round_time_info.epoch_end;
             let first_update_time =
                 (registry.info.state.round_time_info.last_update + update_time) / 2;
-            let sync_conditions1 = registry.new_action::<DigSyncAction>().spend(
+            let sync_conditions1 = registry.new_action::<RewardDistributorSyncAction>().spend(
                 ctx,
                 &mut registry,
                 first_update_time,
             )?;
 
-            let sync_conditions2 =
-                registry
-                    .new_action::<DigSyncAction>()
-                    .spend(ctx, &mut registry, update_time)?;
+            let sync_conditions2 = registry.new_action::<RewardDistributorSyncAction>().spend(
+                ctx,
+                &mut registry,
+                update_time,
+            )?;
 
             let reward_slot = *incentive_slots
                 .iter()
@@ -2917,8 +3111,8 @@ mod tests {
                 })
                 .unwrap();
 
-            let (new_epoch_conditions, new_reward_slot, _validator_fee) = registry
-                .new_action::<DigNewEpochAction>()
+            let (new_epoch_conditions, new_reward_slot, _manager_fee) = registry
+                .new_action::<RewardDistributorNewEpochAction>()
                 .spend(ctx, &mut registry, reward_slot)?;
             incentive_slots
                 .retain(|s| s.info.value.epoch_start != new_reward_slot.info.value.epoch_start);
@@ -2942,8 +3136,9 @@ mod tests {
         // commit incentives for 10th epoch
         let tenth_epoch_start = first_epoch_start + constants.epoch_seconds * 9;
         let rewards_to_add = constants.epoch_seconds * 10;
-        let (secure_conditions, tenth_epoch_commitment_slot, new_incentive_slots) =
-            registry.new_action::<DigCommitIncentivesAction>().spend(
+        let (secure_conditions, tenth_epoch_commitment_slot, new_incentive_slots) = registry
+            .new_action::<RewardDistributorCommitIncentivesAction>()
+            .spend(
                 ctx,
                 &mut registry,
                 *incentive_slots.last().unwrap(),
@@ -2988,10 +3183,11 @@ mod tests {
 
         for epoch in 7..10 {
             let update_time = registry.info.state.round_time_info.epoch_end;
-            let sync_conditions =
-                registry
-                    .new_action::<DigSyncAction>()
-                    .spend(ctx, &mut registry, update_time)?;
+            let sync_conditions = registry.new_action::<RewardDistributorSyncAction>().spend(
+                ctx,
+                &mut registry,
+                update_time,
+            )?;
 
             let reward_slot = *incentive_slots
                 .iter()
@@ -2999,8 +3195,9 @@ mod tests {
                     s.info.value.epoch_start == first_epoch_start + epoch * constants.epoch_seconds
                 })
                 .unwrap();
-            let (new_epoch_conditions, new_reward_slot, _validator_fee) =
-                registry.new_action::<DigNewEpochAction>().spend(
+            let (new_epoch_conditions, new_reward_slot, _manager_fee) = registry
+                .new_action::<RewardDistributorNewEpochAction>()
+                .spend(
                     ctx,
                     &mut registry,
                     reward_slot,
@@ -3024,16 +3221,17 @@ mod tests {
         }
 
         let update_time = registry.info.state.round_time_info.epoch_end - 100;
-        let sync_conditions =
-            registry
-                .new_action::<DigSyncAction>()
-                .spend(ctx, &mut registry, update_time)?;
+        let sync_conditions = registry.new_action::<RewardDistributorSyncAction>().spend(
+            ctx,
+            &mut registry,
+            update_time,
+        )?;
 
-        // payout mirror
+        // payout entry
         let reserve_cat = registry.reserve.to_cat();
-        let (payout_conditions, _mirror1_slot, withdrawal_amount) = registry
-            .new_action::<DigInitiatePayoutAction>()
-            .spend(ctx, &mut registry, mirror1_slot)?;
+        let (payout_conditions, _entry1_slot, withdrawal_amount) = registry
+            .new_action::<RewardDistributorInitiatePayoutAction>()
+            .spend(ctx, &mut registry, entry1_slot)?;
 
         ensure_conditions_met(ctx, &mut sim, payout_conditions.extend(sync_conditions), 0)?;
 
@@ -3043,7 +3241,7 @@ mod tests {
         benchmark.add_spends(ctx, &mut sim, "initiate_payout", &[])?;
 
         let payout_coin_id = reserve_cat
-            .wrapped_child(mirror1_bls.puzzle_hash, withdrawal_amount)
+            .wrapped_child(entry1_bls.puzzle_hash, withdrawal_amount)
             .coin
             .coin_id();
 
