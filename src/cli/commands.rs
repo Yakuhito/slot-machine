@@ -8,11 +8,12 @@ use super::{
     reward_distributor_broadcast_entry_update, reward_distributor_clawback_rewards,
     reward_distributor_commit_rewards, reward_distributor_initiate_payout,
     reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_sign_entry_update,
-    reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
-    verifications_sign_launch, verifications_sign_revocation, verifications_view,
-    xchandles_continue_launch, xchandles_expire, xchandles_extend, xchandles_initiate_launch,
-    xchandles_listen, xchandles_register, xchandles_unroll_state_scheduler, xchandles_update,
-    xchandles_verify_deployment,
+    reward_distributor_sync, reward_distributor_view, verifications_broadcast_launch,
+    verifications_broadcast_revocation, verifications_sign_launch, verifications_sign_revocation,
+    verifications_view, xchandles_continue_launch, xchandles_expire, xchandles_extend,
+    xchandles_initiate_launch, xchandles_listen, xchandles_register,
+    xchandles_unroll_state_scheduler, xchandles_update, xchandles_verify_deployment,
+    xchandles_view,
 };
 
 #[derive(Parser)]
@@ -618,6 +619,24 @@ enum XchandlesCliAction {
         #[arg(long, default_value_t = false)]
         testnet11: bool,
     },
+    /// Shows up-to-date information about an XCHandles registry
+    View {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Payment asset id hint
+        #[arg(long)]
+        payment_asset_id: Option<String>,
+
+        /// Payment CAT base price hint
+        #[arg(long)]
+        payment_cat_base_price: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -851,6 +870,16 @@ enum RewardDistributorCliAction {
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
+    },
+    /// Views up-to-date information about a reward distributor
+    View {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
     },
 }
 
@@ -1277,6 +1306,20 @@ pub async fn run_cli() {
                 testnet11,
                 launcher_ids,
             } => xchandles_listen(launcher_ids, testnet11).await,
+            XchandlesCliAction::View {
+                launcher_id,
+                testnet11,
+                payment_asset_id,
+                payment_cat_base_price,
+            } => {
+                xchandles_view(
+                    launcher_id,
+                    testnet11,
+                    payment_asset_id,
+                    payment_cat_base_price,
+                )
+                .await
+            }
         },
         Commands::RewardDistributor { action } => match action {
             RewardDistributorCliAction::Launch {
@@ -1411,6 +1454,10 @@ pub async fn run_cli() {
                 reward_distributor_initiate_payout(launcher_id, payout_puzzle_hash, testnet11, fee)
                     .await
             }
+            RewardDistributorCliAction::View {
+                launcher_id,
+                testnet11,
+            } => reward_distributor_view(launcher_id, testnet11).await,
         },
         Commands::Verifications { action } => match action {
             VerificationsCliAction::SignLaunch {

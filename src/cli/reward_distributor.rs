@@ -9,6 +9,7 @@ mod new_epoch;
 mod sign_entry_update;
 mod sync;
 mod sync_distributor;
+mod view;
 
 pub use add_rewards::*;
 pub use broadcast_entry_update::*;
@@ -21,3 +22,4 @@ pub use new_epoch::*;
 pub use sign_entry_update::*;
 pub use sync::*;
 pub use sync_distributor::*;
+pub use view::*;

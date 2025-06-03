@@ -9,6 +9,7 @@ mod sync;
 mod unroll_state_scheduler;
 mod update;
 mod verify_deployment;
+mod view;
 mod xchandles_api_client;
 
 pub use continue_launch::*;
@@ -22,4 +23,5 @@ pub use sync::*;
 pub use unroll_state_scheduler::*;
 pub use update::*;
 pub use verify_deployment::*;
+pub use view::*;
 pub use xchandles_api_client::*;
