@@ -25,6 +25,7 @@ sqlx = { version = "0.8.3", features = ["sqlite", "runtime-async-std-native-tls"
 bech32 = "0.9.1"
 reqwest = { version = "0.12.15", features = ["json", "rustls-tls"] }
 dirs = "6.0.0"
+rustls = { version = "0.23", features = ["ring","logging","tls12"], default-features = false }
 tokio-tungstenite ={ version = "0.26.2", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3.31"
 axum = { version = "0.8.3", features = ["macros"]}

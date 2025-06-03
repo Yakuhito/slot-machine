@@ -3834,6 +3834,7 @@ dependencies = [
  "prettytable-rs",
  "reqwest",
  "rstest",
+ "rustls",
  "sage-api",
  "serde",
  "serde_json",

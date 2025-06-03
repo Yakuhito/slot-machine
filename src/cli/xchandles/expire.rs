@@ -96,10 +96,12 @@ pub async fn xchandles_expire(
     };
     println!("done.");
 
-    let expire_time = expire_time.unwrap_or(
+    let expire_time = if let Some(et) = expire_time {
+        et
+    } else {
         get_last_onchain_timestamp(&cli).await?
-            + registry.info.constants.relative_block_height as u64 * 18,
-    );
+            + registry.info.constants.relative_block_height as u64 * 18
+    };
     println!("Using expire time: {}", expire_time);
 
     let pricing_puzzle = XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(

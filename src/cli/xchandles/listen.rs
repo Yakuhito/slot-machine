@@ -67,6 +67,10 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
         db: Arc::clone(&db),
     };
 
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // API
     let api_state = state.clone();
     tokio::spawn(async move {

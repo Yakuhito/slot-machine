@@ -113,7 +113,11 @@ pub async fn xchandles_continue_launch(
 
     // Make sure this is always rounded down to a day
     let constants = registry.info.constants;
-    let start_time = start_time.unwrap_or(get_last_onchain_timestamp(&client).await? / 8640 * 8640);
+    let start_time = if let Some(st) = start_time {
+        st
+    } else {
+        get_last_onchain_timestamp(&client).await? / 8640 * 8640
+    };
     println!("Using start time: {}", start_time);
 
     if i == 0 {
