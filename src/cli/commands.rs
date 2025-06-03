@@ -596,6 +596,10 @@ enum XchandlesCliAction {
         #[arg(long)]
         payment_cat_base_price: String,
 
+        /// Committed expiration (old expiration for refunds where someone re-registered the handle before you)
+        #[arg(long)]
+        committed_expiration: Option<u64>,
+
         /// Use local database instead of XCHandles API
         #[arg(long, default_value_t = false)]
         local: bool,
@@ -1247,6 +1251,7 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                committed_expiration,
                 local,
                 fee,
             } => {
@@ -1262,6 +1267,7 @@ pub async fn run_cli() {
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    committed_expiration,
                     local,
                     fee,
                 )

@@ -35,6 +35,7 @@ pub async fn xchandles_expire(
     testnet11: bool,
     payment_asset_id_str: String,
     payment_cat_base_price_str: String,
+    commited_expiration: Option<u64>,
     local: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -69,13 +70,6 @@ pub async fn xchandles_expire(
             )
             .into()
     {
-        if !refund {
-            return Err(CliError::Custom(
-                "Given payment asset id & base price do not match the current registry's state."
-                    .to_string(),
-            ));
-        }
-
         yes_no_prompt("Given payment asset id & base price do not match the current registry. Re-registration will NOT work unless the price singleton changes the registry's state. Continue at your own risk?")?;
     }
 
@@ -109,19 +103,26 @@ pub async fn xchandles_expire(
         payment_cat_base_price,
         1000,
     )?;
-    let payment_cat_amount = pricing_puzzle.clone().get_price(
-        &mut ctx,
-        handle.clone(),
-        slot.info.value.expiration,
-        expire_time,
-        num_years,
-    )? as u64;
+    println!("Original slot expiration: {}", slot.info.value.expiration); // todo: debug
+    let mut payment_cat_amount = if refund && slot.info.value.expiration > expire_time {
+        0
+    } else {
+        pricing_puzzle.clone().get_price(
+            &mut ctx,
+            handle.clone(),
+            slot.info.value.expiration,
+            expire_time,
+            num_years,
+        )? as u64
+    };
 
     println!("Handle: {}", handle);
-    println!(
-        "Payment CAT amount: {:.3}",
-        payment_cat_amount as f64 / 1000.0
-    );
+    if payment_cat_amount != 0 {
+        println!(
+            "Payment CAT amount: {:.3}",
+            payment_cat_amount as f64 / 1000.0
+        );
+    }
     println!("Fee: {} XCH", fee_str);
 
     let secret = if let Some(s) = secret {
@@ -137,10 +138,15 @@ pub async fn xchandles_expire(
         s
     };
 
+    let commited_expiration = if let Some(ce) = commited_expiration {
+        ce
+    } else {
+        slot.info.value.expiration
+    };
     let pricing_solution = XchandlesExponentialPremiumRenewPuzzleSolution {
         buy_time: expire_time,
         pricing_program_solution: XchandlesFactorPricingSolution {
-            current_expiration: slot.info.value.expiration,
+            current_expiration: commited_expiration,
             handle: handle.clone(),
             num_years,
         },
@@ -195,10 +201,19 @@ pub async fn xchandles_expire(
     };
 
     let precommit_coin_record = potential_precommit_coin_records.iter().find(|cr| {
-        cr.coin.puzzle_hash == precomit_puzzle_hash.into() && cr.coin.amount == payment_cat_amount
+        cr.coin.puzzle_hash == precomit_puzzle_hash.into()
+            && (payment_cat_amount == 0 || cr.coin.amount == payment_cat_amount)
     });
 
     if let Some(precommit_coin_record) = precommit_coin_record {
+        if payment_cat_amount == 0 {
+            println!(
+                "Payment CAT amount: {:.3}",
+                precommit_coin_record.coin.amount as f64 / 1000.0
+            );
+            payment_cat_amount = precommit_coin_record.coin.amount;
+        }
+
         let target_block_height = precommit_coin_record.confirmed_block_index
             + registry.info.constants.relative_block_height
             + registry.info.constants.relative_block_height / 4;
@@ -417,12 +432,13 @@ pub async fn xchandles_expire(
     println!("Confirmed!");
 
     println!(
-        "To spend the precommitment coin, run the same command again with two more arguments:"
+        "To spend the precommitment coin, run the same command again with three more arguments:"
     );
     println!(
-        "  --secret {} --expire-time {}",
+        "  --secret {} --expire-time {} --committed-expiration {}",
         hex::encode(secret),
-        expire_time
+        expire_time,
+        commited_expiration
     );
 
     Ok(())
