@@ -1,4 +1,5 @@
 mod continue_launch;
+mod expire;
 mod extend;
 mod initiate_launch;
 mod register;
@@ -8,6 +9,7 @@ mod update;
 mod verify_deployment;
 
 pub use continue_launch::*;
+pub use expire::*;
 pub use extend::*;
 pub use initiate_launch::*;
 pub use register::*;
