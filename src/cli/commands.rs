@@ -11,7 +11,7 @@ use super::{
     reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
     verifications_sign_launch, verifications_sign_revocation, verifications_view,
     xchandles_continue_launch, xchandles_expire, xchandles_extend, xchandles_initiate_launch,
-    xchandles_register, xchandles_unroll_state_scheduler, xchandles_update,
+    xchandles_listen, xchandles_register, xchandles_unroll_state_scheduler, xchandles_update,
     xchandles_verify_deployment,
 };
 
@@ -583,6 +583,16 @@ enum XchandlesCliAction {
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
+    },
+    /// Listen for XCHandles spends
+    Listen {
+        /// XCHandles (sub)registry launcher ids (comma-separated list)
+        #[arg(long)]
+        launcher_ids: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
     },
 }
 
@@ -1228,6 +1238,10 @@ pub async fn run_cli() {
                 )
                 .await
             }
+            XchandlesCliAction::Listen {
+                testnet11,
+                launcher_ids,
+            } => xchandles_listen(launcher_ids, testnet11).await,
         },
         Commands::RewardDistributor { action } => match action {
             RewardDistributorCliAction::Launch {

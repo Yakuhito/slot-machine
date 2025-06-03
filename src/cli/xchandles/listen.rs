@@ -55,7 +55,7 @@ struct AppState {
     db: Arc<futures::lock::Mutex<Db>>,
 }
 
-pub async fn xchandles_listen(testnet11: bool, launcher_ids: Vec<String>) -> Result<(), CliError> {
+pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(), CliError> {
     let db = Db::new(true).await?;
     let db = Arc::new(futures::lock::Mutex::new(db));
 
@@ -72,8 +72,8 @@ pub async fn xchandles_listen(testnet11: bool, launcher_ids: Vec<String>) -> Res
     });
 
     let launcher_ids = launcher_ids
-        .iter()
-        .map(|id| hex_string_to_bytes32(id))
+        .split(',')
+        .map(hex_string_to_bytes32)
         .collect::<Result<Vec<Bytes32>, CliError>>()?;
 
     // Updates
