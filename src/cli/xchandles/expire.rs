@@ -13,11 +13,12 @@ use crate::{
 };
 
 #[allow(clippy::too_many_arguments)]
-pub async fn xchandles_extend(
+pub async fn xchandles_expire(
     launcher_id_str: String,
     handle: String,
     expire_time: Option<u64>,
     num_years: u64,
+    _refund: bool,
     testnet11: bool,
     payment_asset_id_str: String,
     payment_cat_base_price_str: String,
@@ -90,6 +91,7 @@ pub async fn xchandles_extend(
     println!("Fee: {} XCH", fee_str);
 
     // TODO: compute precommit coin ph, try to fetch it - create if not found; action spend if found
+    // TODO: refund
 
     let (notarized_payment, sec_conds, _new_slot) =
         registry.new_action::<XchandlesExtendAction>().spend(

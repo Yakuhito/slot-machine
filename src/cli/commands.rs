@@ -10,8 +10,9 @@ use super::{
     reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_sign_entry_update,
     reward_distributor_sync, verifications_broadcast_launch, verifications_broadcast_revocation,
     verifications_sign_launch, verifications_sign_revocation, verifications_view,
-    xchandles_continue_launch, xchandles_extend, xchandles_initiate_launch, xchandles_register,
-    xchandles_unroll_state_scheduler, xchandles_update, xchandles_verify_deployment,
+    xchandles_continue_launch, xchandles_expire, xchandles_extend, xchandles_initiate_launch,
+    xchandles_register, xchandles_unroll_state_scheduler, xchandles_update,
+    xchandles_verify_deployment,
 };
 
 #[derive(Parser)]
@@ -528,6 +529,44 @@ enum XchandlesCliAction {
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Expires a handle (re-registers after the intial registration expired)
+    Expire {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Handle to expire
+        #[arg(long)]
+        handle: String,
+
+        /// Expire time (UNIX timestamp)
+        #[arg(long)]
+        expire_time: Option<u64>,
+
+        /// Number of years to register the handle for
+        #[arg(long)]
+        num_years: u64,
+
+        /// Use the 'refund' path to recover a precommit coin
+        #[arg(long)]
+        refund: bool,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Payment asset id
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Payment CAT base price
+        #[arg(long)]
+        payment_cat_base_price: String,
 
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
@@ -1143,6 +1182,30 @@ pub async fn run_cli() {
                     new_owner_nft,
                     new_resolved_nft,
                     testnet11,
+                    fee,
+                )
+                .await
+            }
+            XchandlesCliAction::Expire {
+                launcher_id,
+                handle,
+                expire_time,
+                num_years,
+                refund,
+                testnet11,
+                payment_asset_id,
+                payment_cat_base_price,
+                fee,
+            } => {
+                xchandles_expire(
+                    launcher_id,
+                    handle,
+                    expire_time,
+                    num_years,
+                    refund,
+                    testnet11,
+                    payment_asset_id,
+                    payment_cat_base_price,
                     fee,
                 )
                 .await
