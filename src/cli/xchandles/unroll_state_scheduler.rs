@@ -8,9 +8,9 @@ use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
     get_coinset_client, hex_string_to_bytes32, load_catalog_state_schedule_csv, new_sk,
-    parse_amount, parse_one_sided_offer, spend_security_coin, sync_multisig_singleton,
-    sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs,
-    DelegatedStateAction, MultisigSingleton, SageClient,
+    parse_amount, parse_one_sided_offer, quick_sync_xchandles, spend_security_coin,
+    sync_multisig_singleton, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db,
+    DefaultCatMakerArgs, DelegatedStateAction, MultisigSingleton, SageClient,
     XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
     XchandlesRegistryState,
 };
@@ -18,6 +18,7 @@ use crate::{
 pub async fn xchandles_unroll_state_scheduler(
     launcher_id_str: String,
     testnet11: bool,
+    local: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
@@ -26,7 +27,11 @@ pub async fn xchandles_unroll_state_scheduler(
     let mut db = Db::new(false).await?;
     let mut ctx = SpendContext::new();
 
-    let mut registry = sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?;
+    let mut registry = if local {
+        sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?
+    } else {
+        quick_sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?
+    };
 
     let (MultisigSingleton::StateScheduler(state_scheduler), _) =
         sync_multisig_singleton::<XchandlesRegistryState>(

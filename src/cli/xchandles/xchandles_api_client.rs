@@ -132,4 +132,23 @@ impl XchandlesApiClient {
 
         Ok((left, right))
     }
+
+    pub async fn get_slot_value(
+        &self,
+        launcher_id: Bytes32,
+        handle_hash: Bytes32,
+    ) -> Result<Slot<XchandlesSlotValue>, CliError> {
+        let mut handle_hash_minus_one = handle_hash.to_bytes();
+        let mut index = 31;
+        while handle_hash_minus_one[index] == 0 {
+            index -= 1;
+        }
+        handle_hash_minus_one[index] -= 1;
+        let handle_hash_minus_one = Bytes32::from(handle_hash_minus_one);
+
+        Ok(self
+            .get_neighbors(launcher_id, handle_hash_minus_one)
+            .await?
+            .1)
+    }
 }

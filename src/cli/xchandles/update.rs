@@ -18,9 +18,9 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 
 use crate::{
     get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, sign_standard_transaction, spend_security_coin, sync_xchandles,
-    wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesSlotValue,
-    XchandlesUpdateAction,
+    parse_one_sided_offer, quick_sync_xchandles, sign_standard_transaction, spend_security_coin,
+    sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
+    XchandlesSlotValue, XchandlesUpdateAction,
 };
 
 fn encode_nft(nft_launcher_id: Bytes32) -> Result<String, CliError> {
@@ -35,6 +35,7 @@ pub async fn xchandles_update(
     new_owner_nft: Option<String>,
     new_resolved_nft: Option<String>,
     testnet11: bool,
+    local: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
@@ -46,18 +47,28 @@ pub async fn xchandles_update(
 
     print!("First, let's sync the registry... ");
     let mut db = Db::new(false).await?;
-    let mut registry = sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?;
+    let mut registry = if local {
+        sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?
+    } else {
+        quick_sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?
+    };
     println!("done.");
 
     print!("Fetching handle slot...");
-    let slot_value_hash = db
-        .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
-        .await?
-        .ok_or(CliError::SlotNotFound("Handle"))?;
-    let slot = db
-        .get_slot::<XchandlesSlotValue>(&mut ctx, launcher_id, 0, slot_value_hash, 0)
-        .await?
-        .ok_or(CliError::SlotNotFound("Handle"))?;
+    let slot = if local {
+        let slot_value_hash = db
+            .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
+            .await?
+            .ok_or(CliError::SlotNotFound("Handle"))?;
+        db.get_slot::<XchandlesSlotValue>(&mut ctx, launcher_id, 0, slot_value_hash, 0)
+            .await?
+            .ok_or(CliError::SlotNotFound("Handle"))?
+    } else {
+        let xchandles_api_client = XchandlesApiClient::get(testnet11);
+        xchandles_api_client
+            .get_slot_value(launcher_id, handle.tree_hash().into())
+            .await?
+    };
     println!("done.");
 
     let new_owner_launcher_id = if let Some(new_owner_nft) = new_owner_nft {

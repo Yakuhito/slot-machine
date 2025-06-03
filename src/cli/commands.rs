@@ -410,6 +410,10 @@ enum XchandlesCliAction {
         #[arg(long, default_value_t = false)]
         testnet11: bool,
 
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
+
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
@@ -470,6 +474,10 @@ enum XchandlesCliAction {
         #[arg(long)]
         payment_cat_base_price: String,
 
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
+
         /// Log the final transaction to a file (sb.debug)
         #[arg(long)]
         log: bool,
@@ -504,6 +512,10 @@ enum XchandlesCliAction {
         #[arg(long)]
         payment_cat_base_price: String,
 
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
+
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
@@ -529,6 +541,10 @@ enum XchandlesCliAction {
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
+
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
 
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
@@ -579,6 +595,10 @@ enum XchandlesCliAction {
         /// Payment CAT base price
         #[arg(long)]
         payment_cat_base_price: String,
+
+        /// Use local database instead of XCHandles API
+        #[arg(long, default_value_t = false)]
+        local: bool,
 
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
@@ -1132,8 +1152,9 @@ pub async fn run_cli() {
             XchandlesCliAction::UnrollStateScheduler {
                 launcher_id,
                 testnet11,
+                local,
                 fee,
-            } => xchandles_unroll_state_scheduler(launcher_id, testnet11, fee).await,
+            } => xchandles_unroll_state_scheduler(launcher_id, testnet11, local, fee).await,
             XchandlesCliAction::VerifyDeployment {
                 launcher_id,
                 testnet11,
@@ -1150,6 +1171,7 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                local,
                 log,
                 fee,
             } => {
@@ -1166,6 +1188,7 @@ pub async fn run_cli() {
                     payment_asset_id,
                     payment_cat_base_price,
                     log,
+                    local,
                     fee,
                 )
                 .await
@@ -1177,6 +1200,7 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                local,
                 fee,
             } => {
                 xchandles_extend(
@@ -1186,6 +1210,7 @@ pub async fn run_cli() {
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    local,
                     fee,
                 )
                 .await
@@ -1196,6 +1221,7 @@ pub async fn run_cli() {
                 new_owner_nft,
                 new_resolved_nft,
                 testnet11,
+                local,
                 fee,
             } => {
                 xchandles_update(
@@ -1204,6 +1230,7 @@ pub async fn run_cli() {
                     new_owner_nft,
                     new_resolved_nft,
                     testnet11,
+                    local,
                     fee,
                 )
                 .await
@@ -1220,6 +1247,7 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                local,
                 fee,
             } => {
                 xchandles_expire(
@@ -1234,6 +1262,7 @@ pub async fn run_cli() {
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    local,
                     fee,
                 )
                 .await

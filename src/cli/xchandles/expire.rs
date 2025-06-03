@@ -13,12 +13,13 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer, SendCat};
 
 use crate::{
     get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
-    sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs, PrecommitCoin,
-    PrecommitLayer, SageClient, Slot, XchandlesExpireAction,
-    XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
-    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
-    XchandlesRefundAction, XchandlesSlotValue,
+    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, quick_sync_xchandles,
+    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db,
+    DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot, XchandlesApiClient,
+    XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
+    XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesFactorPricingPuzzleArgs,
+    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesRefundAction,
+    XchandlesSlotValue,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -34,6 +35,7 @@ pub async fn xchandles_expire(
     testnet11: bool,
     payment_asset_id_str: String,
     payment_cat_base_price_str: String,
+    local: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
     if refund {
@@ -51,7 +53,11 @@ pub async fn xchandles_expire(
 
     print!("First, let's sync the registry... ");
     let mut db = Db::new(false).await?;
-    let mut registry = sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?;
+    let mut registry = if local {
+        sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?
+    } else {
+        quick_sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?
+    };
     println!("done.");
 
     if DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
@@ -74,14 +80,20 @@ pub async fn xchandles_expire(
     }
 
     print!("Fetching slot...");
-    let slot_value_hash = db
-        .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
-        .await?
-        .ok_or(CliError::SlotNotFound("Handle"))?;
-    let slot: Slot<XchandlesSlotValue> = db
-        .get_slot(&mut ctx, launcher_id, 0, slot_value_hash, 0)
-        .await?
-        .ok_or(CliError::SlotNotFound("Handle"))?;
+    let slot = if local {
+        let slot_value_hash = db
+            .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
+            .await?
+            .ok_or(CliError::SlotNotFound("Handle"))?;
+        db.get_slot(&mut ctx, launcher_id, 0, slot_value_hash, 0)
+            .await?
+            .ok_or(CliError::SlotNotFound("Handle"))?
+    } else {
+        let xchandles_api_client = XchandlesApiClient::get(testnet11);
+        xchandles_api_client
+            .get_slot_value(launcher_id, handle.tree_hash().into())
+            .await?
+    };
     println!("done.");
 
     let expire_time = expire_time.unwrap_or(

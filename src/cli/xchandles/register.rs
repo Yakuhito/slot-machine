@@ -14,11 +14,11 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer, SendCat};
 use crate::{
     get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
     hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, print_spend_bundle_to_file,
-    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db,
-    DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
-    XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
-    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesRefundAction,
-    XchandlesRegisterAction, XchandlesSlotValue,
+    quick_sync_xchandles, spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt,
+    CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
+    XchandlesApiClient, XchandlesExponentialPremiumRenewPuzzleArgs,
+    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
+    XchandlesRefundAction, XchandlesRegisterAction, XchandlesSlotValue,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -35,6 +35,7 @@ pub async fn xchandles_register(
     payment_asset_id_str: String,
     payment_cat_base_price_str: String,
     log: bool,
+    local: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
@@ -58,7 +59,11 @@ pub async fn xchandles_register(
 
     print!("First, let's sync the registry... ");
     let mut db = Db::new(false).await?;
-    let mut registry = sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?;
+    let mut registry = if local {
+        sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?
+    } else {
+        quick_sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?
+    };
     println!("done.");
 
     let refund_address = if let Some(provided_refund_address) = refund_address {
@@ -286,20 +291,35 @@ pub async fn xchandles_register(
                     )
                     .into()
             {
-                let Some(slot_value_hash) = db
-                    .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
-                    .await?
-                else {
-                    return Err(CliError::Custom(
+                if local {
+                    let Some(slot_value_hash) = db
+                        .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
+                        .await?
+                    else {
+                        return Err(CliError::Custom(
                                 "Refund not available - precommit uses right CAT & amount & tries to register a new CAT".to_string(),
                             ));
-                };
+                    };
 
-                Some(
-                    db.get_slot::<XchandlesSlotValue>(&mut ctx, launcher_id, 0, slot_value_hash, 0)
+                    Some(
+                        db.get_slot::<XchandlesSlotValue>(
+                            &mut ctx,
+                            launcher_id,
+                            0,
+                            slot_value_hash,
+                            0,
+                        )
                         .await?
                         .unwrap(),
-                )
+                    )
+                } else {
+                    let xchandles_api_client = XchandlesApiClient::get(testnet11);
+                    Some(
+                        xchandles_api_client
+                            .get_slot_value(launcher_id, handle.tree_hash().into())
+                            .await?,
+                    )
+                }
             } else {
                 None
             };
@@ -318,9 +338,15 @@ pub async fn xchandles_register(
                 .0
                 .reserve_fee(1)
         } else {
-            let (left_slot, right_slot) = db
-                .get_xchandles_neighbors(&mut ctx, launcher_id, handle.tree_hash().into())
-                .await?;
+            let (left_slot, right_slot) = if local {
+                db.get_xchandles_neighbors(&mut ctx, launcher_id, handle.tree_hash().into())
+                    .await?
+            } else {
+                let xchandles_api_client = XchandlesApiClient::get(testnet11);
+                xchandles_api_client
+                    .get_neighbors(launcher_id, handle.tree_hash().into())
+                    .await?
+            };
 
             registry
                 .new_action::<XchandlesRegisterAction>()
