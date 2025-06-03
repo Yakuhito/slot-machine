@@ -52,6 +52,7 @@ pub async fn xchandles_continue_launch(
     launcher_id_str: String,
     payment_asset_id_str: String,
     handles_per_spend: usize,
+    start_time: Option<u64>,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -112,7 +113,8 @@ pub async fn xchandles_continue_launch(
 
     // Make sure this is always rounded down to a day
     let constants = registry.info.constants;
-    let start_time = get_last_onchain_timestamp(&client).await? / 8640 * 8640;
+    let start_time = start_time.unwrap_or(get_last_onchain_timestamp(&client).await? / 8640 * 8640);
+    println!("Using start time: {}", start_time);
 
     if i == 0 {
         println!("No handles registered yet - looking for precommitment coins...");

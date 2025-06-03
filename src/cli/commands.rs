@@ -387,6 +387,10 @@ enum XchandlesCliAction {
         #[arg(long)]
         handles_per_spend: usize,
 
+        /// Start timestamp for premine
+        #[arg(long)]
+        start_time: Option<u64>,
+
         /// Use testnet11
         #[arg(long, default_value_t = false)]
         testnet11: bool,
@@ -1050,6 +1054,7 @@ pub async fn run_cli() {
                 launcher_id,
                 payment_asset_id,
                 handles_per_spend,
+                start_time,
                 testnet11,
                 fee,
             } => {
@@ -1057,6 +1062,7 @@ pub async fn run_cli() {
                     launcher_id,
                     payment_asset_id,
                     handles_per_spend,
+                    start_time,
                     testnet11,
                     fee,
                 )
