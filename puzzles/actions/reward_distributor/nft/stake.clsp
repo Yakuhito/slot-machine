@@ -56,7 +56,7 @@
         (nft_lancher_id
             (coinid
                 did_parent_info
-                (curry_hashes_inline SINGLETON_MOD_HASH
+                (curry_hashes SINGLETON_MOD_HASH
                     (sha256tree DID_SINGLETON_STRUCT)
                     did_inner_ph
                 )
@@ -81,11 +81,11 @@
             (list
                 ASSERT_PUZZLE_ANNOUNCEMENT
                 (sha256
-                    (curry_hashes_inline SINGLETON_MOD_HASH
+                    (curry_hashes SINGLETON_MOD_HASH
                         (sha256tree
                             (c SINGLETON_MOD_HASH (c (nft_lancher_id_stager nft_launcher_proof) SINGLETON_LAUNCHER_HASH))
                         )
-                        (curry_hashes_inline NFT_STATE_LAYER_MOD_HASH
+                        (curry_hashes NFT_STATE_LAYER_MOD_HASH
                             (sha256 1 NFT_STATE_LAYER_MOD_HASH)
                             nft_state_hash
                             NFT_STATE_LAYER_INNER_PH
@@ -94,7 +94,7 @@
                     (sha256tree 
                         (list
                             (sha256tree (c Ephemeral_State my_id)) ; nonce
-                            (notarized_payment (curry_hashes_inline NONCE_MOD_HASH
+                            (notarized_payment (curry_hashes NONCE_MOD_HASH
                                 (sha256 1 entry_custody_puzzle_hash)
                                 MY_P2_PUZZLE_HASH
                             ))
@@ -103,7 +103,7 @@
                 )
             )
 
-            (create_slot_inline ENTRY_SLOT_1ST_CURRY_HASH
+            (create_slot ENTRY_SLOT_1ST_CURRY_HASH
                 (sha256 2
                     (sha256 1 entry_custody_puzzle_hash)
                     (sha256 2
