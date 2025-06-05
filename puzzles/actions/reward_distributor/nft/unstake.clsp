@@ -27,39 +27,32 @@
     (
         manager_singleton_inner_puzzle_hash
         entry_payout_amount
-        entry_payout_puzzle_hash
         entry_initial_cumulative_payout .
-        entry_shares
+        entry_custody_puzzle_hash
     )
 )
     (include condition_codes.clib)
     (include curry.clib)
     (include slots.clib)
 
-    (if (= entry_payout_amount (* (- cumulative_payout entry_initial_cumulative_payout) entry_shares))
+    (if (= entry_payout_amount (- cumulative_payout entry_initial_cumulative_payout))
         (c
             (c
-                () ; new ephemeral state
+                Ephemeral_State ; new ephemeral state
                 (c
                     (- total_reserves entry_payout_amount)
                     (c
-                        (- active_shares entry_shares)
+                        (- active_shares 1)
                         Current_State_Rest
                     )
                 ) ; new state
             )
             (list
-                ; manager actually wants us to remove this entry
+                ; owner actually wants us to remove this entry
                 (list RECEIVE_MESSAGE
                     18 ; puzzle hash - puzzle hash
-                    (concat 'r' (sha256 2
-                        (sha256 1 entry_payout_puzzle_hash)
-                        (sha256 1 entry_shares)
-                    )) ; message = 'r' + (sha265tree (entry_payout_puzzle_hash . entry_shares))
-                    (curry_hashes_inline SINGLETON_MOD_HASH
-                        MANAGER_SINGLETON_STRUCT_HASH
-                        manager_singleton_inner_puzzle_hash
-                    )
+                    entry_initial_cumulative_payout ; message
+                    entry_custody_puzzle_hash ; sender
                 )
 
                 ; make sure the reward info is up to date
@@ -71,7 +64,7 @@
                         (sha256 1 entry_payout_puzzle_hash)
                         (sha256 2
                             (sha256 1 entry_initial_cumulative_payout)
-                            (sha256 1 entry_shares)
+                            (sha256 1 1)
                         )
                     ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
                 )
