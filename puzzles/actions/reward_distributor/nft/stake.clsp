@@ -4,7 +4,8 @@
 (mod (
     (@ DID_SINGLETON_STRUCT (SINGLETON_MOD_HASH DID_LAUNCHER_ID . SINGLETON_LAUNCHER_HASH))
     NFT_STATE_LAYER_MOD_HASH
-    NFT_STATE_LAYER_INNER_PH
+    NFT_OWNERSHIP_LAYER_MOD_HASH
+    OFFER_MOD_HASH
     NONCE_MOD_HASH
     MY_P2_PUZZLE_HASH
     ENTRY_SLOT_1ST_CURRY_HASH ; after 1st curry
@@ -25,9 +26,8 @@
     ) ; Truth
     (
         my_id
-        nft_state_hash
+        (nft_metadata_hash nft_metadata_updater_hash_hash . nft_transfer_porgram_hash)
         nft_launcher_proof
-        manager_singleton_inner_puzzle_hash
         entry_custody_puzzle_hash
     )
 )
@@ -87,8 +87,14 @@
                         )
                         (curry_hashes NFT_STATE_LAYER_MOD_HASH
                             (sha256 1 NFT_STATE_LAYER_MOD_HASH)
-                            nft_state_hash
-                            NFT_STATE_LAYER_INNER_PH
+                            nft_metadata_hash
+                            nft_metadata_updater_hash_hash  
+                            (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+                                (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+                                (sha256 1 ())
+                                nft_transfer_porgram_hash
+                                OFFER_MOD_HASH
+                            )
                         )
                     ) ; NFT puzzle hash
                     (sha256tree 

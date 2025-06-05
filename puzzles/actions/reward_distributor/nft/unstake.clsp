@@ -1,5 +1,5 @@
-; remove_entry.clsp by yakuhito
-;; Stops rewarding a specific entry.
+; unstake.clsp by yakuhito
+;; Removes an entry from the reward distributor, returning the NFT to the user.
 
 (mod (
     SINGLETON_MOD_HASH
