@@ -3,6 +3,8 @@
 
 (mod (
     (@ DID_SINGLETON_STRUCT (SINGLETON_MOD_HASH DID_LAUNCHER_ID . SINGLETON_LAUNCHER_HASH))
+    NFT_STATE_LAYER_MOD_HASH
+    NFT_STATE_LAYER_INNER_PH
     NONCE_MOD_HASH
     MY_P2_PUZZLE_HASH
     ENTRY_SLOT_1ST_CURRY_HASH ; after 1st curry
@@ -23,12 +25,14 @@
     ) ; Truth
     (
         my_id
+        nft_state_hash
         nft_launcher_proof
         manager_singleton_inner_puzzle_hash
         entry_custody_puzzle_hash
     )
 )
     (include condition_codes.clib)
+    (include sha256tree.clib)
     (include curry.clib)
     (include slots.clib)
 
@@ -50,7 +54,7 @@
 
     (defun-inline nft_lancher_id_stager (((did_parent_info did_inner_ph . did_amount) . nft_launcher_proof))
         (nft_lancher_id
-            (coin_id
+            (coinid
                 did_parent_info
                 (curry_hashes_inline SINGLETON_MOD_HASH
                     (sha256tree DID_SINGLETON_STRUCT)
@@ -81,7 +85,11 @@
                         (sha256tree
                             (c SINGLETON_MOD_HASH (c (nft_lancher_id_stager nft_launcher_proof) SINGLETON_LAUNCHER_HASH))
                         )
-                        TODO_NFT_INNER_PH
+                        (curry_hashes_inline NFT_STATE_LAYER_MOD_HASH
+                            (sha256 1 NFT_STATE_LAYER_MOD_HASH)
+                            nft_state_hash
+                            NFT_STATE_LAYER_INNER_PH
+                        )
                     ) ; NFT puzzle hash
                     (sha256tree 
                         (list
