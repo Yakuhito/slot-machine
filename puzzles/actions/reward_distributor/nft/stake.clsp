@@ -26,8 +26,10 @@
     ) ; Truth
     (
         my_id
-        (nft_metadata_hash nft_metadata_updater_hash_hash . nft_transfer_porgram_hash)
-        nft_launcher_proof
+        nft_metadata_hash
+        nft_metadata_updater_hash_hash
+        nft_transfer_porgram_hash
+        nft_launcher_proof .
         entry_custody_puzzle_hash
     )
 )
@@ -40,12 +42,12 @@
         (list ph 1 (list ph))
     )
 
-    (defun nft_lancher_id (did_coin_id (proof . nft_launcher_proof_rest))
-        (if nft_launcher_proof_rest
+    (defun nft_lancher_id (did_coin_id (@ nft_launcher_proof ((proof_puzzle_hash . proof_amount) . nft_launcher_proof_rest)))
+        (if nft_launcher_proof
             (coinid
                 (nft_lancher_id did_coin_id nft_launcher_proof_rest)
-                (f proof)
-                (r proof)
+                proof_puzzle_hash
+                proof_amount
             )
             ; else
             did_coin_id
