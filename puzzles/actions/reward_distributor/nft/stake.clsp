@@ -66,6 +66,16 @@
         )
     )
 
+    (defun add_announcement_assert_and_create_security_condition (ann conditions)
+        (c
+            (list ASSERT_PUZZLE_ANNOUNCEMENT ann)
+            (c
+                (list CREATE_PUZZLE_ANNOUNCEMENT ann)
+                conditions
+            )
+        )
+    )
+
     (c
         (list
             (+ Ephemeral_State 1)
@@ -74,54 +84,51 @@
             Reward_Info
             Round_Time_Info
         ) ; new state
-        (list
-            (list ASSERT_MY_COIN_ID my_id)
-
-            ; NFT has been locked
-            (list
-                ASSERT_PUZZLE_ANNOUNCEMENT
-                (sha256
-                    (curry_hashes SINGLETON_MOD_HASH
-                        (sha256tree
-                            (c SINGLETON_MOD_HASH (c (nft_lancher_id_stager nft_launcher_proof) SINGLETON_LAUNCHER_HASH))
+        (add_announcement_assert_and_create_security_condition
+            (sha256
+                (curry_hashes SINGLETON_MOD_HASH
+                    (sha256tree
+                        (c SINGLETON_MOD_HASH (c (nft_lancher_id_stager nft_launcher_proof) SINGLETON_LAUNCHER_HASH))
+                    )
+                    (curry_hashes NFT_STATE_LAYER_MOD_HASH
+                        (sha256 1 NFT_STATE_LAYER_MOD_HASH)
+                        nft_metadata_hash
+                        nft_metadata_updater_hash_hash  
+                        (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+                            (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+                            (sha256 1 ())
+                            nft_transfer_porgram_hash
+                            OFFER_MOD_HASH
                         )
-                        (curry_hashes NFT_STATE_LAYER_MOD_HASH
-                            (sha256 1 NFT_STATE_LAYER_MOD_HASH)
-                            nft_metadata_hash
-                            nft_metadata_updater_hash_hash  
-                            (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
-                                (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
-                                (sha256 1 ())
-                                nft_transfer_porgram_hash
-                                OFFER_MOD_HASH
-                            )
-                        )
-                    ) ; NFT puzzle hash
-                    (sha256tree 
-                        (list
-                            (sha256tree (c Ephemeral_State my_id)) ; nonce
-                            (notarized_payment (curry_hashes NONCE_MOD_HASH
-                                (sha256 1 entry_custody_puzzle_hash)
-                                MY_P2_PUZZLE_HASH
-                            ))
-                        )
+                    )
+                ) ; NFT puzzle hash
+                (sha256tree 
+                    (list
+                        (sha256tree (c Ephemeral_State my_id)) ; nonce
+                        (notarized_payment (curry_hashes NONCE_MOD_HASH
+                            (sha256 1 entry_custody_puzzle_hash)
+                            MY_P2_PUZZLE_HASH
+                        ))
                     )
                 )
             )
+            (list
+                (list ASSERT_MY_COIN_ID my_id)
 
-            (create_slot ENTRY_SLOT_1ST_CURRY_HASH
-                (sha256 2
-                    (sha256 1 entry_custody_puzzle_hash)
+                (create_slot ENTRY_SLOT_1ST_CURRY_HASH
                     (sha256 2
-                        (sha256 1 cumulative_payout)
-                        (sha256 1 1)
-                    )
-                ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
-                entry_custody_puzzle_hash
-            )
+                        (sha256 1 entry_custody_puzzle_hash)
+                        (sha256 2
+                            (sha256 1 cumulative_payout)
+                            (sha256 1 1)
+                        )
+                    ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
+                    entry_custody_puzzle_hash
+                )
 
-            ; make sure the reward info is up to date
-            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ last_update MAX_SECONDS_OFFSET))
+                ; make sure the reward info is up to date
+                (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ last_update MAX_SECONDS_OFFSET))
+            )
         ) ; conditions
     )
 )

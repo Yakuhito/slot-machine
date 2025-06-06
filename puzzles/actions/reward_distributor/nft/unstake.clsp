@@ -94,7 +94,7 @@
                 ; owner actually wants us to remove this entry
                 (list RECEIVE_MESSAGE
                     18 ; puzzle hash - puzzle hash
-                    entry_initial_cumulative_payout ; message
+                    nft_launcher_id ; message
                     entry_custody_puzzle_hash ; sender
                 )
 
