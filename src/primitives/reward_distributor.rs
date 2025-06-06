@@ -265,6 +265,24 @@ impl RewardDistributor {
         Ok(state.1)
     }
 
+    pub fn get_latest_pending_ephemeral_state(
+        &self,
+        allocator: &mut Allocator,
+    ) -> Result<u64, DriverError> {
+        let mut state = (0, self.info.state);
+
+        for action in self.pending_items.pending_actions.iter() {
+            let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
+
+            let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
+            (state, _) = <match_tuple!((u64, RewardDistributorState), NodePtr)>::from_clvm(
+                allocator, output,
+            )?;
+        }
+
+        Ok(state.0)
+    }
+
     pub fn get_pending_items_from_spend(
         &self,
         ctx: &mut SpendContext,
