@@ -45,7 +45,7 @@
     )
         (c
             (c 
-                () ; new ephemeral state
+                Ephemeral_State ; new ephemeral state
                 (c
                     (- total_reserves entry_payout_amount)
                     Current_State_Rest

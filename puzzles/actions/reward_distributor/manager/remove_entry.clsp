@@ -39,7 +39,7 @@
     (if (= entry_payout_amount (* (- cumulative_payout entry_initial_cumulative_payout) entry_shares))
         (c
             (c
-                () ; new ephemeral state
+                Ephemeral_State ; new ephemeral state
                 (c
                     (- total_reserves entry_payout_amount)
                     (c

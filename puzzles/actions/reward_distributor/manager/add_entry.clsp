@@ -32,7 +32,7 @@
 
     (c
         (list
-            ()
+            Ephemeral_State
             total_reserves
             (+ active_shares entry_shares)
             Reward_Info

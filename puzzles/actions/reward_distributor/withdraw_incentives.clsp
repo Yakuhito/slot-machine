@@ -34,7 +34,7 @@
     
     (c
         (c
-            () ; new ephemeral state
+            Ephemeral_State ; new ephemeral state
             (c
                 (- total_reserves 
                     (if (= withdrawal_share (/ (* WITHDRAWAL_SHARE_BPS committed_value) 10000)) withdrawal_share (x))
