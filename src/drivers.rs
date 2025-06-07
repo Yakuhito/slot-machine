@@ -946,11 +946,12 @@ mod tests {
         RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
         RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
         RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
-        RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
-        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
-        XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
-        XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction,
-        XchandlesRegisterAction, XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
+        RewardDistributorUnstakeAction, RewardDistributorWithdrawIncentivesAction, Slot,
+        SpendContextExt, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
+        XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesExtendAction,
+        XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesOracleAction,
+        XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRegisterAction,
+        XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -2649,7 +2650,7 @@ mod tests {
         let nft_bls = sim.bls(1);
 
         // add the 1st entry/NFT before reward epoch ('first epoch') begins
-        let (entry1_slot, nft1) = if manager_type == RewardDistributorType::Manager {
+        let (entry1_slot, _nft1) = if manager_type == RewardDistributorType::Manager {
             let (manager_conditions, entry1_slot) = registry
                 .new_action::<RewardDistributorAddEntryAction>()
                 .spend(
@@ -3098,8 +3099,8 @@ mod tests {
         );
 
         // add second entry OR 2 more NFTs
-        let nft2_bls = sim.bls(1);
-        let nft3_bls = sim.bls(1);
+        let nft2_bls = sim.bls(0);
+        let nft3_bls = sim.bls(0);
         let (entry2_slot, other_nft2_info) = if manager_type == RewardDistributorType::Manager {
             let (manager_conditions, entry2_slot) = registry
                 .new_action::<RewardDistributorAddEntryAction>()
@@ -3167,9 +3168,7 @@ mod tests {
                 2,
             )?;
 
-            println!("before mints"); // todo: debug
             benchmark.add_spends(ctx, &mut sim, "mint_2_nfts", &[])?;
-            println!("after mints"); // todo: debug
 
             let Proof::Lineage(did_proof) = manager_or_did_singleton_proof else {
                 panic!("did_proof is not a lineage proof");
@@ -3235,20 +3234,17 @@ mod tests {
             );
             offer3_nft.spend(ctx, nft3_inner_spend)?;
 
-            println!("before spends"); // todo: debug
-                                       // sim.spend_coins(spends, &[nft2_bls.sk.clone(), nft3_bls.sk.clone()])?;
+            // sim.spend_coins(spends, &[nft2_bls.sk.clone(), nft3_bls.sk.clone()])?;
             benchmark.add_spends(
                 ctx,
                 &mut sim,
                 "stake_2_nfts",
                 &[nft2_bls.sk.clone(), nft3_bls.sk.clone()],
             )?;
-            println!("after spends"); // todo: debug
 
             (entry2_slot, Some((entry3_slot, locked_nft2, locked_nft3)))
         };
         assert_eq!(registry.info.state.active_shares, 3);
-        println!("got here, yay!"); // todo: debug
 
         // sync to 75% (so + 25%)
         let initial_reward_info = registry.info.state.round_reward_info;
@@ -3276,33 +3272,77 @@ mod tests {
 
         // remove 2nd entry/the 2 NFTs
         let reserve_cat = registry.reserve.to_cat();
-        let (remove_entry_manager_conditions, entry2_payout_amount) = registry
-            .new_action::<RewardDistributorRemoveEntryAction>()
-            .spend(
+        if let Some((entry3_slot, locked_nft2, locked_nft3)) = other_nft2_info {
+            let nft2_return_coin_id = locked_nft2
+                .wrapped_child(nft2_bls.puzzle_hash, None, locked_nft2.info.metadata)
+                .coin
+                .coin_id();
+            let nft3_return_coin_id = locked_nft3
+                .wrapped_child(nft3_bls.puzzle_hash, None, locked_nft3.info.metadata)
+                .coin
+                .coin_id();
+
+            let (custody2_conds, payout2_amount) = registry
+                .new_action::<RewardDistributorUnstakeAction>()
+                .spend(ctx, &mut registry, entry2_slot, locked_nft2)?;
+            let (custody3_conds, payout3_amount) = registry
+                .new_action::<RewardDistributorUnstakeAction>()
+                .spend(ctx, &mut registry, entry3_slot, locked_nft3)?;
+
+            StandardLayer::new(nft2_bls.pk).spend(ctx, nft2_bls.coin, custody2_conds)?;
+            StandardLayer::new(nft3_bls.pk).spend(ctx, nft3_bls.coin, custody3_conds)?;
+
+            registry = registry.finish_spend(ctx, vec![])?;
+            // sim.spend_coins(ctx.take(), &[])?;
+            benchmark.add_spends(ctx, &mut sim, "unstake_2_nfts", &[])?;
+
+            let payout_coin_id2 = reserve_cat
+                .wrapped_child(nft2_bls.puzzle_hash, payout2_amount)
+                .coin
+                .coin_id();
+            let payout_coin_id3 = reserve_cat
+                .wrapped_child(nft3_bls.puzzle_hash, payout3_amount)
+                .coin
+                .coin_id();
+
+            assert!(sim.coin_state(payout_coin_id2).is_some());
+            assert!(sim.coin_state(payout_coin_id3).is_some());
+            assert!(sim
+                .coin_state(entry3_slot.coin.coin_id())
+                .unwrap()
+                .spent_height
+                .is_some());
+            assert!(sim.coin_state(nft2_return_coin_id).is_some());
+            assert!(sim.coin_state(nft3_return_coin_id).is_some());
+        } else {
+            let (remove_entry_manager_conditions, entry2_payout_amount) = registry
+                .new_action::<RewardDistributorRemoveEntryAction>()
+                .spend(
+                    ctx,
+                    &mut registry,
+                    entry2_slot,
+                    manager_or_did_singleton_inner_puzzle_hash,
+                )?;
+
+            let (_manager_coin, _manager_singleton_proof) = spend_manager_singleton(
                 ctx,
-                &mut registry,
-                entry2_slot,
-                manager_or_did_singleton_inner_puzzle_hash,
+                manager_or_did_coin,
+                manager_or_did_singleton_proof,
+                manager_or_did_singleton_puzzle,
+                remove_entry_manager_conditions,
             )?;
 
-        let (_manager_coin, _manager_singleton_proof) = spend_manager_singleton(
-            ctx,
-            manager_or_did_coin,
-            manager_or_did_singleton_proof,
-            manager_or_did_singleton_puzzle,
-            remove_entry_manager_conditions,
-        )?;
+            registry = registry.finish_spend(ctx, vec![])?;
+            // sim.spend_coins(ctx.take(), &[])?;
+            benchmark.add_spends(ctx, &mut sim, "remove_entry", &[])?;
+            let payout_coin_id = reserve_cat
+                .wrapped_child(entry2_bls.puzzle_hash, entry2_payout_amount)
+                .coin
+                .coin_id();
 
-        registry = registry.finish_spend(ctx, vec![])?;
-        // sim.spend_coins(ctx.take(), &[])?;
-        benchmark.add_spends(ctx, &mut sim, "remove_entry", &[])?;
-        let payout_coin_id = reserve_cat
-            .wrapped_child(entry2_bls.puzzle_hash, entry2_payout_amount)
-            .coin
-            .coin_id();
-
+            assert!(sim.coin_state(payout_coin_id).is_some());
+        }
         assert!(registry.info.state.active_shares == 1);
-        assert!(sim.coin_state(payout_coin_id).is_some());
         assert!(sim
             .coin_state(entry2_slot.coin.coin_id())
             .unwrap()
