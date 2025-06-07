@@ -13,12 +13,12 @@ use chia_wallet_sdk::{
     prelude::Memos,
     types::Conditions,
 };
-use clvm_traits::{clvm_list, FromClvm, ToClvm};
+use clvm_traits::{clvm_quote, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    Action, P2DelegatedBySingletonLayer, P2DelegatedBySingletonLayerArgs,
+    Action, NonceWrapperArgs, P2DelegatedBySingletonLayer, P2DelegatedBySingletonLayerArgs,
     P2DelegatedBySingletonLayerSolution, RewardDistributor, RewardDistributorConstants,
     RewardDistributorEntrySlotValue, RewardDistributorSlotNonce, Slot, SpendContextExt,
     NONCE_WRAPPER_PUZZLE_HASH,
@@ -138,17 +138,20 @@ impl RewardDistributorUnstakeAction {
         // don't forget about the nonce wrapper!
         let nft_inner_puzzle = CurriedProgram {
             program: ctx.nonce_wrapper_puzzle()?,
-            args: clvm_list!(entry_slot.info.value.payout_puzzle_hash, nft_inner_puzzle),
+            args: NonceWrapperArgs::<Bytes32, NodePtr> {
+                nonce: entry_slot.info.value.payout_puzzle_hash,
+                inner_puzzle: nft_inner_puzzle,
+            },
         }
         .to_clvm(ctx)
         .map_err(DriverError::ToClvm)?;
 
         let hint = Memos::hint(ctx, entry_slot.info.value.payout_puzzle_hash)?;
-        let delegated_puzzle = ctx.alloc(&Conditions::new().create_coin(
+        let delegated_puzzle = ctx.alloc(&clvm_quote!(Conditions::new().create_coin(
             entry_slot.info.value.payout_puzzle_hash,
             1,
             Some(hint),
-        ))?;
+        )))?;
         let nft_inner_solution = my_p2.construct_solution(
             ctx,
             P2DelegatedBySingletonLayerSolution::<NodePtr, NodePtr> {
@@ -157,6 +160,7 @@ impl RewardDistributorUnstakeAction {
                 delegated_solution: NodePtr::NIL,
             },
         )?;
+
         locked_nft.spend(ctx, Spend::new(nft_inner_puzzle, nft_inner_solution))?;
 
         Ok((remove_entry_conditions, entry_payout_amount))
