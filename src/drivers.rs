@@ -3234,6 +3234,7 @@ mod tests {
             );
             offer3_nft.spend(ctx, nft3_inner_spend)?;
 
+            sim.pass_time(250);
             // sim.spend_coins(spends, &[nft2_bls.sk.clone(), nft3_bls.sk.clone()])?;
             benchmark.add_spends(
                 ctx,
