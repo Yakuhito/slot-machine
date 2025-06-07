@@ -939,19 +939,19 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        benchmarker::tests::Benchmark, print_spend_bundle_to_file, CatNftMetadata,
-        CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction, CatalogSlotValue,
-        DelegatedStateAction, DelegatedStateActionSolution, IntermediaryCoinProof,
-        NftLauncherProof, PrecommitCoin, RewardDistributorAddEntryAction,
-        RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
-        RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
-        RewardDistributorRemoveEntryAction, RewardDistributorStakeAction,
-        RewardDistributorSyncAction, RewardDistributorType, RewardDistributorUnstakeAction,
-        RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
-        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
-        XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
-        XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction,
-        XchandlesRegisterAction, XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
+        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
+        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
+        DelegatedStateActionSolution, IntermediaryCoinProof, NftLauncherProof, PrecommitCoin,
+        RewardDistributorAddEntryAction, RewardDistributorAddIncentivesAction,
+        RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
+        RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
+        RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
+        RewardDistributorUnstakeAction, RewardDistributorWithdrawIncentivesAction, Slot,
+        SpendContextExt, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
+        XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesExtendAction,
+        XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesOracleAction,
+        XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRegisterAction,
+        XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -3295,13 +3295,13 @@ mod tests {
 
             registry = registry.finish_spend(ctx, vec![])?;
 
-            // todo: debug -----------------
-            let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            sim.spend_coins(spends, &[nft2_bls.sk.clone(), nft3_bls.sk.clone()])?;
-            // todo: debug -----------------
-            // benchmark.add_spends(ctx, &mut sim, "unstake_2_nfts", &[])?;
-            // todo: debug /\
+            // sim.spend_coins(spends, &[nft2_bls.sk.clone(), nft3_bls.sk.clone()])?;
+            benchmark.add_spends(
+                ctx,
+                &mut sim,
+                "unstake_2_nfts",
+                &[nft2_bls.sk.clone(), nft3_bls.sk.clone()],
+            )?;
 
             let payout_coin_id2 = reserve_cat
                 .wrapped_child(nft2_bls.puzzle_hash, payout2_amount)
@@ -3511,7 +3511,13 @@ mod tests {
         benchmark.add_spends(ctx, &mut sim, "initiate_payout", &[])?;
 
         let payout_coin_id = reserve_cat
-            .wrapped_child(entry1_bls.puzzle_hash, withdrawal_amount)
+            .wrapped_child(
+                match manager_type {
+                    RewardDistributorType::Manager => entry1_bls.puzzle_hash,
+                    RewardDistributorType::Nft => nft_bls.puzzle_hash,
+                },
+                withdrawal_amount,
+            )
             .coin
             .coin_id();
 

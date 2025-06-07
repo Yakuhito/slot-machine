@@ -103,7 +103,7 @@ pub async fn xchandles_expire(
         payment_cat_base_price,
         1000,
     )?;
-    println!("Original slot expiration: {}", slot.info.value.expiration); // todo: debug
+    println!("Original slot expiration: {}", slot.info.value.expiration);
     let mut payment_cat_amount = if refund && slot.info.value.expiration > expire_time {
         0
     } else {
