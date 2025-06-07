@@ -88,7 +88,7 @@ impl RewardDistributorUnstakeAction {
 
         // compute message that the custody puzzle needs to send
         let unstake_message: Bytes32 = locked_nft.info.launcher_id;
-        let mut unstake_message: Vec<u8> = unstake_message.to_vec();
+        let unstake_message: Vec<u8> = unstake_message.to_vec();
 
         let remove_entry_conditions = Conditions::new()
             .send_message(
@@ -142,10 +142,11 @@ impl RewardDistributorUnstakeAction {
         .to_clvm(ctx)
         .map_err(DriverError::ToClvm)?;
 
+        let hint = Memos::hint(ctx, entry_slot.info.value.payout_puzzle_hash)?;
         let delegated_puzzle = ctx.alloc(&Conditions::new().create_coin(
             entry_slot.info.value.payout_puzzle_hash,
             1,
-            Some(Memos::hint(ctx, entry_slot.info.value.payout_puzzle_hash)?),
+            Some(hint),
         ))?;
         let nft_inner_solution = my_p2.construct_solution(
             ctx,

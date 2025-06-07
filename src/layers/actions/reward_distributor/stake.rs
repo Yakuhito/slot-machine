@@ -4,14 +4,14 @@ use chia::{
     puzzles::singleton::SingletonStruct,
 };
 use chia_puzzle_types::{
-    nft::NftOwnershipLayerArgs,
+    nft::NftRoyaltyTransferPuzzleArgs,
     offer::{NotarizedPayment, Payment},
     singleton::SingletonArgs,
     LineageProof,
 };
 use chia_puzzles::{NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_HASH, SETTLEMENT_PAYMENT_HASH};
 use chia_wallet_sdk::{
-    driver::{DriverError, Spend, SpendContext},
+    driver::{DriverError, HashedPtr, Nft, Spend, SpendContext},
     types::{announcement_id, Conditions},
 };
 use clvm_traits::{clvm_list, clvm_tuple, FromClvm, ToClvm};
@@ -84,9 +84,7 @@ impl RewardDistributorStakeAction {
         self,
         ctx: &mut SpendContext,
         distributor: &mut RewardDistributor,
-        nft_metadata_hash: Bytes32,
-        nft_metadata_updater_hash_hash: Bytes32,
-        nft_transfer_porgram_hash: Bytes32,
+        current_nft: Nft<HashedPtr>,
         nft_launcher_proof: NftLauncherProof,
         entry_custody_puzzle_hash: Bytes32,
         my_id: Bytes32,
@@ -135,31 +133,26 @@ impl RewardDistributorStakeAction {
                 Coin::new(nft_launcher_id, proof.full_puzzle_hash, proof.amount).coin_id();
         }
 
-        let nft_state_layer_mod_hash: Bytes32 = NFT_STATE_LAYER_HASH.into();
-        let nft_puzzle_hash = SingletonArgs::curry_tree_hash(
-            nft_launcher_id,
-            CurriedProgram {
-                program: TreeHash::new(NFT_STATE_LAYER_HASH),
-                args: clvm_list!(
-                    nft_state_layer_mod_hash,
-                    nft_metadata_hash,
-                    nft_metadata_updater_hash_hash,
-                    NftOwnershipLayerArgs::curry_tree_hash(
-                        None,
-                        nft_transfer_porgram_hash.into(),
-                        SETTLEMENT_PAYMENT_HASH.into(),
-                    ),
-                ),
-            }
-            .tree_hash(),
-        );
-
         // spend self
+        let nft = current_nft.wrapped_child(
+            SETTLEMENT_PAYMENT_HASH.into(),
+            None,
+            current_nft.info.metadata,
+        );
         let action_solution = ctx.alloc(&RewardDistributorStakeActionSolution {
             my_id,
-            nft_metadata_hash,
-            nft_metadata_updater_hash_hash,
-            nft_transfer_porgram_hash,
+            nft_metadata_hash: nft.info.metadata.tree_hash().into(),
+            nft_metadata_updater_hash_hash: nft
+                .info
+                .metadata_updater_puzzle_hash
+                .tree_hash()
+                .into(),
+            nft_transfer_porgram_hash: NftRoyaltyTransferPuzzleArgs::curry_tree_hash(
+                nft.info.launcher_id,
+                nft.info.royalty_puzzle_hash,
+                nft.info.royalty_ten_thousandths,
+            )
+            .into(),
             nft_launcher_proof,
             entry_custody_puzzle_hash,
         })?;
@@ -172,7 +165,7 @@ impl RewardDistributorStakeAction {
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             Conditions::new()
-                .assert_puzzle_announcement(announcement_id(nft_puzzle_hash.into(), msg)),
+                .assert_puzzle_announcement(announcement_id(nft.coin.puzzle_hash, msg)),
             notarized_payment,
             distributor
                 .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
