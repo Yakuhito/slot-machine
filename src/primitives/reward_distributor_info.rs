@@ -15,8 +15,8 @@ use crate::{
     ReserveFinalizer2ndCurryArgs, RewardDistributorAddEntryAction,
     RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
     RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
-    RewardDistributorRemoveEntryAction, RewardDistributorSyncAction,
-    RewardDistributorWithdrawIncentivesAction, SpendContextExt,
+    RewardDistributorRemoveEntryAction, RewardDistributorStakeAction, RewardDistributorSyncAction,
+    RewardDistributorUnstakeAction, RewardDistributorWithdrawIncentivesAction, SpendContextExt,
     RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM_HASH,
 };
 
@@ -167,9 +167,6 @@ impl RewardDistributorInfo {
             RewardDistributorAddIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            RewardDistributorAddEntryAction::from_constants(constants)
-                .tree_hash()
-                .into(),
             RewardDistributorCommitIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
@@ -179,15 +176,36 @@ impl RewardDistributorInfo {
             RewardDistributorNewEpochAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            RewardDistributorRemoveEntryAction::from_constants(constants)
-                .tree_hash()
-                .into(),
             RewardDistributorSyncAction::from_constants(constants)
                 .tree_hash()
                 .into(),
             RewardDistributorWithdrawIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
+            match constants.reward_distributor_type {
+                RewardDistributorType::Manager => {
+                    RewardDistributorAddEntryAction::from_constants(constants)
+                        .tree_hash()
+                        .into()
+                }
+                RewardDistributorType::Nft => {
+                    RewardDistributorStakeAction::from_constants(constants)
+                        .tree_hash()
+                        .into()
+                }
+            },
+            match constants.reward_distributor_type {
+                RewardDistributorType::Manager => {
+                    RewardDistributorRemoveEntryAction::from_constants(constants)
+                        .tree_hash()
+                        .into()
+                }
+                RewardDistributorType::Nft => {
+                    RewardDistributorUnstakeAction::from_constants(constants)
+                        .tree_hash()
+                        .into()
+                }
+            },
         ]
     }
 

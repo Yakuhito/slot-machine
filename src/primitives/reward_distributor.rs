@@ -19,6 +19,7 @@ use crate::{
     ReserveFinalizerSolution, RewardDistributorAddEntryAction,
     RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
     RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
+    RewardDistributorStakeAction, RewardDistributorUnstakeAction,
     RewardDistributorWithdrawIncentivesAction, Slot, SlotInfo, SlotProof,
 };
 
@@ -36,7 +37,7 @@ pub struct RewardDistributorPendingItems {
 
     pub pending_reward_slot_values: Vec<RewardDistributorRewardSlotValue>,
     pub pending_commitment_slot_values: Vec<RewardDistributorCommitmentSlotValue>,
-    pub pending_mirror_slot_values: Vec<RewardDistributorEntrySlotValue>,
+    pub pending_entry_slot_values: Vec<RewardDistributorEntrySlotValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -297,7 +298,7 @@ impl RewardDistributor {
         let mut actions: Vec<Spend> = vec![];
         let mut reward_slot_values: Vec<RewardDistributorRewardSlotValue> = vec![];
         let mut commitment_slot_values: Vec<RewardDistributorCommitmentSlotValue> = vec![];
-        let mut mirror_slot_values: Vec<RewardDistributorEntrySlotValue> = vec![];
+        let mut entry_slot_values: Vec<RewardDistributorEntrySlotValue> = vec![];
         let mut spent_slots: Vec<(RewardDistributorSlotNonce, Bytes32)> = vec![];
 
         let new_epoch_action =
@@ -315,6 +316,12 @@ impl RewardDistributor {
         let remove_entry_action =
             RewardDistributorRemoveEntryAction::from_constants(&self.info.constants);
         let remove_entry_hash = remove_entry_action.tree_hash();
+
+        let stake_action = RewardDistributorStakeAction::from_constants(&self.info.constants);
+        let stake_hash = stake_action.tree_hash();
+
+        let unstake_action = RewardDistributorUnstakeAction::from_constants(&self.info.constants);
+        let unstake_hash = unstake_action.tree_hash();
 
         let withdraw_incentives_action =
             RewardDistributorWithdrawIncentivesAction::from_constants(&self.info.constants);
@@ -356,7 +363,13 @@ impl RewardDistributor {
                 reward_slot_values.extend(rews);
                 spent_slots.push(spent_slot);
             } else if raw_action_hash == add_entry_hash {
-                mirror_slot_values.push(add_entry_action.get_slot_value_from_solution(
+                entry_slot_values.push(add_entry_action.get_slot_value_from_solution(
+                    ctx,
+                    &current_state.1,
+                    raw_action.solution,
+                )?);
+            } else if raw_action_hash == stake_hash {
+                entry_slot_values.push(stake_action.get_slot_value_from_solution(
                     ctx,
                     &current_state.1,
                     raw_action.solution,
@@ -365,6 +378,10 @@ impl RewardDistributor {
                 spent_slots.push(
                     remove_entry_action
                         .get_spent_slot_value_from_solution(ctx, raw_action.solution)?,
+                );
+            } else if raw_action_hash == unstake_hash {
+                spent_slots.push(
+                    unstake_action.get_spent_slot_value_from_solution(ctx, raw_action.solution)?,
                 );
             } else if raw_action_hash == withdraw_incentives_hash {
                 let (rew, spnt) = withdraw_incentives_action.get_slot_value_from_solution(
@@ -382,7 +399,7 @@ impl RewardDistributor {
                     raw_action.solution,
                 )?;
 
-                mirror_slot_values.push(mirr);
+                entry_slot_values.push(mirr);
                 spent_slots.push(spent);
             }
         }
@@ -392,7 +409,7 @@ impl RewardDistributor {
             pending_spent_slots: spent_slots,
             pending_reward_slot_values: reward_slot_values,
             pending_commitment_slot_values: commitment_slot_values,
-            pending_mirror_slot_values: mirror_slot_values,
+            pending_entry_slot_values: entry_slot_values,
         })
     }
 }
