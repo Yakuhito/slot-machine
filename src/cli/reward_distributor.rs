@@ -10,6 +10,7 @@ mod sign_entry_update;
 mod stake;
 mod sync;
 mod sync_distributor;
+mod unstake;
 mod view;
 
 pub use add_rewards::*;
@@ -24,4 +25,5 @@ pub use sign_entry_update::*;
 pub use stake::*;
 pub use sync::*;
 pub use sync_distributor::*;
+pub use unstake::*;
 pub use view::*;

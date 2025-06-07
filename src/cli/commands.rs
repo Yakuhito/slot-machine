@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::reward_distributor_stake;
+use crate::{reward_distributor_stake, reward_distributor_unstake};
 
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
@@ -1502,7 +1502,7 @@ pub async fn run_cli() {
                 custody_puzzle_hash,
                 testnet11,
                 fee,
-            } => todo!("To be implemented"), // todo: debug
+            } => reward_distributor_unstake(launcher_id, custody_puzzle_hash, testnet11, fee).await,
             RewardDistributorCliAction::AddRewards {
                 launcher_id,
                 reward_amount,
