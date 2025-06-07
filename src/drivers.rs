@@ -939,13 +939,14 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
-        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
-        DelegatedStateActionSolution, IntermediaryCoinProof, NftLauncherProof, PrecommitCoin,
-        RewardDistributorAddEntryAction, RewardDistributorAddIncentivesAction,
-        RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
-        RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
-        RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
+        benchmarker::tests::Benchmark, print_spend_bundle_to_file, CatNftMetadata,
+        CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction, CatalogSlotValue,
+        DelegatedStateAction, DelegatedStateActionSolution, IntermediaryCoinProof,
+        NftLauncherProof, PrecommitCoin, RewardDistributorAddEntryAction,
+        RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
+        RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
+        RewardDistributorRemoveEntryAction, RewardDistributorStakeAction,
+        RewardDistributorSyncAction, RewardDistributorType,
         RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
@@ -2649,7 +2650,7 @@ mod tests {
         let nft_bls = sim.bls(1);
 
         // add the 1st entry/NFT before reward epoch ('first epoch') begins
-        let (entry1_slot, nft1) = if manager_type == RewardDistributorType::Manager {
+        let (entry1_slot, _nft1) = if manager_type == RewardDistributorType::Manager {
             let (manager_conditions, entry1_slot) = registry
                 .new_action::<RewardDistributorAddEntryAction>()
                 .spend(
@@ -2674,7 +2675,9 @@ mod tests {
 
             (entry1_slot, None)
         } else {
-            let nft_launcher = Launcher::new(manager_or_did_coin.coin_id(), 0);
+            println!("here"); // todo: debug
+            let nft_launcher =
+                Launcher::new(manager_or_did_coin.coin_id(), 0).with_singleton_amount(1);
             let nft_launcher_coin = nft_launcher.coin();
             let meta = ctx.alloc(&"nft1")?;
             let meta = HashedPtr::from_ptr(ctx, meta);
@@ -2701,7 +2704,16 @@ mod tests {
                 1,
             )?;
 
+            println!("here 2"); // todo: debug
+                                // todo: debug ---------
+            let spends = ctx.take();
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
+            spends.into_iter().for_each(|s| {
+                ctx.insert(s);
+            });
+            // todo: debug ---------
             benchmark.add_spends(ctx, &mut sim, "mint_nft", &[])?;
+            println!("minted nft"); // todo: debug
 
             let Proof::Lineage(did_proof) = manager_or_did_singleton_proof else {
                 panic!("did_proof is not a lineage proof");
