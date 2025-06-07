@@ -3,27 +3,25 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
-use chia_puzzle_types::{
-    nft::{NftOwnershipLayerArgs, NftRoyaltyTransferPuzzleArgs},
-    offer::{NotarizedPayment, Payment},
-    singleton::SingletonArgs,
-};
+use chia_puzzle_types::nft::NftRoyaltyTransferPuzzleArgs;
 use chia_puzzles::{
-    NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_HASH, SETTLEMENT_PAYMENT_HASH,
-    SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH,
+    NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_HASH, SINGLETON_LAUNCHER_HASH,
+    SINGLETON_TOP_LAYER_V1_1_HASH,
 };
 use chia_wallet_sdk::{
-    driver::{DriverError, HashedPtr, Nft, NftStateLayer, SingletonLayer, Spend, SpendContext},
-    types::{announcement_id, Conditions},
+    driver::{DriverError, HashedPtr, Layer, Nft, Spend, SpendContext},
+    prelude::Memos,
+    types::Conditions,
 };
-use clvm_traits::{clvm_list, clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{clvm_list, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    Action, P2DelegatedBySingletonLayerArgs, RewardDistributor, RewardDistributorConstants,
-    RewardDistributorEntrySlotValue, RewardDistributorSlotNonce, RewardDistributorState, Slot,
-    SpendContextExt, NONCE_WRAPPER_PUZZLE_HASH,
+    Action, P2DelegatedBySingletonLayer, P2DelegatedBySingletonLayerArgs,
+    P2DelegatedBySingletonLayerSolution, RewardDistributor, RewardDistributorConstants,
+    RewardDistributorEntrySlotValue, RewardDistributorSlotNonce, Slot, SpendContextExt,
+    NONCE_WRAPPER_PUZZLE_HASH,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,14 +125,36 @@ impl RewardDistributorUnstakeAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
+        let registry_inner_puzzle_hash = distributor.info.inner_puzzle_hash();
         distributor.insert(Spend::new(action_puzzle, action_solution));
 
         // spend NFT
+        let my_p2 = P2DelegatedBySingletonLayer::new(
+            SingletonStruct::new(self.launcher_id).tree_hash().into(),
+            1,
+        );
+        let nft_inner_puzzle = my_p2.construct_puzzle(ctx)?;
+        // don't forget about the nonce wrapper!
         let nft_inner_puzzle = CurriedProgram {
             program: ctx.nonce_wrapper_puzzle()?,
-            args: clvm_list!(entry_slot.info.value.payout_puzzle_hash, todo_p2_puzzle),
-        };
-        let nft_inner_solution = todo;
+            args: clvm_list!(entry_slot.info.value.payout_puzzle_hash, nft_inner_puzzle),
+        }
+        .to_clvm(ctx)
+        .map_err(DriverError::ToClvm)?;
+
+        let delegated_puzzle = ctx.alloc(&Conditions::new().create_coin(
+            entry_slot.info.value.payout_puzzle_hash,
+            1,
+            Some(Memos::hint(ctx, entry_slot.info.value.payout_puzzle_hash)?),
+        ))?;
+        let nft_inner_solution = my_p2.construct_solution(
+            ctx,
+            P2DelegatedBySingletonLayerSolution::<NodePtr, NodePtr> {
+                singleton_inner_puzzle_hash: registry_inner_puzzle_hash.into(),
+                delegated_puzzle,
+                delegated_solution: NodePtr::NIL,
+            },
+        )?;
         locked_nft.spend(ctx, Spend::new(nft_inner_puzzle, nft_inner_solution))?;
 
         Ok((remove_entry_conditions, entry_payout_amount))
