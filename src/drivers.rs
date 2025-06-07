@@ -2483,10 +2483,25 @@ mod tests {
     }
 
     #[test]
-    fn test_dig_reward_distributor() -> anyhow::Result<()> {
+    fn test_managed_reward_distributor() -> anyhow::Result<()> {
+        test_reward_distributor(RewardDistributorType::Manager)
+    }
+
+    #[test]
+    fn test_nft_reward_distributor() -> anyhow::Result<()> {
+        test_reward_distributor(RewardDistributorType::Nft)
+    }
+
+    fn test_reward_distributor(manager_type: RewardDistributorType) -> anyhow::Result<()> {
         let ctx = &mut SpendContext::new();
         let mut sim = Simulator::new();
-        let mut benchmark = Benchmark::new("DIG Reward Distributor".to_string());
+        let mut benchmark = Benchmark::new(format!(
+            "Reward Distributor ({})",
+            match manager_type {
+                RewardDistributorType::Manager => "Manager",
+                RewardDistributorType::Nft => "NFT",
+            }
+        ));
 
         // Launch token CAT
         let cat_amount = 10_000_000_000;
@@ -2506,19 +2521,19 @@ mod tests {
 
         // Launch manager singleton
         let (
-            manager_launcher_id,
-            mut manager_coin,
-            mut manager_singleton_proof,
-            _manager_singleton_inner_puzzle,
-            manager_singleton_inner_puzzle_hash,
-            manager_singleton_puzzle,
+            manager_or_did_launcher_id,
+            mut manager_or_did_coin,
+            mut manager_or_did_singleton_proof,
+            _manager_or_didsingleton_inner_puzzle,
+            manager_or_did_singleton_inner_puzzle_hash,
+            manager_or_did_singleton_puzzle,
         ) = launch_test_singleton(ctx, &mut sim)?;
 
         // setup config
         let constants = RewardDistributorConstants {
             launcher_id: Bytes32::from([1; 32]),
-            reward_distributor_type: RewardDistributorType::Manager,
-            manager_or_collection_did_launcher_id: manager_launcher_id,
+            reward_distributor_type: manager_type,
+            manager_or_collection_did_launcher_id: manager_or_did_launcher_id,
             fee_payout_puzzle_hash: Bytes32::new([1; 32]),
             epoch_seconds: 1000,
             max_seconds_offset: 300,
@@ -2643,15 +2658,15 @@ mod tests {
                 &mut registry,
                 entry1_bls.puzzle_hash,
                 1,
-                manager_singleton_inner_puzzle_hash,
+                manager_or_did_singleton_inner_puzzle_hash,
             )?;
         registry = registry.finish_spend(ctx, vec![])?;
 
-        (manager_coin, manager_singleton_proof) = spend_manager_singleton(
+        (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
             ctx,
-            manager_coin,
-            manager_singleton_proof,
-            manager_singleton_puzzle,
+            manager_or_did_coin,
+            manager_or_did_singleton_proof,
+            manager_or_did_singleton_puzzle,
             manager_conditions,
         )?;
 
@@ -3012,13 +3027,13 @@ mod tests {
                 &mut registry,
                 entry2_bls.puzzle_hash,
                 2,
-                manager_singleton_inner_puzzle_hash,
+                manager_or_did_singleton_inner_puzzle_hash,
             )?;
-        (manager_coin, manager_singleton_proof) = spend_manager_singleton(
+        (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
             ctx,
-            manager_coin,
-            manager_singleton_proof,
-            manager_singleton_puzzle,
+            manager_or_did_coin,
+            manager_or_did_singleton_proof,
+            manager_or_did_singleton_puzzle,
             manager_conditions,
         )?;
 
@@ -3060,14 +3075,14 @@ mod tests {
                 ctx,
                 &mut registry,
                 entry2_slot,
-                manager_singleton_inner_puzzle_hash,
+                manager_or_did_singleton_inner_puzzle_hash,
             )?;
 
         let (_manager_coin, _manager_singleton_proof) = spend_manager_singleton(
             ctx,
-            manager_coin,
-            manager_singleton_proof,
-            manager_singleton_puzzle,
+            manager_or_did_coin,
+            manager_or_did_singleton_proof,
+            manager_or_did_singleton_puzzle,
             remove_entry_manager_conditions,
         )?;
 
