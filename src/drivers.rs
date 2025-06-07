@@ -939,13 +939,14 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
-        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
-        DelegatedStateActionSolution, IntermediaryCoinProof, NftLauncherProof, PrecommitCoin,
-        RewardDistributorAddEntryAction, RewardDistributorAddIncentivesAction,
-        RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
-        RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
-        RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
+        benchmarker::tests::Benchmark, print_spend_bundle_to_file, CatNftMetadata,
+        CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction, CatalogSlotValue,
+        DelegatedStateAction, DelegatedStateActionSolution, IntermediaryCoinProof,
+        NftLauncherProof, PrecommitCoin, RewardDistributorAddEntryAction,
+        RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
+        RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
+        RewardDistributorRemoveEntryAction, RewardDistributorStakeAction,
+        RewardDistributorSyncAction, RewardDistributorType,
         RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
@@ -2746,8 +2747,11 @@ mod tests {
             );
             offer_nft.spend(ctx, nft_inner_spend)?;
 
-            // sim.spend_coins(ctx.take(), &[])?;
-            benchmark.add_spends(ctx, &mut sim, "stake_nft", &[nft_bls.sk.clone()])?;
+            let spends = ctx.take(); // todo: debug
+            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug"); // todo: debug
+            sim.spend_coins(spends, &[nft_bls.sk.clone()])?;
+            // benchmark.add_spends(ctx, &mut sim, "stake_nft", &[nft_bls.sk.clone()])?;
+            // todo: debug /\
 
             (entry1_slot, Some(locked_nft))
         };

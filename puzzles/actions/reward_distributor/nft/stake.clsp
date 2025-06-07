@@ -115,6 +115,63 @@
                 )
             )
             (list
+                ; todo: debug ------------------------------------------------------
+                (list REMARK (nft_lancher_id_stager nft_launcher_proof))
+                (list REMARK (sha256tree 
+                    (list
+                        (sha256tree (c Ephemeral_State my_id)) ; nonce
+                        (notarized_payment (curry_hashes NONCE_MOD_HASH
+                            (sha256 1 entry_custody_puzzle_hash)
+                            MY_P2_PUZZLE_HASH
+                        ))
+                    )
+                ) 
+                (sha256tree (c Ephemeral_State my_id))
+                
+                (notarized_payment (curry_hashes NONCE_MOD_HASH
+                            (sha256 1 entry_custody_puzzle_hash)
+                            MY_P2_PUZZLE_HASH
+                        ))
+                )
+
+                (list REMARK
+                    OFFER_MOD_HASH
+                    (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+                        (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+                        (sha256 1 ())
+                        nft_transfer_porgram_hash
+                        OFFER_MOD_HASH
+                    )
+                    (curry_hashes NFT_STATE_LAYER_MOD_HASH
+                        (sha256 1 NFT_STATE_LAYER_MOD_HASH)
+                        nft_metadata_hash
+                        nft_metadata_updater_hash_hash  
+                        (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+                            (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+                            (sha256 1 ())
+                            nft_transfer_porgram_hash
+                            OFFER_MOD_HASH
+                        )
+                    )
+                    (curry_hashes SINGLETON_MOD_HASH
+                        (sha256tree
+                            (c SINGLETON_MOD_HASH (c (nft_lancher_id_stager nft_launcher_proof) SINGLETON_LAUNCHER_HASH))
+                        )
+                        (curry_hashes NFT_STATE_LAYER_MOD_HASH
+                            (sha256 1 NFT_STATE_LAYER_MOD_HASH)
+                            nft_metadata_hash
+                            nft_metadata_updater_hash_hash  
+                            (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+                                (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+                                (sha256 1 ())
+                                nft_transfer_porgram_hash
+                                OFFER_MOD_HASH
+                            )
+                        )
+                    ) ; NFT puzzle hash
+                )
+                ; todo: debug ------------------------------------------------------
+
                 (list ASSERT_MY_COIN_ID my_id)
 
                 (create_slot ENTRY_SLOT_1ST_CURRY_HASH
