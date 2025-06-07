@@ -7,14 +7,13 @@ use chia_puzzle_types::{
     nft::NftOwnershipLayerArgs,
     offer::{NotarizedPayment, Payment},
     singleton::SingletonArgs,
-    LineageProof,
 };
 use chia_puzzles::{
     NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_HASH, SETTLEMENT_PAYMENT_HASH,
     SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH,
 };
 use chia_wallet_sdk::{
-    driver::{DriverError, Spend, SpendContext},
+    driver::{DriverError, HashedPtr, Nft, NftStateLayer, SingletonLayer, Spend, SpendContext},
     types::{announcement_id, Conditions},
 };
 use clvm_traits::{clvm_list, clvm_tuple, FromClvm, ToClvm};
@@ -28,145 +27,106 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RewardDistributorStakeAction {
+pub struct RewardDistributorUnstakeAction {
     pub launcher_id: Bytes32,
-    pub did_launcher_id: Bytes32,
     pub max_second_offset: u64,
 }
 
-impl ToTreeHash for RewardDistributorStakeAction {
+impl ToTreeHash for RewardDistributorUnstakeAction {
     fn tree_hash(&self) -> TreeHash {
-        RewardDistributorStakeActionArgs::curry_tree_hash(
+        RewardDistributorUnstakeActionArgs::curry_tree_hash(
             self.launcher_id,
-            self.did_launcher_id,
             self.max_second_offset,
         )
     }
 }
 
-impl Action<RewardDistributor> for RewardDistributorStakeAction {
+impl Action<RewardDistributor> for RewardDistributorUnstakeAction {
     fn from_constants(constants: &RewardDistributorConstants) -> Self {
         Self {
             launcher_id: constants.launcher_id,
-            did_launcher_id: constants.manager_or_collection_did_launcher_id,
             max_second_offset: constants.max_seconds_offset,
         }
     }
 }
 
-impl RewardDistributorStakeAction {
+impl RewardDistributorUnstakeAction {
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         CurriedProgram {
-            program: ctx.reward_distributor_stake_action_puzzle()?,
-            args: RewardDistributorStakeActionArgs::new(
-                self.launcher_id,
-                self.did_launcher_id,
-                self.max_second_offset,
-            ),
+            program: ctx.reward_distributor_unstake_action_puzzle()?,
+            args: RewardDistributorUnstakeActionArgs::new(self.launcher_id, self.max_second_offset),
         }
         .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
+    pub fn get_spent_slot_value_from_solution(
         &self,
         ctx: &SpendContext,
-        state: &RewardDistributorState,
         solution: NodePtr,
-    ) -> Result<RewardDistributorEntrySlotValue, DriverError> {
-        let solution = ctx.extract::<RewardDistributorStakeActionSolution>(solution)?;
+    ) -> Result<(RewardDistributorSlotNonce, Bytes32), DriverError> {
+        let solution = ctx.extract::<RewardDistributorUnstakeActionSolution>(solution)?;
 
-        Ok(RewardDistributorEntrySlotValue {
-            payout_puzzle_hash: solution.entry_custody_puzzle_hash,
-            initial_cumulative_payout: state.round_reward_info.cumulative_payout,
-            shares: 1,
-        })
+        Ok((
+            RewardDistributorSlotNonce::ENTRY,
+            RewardDistributorEntrySlotValue {
+                payout_puzzle_hash: solution.entry_custody_puzzle_hash,
+                initial_cumulative_payout: solution.entry_initial_cumulative_payout,
+                shares: 1,
+            }
+            .tree_hash()
+            .into(),
+        ))
     }
 
     pub fn spend(
         self,
         ctx: &mut SpendContext,
         distributor: &mut RewardDistributor,
+        entry_slot: Slot<RewardDistributorEntrySlotValue>,
+        nft_launcher_id: Bytes32,
         nft_metadata_hash: Bytes32,
         nft_metadata_updater_hash_hash: Bytes32,
         nft_transfer_porgram_hash: Bytes32,
-        nft_launcher_proof: NftLauncherProof,
-        entry_custody_puzzle_hash: Bytes32,
-        my_id: Bytes32,
-    ) -> Result<
-        (
-            Conditions,
-            NotarizedPayment,
-            Slot<RewardDistributorEntrySlotValue>,
-        ),
-        DriverError,
-    > {
-        let ephemeral_counter = distributor.get_latest_pending_ephemeral_state(ctx)?;
+        locked_nft: Nft<HashedPtr>,
+    ) -> Result<(Conditions, u64), DriverError> {
+        // u64 = last payment amount
 
-        // calculate notarized payment
-        let payment_puzzle_hash: Bytes32 = CurriedProgram {
-            program: NONCE_WRAPPER_PUZZLE_HASH,
-            args: clvm_list!(
-                entry_custody_puzzle_hash,
-                RewardDistributorStakeActionArgs::my_p2_puzzle_hash(self.launcher_id)
-            ),
-        }
-        .tree_hash()
-        .into();
-        let notarized_payment = NotarizedPayment {
-            nonce: clvm_tuple!(my_id, ephemeral_counter).tree_hash().into(),
-            payments: vec![Payment::with_memos(
-                payment_puzzle_hash,
-                1,
-                vec![payment_puzzle_hash.into()],
-            )],
-        };
+        // compute message that the custody puzzle needs to send
+        let unstake_message: Bytes32 = nft_launcher_id;
+        let mut unstake_message: Vec<u8> = unstake_message.to_vec();
 
-        // calculate full puzzle hash of NFT from offer (required for ann assert)
-        let nft_launcher_id = Bytes32::default();
-        let nft_state_layer_mod_hash: Bytes32 = NFT_STATE_LAYER_HASH.into();
-        let nft_puzzle_hash = SingletonArgs::curry_tree_hash(
-            nft_launcher_id,
-            CurriedProgram {
-                program: TreeHash::new(NFT_STATE_LAYER_HASH),
-                args: clvm_list!(
-                    nft_state_layer_mod_hash,
-                    nft_metadata_hash,
-                    nft_metadata_updater_hash_hash,
-                    NftOwnershipLayerArgs::curry_tree_hash(
-                        None,
-                        nft_transfer_porgram_hash.into(),
-                        SETTLEMENT_PAYMENT_HASH.into(),
-                    ),
-                ),
-            }
-            .tree_hash(),
-        );
+        let remove_entry_conditions = Conditions::new()
+            .send_message(
+                18,
+                unstake_message.into(),
+                vec![ctx.alloc(&distributor.coin.puzzle_hash)?],
+            )
+            .assert_concurrent_puzzle(entry_slot.coin.puzzle_hash);
+
+        // spend entry slot
+        entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
+
+        // spend NFT
+        locked_nft.spend()?;
 
         // spend self
-        let action_solution = ctx.alloc(&RewardDistributorStakeActionSolution {
-            my_id,
+        let my_state = distributor.get_latest_pending_state(ctx)?;
+        let entry_payout_amount = entry_slot.info.value.shares
+            * (my_state.round_reward_info.cumulative_payout
+                - entry_slot.info.value.initial_cumulative_payout);
+        let action_solution = ctx.alloc(&RewardDistributorUnstakeActionSolution {
+            nft_launcher_id,
             nft_metadata_hash,
             nft_metadata_updater_hash_hash,
             nft_transfer_porgram_hash,
-            nft_launcher_proof,
-            entry_custody_puzzle_hash,
+            entry_initial_cumulative_payout: entry_slot.info.value.initial_cumulative_payout,
+            entry_custody_puzzle_hash: entry_slot.info.value.payout_puzzle_hash,
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let my_state = distributor.get_latest_pending_state(ctx)?;
-        let slot_value = self.get_slot_value_from_solution(ctx, &my_state, action_solution)?;
-
-        let msg: Bytes32 = notarized_payment.tree_hash().into();
         distributor.insert(Spend::new(action_puzzle, action_solution));
-        Ok((
-            Conditions::new()
-                .assert_puzzle_announcement(announcement_id(nft_puzzle_hash.into(), msg)),
-            notarized_payment,
-            distributor
-                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
-                [0],
-        ))
+        Ok((remove_entry_conditions, entry_payout_amount))
     }
 }
 
@@ -230,7 +190,7 @@ impl RewardDistributorUnstakeActionArgs {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct RewardDistributorStakeActionSolution {
+pub struct RewardDistributorUnstakeActionSolution {
     pub nft_launcher_id: Bytes32,
     pub nft_metadata_hash: Bytes32,
     pub nft_metadata_updater_hash_hash: Bytes32,

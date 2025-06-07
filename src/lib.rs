@@ -50,6 +50,7 @@ pub trait SpendContextExt {
         &mut self,
     ) -> Result<NodePtr, DriverError>;
     fn reward_distributor_stake_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn reward_distributor_unstake_action_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn nonce_wrapper_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn reserve_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn p2_delegated_by_singleton_puzzle(&mut self) -> Result<NodePtr, DriverError>;
@@ -247,6 +248,14 @@ impl SpendContextExt for SpendContext {
         self.puzzle(NONCE_WRAPPER_PUZZLE_HASH, &NONCE_WRAPPER_PUZZLE)
     }
 
+    /// Allocate the reward distributor unstake action puzzle and return its pointer.
+    fn reward_distributor_unstake_action_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            REWARD_DISTRIBUTOR_UNSTAKE_PUZZLE_HASH,
+            &REWARD_DISTRIBUTOR_UNSTAKE_PUZZLE,
+        )
+    }
+
     /// Allocate the reserve finalizer puzzle and return its pointer.
     fn reserve_finalizer_puzzle(&mut self) -> Result<NodePtr, DriverError> {
         self.puzzle(RESERVE_FINALIZER_PUZZLE_HASH, &RESERVE_FINALIZER_PUZZLE)
@@ -327,6 +336,7 @@ mod tests {
         assert_puzzle_hash!(REWARD_DISTRIBUTOR_SYNC_PUZZLE => REWARD_DISTRIBUTOR_SYNC_PUZZLE_HASH);
         assert_puzzle_hash!(REWARD_DISTRIBUTOR_WITHDRAW_INCENTIVES_PUZZLE => REWARD_DISTRIBUTOR_WITHDRAW_INCENTIVES_PUZZLE_HASH);
         assert_puzzle_hash!(REWARD_DISTRIBUTOR_STAKE_PUZZLE => REWARD_DISTRIBUTOR_STAKE_PUZZLE_HASH);
+        assert_puzzle_hash!(REWARD_DISTRIBUTOR_UNSTAKE_PUZZLE => REWARD_DISTRIBUTOR_UNSTAKE_PUZZLE_HASH);
         assert_puzzle_hash!(NONCE_WRAPPER_PUZZLE => NONCE_WRAPPER_PUZZLE_HASH);
         assert_puzzle_hash!(RESERVE_FINALIZER_PUZZLE => RESERVE_FINALIZER_PUZZLE_HASH);
         assert_puzzle_hash!(P2_DELEGATED_BY_SINGLETON_PUZZLE => P2_DELEGATED_BY_SINGLETON_PUZZLE_HASH);
