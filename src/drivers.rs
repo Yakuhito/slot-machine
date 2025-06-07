@@ -939,7 +939,18 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction, DelegatedStateActionSolution, IntermediaryCoinProof, NftLauncherProof, PrecommitCoin, RewardDistributorAddEntryAction, RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction, RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType, RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH
+        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
+        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
+        DelegatedStateActionSolution, IntermediaryCoinProof, NftLauncherProof, PrecommitCoin,
+        RewardDistributorAddEntryAction, RewardDistributorAddIncentivesAction,
+        RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
+        RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
+        RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
+        RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
+        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
+        XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
+        XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction,
+        XchandlesRegisterAction, XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -2635,10 +2646,10 @@ mod tests {
             .wrapped_child(cat_minter.puzzle_hash, source_cat.coin.amount);
         assert!(sim.coin_state(source_cat.coin.coin_id()).is_some());
 
-        let mut nft_bls = sim.bls(1);
+        let nft_bls = sim.bls(1);
 
         // add the 1st entry/NFT before reward epoch ('first epoch') begins
-        let entry1_slot = if manager_type == RewardDistributorType::Manager {
+        let (entry1_slot, nft1) = if manager_type == RewardDistributorType::Manager {
             let (manager_conditions, entry1_slot) = registry
                 .new_action::<RewardDistributorAddEntryAction>()
                 .spend(
@@ -2660,8 +2671,8 @@ mod tests {
 
             // sim.spend_coins(ctx.take(), &[])?;
             benchmark.add_spends(ctx, &mut sim, "add_entry", &[])?;
-            
-            entry1_slot
+
+            (entry1_slot, None)
         } else {
             let nft_launcher = Launcher::new(manager_or_did_coin.coin_id(), 0);
             let nft_launcher_coin = nft_launcher.coin();
@@ -2686,7 +2697,7 @@ mod tests {
             ensure_conditions_met(
                 ctx,
                 &mut sim,
-                Conditions::new().assert_concurrent_spend(nft_launcher.coin().coin_id()),
+                Conditions::new().assert_concurrent_spend(nft_launcher_coin.coin_id()),
                 1,
             )?;
 
@@ -2697,26 +2708,46 @@ mod tests {
             };
             let nft_proof = NftLauncherProof {
                 did_proof,
-                intermediary_coin_proofs: vec![
-                    IntermediaryCoinProof {
-                        full_puzzle_hash: nft_launcher_coin.puzzle_hash,
-                        amount: nft_launcher_coin.amount,
-                    }
-                ]
+                intermediary_coin_proofs: vec![IntermediaryCoinProof {
+                    full_puzzle_hash: nft_launcher_coin.puzzle_hash,
+                    amount: nft_launcher_coin.amount,
+                }],
             };
 
-            let (sec_conds, notarized_payment, entry1_slot) = registry
+            let (sec_conds, notarized_payment, entry1_slot, locked_nft) = registry
                 .new_action::<RewardDistributorStakeAction>()
                 .spend(ctx, &mut registry, nft, nft_proof, nft_bls.puzzle_hash)?;
             registry = registry.finish_spend(ctx, vec![])?;
 
             ensure_conditions_met(ctx, &mut sim, sec_conds, 0)?;
-            todo_offer_nft
+
+            let offer_nft =
+                nft.wrapped_child(SETTLEMENT_PAYMENT_HASH.into(), None, nft.info.metadata);
+
+            let nft_inner_spend = Spend::new(
+                ctx.alloc(&clvm_quote!(Conditions::new().create_coin(
+                    SETTLEMENT_PAYMENT_HASH.into(),
+                    1,
+                    None
+                )))?,
+                NodePtr::NIL,
+            );
+            let nft_inner_spend =
+                StandardLayer::new(nft_bls.pk).delegated_inner_spend(ctx, nft_inner_spend)?;
+            nft.spend(ctx, nft_inner_spend)?;
+
+            let nft_inner_spend = Spend::new(
+                ctx.alloc_mod::<SettlementPayment>()?,
+                ctx.alloc(&SettlementPaymentsSolution {
+                    notarized_payments: vec![notarized_payment],
+                })?,
+            );
+            offer_nft.spend(ctx, nft_inner_spend)?;
 
             // sim.spend_coins(ctx.take(), &[])?;
-            benchmark.add_spends(ctx, &mut sim, "stake_nft", &[])?;
-            
-            entry1_slot
+            benchmark.add_spends(ctx, &mut sim, "stake_nft", &[nft_bls.sk.clone()])?;
+
+            (entry1_slot, Some(locked_nft))
         };
         println!("got here, yay!"); // todo: debug
 

@@ -1,12 +1,11 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::{Bytes32, Coin},
+    protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
 use chia_puzzle_types::{
     nft::NftRoyaltyTransferPuzzleArgs,
     offer::{NotarizedPayment, Payment},
-    singleton::SingletonArgs,
     LineageProof,
 };
 use chia_puzzles::{NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_HASH, SETTLEMENT_PAYMENT_HASH};
@@ -92,6 +91,7 @@ impl RewardDistributorStakeAction {
             Conditions,
             NotarizedPayment,
             Slot<RewardDistributorEntrySlotValue>,
+            Nft<HashedPtr>,
         ),
         DriverError,
     > {
@@ -116,22 +116,6 @@ impl RewardDistributorStakeAction {
                 vec![payment_puzzle_hash.into()],
             )],
         };
-
-        // calculate full puzzle hash of NFT from offer (required for ann assert)
-        let mut nft_launcher_id = Coin::new(
-            nft_launcher_proof.did_proof.parent_parent_coin_info,
-            SingletonArgs::curry_tree_hash(
-                self.did_launcher_id,
-                nft_launcher_proof.did_proof.parent_inner_puzzle_hash.into(),
-            )
-            .into(),
-            nft_launcher_proof.did_proof.parent_amount,
-        )
-        .coin_id();
-        for proof in nft_launcher_proof.intermediary_coin_proofs.iter().rev() {
-            nft_launcher_id =
-                Coin::new(nft_launcher_id, proof.full_puzzle_hash, proof.amount).coin_id();
-        }
 
         // spend self
         let nft = current_nft.wrapped_child(
@@ -163,6 +147,7 @@ impl RewardDistributorStakeAction {
 
         let msg: Bytes32 = notarized_payment.tree_hash().into();
         distributor.insert(Spend::new(action_puzzle, action_solution));
+
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(nft.coin.puzzle_hash, msg)),
@@ -170,6 +155,7 @@ impl RewardDistributorStakeAction {
             distributor
                 .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
                 [0],
+            nft.wrapped_child(payment_puzzle_hash, None, nft.info.metadata),
         ))
     }
 }
