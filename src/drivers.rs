@@ -3167,7 +3167,9 @@ mod tests {
                 2,
             )?;
 
+            println!("before mints"); // todo: debug
             benchmark.add_spends(ctx, &mut sim, "mint_2_nfts", &[])?;
+            println!("after mints"); // todo: debug
 
             let Proof::Lineage(did_proof) = manager_or_did_singleton_proof else {
                 panic!("did_proof is not a lineage proof");
@@ -3213,7 +3215,7 @@ mod tests {
             let nft2_inner_spend =
                 StandardLayer::new(nft2_bls.pk).delegated_inner_spend(ctx, nfts_inner_spend)?;
             let nft3_inner_spend =
-                StandardLayer::new(nft2_bls.pk).delegated_inner_spend(ctx, nfts_inner_spend)?;
+                StandardLayer::new(nft3_bls.pk).delegated_inner_spend(ctx, nfts_inner_spend)?;
             nft2.spend(ctx, nft2_inner_spend)?;
             nft3.spend(ctx, nft3_inner_spend)?;
 
@@ -3233,13 +3235,15 @@ mod tests {
             );
             offer3_nft.spend(ctx, nft3_inner_spend)?;
 
-            // sim.spend_coins(spends, &[nft2_bls.sk.clone(), nft3_bls.sk.clone()])?;
+            println!("before spends"); // todo: debug
+                                       // sim.spend_coins(spends, &[nft2_bls.sk.clone(), nft3_bls.sk.clone()])?;
             benchmark.add_spends(
                 ctx,
                 &mut sim,
                 "stake_2_nfts",
                 &[nft2_bls.sk.clone(), nft3_bls.sk.clone()],
             )?;
+            println!("after spends"); // todo: debug
 
             (entry2_slot, Some((entry3_slot, locked_nft2, locked_nft3)))
         };
