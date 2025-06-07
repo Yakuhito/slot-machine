@@ -33,7 +33,6 @@
         nft_metadata_hash
         nft_metadata_updater_hash_hash
         nft_transfer_porgram_hash
-        entry_payout_amount
         entry_initial_cumulative_payout .
         entry_custody_puzzle_hash
     )
@@ -43,89 +42,85 @@
     (include curry.clib)
     (include slots.clib)
 
-    (if (= entry_payout_amount )
+    (c
         (c
+            Ephemeral_State ; new ephemeral state
             (c
-                Ephemeral_State ; new ephemeral state
+                (- total_reserves (- cumulative_payout entry_initial_cumulative_payout))
                 (c
-                    (- total_reserves (- cumulative_payout entry_initial_cumulative_payout))
-                    (c
-                        (- active_shares 1)
-                        Current_State_Rest
-                    )
-                ) ; new state
-            )
-            (list
-                ; remove entry
-                (list SEND_MESSAGE
-                    23 ; sender puzzle hash, receiver coin id
-                    (sha256tree (c ; this is the leading 'q . ' in the delegated puzzle
-                        1 
+                    (- active_shares 1)
+                    Current_State_Rest
+                )
+            ) ; new state
+        )
+        (list
+            ; remove entry
+            (list SEND_MESSAGE
+                23 ; sender puzzle hash, receiver coin id
+                (sha256tree (c ; this is the leading 'q . ' in the delegated puzzle
+                    1 
+                    (list
                         (list
-                            (list
-                                CREATE_COIN
-                                entry_custody_puzzle_hash
-                                1
-                                (list entry_custody_puzzle_hash)
-                            )
+                            CREATE_COIN
+                            entry_custody_puzzle_hash
+                            1
+                            (list entry_custody_puzzle_hash)
                         )
-                    )) ; message = delegated puzzle hash
-                    (coinid
-                        nft_parent_id
-                        (curry_hashes SINGLETON_MOD_HASH
-                            (sha256tree
-                                (c SINGLETON_MOD_HASH (c nft_launcher_id SINGLETON_LAUNCHER_HASH))
-                            )
-                            (curry_hashes NFT_STATE_LAYER_MOD_HASH
-                                (sha256 1 NFT_STATE_LAYER_MOD_HASH)
-                                nft_metadata_hash
-                                nft_metadata_updater_hash_hash  
-                                (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
-                                    (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
-                                    (sha256 1 ())
-                                    nft_transfer_porgram_hash
-                                    (curry_hashes NONCE_MOD_HASH
-                                        (sha256 1 entry_custody_puzzle_hash)
-                                        MY_P2_PUZZLE_HASH
-                                    )
+                    )
+                )) ; message = delegated puzzle hash
+                (coinid
+                    nft_parent_id
+                    (curry_hashes SINGLETON_MOD_HASH
+                        (sha256tree
+                            (c SINGLETON_MOD_HASH (c nft_launcher_id SINGLETON_LAUNCHER_HASH))
+                        )
+                        (curry_hashes NFT_STATE_LAYER_MOD_HASH
+                            (sha256 1 NFT_STATE_LAYER_MOD_HASH)
+                            nft_metadata_hash
+                            nft_metadata_updater_hash_hash  
+                            (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+                                (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+                                (sha256 1 ())
+                                nft_transfer_porgram_hash
+                                (curry_hashes NONCE_MOD_HASH
+                                    (sha256 1 entry_custody_puzzle_hash)
+                                    MY_P2_PUZZLE_HASH
                                 )
                             )
-                        ) ; NFT puzzle hash
-                        1
-                    )
-                )
-
-                ; owner actually wants us to remove this entry
-                (list RECEIVE_MESSAGE
-                    18 ; puzzle hash - puzzle hash
-                    nft_launcher_id ; message
-                    entry_custody_puzzle_hash ; sender
-                )
-
-                ; make sure the reward info is up to date
-                (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ last_update MAX_SECONDS_OFFSET))
-
-                ; spend entry reward slot without recreating it
-                (spend_slot ENTRY_SLOT_1ST_CURRY_HASH
-                    (sha256 2
-                        (sha256 1 entry_custody_puzzle_hash)
-                        (sha256 2
-                            (sha256 1 entry_initial_cumulative_payout)
-                            (sha256 1 1)
                         )
-                    ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
+                    ) ; NFT puzzle hash
+                    1
                 )
+            )
 
-                ; leading -42 -> condition will be returned by the reserve
-                (list -42
-                    CREATE_COIN
-                    entry_custody_puzzle_hash
-                    (- cumulative_payout entry_initial_cumulative_payout)
-                    (list entry_custody_puzzle_hash)
-                )
-            ) ; conditions
-        )
-        ; else
-        (x)
+            ; owner actually wants us to remove this entry
+            (list RECEIVE_MESSAGE
+                18 ; puzzle hash - puzzle hash
+                nft_launcher_id ; message
+                entry_custody_puzzle_hash ; sender
+            )
+
+            ; make sure the reward info is up to date
+            (list ASSERT_BEFORE_SECONDS_ABSOLUTE (+ last_update MAX_SECONDS_OFFSET))
+
+            ; spend entry reward slot without recreating it
+            (spend_slot ENTRY_SLOT_1ST_CURRY_HASH
+                (sha256 2
+                    (sha256 1 entry_custody_puzzle_hash)
+                    (sha256 2
+                        (sha256 1 entry_initial_cumulative_payout)
+                        (sha256 1 1)
+                    )
+                ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
+            )
+
+            ; leading -42 -> condition will be returned by the reserve
+            (list -42
+                CREATE_COIN
+                entry_custody_puzzle_hash
+                (- cumulative_payout entry_initial_cumulative_payout)
+                (list entry_custody_puzzle_hash)
+            )
+        ) ; conditions
     )
 )
