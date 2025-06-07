@@ -643,9 +643,13 @@ enum XchandlesCliAction {
 enum RewardDistributorCliAction {
     /// Launches a new DIG Reward Distributor deployment
     Launch {
-        /// Manager singleton launcher id
+        /// Manager singleton launcher id (for managed reward distributors)
         #[arg(long)]
-        manager_launcher_id: String,
+        manager_launcher_id: Option<String>,
+
+        /// Collection DID launcher id (for NFT reward distributors)
+        #[arg(long)]
+        collection_did_launcher_id: Option<String>,
 
         /// Fee payout address
         #[arg(long)]
@@ -1324,6 +1328,7 @@ pub async fn run_cli() {
         Commands::RewardDistributor { action } => match action {
             RewardDistributorCliAction::Launch {
                 manager_launcher_id,
+                collection_did_launcher_id,
                 fee_payout_address,
                 first_epoch_start_timestamp,
                 epoch_seconds,
@@ -1338,6 +1343,7 @@ pub async fn run_cli() {
             } => {
                 reward_distributor_launch(
                     manager_launcher_id,
+                    collection_did_launcher_id,
                     fee_payout_address,
                     first_epoch_start_timestamp,
                     epoch_seconds,

@@ -944,7 +944,7 @@ mod tests {
         DelegatedStateActionSolution, PrecommitCoin, RewardDistributorAddEntryAction,
         RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
         RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
-        RewardDistributorRemoveEntryAction, RewardDistributorSyncAction,
+        RewardDistributorRemoveEntryAction, RewardDistributorSyncAction, RewardDistributorType,
         RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
@@ -2517,7 +2517,8 @@ mod tests {
         // setup config
         let constants = RewardDistributorConstants {
             launcher_id: Bytes32::from([1; 32]),
-            manager_launcher_id,
+            reward_distributor_type: RewardDistributorType::Manager,
+            manager_or_collection_did_launcher_id: manager_launcher_id,
             fee_payout_puzzle_hash: Bytes32::new([1; 32]),
             epoch_seconds: 1000,
             max_seconds_offset: 300,

@@ -1,5 +1,6 @@
 use crate::{
     get_coinset_client, get_prefix, hex_string_to_bytes32, sync_distributor, CliError, Db,
+    RewardDistributorType,
 };
 use chia_wallet_sdk::{driver::SpendContext, utils::Address};
 
@@ -47,10 +48,26 @@ pub async fn reward_distributor_view(
         "  Launcher ID: {}",
         hex::encode(distributor.info.constants.launcher_id)
     );
-    println!(
-        "  Manager launcher ID: {}",
-        hex::encode(distributor.info.constants.manager_launcher_id)
-    );
+    match distributor.info.constants.reward_distributor_type {
+        RewardDistributorType::Manager => println!(
+            "  Manager launcher ID: {}",
+            hex::encode(
+                distributor
+                    .info
+                    .constants
+                    .manager_or_collection_did_launcher_id
+            )
+        ),
+        RewardDistributorType::Nft => println!(
+            "  Collection DID launcher ID: {}",
+            hex::encode(
+                distributor
+                    .info
+                    .constants
+                    .manager_or_collection_did_launcher_id
+            )
+        ),
+    };
     println!(
         "  Fee payout address: {}",
         Address::new(
