@@ -1,6 +1,6 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::{Bytes32, Coin},
+    protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
 };
 use chia_puzzle_types::{
@@ -9,7 +9,10 @@ use chia_puzzle_types::{
     singleton::SingletonArgs,
     LineageProof,
 };
-use chia_puzzles::{NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_HASH, SETTLEMENT_PAYMENT_HASH};
+use chia_puzzles::{
+    NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_HASH, SETTLEMENT_PAYMENT_HASH,
+    SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH,
+};
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
     types::{announcement_id, Conditions},
@@ -21,7 +24,7 @@ use hex_literal::hex;
 use crate::{
     Action, P2DelegatedBySingletonLayerArgs, RewardDistributor, RewardDistributorConstants,
     RewardDistributorEntrySlotValue, RewardDistributorSlotNonce, RewardDistributorState, Slot,
-    SpendContextExt,
+    SpendContextExt, NONCE_WRAPPER_PUZZLE_HASH,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,21 +123,7 @@ impl RewardDistributorStakeAction {
         };
 
         // calculate full puzzle hash of NFT from offer (required for ann assert)
-        let mut nft_launcher_id = Coin::new(
-            nft_launcher_proof.did_proof.parent_parent_coin_info,
-            SingletonArgs::curry_tree_hash(
-                self.did_launcher_id,
-                nft_launcher_proof.did_proof.parent_inner_puzzle_hash.into(),
-            )
-            .into(),
-            nft_launcher_proof.did_proof.parent_amount,
-        )
-        .coin_id();
-        for proof in nft_launcher_proof.intermediary_coin_proofs.iter().rev() {
-            nft_launcher_id =
-                Coin::new(nft_launcher_id, proof.full_puzzle_hash, proof.amount).coin_id();
-        }
-
+        let nft_launcher_id = Bytes32::default();
         let nft_state_layer_mod_hash: Bytes32 = NFT_STATE_LAYER_HASH.into();
         let nft_puzzle_hash = SingletonArgs::curry_tree_hash(
             nft_launcher_id,
@@ -181,40 +170,34 @@ impl RewardDistributorStakeAction {
     }
 }
 
-pub const REWARD_DISTRIBUTOR_STAKE_PUZZLE: [u8; 1241] = hex!("ff02ffff01ff04ffff04ffff10ff8209ffffff010180ffff04ff8215ffffff04ffff10ff822dffffff010180ffff04ff825dffffff04ff82bdffff808080808080ffff02ff3cffff04ff02ffff04ffff0bffff02ff3affff04ff02ffff04ff09ffff04ffff02ff3effff04ff02ffff04ffff04ff09ffff04ffff02ff36ffff04ff02ffff04ffff30ff83047bffffff02ff3affff04ff02ffff04ff09ffff04ffff02ff3effff04ff02ffff04ff05ff80808080ffff04ff830a7bffff808080808080ff830e7bff80ffff04ff83037bffff8080808080ff1d8080ff80808080ffff04ffff02ff3affff04ff02ffff04ff0bffff04ffff0bffff0101ff0b80ffff04ff822bffffff04ff825bffffff04ffff02ff3affff04ff02ffff04ff17ffff04ffff0bffff0101ff1780ffff04ffff01a04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459affff04ff82bbffffff04ff2fff8080808080808080ff8080808080808080ff808080808080ffff02ff3effff04ff02ffff04ffff04ffff02ff3effff04ff02ffff04ffff04ff8209ffff8213ff80ff80808080ffff04ffff02ff2effff04ff02ffff04ffff02ff3affff04ff02ffff04ff5fffff04ffff0bffff0101ff8301fbff80ffff04ff81bfff808080808080ff80808080ff808080ff8080808080ffff04ffff04ffff04ff28ffff04ff8213ffff808080ffff04ffff02ff2affff04ff02ffff04ff82017fffff04ffff0bffff0102ffff0bffff0101ff8301fbff80ffff0bffff0102ffff0bffff0101ff829dff80ffff01a09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b28080ffff04ff8301fbffff808080808080ffff04ffff04ff10ffff04ffff10ff83013dffff8202ff80ff808080ff80808080ff808080808080ffff04ffff01ffffff55ff463fffff333eff02ff04ffff04ff38ffff04ff05ff808080ffff04ffff04ff34ffff04ff05ff808080ff0b8080ffffffff02ffff03ff05ffff01ff0bff81f2ffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff22ffff04ff02ffff04ff0dff80808080ff808080808080ffff0181d280ff0180ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff04ff24ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ffff04ff80ffff04ffff04ff17ff8080ff8080808080ff0bff81b2ffff02ff26ffff04ff02ffff04ff05ffff04ffff02ff22ffff04ff02ffff04ff07ff80808080ff808080808080ffffff0bff2cffff0bff2cff81d2ff0580ffff0bff2cff0bff81928080ff02ffff03ff0bffff01ff30ffff02ff36ffff04ff02ffff04ff05ffff04ff1bff8080808080ff23ff3380ffff010580ff0180ffff04ff05ffff04ffff0101ffff04ffff04ff05ff8080ff80808080ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff3effff04ff02ffff04ff09ff80808080ffff02ff3effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080");
+pub const REWARD_DISTRIBUTOR_UNSTAKE_PUZZLE: [u8; 1141] = hex!("ff02ffff01ff02ffff03ffff09ff83017bff80ffff01ff04ffff04ff8209ffffff04ffff11ff8215ffffff11ff829dffff8302fbff8080ffff04ffff11ff822dffffff010180ff823dff808080ffff04ffff04ff2cffff04ffff0117ffff04ffff02ff2effff04ff02ffff04ffff04ffff0101ffff04ffff04ff18ffff04ff8303fbffffff04ffff0101ffff04ffff04ff8303fbffff8080ff8080808080ff808080ff80808080ffff04ffff30ffff018d6e66745f706172656e745f6964ffff02ff3affff04ff02ffff04ff05ffff04ffff02ff2effff04ff02ffff04ffff04ff05ffff04ff8213ffff0b8080ff80808080ffff04ffff02ff3affff04ff02ffff04ff17ffff04ffff0bffff0101ff1780ffff04ff822bffffff04ff825bffffff04ffff02ff3affff04ff02ffff04ff2fffff04ffff0bffff0101ff2f80ffff04ffff01a04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459affff04ff82bbffffff04ffff02ff3affff04ff02ffff04ff5fffff04ffff0bffff0101ff8303fbff80ffff04ff81bfff808080808080ff8080808080808080ff8080808080808080ff808080808080ffff010180ff8080808080ffff04ffff04ff14ffff04ffff0112ffff04ff8213ffffff04ff8303fbffff8080808080ffff04ffff04ff10ffff04ffff10ff83013dffff8202ff80ff808080ffff04ffff02ff3effff04ff02ffff04ff82017fffff04ffff0bffff0102ffff0bffff0101ff8303fbff80ffff0bffff0102ffff0bffff0101ff8302fbff80ffff01a09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b28080ff8080808080ffff04ffff04ffff0181d6ffff04ff18ffff04ff8303fbffffff04ffff11ff829dffff8302fbff80ffff04ffff04ff8303fbffff8080ff808080808080ff80808080808080ffff01ff088080ff0180ffff04ffff01ffffff5533ff43ff4202ffffff02ffff03ff05ffff01ff0bff81eaffff02ff16ffff04ff02ffff04ff09ffff04ffff02ff12ffff04ff02ffff04ff0dff80808080ff808080808080ffff0181ca80ff0180ffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff0bff81aaffff02ff16ffff04ff02ffff04ff05ffff04ffff02ff12ffff04ff02ffff04ff07ff80808080ff808080808080ffff0bff3cffff0bff3cff81caff0580ffff0bff3cff0bff818a8080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff2cffff04ffff0112ffff04ff80ffff04ffff02ff3affff04ff02ffff04ff05ffff04ffff0bffff0101ff0b80ff8080808080ff8080808080ff018080");
 
-pub const REWARD_DISTRIBUTOR_STAKE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
+pub const REWARD_DISTRIBUTOR_UNSTAKE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    20b8bbfef174cb1c631f4c272962b846ca8973193a3ccffacbb98b0485b34034
+    4565bb881e82a34383a56a38aaad091218a8edb0864ccb7bc7b825a70d977280
     "
-));
-
-// run '(mod (NONCE INNER_PUZZLE . inner_solution) (a INNER_PUZZLE inner_solution))' -d
-pub const NONCE_WRAPPER_PUZZLE: [u8; 7] = hex!("ff02ff05ff0780");
-pub const NONCE_WRAPPER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
-    "847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657"
 ));
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
-pub struct RewardDistributorStakeActionArgs {
-    pub did_singleton_struct: SingletonStruct,
+pub struct RewardDistributorUnstakeActionArgs {
+    pub singleton_mod_hash: Bytes32,
+    pub singleton_launcher_hash: Bytes32,
     pub nft_state_layer_mod_hash: Bytes32,
     pub nft_ownership_layer_mod_hash: Bytes32,
-    pub offer_mod_hash: Bytes32,
     pub nonce_mod_hash: Bytes32,
     pub my_p2_puzzle_hash: Bytes32,
     pub entry_slot_1st_curry_hash: Bytes32,
     pub max_second_offset: u64,
 }
 
-impl RewardDistributorStakeActionArgs {
-    pub fn new(launcher_id: Bytes32, did_launcher_id: Bytes32, max_second_offset: u64) -> Self {
+impl RewardDistributorUnstakeActionArgs {
+    pub fn new(launcher_id: Bytes32, max_second_offset: u64) -> Self {
         Self {
-            did_singleton_struct: SingletonStruct::new(did_launcher_id),
+            singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
+            singleton_launcher_hash: SINGLETON_LAUNCHER_HASH.into(),
             nft_state_layer_mod_hash: NFT_STATE_LAYER_HASH.into(),
             nft_ownership_layer_mod_hash: NFT_OWNERSHIP_LAYER_HASH.into(),
-            offer_mod_hash: SETTLEMENT_PAYMENT_HASH.into(),
             nonce_mod_hash: NONCE_WRAPPER_PUZZLE_HASH.into(),
             my_p2_puzzle_hash: Self::my_p2_puzzle_hash(launcher_id),
             entry_slot_1st_curry_hash: Slot::<()>::first_curry_hash(
@@ -235,37 +218,14 @@ impl RewardDistributorStakeActionArgs {
     }
 }
 
-impl RewardDistributorStakeActionArgs {
-    pub fn curry_tree_hash(
-        launcher_id: Bytes32,
-        did_launcher_id: Bytes32,
-        max_second_offset: u64,
-    ) -> TreeHash {
+impl RewardDistributorUnstakeActionArgs {
+    pub fn curry_tree_hash(launcher_id: Bytes32, max_second_offset: u64) -> TreeHash {
         CurriedProgram {
-            program: REWARD_DISTRIBUTOR_STAKE_PUZZLE_HASH,
-            args: RewardDistributorStakeActionArgs::new(
-                launcher_id,
-                did_launcher_id,
-                max_second_offset,
-            ),
+            program: REWARD_DISTRIBUTOR_UNSTAKE_PUZZLE_HASH,
+            args: RewardDistributorUnstakeActionArgs::new(launcher_id, max_second_offset),
         }
         .tree_hash()
     }
-}
-
-#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
-pub struct IntermediaryCoinProof {
-    pub full_puzzle_hash: Bytes32,
-    pub amount: u64,
-}
-
-#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
-pub struct NftLauncherProof {
-    pub did_proof: LineageProof,
-    #[clvm(rest)]
-    pub intermediary_coin_proofs: Vec<IntermediaryCoinProof>,
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]

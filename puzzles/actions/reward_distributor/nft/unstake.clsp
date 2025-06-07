@@ -6,6 +6,7 @@
     SINGLETON_LAUNCHER_HASH
     NFT_STATE_LAYER_MOD_HASH
     NFT_OWNERSHIP_LAYER_MOD_HASH
+    NONCE_MOD_HASH
     MY_P2_PUZZLE_HASH
     ENTRY_SLOT_1ST_CURRY_HASH ; after 1st curry
     MAX_SECONDS_OFFSET ; at most this amount of seconds can pass since last update
@@ -83,7 +84,10 @@
                                     (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
                                     (sha256 1 ())
                                     nft_transfer_porgram_hash
-                                    MY_P2_PUZZLE_HASH
+                                    (curry_hashes NONCE_MOD_HASH
+                                        (sha256 1 entry_custody_puzzle_hash)
+                                        MY_P2_PUZZLE_HASH
+                                    )
                                 )
                             )
                         ) ; NFT puzzle hash
