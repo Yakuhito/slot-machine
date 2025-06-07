@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 
+use crate::reward_distributor_stake;
+
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
     catalog_listen, catalog_register, catalog_sign_state_update, catalog_unroll_state_scheduler,
@@ -839,6 +841,46 @@ enum RewardDistributorCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+    /// Stake an NFT
+    Stake {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Entry payout puzzle hash (default: wallet address at index 0)
+        #[arg(long)]
+        custody_puzzle_hash: Option<String>,
+
+        /// NFT id (nft1...)
+        #[arg(long)]
+        nft: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Unstake an NFT
+    Unstake {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Entry payout puzzle hash (default: wallet address at index 0)
+        #[arg(long)]
+        custody_puzzle_hash: Option<String>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     /// Adds rewards to the current epoch
     AddRewards {
         /// Reward distributor singleton launcher id
@@ -1445,6 +1487,22 @@ pub async fn run_cli() {
                 )
                 .await
             }
+            RewardDistributorCliAction::Stake {
+                launcher_id,
+                custody_puzzle_hash,
+                nft,
+                testnet11,
+                fee,
+            } => {
+                reward_distributor_stake(launcher_id, nft, custody_puzzle_hash, testnet11, fee)
+                    .await
+            }
+            RewardDistributorCliAction::Unstake {
+                launcher_id,
+                custody_puzzle_hash,
+                testnet11,
+                fee,
+            } => todo!("To be implemented"), // todo: debug
             RewardDistributorCliAction::AddRewards {
                 launcher_id,
                 reward_amount,
