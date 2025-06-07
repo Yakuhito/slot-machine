@@ -30,6 +30,7 @@
     ) ; Truth
     (
         nft_launcher_id
+        nft_parent_id
         nft_metadata_hash
         nft_metadata_updater_hash_hash
         nft_transfer_porgram_hash
