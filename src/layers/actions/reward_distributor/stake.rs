@@ -13,7 +13,7 @@ use chia_wallet_sdk::{
     driver::{DriverError, HashedPtr, Nft, Spend, SpendContext},
     types::{announcement_id, Conditions},
 };
-use clvm_traits::{clvm_list, clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
@@ -103,7 +103,10 @@ impl RewardDistributorStakeAction {
             RewardDistributorStakeActionArgs::my_p2_puzzle_hash(self.launcher_id).into();
         let payment_puzzle_hash: Bytes32 = CurriedProgram {
             program: NONCE_WRAPPER_PUZZLE_HASH,
-            args: clvm_list!(entry_custody_puzzle_hash, my_p2_treehash),
+            args: NonceWrapperArgs::<Bytes32, TreeHash> {
+                nonce: entry_custody_puzzle_hash,
+                inner_puzzle: my_p2_treehash,
+            },
         }
         .tree_hash()
         .into();
@@ -172,6 +175,13 @@ pub const NONCE_WRAPPER_PUZZLE: [u8; 7] = hex!("ff02ff05ff0780");
 pub const NONCE_WRAPPER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657"
 ));
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct NonceWrapperArgs<N, I> {
+    pub nonce: N,
+    pub inner_puzzle: I,
+}
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
