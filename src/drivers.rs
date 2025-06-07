@@ -939,14 +939,13 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        benchmarker::tests::Benchmark, print_spend_bundle_to_file, CatNftMetadata,
-        CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction, CatalogSlotValue,
-        DelegatedStateAction, DelegatedStateActionSolution, IntermediaryCoinProof,
-        NftLauncherProof, PrecommitCoin, RewardDistributorAddEntryAction,
-        RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
-        RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
-        RewardDistributorRemoveEntryAction, RewardDistributorStakeAction,
-        RewardDistributorSyncAction, RewardDistributorType,
+        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
+        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
+        DelegatedStateActionSolution, IntermediaryCoinProof, NftLauncherProof, PrecommitCoin,
+        RewardDistributorAddEntryAction, RewardDistributorAddIncentivesAction,
+        RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
+        RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
+        RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
         RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
@@ -2650,7 +2649,7 @@ mod tests {
         let nft_bls = sim.bls(1);
 
         // add the 1st entry/NFT before reward epoch ('first epoch') begins
-        let (entry1_slot, _nft1) = if manager_type == RewardDistributorType::Manager {
+        let (entry1_slot, nft1) = if manager_type == RewardDistributorType::Manager {
             let (manager_conditions, entry1_slot) = registry
                 .new_action::<RewardDistributorAddEntryAction>()
                 .spend(
@@ -2751,7 +2750,6 @@ mod tests {
 
             (entry1_slot, Some(locked_nft))
         };
-        println!("got here, yay!"); // todo: debug
 
         // commit incentives for first epoch
         let rewards_to_add = constants.epoch_seconds;
@@ -3099,29 +3097,154 @@ mod tests {
             source_cat.coin.amount - incentives_amount,
         );
 
-        // add entry2
-        let (manager_conditions, entry2_slot) = registry
-            .new_action::<RewardDistributorAddEntryAction>()
-            .spend(
+        // add second entry OR 2 more NFTs
+        let nft2_bls = sim.bls(1);
+        let nft3_bls = sim.bls(1);
+        let (entry2_slot, other_nft2_info) = if manager_type == RewardDistributorType::Manager {
+            let (manager_conditions, entry2_slot) = registry
+                .new_action::<RewardDistributorAddEntryAction>()
+                .spend(
+                    ctx,
+                    &mut registry,
+                    entry2_bls.puzzle_hash,
+                    2,
+                    manager_or_did_singleton_inner_puzzle_hash,
+                )?;
+            (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
                 ctx,
-                &mut registry,
-                entry2_bls.puzzle_hash,
-                2,
-                manager_or_did_singleton_inner_puzzle_hash,
+                manager_or_did_coin,
+                manager_or_did_singleton_proof,
+                manager_or_did_singleton_puzzle,
+                manager_conditions,
             )?;
-        (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
-            ctx,
-            manager_or_did_coin,
-            manager_or_did_singleton_proof,
-            manager_or_did_singleton_puzzle,
-            manager_conditions,
-        )?;
 
-        registry = registry.finish_spend(ctx, vec![])?;
-        sim.pass_time(250);
-        // sim.spend_coins(ctx.take(), &[])?;
-        benchmark.add_spends(ctx, &mut sim, "add_entry", &[])?;
+            registry = registry.finish_spend(ctx, vec![])?;
+            sim.pass_time(250);
+            // sim.spend_coins(ctx.take(), &[])?;
+            benchmark.add_spends(ctx, &mut sim, "add_entry", &[])?;
+
+            (entry2_slot, None)
+        } else {
+            let nft2_launcher =
+                Launcher::new(manager_or_did_coin.coin_id(), 0).with_singleton_amount(1);
+            let nft2_launcher_coin = nft2_launcher.coin();
+            let meta2 = ctx.alloc(&"nft2")?;
+            let meta2 = HashedPtr::from_ptr(ctx, meta2);
+
+            let nft3_launcher =
+                Launcher::new(manager_or_did_coin.coin_id(), 2).with_singleton_amount(1);
+            let nft3_launcher_coin = nft3_launcher.coin();
+            let meta3 = ctx.alloc(&"nft3")?;
+            let meta3 = HashedPtr::from_ptr(ctx, meta3);
+
+            let (conds2, nft2) = nft2_launcher.mint_nft(
+                ctx,
+                NftMint::new(meta2, nft2_bls.puzzle_hash, 12, None)
+                    .with_royalty_puzzle_hash(Bytes32::from([2; 32]))
+                    .with_custom_metadata_updater(ANY_METADATA_UPDATER_HASH.into()),
+            )?;
+
+            let (conds3, nft3) = nft3_launcher.mint_nft(
+                ctx,
+                NftMint::new(meta3, nft3_bls.puzzle_hash, 15, None)
+                    .with_royalty_puzzle_hash(Bytes32::from([3; 32])),
+            )?;
+
+            (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
+                ctx,
+                manager_or_did_coin,
+                manager_or_did_singleton_proof,
+                manager_or_did_singleton_puzzle,
+                conds2.extend(conds3),
+            )?;
+
+            ensure_conditions_met(
+                ctx,
+                &mut sim,
+                Conditions::new()
+                    .assert_concurrent_spend(nft2_launcher_coin.coin_id())
+                    .assert_concurrent_spend(nft3_launcher_coin.coin_id()),
+                2,
+            )?;
+
+            benchmark.add_spends(ctx, &mut sim, "mint_2_nfts", &[])?;
+
+            let Proof::Lineage(did_proof) = manager_or_did_singleton_proof else {
+                panic!("did_proof is not a lineage proof");
+            };
+            let nft2_proof = NftLauncherProof {
+                did_proof,
+                intermediary_coin_proofs: vec![IntermediaryCoinProof {
+                    full_puzzle_hash: nft2_launcher_coin.puzzle_hash,
+                    amount: nft2_launcher_coin.amount,
+                }],
+            };
+            let nft3_proof = NftLauncherProof {
+                did_proof,
+                intermediary_coin_proofs: vec![IntermediaryCoinProof {
+                    full_puzzle_hash: nft3_launcher_coin.puzzle_hash,
+                    amount: nft3_launcher_coin.amount,
+                }],
+            };
+
+            let (sec_conds2, notarized_payment2, entry2_slot, locked_nft2) = registry
+                .new_action::<RewardDistributorStakeAction>()
+                .spend(ctx, &mut registry, nft2, nft2_proof, nft2_bls.puzzle_hash)?;
+            let (sec_conds3, notarized_payment3, entry3_slot, locked_nft3) = registry
+                .new_action::<RewardDistributorStakeAction>()
+                .spend(ctx, &mut registry, nft3, nft3_proof, nft3_bls.puzzle_hash)?;
+            registry = registry.finish_spend(ctx, vec![])?;
+
+            ensure_conditions_met(ctx, &mut sim, sec_conds2.extend(sec_conds3), 0)?;
+
+            let offer2_nft =
+                nft2.wrapped_child(SETTLEMENT_PAYMENT_HASH.into(), None, nft2.info.metadata);
+            let offer3_nft =
+                nft3.wrapped_child(SETTLEMENT_PAYMENT_HASH.into(), None, nft3.info.metadata);
+
+            let nfts_inner_spend = Spend::new(
+                ctx.alloc(&clvm_quote!(Conditions::new().create_coin(
+                    SETTLEMENT_PAYMENT_HASH.into(),
+                    1,
+                    None
+                )))?,
+                NodePtr::NIL,
+            );
+            let nft2_inner_spend =
+                StandardLayer::new(nft2_bls.pk).delegated_inner_spend(ctx, nfts_inner_spend)?;
+            let nft3_inner_spend =
+                StandardLayer::new(nft2_bls.pk).delegated_inner_spend(ctx, nfts_inner_spend)?;
+            nft2.spend(ctx, nft2_inner_spend)?;
+            nft3.spend(ctx, nft3_inner_spend)?;
+
+            let nft2_inner_spend = Spend::new(
+                ctx.alloc_mod::<SettlementPayment>()?,
+                ctx.alloc(&SettlementPaymentsSolution {
+                    notarized_payments: vec![notarized_payment2],
+                })?,
+            );
+            offer2_nft.spend(ctx, nft2_inner_spend)?;
+
+            let nft3_inner_spend = Spend::new(
+                ctx.alloc_mod::<SettlementPayment>()?,
+                ctx.alloc(&SettlementPaymentsSolution {
+                    notarized_payments: vec![notarized_payment3],
+                })?,
+            );
+            offer3_nft.spend(ctx, nft3_inner_spend)?;
+
+            // sim.spend_coins(spends, &[nft2_bls.sk.clone(), nft3_bls.sk.clone()])?;
+            benchmark.add_spends(
+                ctx,
+                &mut sim,
+                "stake_2_nfts",
+                &[nft2_bls.sk.clone(), nft3_bls.sk.clone()],
+            )?;
+
+            (entry2_slot, Some((entry3_slot, locked_nft2, locked_nft3)))
+        };
         assert_eq!(registry.info.state.active_shares, 3);
+        println!("got here, yay!"); // todo: debug
 
         // sync to 75% (so + 25%)
         let initial_reward_info = registry.info.state.round_reward_info;
@@ -3147,7 +3270,7 @@ mod tests {
                 == initial_reward_info.cumulative_payout + cumulative_payout_delta
         );
 
-        // remove entry2
+        // remove 2nd entry/the 2 NFTs
         let reserve_cat = registry.reserve.to_cat();
         let (remove_entry_manager_conditions, entry2_payout_amount) = registry
             .new_action::<RewardDistributorRemoveEntryAction>()
