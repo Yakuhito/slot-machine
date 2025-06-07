@@ -2675,7 +2675,6 @@ mod tests {
 
             (entry1_slot, None)
         } else {
-            println!("correct path"); // todo: debug
             let nft_launcher =
                 Launcher::new(manager_or_did_coin.coin_id(), 0).with_singleton_amount(1);
             let nft_launcher_coin = nft_launcher.coin();
@@ -2747,11 +2746,8 @@ mod tests {
             );
             offer_nft.spend(ctx, nft_inner_spend)?;
 
-            let spends = ctx.take(); // todo: debug
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug"); // todo: debug
-            sim.spend_coins(spends, &[nft_bls.sk.clone()])?;
-            // benchmark.add_spends(ctx, &mut sim, "stake_nft", &[nft_bls.sk.clone()])?;
-            // todo: debug /\
+            // sim.spend_coins(spends, &[nft_bls.sk.clone()])?;
+            benchmark.add_spends(ctx, &mut sim, "stake_nft", &[nft_bls.sk.clone()])?;
 
             (entry1_slot, Some(locked_nft))
         };
