@@ -87,7 +87,6 @@ impl RewardDistributorStakeAction {
         current_nft: Nft<HashedPtr>,
         nft_launcher_proof: NftLauncherProof,
         entry_custody_puzzle_hash: Bytes32,
-        my_id: Bytes32,
     ) -> Result<
         (
             Conditions,
@@ -97,6 +96,7 @@ impl RewardDistributorStakeAction {
         DriverError,
     > {
         let ephemeral_counter = distributor.get_latest_pending_ephemeral_state(ctx)?;
+        let my_id = distributor.coin.coin_id();
 
         // calculate notarized payment
         let payment_puzzle_hash: Bytes32 = CurriedProgram {

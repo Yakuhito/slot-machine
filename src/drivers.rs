@@ -939,17 +939,7 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
-        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
-        DelegatedStateActionSolution, PrecommitCoin, RewardDistributorAddEntryAction,
-        RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
-        RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
-        RewardDistributorRemoveEntryAction, RewardDistributorSyncAction, RewardDistributorType,
-        RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
-        XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
-        XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
-        XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction,
-        XchandlesRegisterAction, XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
+        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction, DelegatedStateActionSolution, IntermediaryCoinProof, NftLauncherProof, PrecommitCoin, RewardDistributorAddEntryAction, RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction, RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType, RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH
     };
 
     use super::*;
@@ -2530,20 +2520,17 @@ mod tests {
         ) = launch_test_singleton(ctx, &mut sim)?;
 
         // setup config
-        let constants = RewardDistributorConstants {
-            launcher_id: Bytes32::from([1; 32]),
-            reward_distributor_type: manager_type,
-            manager_or_collection_did_launcher_id: manager_or_did_launcher_id,
-            fee_payout_puzzle_hash: Bytes32::new([1; 32]),
-            epoch_seconds: 1000,
-            max_seconds_offset: 300,
-            payout_threshold: 42,
-            fee_bps: 420,               // 4.2% fee
-            withdrawal_share_bps: 9000, // 90% of the amount deposited will be returned
-            reserve_asset_id: source_cat.asset_id,
-            reserve_inner_puzzle_hash: Bytes32::default(), // will be overwritten
-            reserve_full_puzzle_hash: Bytes32::default(),  // will be overwritten
-        };
+        let constants = RewardDistributorConstants::without_launcher_id(
+            manager_type,
+            manager_or_did_launcher_id,
+            Bytes32::new([1; 32]),
+            1000,
+            300,
+            42,
+            420,  // 4.2% fee
+            9000, // 90% of the amount deposited will be returned
+            source_cat.asset_id,
+        );
 
         // Create source offer
         let entry1_bls = sim.bls(0);
@@ -2612,10 +2599,8 @@ mod tests {
             )?,
         });
 
-        // Launch the DIG reward distributor
+        // Launch the reward distributor
         let first_epoch_start = 1234;
-
-        // launch reserve
         let (_, security_sk, mut registry, first_epoch_slot) = launch_dig_reward_distributor(
             ctx,
             offer,
@@ -2650,28 +2635,90 @@ mod tests {
             .wrapped_child(cat_minter.puzzle_hash, source_cat.coin.amount);
         assert!(sim.coin_state(source_cat.coin.coin_id()).is_some());
 
-        // add the 1st entry before reward epoch ('first epoch') begins
-        let (manager_conditions, entry1_slot) = registry
-            .new_action::<RewardDistributorAddEntryAction>()
-            .spend(
+        let mut nft_bls = sim.bls(1);
+
+        // add the 1st entry/NFT before reward epoch ('first epoch') begins
+        let entry1_slot = if manager_type == RewardDistributorType::Manager {
+            let (manager_conditions, entry1_slot) = registry
+                .new_action::<RewardDistributorAddEntryAction>()
+                .spend(
+                    ctx,
+                    &mut registry,
+                    entry1_bls.puzzle_hash,
+                    1,
+                    manager_or_did_singleton_inner_puzzle_hash,
+                )?;
+            registry = registry.finish_spend(ctx, vec![])?;
+
+            (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
                 ctx,
-                &mut registry,
-                entry1_bls.puzzle_hash,
-                1,
-                manager_or_did_singleton_inner_puzzle_hash,
+                manager_or_did_coin,
+                manager_or_did_singleton_proof,
+                manager_or_did_singleton_puzzle,
+                manager_conditions,
             )?;
-        registry = registry.finish_spend(ctx, vec![])?;
 
-        (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
-            ctx,
-            manager_or_did_coin,
-            manager_or_did_singleton_proof,
-            manager_or_did_singleton_puzzle,
-            manager_conditions,
-        )?;
+            // sim.spend_coins(ctx.take(), &[])?;
+            benchmark.add_spends(ctx, &mut sim, "add_entry", &[])?;
+            
+            entry1_slot
+        } else {
+            let nft_launcher = Launcher::new(manager_or_did_coin.coin_id(), 0);
+            let nft_launcher_coin = nft_launcher.coin();
+            let meta = ctx.alloc(&"nft1")?;
+            let meta = HashedPtr::from_ptr(ctx, meta);
 
-        // sim.spend_coins(ctx.take(), &[])?;
-        benchmark.add_spends(ctx, &mut sim, "add_entry", &[])?;
+            let (conds, nft) = nft_launcher.mint_nft(
+                ctx,
+                NftMint::new(meta, nft_bls.puzzle_hash, 10, None)
+                    .with_royalty_puzzle_hash(Bytes32::from([1; 32]))
+                    .with_custom_metadata_updater(ANY_METADATA_UPDATER_HASH.into()),
+            )?;
+
+            (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
+                ctx,
+                manager_or_did_coin,
+                manager_or_did_singleton_proof,
+                manager_or_did_singleton_puzzle,
+                conds,
+            )?;
+
+            ensure_conditions_met(
+                ctx,
+                &mut sim,
+                Conditions::new().assert_concurrent_spend(nft_launcher.coin().coin_id()),
+                1,
+            )?;
+
+            benchmark.add_spends(ctx, &mut sim, "mint_nft", &[])?;
+
+            let Proof::Lineage(did_proof) = manager_or_did_singleton_proof else {
+                panic!("did_proof is not a lineage proof");
+            };
+            let nft_proof = NftLauncherProof {
+                did_proof,
+                intermediary_coin_proofs: vec![
+                    IntermediaryCoinProof {
+                        full_puzzle_hash: nft_launcher_coin.puzzle_hash,
+                        amount: nft_launcher_coin.amount,
+                    }
+                ]
+            };
+
+            let (sec_conds, notarized_payment, entry1_slot) = registry
+                .new_action::<RewardDistributorStakeAction>()
+                .spend(ctx, &mut registry, nft, nft_proof, nft_bls.puzzle_hash)?;
+            registry = registry.finish_spend(ctx, vec![])?;
+
+            ensure_conditions_met(ctx, &mut sim, sec_conds, 0)?;
+            todo_offer_nft
+
+            // sim.spend_coins(ctx.take(), &[])?;
+            benchmark.add_spends(ctx, &mut sim, "stake_nft", &[])?;
+            
+            entry1_slot
+        };
+        println!("got here, yay!"); // todo: debug
 
         // commit incentives for first epoch
         let rewards_to_add = constants.epoch_seconds;
