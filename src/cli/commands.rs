@@ -19,7 +19,7 @@ use super::{
 #[derive(Parser)]
 #[command(
     name = "Slot Machine CLI",
-    about = "A CLI for interacting with the first dApps that use the slot primitive: CATalog, CNS, and the DIG Reward Distributor"
+    about = "A CLI for interacting with the first dApps that use the slot primitive: CATalog, XCHandles, and reward distributors"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -641,7 +641,7 @@ enum XchandlesCliAction {
 
 #[derive(Subcommand)]
 enum RewardDistributorCliAction {
-    /// Launches a new DIG Reward Distributor deployment
+    /// Launches a new reward distributor
     Launch {
         /// Manager singleton launcher id (for managed reward distributors)
         #[arg(long)]

@@ -776,10 +776,9 @@ pub fn launch_dig_reward_distributor(
         }),
         None,
     )?;
-    let dig_reward_distributor_hint: Bytes32 = "DIG Reward Distributor v1".tree_hash().into();
-    let launcher_memos = chia_wallet_sdk::prelude::Memos::new(
-        ctx.alloc(&(dig_reward_distributor_hint, (comment, ())))?,
-    );
+    let reward_distributor_hint: Bytes32 = "Reward Distributor v1".tree_hash().into();
+    let launcher_memos =
+        chia_wallet_sdk::prelude::Memos::new(ctx.alloc(&(reward_distributor_hint, (comment, ())))?);
     let launcher = Launcher::with_memos(mock_offer.security_coin.coin_id(), 1, launcher_memos);
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
