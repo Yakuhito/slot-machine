@@ -45,7 +45,7 @@ impl Action<RewardDistributor> for RewardDistributorStakeAction {
     fn from_constants(constants: &RewardDistributorConstants) -> Self {
         Self {
             launcher_id: constants.launcher_id,
-            did_launcher_id: constants.did_launcher_id,
+            did_launcher_id: constants.manager_or_collection_did_launcher_id,
             max_second_offset: constants.max_seconds_offset,
         }
     }

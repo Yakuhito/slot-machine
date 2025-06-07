@@ -38,7 +38,7 @@ impl Action<RewardDistributor> for RewardDistributorRemoveEntryAction {
     fn from_constants(constants: &RewardDistributorConstants) -> Self {
         Self {
             launcher_id: constants.launcher_id,
-            manager_launcher_id: constants.manager_launcher_id,
+            manager_launcher_id: constants.manager_or_collection_did_launcher_id,
             max_seconds_offset: constants.max_seconds_offset,
         }
     }
