@@ -54,7 +54,7 @@
         )
     )
 
-    (defun-inline nft_lancher_id_stager (((did_parent_info did_inner_ph . did_amount) . nft_launcher_proof))
+    (defun-inline nft_lancher_id_stager (((did_parent_info did_inner_ph did_amount) . nft_launcher_proof))
         (nft_lancher_id
             (coinid
                 did_parent_info

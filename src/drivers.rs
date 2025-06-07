@@ -939,14 +939,13 @@ mod tests {
     use hex_literal::hex;
 
     use crate::{
-        benchmarker::tests::Benchmark, print_spend_bundle_to_file, CatNftMetadata,
-        CatalogPrecommitValue, CatalogRefundAction, CatalogRegisterAction, CatalogSlotValue,
-        DelegatedStateAction, DelegatedStateActionSolution, IntermediaryCoinProof,
-        NftLauncherProof, PrecommitCoin, RewardDistributorAddEntryAction,
-        RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
-        RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
-        RewardDistributorRemoveEntryAction, RewardDistributorStakeAction,
-        RewardDistributorSyncAction, RewardDistributorType,
+        benchmarker::tests::Benchmark, CatNftMetadata, CatalogPrecommitValue, CatalogRefundAction,
+        CatalogRegisterAction, CatalogSlotValue, DelegatedStateAction,
+        DelegatedStateActionSolution, IntermediaryCoinProof, NftLauncherProof, PrecommitCoin,
+        RewardDistributorAddEntryAction, RewardDistributorAddIncentivesAction,
+        RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
+        RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
+        RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
         RewardDistributorWithdrawIncentivesAction, Slot, SpendContextExt, XchandlesExpireAction,
         XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesExponentialPremiumRenewPuzzleSolution,
         XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution,
@@ -2675,7 +2674,7 @@ mod tests {
 
             (entry1_slot, None)
         } else {
-            println!("here"); // todo: debug
+            println!("correct path"); // todo: debug
             let nft_launcher =
                 Launcher::new(manager_or_did_coin.coin_id(), 0).with_singleton_amount(1);
             let nft_launcher_coin = nft_launcher.coin();
@@ -2704,16 +2703,7 @@ mod tests {
                 1,
             )?;
 
-            println!("here 2"); // todo: debug
-                                // todo: debug ---------
-            let spends = ctx.take();
-            print_spend_bundle_to_file(spends.clone(), Signature::default(), "sb.debug");
-            spends.into_iter().for_each(|s| {
-                ctx.insert(s);
-            });
-            // todo: debug ---------
             benchmark.add_spends(ctx, &mut sim, "mint_nft", &[])?;
-            println!("minted nft"); // todo: debug
 
             let Proof::Lineage(did_proof) = manager_or_did_singleton_proof else {
                 panic!("did_proof is not a lineage proof");
