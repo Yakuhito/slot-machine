@@ -3524,7 +3524,13 @@ mod tests {
         assert!(sim.coin_state(payout_coin_id).is_some());
         assert_eq!(sim.coin_state(payout_coin_id).unwrap().coin.amount, 12602);
 
-        benchmark.print_summary(Some("dig.costs"));
+        benchmark.print_summary(Some(&format!(
+            "{}-reward-distributor.costs",
+            match manager_type {
+                RewardDistributorType::Manager => "manager",
+                RewardDistributorType::Nft => "nft",
+            }
+        )));
 
         Ok(())
     }
