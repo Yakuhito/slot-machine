@@ -4,7 +4,7 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Offer, SpendContext},
+    driver::{HashedPtr, Nft, Offer, Puzzle, SpendContext},
     types::Conditions,
     utils::Address,
 };
@@ -13,9 +13,9 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 
 use crate::{
     get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
-    sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db, NonceWrapperArgs,
-    RewardDistributorEntrySlotValue, RewardDistributorSlotNonce, RewardDistributorStakeAction,
+    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, prompt_for_value,
+    spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
+    NonceWrapperArgs, RewardDistributorEntrySlotValue, RewardDistributorSlotNonce,
     RewardDistributorStakeActionArgs, RewardDistributorSyncAction, RewardDistributorUnstakeAction,
     SageClient, Slot, NONCE_WRAPPER_PUZZLE_HASH,
 };
@@ -73,10 +73,6 @@ pub async fn reward_distributor_unstake(
         Address::new(custody_puzzle_hash, get_prefix(testnet11)).encode()?
     );
 
-    println!("A one-sided offer will be created. It will contain:");
-    println!("  1 mojo");
-    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
-
     println!("Getting entry slot...");
     let entry_slot_value_hashes = db
         .get_dig_indexed_slot_values_by_puzzle_hash(
@@ -118,7 +114,69 @@ pub async fn reward_distributor_unstake(
         .await?
         .coin_records
         .unwrap();
-    todo_here_future_yak
+    let mut locked_nfts = Vec::new();
+
+    for coin_record in possible_locked_nft_coins {
+        let parent_coin_spend = client
+            .get_puzzle_and_solution(
+                coin_record.coin.parent_coin_info,
+                Some(coin_record.confirmed_block_index),
+            )
+            .await?
+            .coin_solution
+            .ok_or(CliError::CoinNotFound(coin_record.coin.parent_coin_info))?;
+
+        let parent_puzzle = ctx.alloc(&parent_coin_spend.puzzle_reveal)?;
+        let parent_puzzle = Puzzle::parse(&ctx, parent_puzzle);
+        let parent_solution = ctx.alloc(&parent_coin_spend.solution)?;
+
+        if let Ok(Some(nft)) = Nft::<HashedPtr>::parse_child(
+            &mut ctx,
+            parent_coin_spend.coin,
+            parent_puzzle,
+            parent_solution,
+        ) {
+            if nft.info.p2_puzzle_hash == locked_nft_hint {
+                locked_nfts.push(nft);
+            }
+        }
+    }
+
+    if locked_nfts.is_empty() {
+        return Err(CliError::Custom(
+            "No locked NFTs found - you may be using the wrong custody address/puzzle hash"
+                .to_string(),
+        ));
+    }
+
+    let mut locked_nft = locked_nfts[0];
+    if locked_nfts.len() > 1 {
+        println!("Found multiple NFTs:");
+        for (i, nft) in locked_nfts.iter().enumerate() {
+            println!(
+                "  - {}: {}",
+                i,
+                Address::new(nft.info.launcher_id, "nft".to_string()).encode()?
+            );
+        }
+
+        let nft_index = prompt_for_value("NFT index to unstake: ")?;
+        let nft_index = nft_index.parse::<usize>()?;
+
+        if nft_index >= locked_nfts.len() {
+            return Err(CliError::Custom("Invalid NFT index".to_string()));
+        }
+        locked_nft = locked_nfts[nft_index];
+    }
+
+    println!(
+        "Unstaking NFT: {}",
+        Address::new(locked_nft.info.launcher_id, "nft".to_string()).encode()?
+    );
+
+    println!("A one-sided offer will be created. It will contain:");
+    println!("  1 mojo");
+    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
 
     yes_no_prompt("Proceed?")?;
 
