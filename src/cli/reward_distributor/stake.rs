@@ -1,5 +1,5 @@
 use chia::protocol::SpendBundle;
-use chia_puzzle_types::LineageProof;
+use chia_puzzle_types::{standard::StandardArgs, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{HashedPtr, Layer, Nft, Offer, Puzzle, SingletonLayer, SpendContext},
@@ -11,15 +11,15 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 
 use crate::{
     get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
-    sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db, IntermediaryCoinProof,
-    NftLauncherProof, RewardDistributorStakeAction, RewardDistributorSyncAction, SageClient,
+    hex_string_to_bytes32, hex_string_to_pubkey, new_sk, parse_amount, parse_one_sided_offer,
+    spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
+    IntermediaryCoinProof, NftLauncherProof, RewardDistributorStakeAction,
+    RewardDistributorSyncAction, SageClient,
 };
 
 pub async fn reward_distributor_stake(
     launcher_id_str: String,
     nft_id_str: String,
-    custody_puzzle_hash_str: Option<String>,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -49,22 +49,23 @@ pub async fn reward_distributor_stake(
     }
 
     let sage = SageClient::new()?;
-    let custody_puzzle_hash = if let Some(custody_puzzle_hash_str) = custody_puzzle_hash_str {
-        hex_string_to_bytes32(&custody_puzzle_hash_str)?
-    } else {
-        Address::decode(
-            &sage
-                .get_derivations(GetDerivations {
-                    hardened: false,
-                    offset: 0,
-                    limit: 1,
-                })
-                .await?
-                .derivations[0]
-                .address,
-        )?
-        .puzzle_hash
-    };
+    let custody_info = sage
+        .get_derivations(GetDerivations {
+            hardened: false,
+            offset: 0,
+            limit: 1,
+        })
+        .await?
+        .derivations[0]
+        .clone();
+    let custody_puzzle_hash = Address::decode(&custody_info.address)?.puzzle_hash;
+    if StandardArgs::curry_tree_hash(hex_string_to_pubkey(&custody_info.public_key)?)
+        != custody_puzzle_hash.into()
+    {
+        return Err(CliError::Custom(
+            "Custody puzzle hash does not match the retrieved public key".to_string(),
+        ));
+    }
 
     print!("Generating NFT launcher proof...");
     let mut intemrediary_coins = Vec::new();

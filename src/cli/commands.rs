@@ -847,10 +847,6 @@ enum RewardDistributorCliAction {
         #[arg(long)]
         launcher_id: String,
 
-        /// Entry payout puzzle hash (default: wallet address at index 0)
-        #[arg(long)]
-        custody_puzzle_hash: Option<String>,
-
         /// NFT id (nft1...)
         #[arg(long)]
         nft: String,
@@ -868,10 +864,6 @@ enum RewardDistributorCliAction {
         /// Reward distributor singleton launcher id
         #[arg(long)]
         launcher_id: String,
-
-        /// Entry payout puzzle hash (default: wallet address at index 0)
-        #[arg(long)]
-        custody_puzzle_hash: Option<String>,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1489,20 +1481,15 @@ pub async fn run_cli() {
             }
             RewardDistributorCliAction::Stake {
                 launcher_id,
-                custody_puzzle_hash,
                 nft,
                 testnet11,
                 fee,
-            } => {
-                reward_distributor_stake(launcher_id, nft, custody_puzzle_hash, testnet11, fee)
-                    .await
-            }
+            } => reward_distributor_stake(launcher_id, nft, testnet11, fee).await,
             RewardDistributorCliAction::Unstake {
                 launcher_id,
-                custody_puzzle_hash,
                 testnet11,
                 fee,
-            } => reward_distributor_unstake(launcher_id, custody_puzzle_hash, testnet11, fee).await,
+            } => reward_distributor_unstake(launcher_id, testnet11, fee).await,
             RewardDistributorCliAction::AddRewards {
                 launcher_id,
                 reward_amount,
