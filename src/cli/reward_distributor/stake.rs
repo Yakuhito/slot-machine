@@ -117,6 +117,7 @@ pub async fn reward_distributor_stake(
         "Using the following address as custody: {}",
         Address::new(custody_puzzle_hash, get_prefix(testnet11)).encode()?
     );
+    println!("Custody puzzle hash: {}", hex::encode(custody_puzzle_hash));
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  the NFT to be deposited");

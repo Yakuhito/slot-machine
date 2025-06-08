@@ -1,4 +1,5 @@
 use chia::{
+    bls::Signature,
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::{Bytes32, SpendBundle},
 };
@@ -13,9 +14,9 @@ use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 
 use crate::{
     get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, prompt_for_value,
-    spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
-    NonceWrapperArgs, RewardDistributorEntrySlotValue, RewardDistributorSlotNonce,
+    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, print_spend_bundle_to_file,
+    prompt_for_value, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
+    CliError, Db, NonceWrapperArgs, RewardDistributorEntrySlotValue, RewardDistributorSlotNonce,
     RewardDistributorStakeActionArgs, RewardDistributorSyncAction, RewardDistributorUnstakeAction,
     SageClient, Slot, NONCE_WRAPPER_PUZZLE_HASH,
 };
@@ -101,8 +102,8 @@ pub async fn reward_distributor_unstake(
     println!("Fetching locked NFT...");
     let locked_nft_hint: Bytes32 = CurriedProgram {
         program: NONCE_WRAPPER_PUZZLE_HASH,
-        args: NonceWrapperArgs::<TreeHash, TreeHash> {
-            nonce: custody_puzzle_hash.into(),
+        args: NonceWrapperArgs::<Bytes32, TreeHash> {
+            nonce: custody_puzzle_hash,
             inner_puzzle: RewardDistributorStakeActionArgs::my_p2_puzzle_hash(launcher_id).into(),
         },
     }
