@@ -94,6 +94,18 @@ pub async fn reward_distributor_stake(
                     parent_inner_puzzle_hash: layer.inner_puzzle.tree_hash().into(),
                     parent_amount: coin_record.coin.amount,
                 };
+                if layer.launcher_id
+                    != distributor
+                        .info
+                        .constants
+                        .manager_or_collection_did_launcher_id
+                {
+                    println!("FAILED");
+                    return Err(CliError::Custom(
+                        "The DID launcher ID does not match the reward distributor's configuration - does the NFT belong to the right collection?"
+                            .to_string(),
+                    ));
+                }
                 break;
             }
         }
