@@ -15,7 +15,7 @@ use crate::{
 #[allow(clippy::too_many_arguments)]
 pub async fn reward_distributor_launch(
     manager_launcher_id_str: Option<String>,
-    collection_did_launcher_id_str: Option<String>,
+    collection_did_str: Option<String>,
     fee_payout_address_str: String,
     first_epoch_start_timestamp: u64,
     epoch_seconds: u64,
@@ -34,9 +34,9 @@ pub async fn reward_distributor_launch(
                 hex_string_to_bytes32(&manager_launcher_id_str)?,
                 RewardDistributorType::Manager,
             )
-        } else if let Some(collection_did_launcher_id_str) = collection_did_launcher_id_str {
+        } else if let Some(collection_did_str) = collection_did_str {
             (
-                hex_string_to_bytes32(&collection_did_launcher_id_str)?,
+                Address::decode(&collection_did_str)?.puzzle_hash,
                 RewardDistributorType::Nft,
             )
         } else {

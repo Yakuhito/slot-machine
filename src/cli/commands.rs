@@ -649,9 +649,9 @@ enum RewardDistributorCliAction {
         #[arg(long)]
         manager_launcher_id: Option<String>,
 
-        /// Collection DID launcher id (for NFT reward distributors)
+        /// Collection (for NFT reward distributors)
         #[arg(long)]
-        collection_did_launcher_id: Option<String>,
+        collection_did: Option<String>,
 
         /// Fee payout address
         #[arg(long)]
@@ -1370,7 +1370,7 @@ pub async fn run_cli() {
         Commands::RewardDistributor { action } => match action {
             RewardDistributorCliAction::Launch {
                 manager_launcher_id,
-                collection_did_launcher_id,
+                collection_did,
                 fee_payout_address,
                 first_epoch_start_timestamp,
                 epoch_seconds,
@@ -1385,7 +1385,7 @@ pub async fn run_cli() {
             } => {
                 reward_distributor_launch(
                     manager_launcher_id,
-                    collection_did_launcher_id,
+                    collection_did,
                     fee_payout_address,
                     first_epoch_start_timestamp,
                     epoch_seconds,
