@@ -45,7 +45,7 @@
     )
         (c
             (list
-                () ; new ephemeral state
+                Ephemeral_State ; new ephemeral state
                 (- total_reserves fee)
                 active_shares
                 (c

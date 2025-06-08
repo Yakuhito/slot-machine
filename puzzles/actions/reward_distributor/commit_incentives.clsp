@@ -77,7 +77,7 @@
     )
         (c
             (list
-                () ; new ephemeral state
+                Ephemeral_State ; new ephemeral state
                 (+ total_reserves rewards_to_add)
                 active_shares
                 Reward_Info

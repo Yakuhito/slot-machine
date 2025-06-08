@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 
+use crate::{reward_distributor_stake, reward_distributor_unstake};
+
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
     catalog_listen, catalog_register, catalog_sign_state_update, catalog_unroll_state_scheduler,
@@ -19,7 +21,7 @@ use super::{
 #[derive(Parser)]
 #[command(
     name = "Slot Machine CLI",
-    about = "A CLI for interacting with the first dApps that use the slot primitive: CATalog, CNS, and the DIG Reward Distributor"
+    about = "A CLI for interacting with the first dApps that use the slot primitive: CATalog, XCHandles, and reward distributors"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -641,11 +643,15 @@ enum XchandlesCliAction {
 
 #[derive(Subcommand)]
 enum RewardDistributorCliAction {
-    /// Launches a new DIG Reward Distributor deployment
+    /// Launches a new reward distributor
     Launch {
-        /// Manager singleton launcher id
+        /// Manager singleton launcher id (for managed reward distributors)
         #[arg(long)]
-        manager_launcher_id: String,
+        manager_launcher_id: Option<String>,
+
+        /// Collection (for NFT reward distributors)
+        #[arg(long)]
+        collection_did: Option<String>,
 
         /// Fee payout address
         #[arg(long)]
@@ -826,6 +832,38 @@ enum RewardDistributorCliAction {
         /// Remove entry (if not provided, entry will be added)
         #[arg(long, default_value_t = false)]
         remove_entry: bool,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Stake an NFT
+    Stake {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// NFT id (nft1...)
+        #[arg(long)]
+        nft: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Unstake an NFT
+    Unstake {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1324,6 +1362,7 @@ pub async fn run_cli() {
         Commands::RewardDistributor { action } => match action {
             RewardDistributorCliAction::Launch {
                 manager_launcher_id,
+                collection_did,
                 fee_payout_address,
                 first_epoch_start_timestamp,
                 epoch_seconds,
@@ -1338,6 +1377,7 @@ pub async fn run_cli() {
             } => {
                 reward_distributor_launch(
                     manager_launcher_id,
+                    collection_did,
                     fee_payout_address,
                     first_epoch_start_timestamp,
                     epoch_seconds,
@@ -1439,6 +1479,17 @@ pub async fn run_cli() {
                 )
                 .await
             }
+            RewardDistributorCliAction::Stake {
+                launcher_id,
+                nft,
+                testnet11,
+                fee,
+            } => reward_distributor_stake(launcher_id, nft, testnet11, fee).await,
+            RewardDistributorCliAction::Unstake {
+                launcher_id,
+                testnet11,
+                fee,
+            } => reward_distributor_unstake(launcher_id, testnet11, fee).await,
             RewardDistributorCliAction::AddRewards {
                 launcher_id,
                 reward_amount,

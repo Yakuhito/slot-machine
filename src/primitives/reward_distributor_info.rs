@@ -15,8 +15,8 @@ use crate::{
     ReserveFinalizer2ndCurryArgs, RewardDistributorAddEntryAction,
     RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
     RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
-    RewardDistributorRemoveEntryAction, RewardDistributorSyncAction,
-    RewardDistributorWithdrawIncentivesAction, SpendContextExt,
+    RewardDistributorRemoveEntryAction, RewardDistributorStakeAction, RewardDistributorSyncAction,
+    RewardDistributorUnstakeAction, RewardDistributorWithdrawIncentivesAction, SpendContextExt,
     RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM_HASH,
 };
 
@@ -77,12 +77,21 @@ impl Reserveful for RewardDistributorState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ToClvm, FromClvm)]
+#[repr(u8)]
+#[clvm(atom)]
+pub enum RewardDistributorType {
+    Manager = 1,
+    Nft = 2,
+}
+
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq, Copy, ToClvm, FromClvm)]
 #[clvm(list)]
 pub struct RewardDistributorConstants {
     pub launcher_id: Bytes32,
-    pub manager_launcher_id: Bytes32,
+    pub reward_distributor_type: RewardDistributorType,
+    pub manager_or_collection_did_launcher_id: Bytes32,
     pub fee_payout_puzzle_hash: Bytes32,
     pub epoch_seconds: u64,
     pub max_seconds_offset: u64,
@@ -97,7 +106,8 @@ pub struct RewardDistributorConstants {
 impl RewardDistributorConstants {
     #[allow(clippy::too_many_arguments)]
     pub fn without_launcher_id(
-        manager_launcher_id: Bytes32,
+        reward_distributor_type: RewardDistributorType,
+        manager_or_collection_did_launcher_id: Bytes32,
         fee_payout_puzzle_hash: Bytes32,
         epoch_seconds: u64,
         max_seconds_offset: u64,
@@ -108,7 +118,8 @@ impl RewardDistributorConstants {
     ) -> Self {
         Self {
             launcher_id: Bytes32::default(),
-            manager_launcher_id,
+            reward_distributor_type,
+            manager_or_collection_did_launcher_id,
             fee_payout_puzzle_hash,
             epoch_seconds,
             max_seconds_offset,
@@ -156,9 +167,6 @@ impl RewardDistributorInfo {
             RewardDistributorAddIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            RewardDistributorAddEntryAction::from_constants(constants)
-                .tree_hash()
-                .into(),
             RewardDistributorCommitIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
@@ -168,15 +176,36 @@ impl RewardDistributorInfo {
             RewardDistributorNewEpochAction::from_constants(constants)
                 .tree_hash()
                 .into(),
-            RewardDistributorRemoveEntryAction::from_constants(constants)
-                .tree_hash()
-                .into(),
             RewardDistributorSyncAction::from_constants(constants)
                 .tree_hash()
                 .into(),
             RewardDistributorWithdrawIncentivesAction::from_constants(constants)
                 .tree_hash()
                 .into(),
+            match constants.reward_distributor_type {
+                RewardDistributorType::Manager => {
+                    RewardDistributorAddEntryAction::from_constants(constants)
+                        .tree_hash()
+                        .into()
+                }
+                RewardDistributorType::Nft => {
+                    RewardDistributorStakeAction::from_constants(constants)
+                        .tree_hash()
+                        .into()
+                }
+            },
+            match constants.reward_distributor_type {
+                RewardDistributorType::Manager => {
+                    RewardDistributorRemoveEntryAction::from_constants(constants)
+                        .tree_hash()
+                        .into()
+                }
+                RewardDistributorType::Nft => {
+                    RewardDistributorUnstakeAction::from_constants(constants)
+                        .tree_hash()
+                        .into()
+                }
+            },
         ]
     }
 

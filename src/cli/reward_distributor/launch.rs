@@ -9,12 +9,13 @@ use sage_api::{Amount, Assets, CatAmount, GetDerivations, MakeOffer};
 use crate::{
     get_coinset_client, get_constants, hex_string_to_bytes32, launch_dig_reward_distributor,
     parse_amount, wait_for_coin, yes_no_prompt, CliError, Db, RewardDistributorConstants,
-    SageClient,
+    RewardDistributorType, SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]
 pub async fn reward_distributor_launch(
-    manager_launcher_id_str: String,
+    manager_launcher_id_str: Option<String>,
+    collection_did_str: Option<String>,
     fee_payout_address_str: String,
     first_epoch_start_timestamp: u64,
     epoch_seconds: u64,
@@ -27,7 +28,22 @@ pub async fn reward_distributor_launch(
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
-    let manager_launcher_id = hex_string_to_bytes32(&manager_launcher_id_str)?;
+    let (manager_or_did_launcher_id, distributor_type) =
+        if let Some(manager_launcher_id_str) = manager_launcher_id_str {
+            (
+                hex_string_to_bytes32(&manager_launcher_id_str)?,
+                RewardDistributorType::Manager,
+            )
+        } else if let Some(collection_did_str) = collection_did_str {
+            (
+                Address::decode(&collection_did_str)?.puzzle_hash,
+                RewardDistributorType::Nft,
+            )
+        } else {
+            return Err(CliError::Custom(
+                "Either manager or collection DID launcher ID must be provided".to_string(),
+            ));
+        };
     let fee_payout_puzzle_hash = Address::decode(&fee_payout_address_str)?.puzzle_hash;
     let reserve_asset_id = hex_string_to_bytes32(&reserve_asset_id_str)?;
     let fee = parse_amount(&fee_str, false)?;
@@ -90,7 +106,8 @@ pub async fn reward_distributor_launch(
         first_epoch_start_timestamp,
         user_puzzle_hash,
         RewardDistributorConstants::without_launcher_id(
-            manager_launcher_id,
+            distributor_type,
+            manager_or_did_launcher_id,
             fee_payout_puzzle_hash,
             epoch_seconds,
             max_seconds_offset,

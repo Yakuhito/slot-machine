@@ -35,7 +35,7 @@ pub async fn reward_distributor_broadcast_entry_update(
     let (signature_from_signers, pubkeys, client, mut ctx, medieval_vault) =
         multisig_broadcast_thing_start(
             signatures_str,
-            hex::encode(distributor_constants.manager_launcher_id),
+            hex::encode(distributor_constants.manager_or_collection_did_launcher_id),
             testnet11,
         )
         .await?;

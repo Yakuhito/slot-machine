@@ -34,7 +34,7 @@ pub async fn reward_distributor_sign_entry_update(
 
     let (my_pubkey, mut ctx, _client, medieval_vault) = multisig_sign_thing_start(
         my_pubkey_str,
-        hex::encode(distributor_constants.manager_launcher_id),
+        hex::encode(distributor_constants.manager_or_collection_did_launcher_id),
         testnet11,
     )
     .await?;

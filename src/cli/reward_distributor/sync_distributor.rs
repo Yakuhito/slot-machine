@@ -290,7 +290,7 @@ pub async fn sync_distributor(
                 }
 
                 for slot in prev_distributor.created_slot_values_to_slots(
-                    pending_items.pending_mirror_slot_values,
+                    pending_items.pending_entry_slot_values,
                     RewardDistributorSlotNonce::ENTRY,
                 ) {
                     db.save_slot(ctx, slot, 0).await?;
