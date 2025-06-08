@@ -309,7 +309,7 @@ impl Db {
     ) -> Result<(), CliError> {
         sqlx::query(
             "
-            DELETE FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3 AND spent_block_height = ?4
+            DELETE FROM slots WHERE singleton_launcher_id = ?1 AND nonce = ?2 AND slot_value_hash = ?3 AND spent_block_height = ?4 LIMIT 1
             ",
         )
         .bind(singleton_launcher_id.to_vec())
