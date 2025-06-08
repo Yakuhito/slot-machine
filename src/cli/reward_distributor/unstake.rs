@@ -5,18 +5,20 @@ use chia::{
 use chia_puzzle_types::standard::StandardArgs;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{HashedPtr, Nft, Offer, Puzzle, SpendContext},
+    driver::{HashedPtr, Nft, Offer, Puzzle, SpendContext, SpendWithConditions, StandardLayer},
     types::Conditions,
     utils::Address,
 };
 
-use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
+use sage_api::{
+    Amount, Assets, CoinJson, CoinSpendJson, GetDerivations, MakeOffer, SignCoinSpends,
+};
 
 use crate::{
-    get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, hex_string_to_pubkey, new_sk, parse_amount, parse_one_sided_offer,
-    prompt_for_value, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
-    CliError, Db, NonceWrapperArgs, RewardDistributorEntrySlotValue, RewardDistributorSlotNonce,
+    get_coinset_client, get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32,
+    hex_string_to_pubkey, hex_string_to_signature, parse_amount, parse_one_sided_offer,
+    prompt_for_value, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
+    NonceWrapperArgs, RewardDistributorEntrySlotValue, RewardDistributorSlotNonce,
     RewardDistributorStakeActionArgs, RewardDistributorSyncAction, RewardDistributorUnstakeAction,
     SageClient, Slot, NONCE_WRAPPER_PUZZLE_HASH,
 };
@@ -61,9 +63,8 @@ pub async fn reward_distributor_unstake(
         .derivations[0]
         .clone();
     let custody_puzzle_hash = Address::decode(&custody_info.address)?.puzzle_hash;
-    if StandardArgs::curry_tree_hash(hex_string_to_pubkey(&custody_info.public_key)?)
-        != custody_puzzle_hash.into()
-    {
+    let custody_public_key = hex_string_to_pubkey(&custody_info.public_key)?;
+    if StandardArgs::curry_tree_hash(custody_public_key) != custody_puzzle_hash.into() {
         return Err(CliError::Custom(
             "Custody puzzle hash does not match the retrieved public key".to_string(),
         ));
@@ -202,7 +203,6 @@ pub async fn reward_distributor_unstake(
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
     let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
 
     let sec_conds = if also_sync {
         distributor
@@ -216,7 +216,7 @@ pub async fn reward_distributor_unstake(
     let (conds, last_payment_amount) = distributor
         .new_action::<RewardDistributorUnstakeAction>()
         .spend(&mut ctx, &mut distributor, entry_slot, locked_nft)?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
+    let offer = parse_one_sided_offer(&mut ctx, offer, custody_public_key, None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     println!(
@@ -228,12 +228,40 @@ pub async fn reward_distributor_unstake(
 
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
 
-    let security_coin_sig = spend_security_coin(
-        &mut ctx,
-        offer.security_coin,
-        offer.security_base_conditions.extend(sec_conds),
-        &security_coin_sk,
-        get_constants(testnet11),
+    // security coin has custody puzzle!
+    println!("Signing custody coin...");
+    let security_coin_spend = StandardLayer::new(custody_public_key)
+        .spend_with_conditions(&mut ctx, offer.security_base_conditions.extend(sec_conds))?;
+    ctx.spend(offer.security_coin, security_coin_spend)?;
+
+    let security_coin_sig = hex_string_to_signature(
+        &sage
+            .sign_coin_spends(SignCoinSpends {
+                coin_spends: vec![CoinSpendJson {
+                    coin: CoinJson {
+                        parent_coin_info: format!(
+                            "0x{}",
+                            hex::encode(offer.security_coin.parent_coin_info)
+                        ),
+                        puzzle_hash: format!("0x{}", hex::encode(offer.security_coin.puzzle_hash)),
+                        amount: Amount::u64(offer.security_coin.amount),
+                    },
+                    puzzle_reveal: format!(
+                        "0x{:}",
+                        hex::encode(ctx.serialize(&security_coin_spend.puzzle)?.to_vec())
+                    ),
+                    solution: format!(
+                        "0x{:}",
+                        hex::encode(ctx.serialize(&security_coin_spend.solution)?.to_vec())
+                    ),
+                }],
+                auto_submit: false,
+                partial: true,
+            })
+            .await?
+            .spend_bundle
+            .aggregated_signature
+            .replace("0x", ""),
     )?;
 
     let spend_bundle =
