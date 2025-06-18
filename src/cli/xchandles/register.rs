@@ -26,7 +26,7 @@ pub async fn xchandles_register(
     launcher_id_str: String,
     handle: String,
     nft: String,
-    num_years: u64,
+    num_periods: u64,
     refund_address: Option<String>,
     secret: Option<String>,
     start_time: Option<u64>,
@@ -101,7 +101,7 @@ pub async fn xchandles_register(
     }
 
     let payment_cat_amount =
-        XchandlesFactorPricingPuzzleArgs::get_price(payment_cat_base_price, &handle, num_years);
+        XchandlesFactorPricingPuzzleArgs::get_price(payment_cat_base_price, &handle, num_periods);
     let refund_puzzle_hash = Address::decode(&refund_address)?.puzzle_hash;
     println!("Refund address: {}", refund_address);
 
@@ -124,7 +124,7 @@ pub async fn xchandles_register(
     let pricing_solution = XchandlesFactorPricingSolution {
         current_expiration: 0,
         handle: handle.clone(),
-        num_periods: num_years,
+        num_periods,
     };
 
     let secret = if let Some(s) = secret {

@@ -16,7 +16,7 @@ use crate::{
 pub async fn xchandles_extend(
     launcher_id_str: String,
     handle: String,
-    num_years: u64,
+    num_periods: u64,
     testnet11: bool,
     payment_asset_id_str: String,
     payment_cat_base_price_str: String,
@@ -58,7 +58,7 @@ pub async fn xchandles_extend(
     }
 
     let payment_cat_amount =
-        XchandlesFactorPricingPuzzleArgs::get_price(payment_cat_base_price, &handle, num_years);
+        XchandlesFactorPricingPuzzleArgs::get_price(payment_cat_base_price, &handle, num_periods);
 
     println!("Handle: {}", handle);
     println!(
@@ -91,7 +91,7 @@ pub async fn xchandles_extend(
             payment_asset_id,
             payment_cat_base_price,
             registration_period,
-            num_years,
+            num_periods,
         )?;
 
     yes_no_prompt("Continue with extension?")?;

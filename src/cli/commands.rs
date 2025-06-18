@@ -453,9 +453,9 @@ enum XchandlesCliAction {
         #[arg(long)]
         nft: String,
 
-        /// Number of years to register the handle for
-        #[arg(long)]
-        num_years: u64,
+        /// Number of periods to register the handle for
+        #[arg(long, default_value = "1")]
+        num_periods: u64,
 
         /// Refund address
         #[arg(long)]
@@ -587,9 +587,9 @@ enum XchandlesCliAction {
         #[arg(long)]
         expire_time: Option<u64>,
 
-        /// Number of years to register the handle for
-        #[arg(long)]
-        num_years: u64,
+        /// Number of periods to register the handle for
+        #[arg(long, default_value = "1")]
+        num_periods: u64,
 
         /// Refund address
         #[arg(long)]
@@ -1262,7 +1262,7 @@ pub async fn run_cli() {
                 launcher_id,
                 handle,
                 nft,
-                num_years,
+                num_periods,
                 refund_address,
                 secret,
                 start_time,
@@ -1279,7 +1279,7 @@ pub async fn run_cli() {
                     launcher_id,
                     handle,
                     nft,
-                    num_years,
+                    num_periods,
                     refund_address,
                     secret,
                     start_time,
@@ -1345,7 +1345,7 @@ pub async fn run_cli() {
                 refund_address,
                 secret,
                 expire_time,
-                num_years,
+                num_periods,
                 refund,
                 testnet11,
                 payment_asset_id,
@@ -1359,7 +1359,7 @@ pub async fn run_cli() {
                     launcher_id,
                     handle,
                     nft,
-                    num_years,
+                    num_periods,
                     refund_address,
                     secret,
                     expire_time,

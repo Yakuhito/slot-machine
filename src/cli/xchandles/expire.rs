@@ -27,7 +27,7 @@ pub async fn xchandles_expire(
     launcher_id_str: String,
     handle: String,
     nft: String,
-    num_years: u64,
+    num_periods: u64,
     refund_address: Option<String>,
     secret: Option<String>,
     expire_time: Option<u64>,
@@ -115,7 +115,7 @@ pub async fn xchandles_expire(
             handle.clone(),
             slot.info.value.expiration,
             expire_time,
-            num_years,
+            num_periods,
         )? as u64
     };
 
@@ -151,7 +151,7 @@ pub async fn xchandles_expire(
         pricing_program_solution: XchandlesFactorPricingSolution {
             current_expiration: commited_expiration,
             handle: handle.clone(),
-            num_periods: num_years,
+            num_periods,
         },
     };
     let precommit_coin_value = XchandlesPrecommitValue::for_normal_registration(
@@ -368,7 +368,7 @@ pub async fn xchandles_expire(
                     &mut ctx,
                     &mut registry,
                     slot,
-                    num_years,
+                    num_periods,
                     payment_cat_base_price,
                     registration_period,
                     precommit_coin,
