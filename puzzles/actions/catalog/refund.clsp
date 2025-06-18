@@ -19,17 +19,14 @@
             )
         )
     )
-    ( 
-        (precommited_cat_maker_reveal . precommited_cat_maker_solution)
-        (
-            tail_hash ; full TAIL in the reveal of the pre-commit coin
-            initial_nft_owner_ph . ; also included in the pre-commit coin
-            refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
-        )
-        (
-            precommited_cat_maker_hash . ; (sha256tree precommited_cat_maker_reveal)
-            precommit_amount ; amount of the pre-commit coin
-        ) .
+    (
+        precommited_cat_maker_hash ; (sha256tree precommited_cat_maker_reveal)
+        precommited_cat_maker_reveal
+        precommited_cat_maker_solution
+        tail_hash ; full TAIL in the reveal of the pre-commit coin
+        initial_nft_owner_ph ; also included in the pre-commit coin
+        refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
+        precommit_amount . ; amount of the pre-commit coin
         neighbors ; (left_tail_hash . right_tail_hash)
     ) ; solution
 )
@@ -38,12 +35,12 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun main (SLOT_1ST_CURRY_HASH slot_value_hash slot_hint slot_spend_needed base_conditions)
+    (defun main (SLOT_1ST_CURRY_HASH slot_value_hash slot_spend_needed base_conditions)
         (if slot_spend_needed
             (c 
                 (spend_slot SLOT_1ST_CURRY_HASH slot_value_hash)
                 (c 
-                    (create_slot SLOT_1ST_CURRY_HASH slot_value_hash slot_hint)
+                    (create_slot SLOT_1ST_CURRY_HASH slot_value_hash)
                     base_conditions
                 )
             )
@@ -58,7 +55,6 @@
             (main 
                 SLOT_1ST_CURRY_HASH
                 (sha256tree (c tail_hash neighbors))
-                tail_hash
                 (all
                     (= Registration_Price precommit_amount)
                     (= precommited_cat_maker_hash Cat_Maker_Puzzle_Hash)
