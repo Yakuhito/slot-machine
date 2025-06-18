@@ -83,7 +83,7 @@
                         0 ; message = 0 = refund
                         (a
                             precommited_cat_maker_reveal
-                            (list
+                            (c
                                 (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                                     refund_puzzle_hash_hash
                                     (sha256 2

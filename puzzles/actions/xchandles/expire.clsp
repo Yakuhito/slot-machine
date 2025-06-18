@@ -60,7 +60,7 @@
                 1 ; message = 1 = spend to payout puzzle hash
                 (a
                     cat_maker_puzzle_reveal
-                    (list
+                    (c
                         slot_inner_ph ; Inner_Puzzle_Hash
                         cat_maker_puzzle_solution
                     )

@@ -77,7 +77,7 @@
                     (sha256
                         (a 
                             cat_maker_puzzle_reveal
-                            (list OFFER_MOD_HASH cat_maker_solution)
+                            (c OFFER_MOD_HASH cat_maker_solution)
                         ) ; full CAT puzzle hash
                         (sha256tree 
                             (list
