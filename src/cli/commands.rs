@@ -477,6 +477,10 @@ enum XchandlesCliAction {
         #[arg(long)]
         payment_cat_base_price: String,
 
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
+
         /// Use local database instead of XCHandles API
         #[arg(long, default_value_t = false)]
         local: bool,
@@ -514,6 +518,10 @@ enum XchandlesCliAction {
         /// Payment CAT base price
         #[arg(long)]
         payment_cat_base_price: String,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
 
         /// Use local database instead of XCHandles API
         #[arg(long, default_value_t = false)]
@@ -599,6 +607,10 @@ enum XchandlesCliAction {
         #[arg(long)]
         payment_cat_base_price: String,
 
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
+
         /// Committed expiration (old expiration for refunds where someone re-registered the handle before you)
         #[arg(long)]
         committed_expiration: Option<u64>,
@@ -638,6 +650,10 @@ enum XchandlesCliAction {
         /// Payment CAT base price hint
         #[arg(long)]
         payment_cat_base_price: Option<String>,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: Option<u64>,
     },
 }
 
@@ -1242,6 +1258,7 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                registration_period,
                 local,
                 log,
                 fee,
@@ -1258,6 +1275,7 @@ pub async fn run_cli() {
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    registration_period,
                     log,
                     local,
                     fee,
@@ -1271,6 +1289,7 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                registration_period,
                 local,
                 fee,
             } => {
@@ -1281,6 +1300,7 @@ pub async fn run_cli() {
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    registration_period,
                     local,
                     fee,
                 )
@@ -1318,6 +1338,7 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                registration_period,
                 committed_expiration,
                 local,
                 fee,
@@ -1334,6 +1355,7 @@ pub async fn run_cli() {
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    registration_period,
                     committed_expiration,
                     local,
                     fee,
@@ -1349,12 +1371,14 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                registration_period,
             } => {
                 xchandles_view(
                     launcher_id,
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    registration_period,
                 )
                 .await
             }
