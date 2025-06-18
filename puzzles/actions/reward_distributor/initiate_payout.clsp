@@ -56,7 +56,7 @@
                     (get_slot_data_hash entry_payout_puzzle_hash entry_initial_cumulative_payout entry_shares)
                 )
 
-                (create_slot_inline ENTRY_SLOT_1ST_CURRY_HASH
+                (create_slot_with_hint_inline ENTRY_SLOT_1ST_CURRY_HASH
                     (get_slot_data_hash entry_payout_puzzle_hash cumulative_payout entry_shares)
                     entry_payout_puzzle_hash
                 )
@@ -64,15 +64,9 @@
                 (list CREATE_PUZZLE_ANNOUNCEMENT
                     (concat 'p'
                         (sha256 2
-                            (sha256 2
-                                (sha256 1 entry_payout_puzzle_hash)
-                                (sha256 1 entry_shares)
-                            )
-                            (sha256 2
-                                (sha256 1 entry_initial_cumulative_payout)
-                                (sha256 1 cumulative_payout)
-                            )
-                        ) ; (sha256tree ((entry_payout_puzzle_hash . entry_shares) . (entry_initial_cumulative_payout new_entry_initial_cumulative_payout)))
+                            (sha256 1 entry_payout_puzzle_hash)
+                            (sha256 1 entry_payout_amount)
+                        ) ; (sha256tree (c entry_payout_puzzle_hash entry_payout_amount))
                     ) 
                 )
 

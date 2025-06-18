@@ -32,7 +32,7 @@
     (defun-inline slot_oracle (SLOT_1ST_CURRY_HASH slot_value_hash hint)
         (list
             (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
-            (create_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash hint)
+            (create_slot_with_hint_inline SLOT_1ST_CURRY_HASH slot_value_hash hint)
         )
     )
 
