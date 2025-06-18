@@ -9,7 +9,8 @@
     CAT_MOD_HASH
     TAIL_HASH_HASH ; (sha256 1 TAIL_HASH)
     Inner_Puzzle_Hash
-    user_solution ; unused
+    ; Note: other CAT makers may have more arguments here
+    ; Puzzles using the maker should prepend Inner_Puzzle_Hash to user-supplied inputs
 )
     (include curry.clib)
 

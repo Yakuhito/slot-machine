@@ -103,35 +103,33 @@ impl XchandlesExpireAction {
     }
 
     pub fn get_slot_value_from_solution(
-        ctx: &SpendContext,
+        ctx: &mut SpendContext,
         old_slot_value: XchandlesSlotValue,
         precommit_coin_value: XchandlesPrecommitValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution = XchandlesExpireActionSolution::<
-            NodePtr,
-            (),
-            NodePtr,
-            XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
-        >::from_clvm(ctx, solution)?;
+        let solution = XchandlesExpireActionSolution::<NodePtr, (), NodePtr, NodePtr>::from_clvm(
+            ctx, solution,
+        )?;
+
+        let pricing_output = ctx.run(
+            solution.expired_handle_pricing_puzzle_reveal,
+            solution.expired_handle_pricing_puzzle_solution,
+        )?;
+        let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
+
+        let expired_solution = ctx.extract::<XchandlesExponentialPremiumRenewPuzzleSolution<
+            XchandlesFactorPricingSolution,
+        >>(solution.expired_handle_pricing_puzzle_solution)?;
 
         Ok(XchandlesSlotValue {
-            handle_hash: solution
-                .expired_handle_pricing_puzzle_solution
+            handle_hash: expired_solution
                 .pricing_program_solution
                 .handle
                 .tree_hash()
                 .into(),
             neighbors: old_slot_value.neighbors,
-            expiration: precommit_coin_value.start_time
-                + 366
-                    * 24
-                    * 60
-                    * 60
-                    * solution
-                        .expired_handle_pricing_puzzle_solution
-                        .pricing_program_solution
-                        .num_years,
+            expiration: precommit_coin_value.start_time + registration_time_delta,
             owner_launcher_id: precommit_coin_value.owner_launcher_id,
             resolved_launcher_id: precommit_coin_value.resolved_launcher_id,
         })
@@ -142,8 +140,9 @@ impl XchandlesExpireAction {
         ctx: &mut SpendContext,
         registry: &mut XchandlesRegistry,
         slot: Slot<XchandlesSlotValue>,
-        num_years: u64,
+        num_periods: u64,
         base_handle_price: u64,
+        registration_period: u64,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
         // spend slot
@@ -175,6 +174,7 @@ impl XchandlesExpireAction {
                 XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
                     ctx,
                     base_handle_price,
+                    registration_period,
                     1000,
                 )?
                 .get_puzzle(ctx)?,
@@ -184,7 +184,7 @@ impl XchandlesExpireAction {
                     pricing_program_solution: XchandlesFactorPricingSolution {
                         current_expiration: slot.info.value.expiration,
                         handle: precommit_coin.value.secret_and_handle.handle.clone(),
-                        num_years,
+                        num_periods,
                     },
                 },
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
@@ -305,6 +305,7 @@ pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::
 #[clvm(curry)]
 pub struct XchandlesExponentialPremiumRenewPuzzleArgs<P> {
     pub base_program: P,
+    pub halving_period: u64,
     pub start_premium: u64,
     pub end_value: u64,
     pub precision: u64,
@@ -348,10 +349,16 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
     pub fn from_scale_factor(
         ctx: &mut SpendContext,
         base_price: u64,
+        registration_period: u64,
         scale_factor: u64,
     ) -> Result<Self, DriverError> {
         Ok(Self {
-            base_program: XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price)?,
+            base_program: XchandlesFactorPricingPuzzleArgs::get_puzzle(
+                ctx,
+                base_price,
+                registration_period,
+            )?,
+            halving_period: 86400, // one day = 86400 = 60 * 60 * 24 seconds
             start_premium: Self::get_start_premium(scale_factor),
             end_value: Self::get_end_value(scale_factor),
             precision: PREMIUM_PRECISION,
@@ -359,11 +366,19 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         })
     }
 
-    pub fn curry_tree_hash(base_price: u64, scale_factor: u64) -> TreeHash {
+    pub fn curry_tree_hash(
+        base_price: u64,
+        registration_period: u64,
+        scale_factor: u64,
+    ) -> TreeHash {
         CurriedProgram {
             program: XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH,
             args: XchandlesExponentialPremiumRenewPuzzleArgs::<TreeHash> {
-                base_program: XchandlesFactorPricingPuzzleArgs::curry_tree_hash(base_price),
+                base_program: XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+                    base_price,
+                    registration_period,
+                ),
+                halving_period: 86400, // one day = 86400 = 60 * 60 * 24 seconds
                 start_premium: Self::get_start_premium(scale_factor),
                 end_value: Self::get_end_value(scale_factor),
                 precision: PREMIUM_PRECISION,
@@ -388,7 +403,7 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         handle: String,
         expiration: u64,
         buy_time: u64,
-        num_years: u64,
+        num_periods: u64,
     ) -> Result<u128, DriverError> {
         let puzzle = self.get_puzzle(ctx)?;
         let solution = ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution::<
@@ -398,7 +413,7 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
             pricing_program_solution: XchandlesFactorPricingSolution {
                 current_expiration: expiration,
                 handle,
-                num_years,
+                num_periods,
             },
         })?;
         let output = ctx.run(puzzle, solution)?;
@@ -431,9 +446,14 @@ mod tests {
     fn test_exponential_premium_puzzle() -> Result<(), DriverError> {
         let mut ctx = SpendContext::new();
 
-        let puzzle =
-            XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(&mut ctx, 0, 1000)?
-                .get_puzzle(&mut ctx)?;
+        let registration_period = 366 * 24 * 60 * 60;
+        let puzzle = XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
+            &mut ctx,
+            0,
+            registration_period,
+            1000,
+        )?
+        .get_puzzle(&mut ctx)?;
 
         let mut last_price = 100_000_000_000;
         for day in 0..28 {
@@ -446,7 +466,7 @@ mod tests {
                     pricing_program_solution: XchandlesFactorPricingSolution {
                         current_expiration: 0,
                         handle: "yakuhito".to_string(),
-                        num_years: 1,
+                        num_periods: 1,
                     },
                 })?;
 
@@ -469,7 +489,10 @@ mod tests {
 
                 assert_eq!(
                     XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
-                        &mut ctx, 0, 1000
+                        &mut ctx,
+                        0,
+                        registration_period,
+                        1000
                     )?
                     .get_price(
                         &mut ctx,
@@ -491,7 +514,7 @@ mod tests {
             pricing_program_solution: XchandlesFactorPricingSolution {
                 current_expiration: 0,
                 handle: "yakuhito".to_string(),
-                num_years: 1,
+                num_periods: 1,
             },
         })?;
 

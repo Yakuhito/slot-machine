@@ -82,20 +82,19 @@ impl XchandlesExtendAction {
     }
 
     pub fn get_slot_value_from_solution(
-        ctx: &SpendContext,
+        ctx: &mut SpendContext,
         old_slot_value: XchandlesSlotValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution = XchandlesExtendActionSolution::<
-            NodePtr,
-            XchandlesFactorPricingSolution,
-            NodePtr,
-            (),
-        >::from_clvm(ctx, solution)?;
+        let solution =
+            XchandlesExtendActionSolution::<NodePtr, NodePtr, NodePtr, NodePtr>::from_clvm(
+                ctx, solution,
+            )?;
 
-        Ok(old_slot_value.with_expiration(
-            old_slot_value.expiration + solution.pricing_solution.num_years * 366 * 24 * 60 * 60,
-        ))
+        let pricing_output = ctx.run(solution.pricing_puzzle_reveal, solution.pricing_solution)?;
+        let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
+
+        Ok(old_slot_value.with_expiration(old_slot_value.expiration + registration_time_delta))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -107,7 +106,8 @@ impl XchandlesExtendAction {
         slot: Slot<XchandlesSlotValue>,
         payment_asset_id: Bytes32,
         base_handle_price: u64,
-        num_years: u64,
+        registration_period: u64,
+        num_periods: u64,
     ) -> Result<(NotarizedPayment, Conditions, Slot<XchandlesSlotValue>), DriverError> {
         // spend slots
         let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
@@ -121,15 +121,18 @@ impl XchandlesExtendAction {
         // finally, spend self
         let cat_maker_puzzle_reveal =
             DefaultCatMakerArgs::get_puzzle(ctx, payment_asset_id.tree_hash().into())?;
-        let pricing_puzzle_reveal =
-            XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_handle_price)?;
+        let pricing_puzzle_reveal = XchandlesFactorPricingPuzzleArgs::get_puzzle(
+            ctx,
+            base_handle_price,
+            registration_period,
+        )?;
         let action_solution = ctx.alloc(&XchandlesExtendActionSolution {
             handle_hash: slot.info.value.handle_hash,
             pricing_puzzle_reveal,
             pricing_solution: XchandlesFactorPricingSolution {
                 current_expiration: slot.info.value.expiration,
                 handle: handle.clone(),
-                num_years,
+                num_periods,
             },
             cat_maker_puzzle_reveal,
             cat_maker_solution: (),
@@ -141,7 +144,7 @@ impl XchandlesExtendAction {
         registry.insert(Spend::new(action_puzzle, action_solution));
 
         let renew_amount =
-            XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, num_years);
+            XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, num_periods);
 
         let notarized_payment = NotarizedPayment {
             nonce: clvm_tuple!(handle.clone(), slot.info.value.expiration)

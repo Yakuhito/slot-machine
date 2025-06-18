@@ -116,12 +116,16 @@ impl XchandlesRegisterAction {
             (spent_slot_values[1], spent_slot_values[0])
         };
 
-        let solution = XchandlesRegisterActionSolution::<
-            NodePtr,
-            XchandlesFactorPricingSolution,
-            NodePtr,
-            NodePtr,
-        >::from_clvm(ctx, solution)?;
+        let solution =
+            XchandlesRegisterActionSolution::<NodePtr, NodePtr, NodePtr, NodePtr>::from_clvm(
+                ctx, solution,
+            )?;
+
+        let pricing_output = ctx.run(
+            solution.pricing_puzzle_reveal,
+            solution.pricing_puzzle_solution,
+        )?;
+        let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
 
         Ok([
             left_slot_value
@@ -130,8 +134,7 @@ impl XchandlesRegisterAction {
                 solution.handle_hash,
                 left_slot_value.handle_hash,
                 right_slot_value.handle_hash,
-                precommit_coin_value.start_time
-                    + solution.pricing_puzzle_solution.num_years * 366 * 24 * 60 * 60,
+                precommit_coin_value.start_time + registration_time_delta,
                 precommit_coin_value.owner_launcher_id,
                 precommit_coin_value.resolved_launcher_id,
             ),
@@ -148,6 +151,7 @@ impl XchandlesRegisterAction {
         right_slot: Slot<XchandlesSlotValue>,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
         base_handle_price: u64,
+        registration_period: u64,
     ) -> Result<(Conditions, [Slot<XchandlesSlotValue>; 3]), DriverError> {
         // spend slots
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
@@ -171,9 +175,9 @@ impl XchandlesRegisterAction {
 
         let start_time = precommit_coin.value.start_time;
 
-        let num_years = precommit_coin.coin.amount
+        let num_periods = precommit_coin.coin.amount
             / XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, 1);
-        let expiration = precommit_coin.value.start_time + num_years * 366 * 24 * 60 * 60;
+        let expiration = precommit_coin.value.start_time + num_periods * registration_period;
 
         // calculate announcement
         let register_announcement: Bytes32 = clvm_tuple!(
@@ -206,11 +210,12 @@ impl XchandlesRegisterAction {
             pricing_puzzle_reveal: XchandlesFactorPricingPuzzleArgs::get_puzzle(
                 ctx,
                 base_handle_price,
+                registration_period,
             )?,
             pricing_puzzle_solution: XchandlesFactorPricingSolution {
                 current_expiration: 0,
                 handle: handle.clone(),
-                num_years,
+                num_periods,
             },
             cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
@@ -343,23 +348,31 @@ pub const XCHANDLES_FACTOR_PRICING_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
 #[clvm(curry)]
 pub struct XchandlesFactorPricingPuzzleArgs {
     pub base_price: u64,
+    pub registration_period: u64,
 }
 
 impl XchandlesFactorPricingPuzzleArgs {
-    pub fn new(base_price: u64) -> Self {
-        Self { base_price }
+    pub fn new(base_price: u64, registration_period: u64) -> Self {
+        Self {
+            base_price,
+            registration_period,
+        }
     }
 
-    pub fn get_puzzle(ctx: &mut SpendContext, base_price: u64) -> Result<NodePtr, DriverError> {
+    pub fn get_puzzle(
+        ctx: &mut SpendContext,
+        base_price: u64,
+        registration_period: u64,
+    ) -> Result<NodePtr, DriverError> {
         CurriedProgram {
             program: ctx.xchandles_factor_pricing_puzzle()?,
-            args: XchandlesFactorPricingPuzzleArgs::new(base_price),
+            args: XchandlesFactorPricingPuzzleArgs::new(base_price, registration_period),
         }
         .to_clvm(ctx)
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_price(base_price: u64, handle: &str, num_years: u64) -> u64 {
+    pub fn get_price(base_price: u64, handle: &str, num_periods: u64) -> u64 {
         base_price
             * match handle.len() {
                 3 => 128,
@@ -372,15 +385,15 @@ impl XchandlesFactorPricingPuzzleArgs {
             } else {
                 1
             }
-            * num_years
+            * num_periods
     }
 }
 
 impl XchandlesFactorPricingPuzzleArgs {
-    pub fn curry_tree_hash(base_price: u64) -> TreeHash {
+    pub fn curry_tree_hash(base_price: u64, registration_period: u64) -> TreeHash {
         CurriedProgram {
             program: XCHANDLES_FACTOR_PRICING_PUZZLE_HASH,
-            args: XchandlesFactorPricingPuzzleArgs::new(base_price),
+            args: XchandlesFactorPricingPuzzleArgs::new(base_price, registration_period),
         }
         .tree_hash()
     }
@@ -392,7 +405,7 @@ pub struct XchandlesFactorPricingSolution {
     pub current_expiration: u64,
     pub handle: String,
     #[clvm(rest)]
-    pub num_years: u64,
+    pub num_periods: u64,
 }
 
 #[cfg(test)]
@@ -413,11 +426,16 @@ mod tests {
     fn test_factor_pricing_puzzle() -> Result<(), DriverError> {
         let mut ctx = SpendContext::new();
         let base_price = 1; // puzzle will only spit out factors
+        let registration_period = 366 * 24 * 60 * 60; // one year
 
-        let puzzle = XchandlesFactorPricingPuzzleArgs::get_puzzle(&mut ctx, base_price)?;
+        let puzzle = XchandlesFactorPricingPuzzleArgs::get_puzzle(
+            &mut ctx,
+            base_price,
+            registration_period,
+        )?;
 
         for handle_length in 3..=31 {
-            for num_years in 1..=3 {
+            for num_periods in 1..=3 {
                 for has_number in [false, true] {
                     let handle = if has_number {
                         "a".repeat(handle_length - 1) + "1"
@@ -428,7 +446,7 @@ mod tests {
                     let solution = ctx.alloc(&XchandlesFactorPricingSolution {
                         current_expiration: (handle_length - 3) as u64, // shouldn't matter
                         handle,
-                        num_years,
+                        num_periods,
                     })?;
 
                     let output = ctx.run(puzzle, solution)?;
@@ -446,10 +464,10 @@ mod tests {
                     if has_number {
                         expected_price /= 2;
                     }
-                    expected_price *= num_years;
+                    expected_price *= num_periods;
 
                     assert_eq!(output.price, expected_price);
-                    assert_eq!(output.registered_time, num_years * 366 * 24 * 60 * 60);
+                    assert_eq!(output.registered_time, num_periods * registration_period);
                 }
             }
         }
@@ -459,7 +477,7 @@ mod tests {
         let solution = ctx.alloc(&XchandlesFactorPricingSolution {
             current_expiration: 0,
             handle: "aa".to_string(),
-            num_years: 1,
+            num_periods: 1,
         })?;
 
         let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
@@ -472,7 +490,7 @@ mod tests {
         let solution = ctx.alloc(&XchandlesFactorPricingSolution {
             current_expiration: 0,
             handle: "a".repeat(32),
-            num_years: 1,
+            num_periods: 1,
         })?;
 
         let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {
@@ -485,7 +503,7 @@ mod tests {
         let solution = ctx.alloc(&XchandlesFactorPricingSolution {
             current_expiration: 0,
             handle: "yak@test".to_string(),
-            num_years: 1,
+            num_periods: 1,
         })?;
 
         let Err(DriverError::Eval(EvalErr(_, s))) = ctx.run(puzzle, solution) else {

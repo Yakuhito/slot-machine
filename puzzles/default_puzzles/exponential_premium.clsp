@@ -10,6 +10,7 @@
 
 (mod (
     BASE_PROGRAM ; compute base price using this program
+    HALVING_PERIOD ; one day = 86400 = 60 * 60 * 24 seconds
     START_PREMIUM
     END_VALUE ; premium at the very end of the expiry auction
     PRECISION ; 10 ** 18
@@ -18,8 +19,6 @@
     Expiration . 
     rest_of_pricing_program_solution ; pricing_program_solution passed to BASE_PROGRAM (r expiration handle . num_years) = (handle . num_years)
 )
-    (defconstant DAY 86400) ; seconds in a day = 60 * 60 * 24
-
     (defun add_fractional_part (PRECISION bits_list acc fraction_part premium)
         (if bits_list
             (add_fractional_part
@@ -51,8 +50,8 @@
                    PRECISION
                    BITS_LIST
                    1
-                   (/ (* 65536 (% (- Buy_Time Expiration) DAY)) DAY) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
-                   (/ START_PREMIUM (lsh 1 (/ (- Buy_Time Expiration) DAY))) ; premium from whole days = START_PREMIUM / 2^d
+                   (/ (* 65536 (% (- Buy_Time Expiration) HALVING_PERIOD)) HALVING_PERIOD) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
+                   (/ START_PREMIUM (lsh 1 (/ (- Buy_Time Expiration) HALVING_PERIOD))) ; premium from whole periods = START_PREMIUM / 2^p
                 ) END_VALUE) ; premium
             )
             registered_time
