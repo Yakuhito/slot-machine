@@ -82,7 +82,7 @@
                         (sha256tree 
                             (list
                                 (sha256 2 handle_hash (sha256 1 expiration)) ; nonce = (sha256tree (c handle expiration))
-                                (list PAYOUT_PUZZLE_HASH total_price) ; notarized payment
+                                (list PAYOUT_PUZZLE_HASH total_price (list PAYOUT_PUZZLE_HASH)) ; notarized payment
                             )
                         )
                     )
