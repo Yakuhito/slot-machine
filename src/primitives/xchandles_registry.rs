@@ -112,14 +112,19 @@ impl XchandlesRegistry {
     {
         let Ok(launcher_solution) = ctx.extract::<LauncherSolution<(
             Bytes32,
-            (u64, (XchandlesRegistryState, (XchandlesConstants, ()))),
+            (
+                u64,
+                (u64, (XchandlesRegistryState, (XchandlesConstants, ()))),
+            ),
         )>>(launcher_solution) else {
             return Ok(None);
         };
 
         let launcher_id = launcher_coin.coin_id();
-        let (initial_registration_asset_id, (initial_base_price, (initial_state, (constants, ())))) =
-            launcher_solution.key_value_list;
+        let (
+            initial_registration_asset_id,
+            (initial_base_price, (initial_registration_period, (initial_state, (constants, ())))),
+        ) = launcher_solution.key_value_list;
 
         let info = XchandlesRegistryInfo::new(
             initial_state,
@@ -129,6 +134,7 @@ impl XchandlesRegistry {
             != XchandlesRegistryState::from(
                 initial_registration_asset_id.tree_hash().into(),
                 initial_base_price,
+                initial_registration_period,
             )
         {
             return Ok(None);
