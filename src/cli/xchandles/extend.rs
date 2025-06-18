@@ -20,6 +20,7 @@ pub async fn xchandles_extend(
     testnet11: bool,
     payment_asset_id_str: String,
     payment_cat_base_price_str: String,
+    registration_period: u64,
     local: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -44,7 +45,11 @@ pub async fn xchandles_extend(
     if DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
         != registry.info.state.cat_maker_puzzle_hash.into()
         || registry.info.state.pricing_puzzle_hash
-            != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(payment_cat_base_price).into()
+            != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+                payment_cat_base_price,
+                registration_period,
+            )
+            .into()
     {
         return Err(CliError::Custom(
             "Given payment asset id & base price do not match the current registry's state."
@@ -85,6 +90,7 @@ pub async fn xchandles_extend(
             slot,
             payment_asset_id,
             payment_cat_base_price,
+            registration_period,
             num_years,
         )?;
 

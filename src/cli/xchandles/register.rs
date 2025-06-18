@@ -34,6 +34,7 @@ pub async fn xchandles_register(
     testnet11: bool,
     payment_asset_id_str: String,
     payment_cat_base_price_str: String,
+    registration_period: u64,
     log: bool,
     local: bool,
     fee_str: String,
@@ -83,10 +84,15 @@ pub async fn xchandles_register(
         && (DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
             != registry.info.state.cat_maker_puzzle_hash.into()
             || registry.info.state.pricing_puzzle_hash
-                != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(payment_cat_base_price).into()
+                != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+                    payment_cat_base_price,
+                    registration_period,
+                )
+                .into()
             || registry.info.state.expired_handle_pricing_puzzle_hash
                 != XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
                     payment_cat_base_price,
+                    registration_period,
                     1000,
                 )
                 .into())
@@ -110,12 +116,15 @@ pub async fn xchandles_register(
         st
     };
 
-    let precommitted_pricing_puzzle =
-        XchandlesFactorPricingPuzzleArgs::get_puzzle(&mut ctx, payment_cat_base_price)?;
+    let precommitted_pricing_puzzle = XchandlesFactorPricingPuzzleArgs::get_puzzle(
+        &mut ctx,
+        payment_cat_base_price,
+        registration_period,
+    )?;
     let pricing_solution = XchandlesFactorPricingSolution {
         current_expiration: 0,
         handle: handle.clone(),
-        num_years,
+        num_periods: num_years,
     };
 
     let secret = if let Some(s) = secret {
@@ -282,11 +291,15 @@ pub async fn xchandles_register(
                 .cat_maker_puzzle_hash
                 .into()
                 && registry.info.state.pricing_puzzle_hash
-                    == XchandlesFactorPricingPuzzleArgs::curry_tree_hash(payment_cat_base_price)
-                        .into()
+                    == XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+                        payment_cat_base_price,
+                        registration_period,
+                    )
+                    .into()
                 && registry.info.state.expired_handle_pricing_puzzle_hash
                     == XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
                         payment_cat_base_price,
+                        registration_period,
                         1000,
                     )
                     .into()
@@ -357,6 +370,7 @@ pub async fn xchandles_register(
                     right_slot,
                     precommit_coin,
                     payment_cat_base_price,
+                    registration_period,
                 )?
                 .0
         };

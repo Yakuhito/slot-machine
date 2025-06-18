@@ -28,16 +28,17 @@ fn precommit_value_for_handle(
     handle: &XchandlesPremineRecord,
     payment_asset_id: Bytes32,
     start_time: u64,
+    registration_period: u64,
 ) -> Result<XchandlesPrecommitValue, CliError> {
     let owner_nft_launcher_id = Address::decode(&handle.owner_nft)?.puzzle_hash;
 
     Ok(XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
-        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(1),
+        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(1, registration_period),
         XchandlesFactorPricingSolution {
             current_expiration: 0,
             handle: handle.handle.clone(),
-            num_years: 1,
+            num_periods: 1,
         }
         .tree_hash(),
         Bytes32::default(),
@@ -53,6 +54,7 @@ pub async fn xchandles_continue_launch(
     payment_asset_id_str: String,
     handles_per_spend: usize,
     start_time: Option<u64>,
+    registration_period: u64,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -126,8 +128,12 @@ pub async fn xchandles_continue_launch(
         let inner_puzzle_hashes = handles_to_launch
             .iter()
             .map(|handle| {
-                let precommit_value =
-                    precommit_value_for_handle(handle, payment_asset_id, start_time)?;
+                let precommit_value = precommit_value_for_handle(
+                    handle,
+                    payment_asset_id,
+                    start_time,
+                    registration_period,
+                )?;
                 let precommit_value_ptr = ctx.alloc(&precommit_value)?;
                 let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
 
@@ -341,7 +347,9 @@ pub async fn xchandles_continue_launch(
     println!("Checking precommitment coins...");
     let precommit_values = handles
         .iter()
-        .map(|handle| precommit_value_for_handle(handle, payment_asset_id, start_time))
+        .map(|handle| {
+            precommit_value_for_handle(handle, payment_asset_id, start_time, registration_period)
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     let precommit_puzzle_hashes = precommit_values
@@ -549,6 +557,7 @@ pub async fn xchandles_continue_launch(
             right_slot,
             precommit_coin,
             1,
+            registration_period,
         )?;
 
         security_coin_conditions = security_coin_conditions.extend(sec_conds);

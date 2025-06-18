@@ -366,8 +366,12 @@ enum XchandlesCliAction {
         payout_address: String,
 
         /// Relative block height for precommits
-        #[arg(long, default_value = "8")]
+        #[arg(long, default_value = "32")]
         relative_block_height: u32,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -394,6 +398,10 @@ enum XchandlesCliAction {
         /// Start timestamp for premine
         #[arg(long)]
         start_time: Option<u64>,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1205,6 +1213,7 @@ pub async fn run_cli() {
                 m,
                 payout_address,
                 relative_block_height,
+                registration_period,
                 testnet11,
                 fee,
             } => {
@@ -1213,6 +1222,7 @@ pub async fn run_cli() {
                     m,
                     payout_address,
                     relative_block_height,
+                    registration_period,
                     testnet11,
                     fee,
                 )
@@ -1223,6 +1233,7 @@ pub async fn run_cli() {
                 payment_asset_id,
                 handles_per_spend,
                 start_time,
+                registration_period,
                 testnet11,
                 fee,
             } => {
@@ -1231,6 +1242,7 @@ pub async fn run_cli() {
                     payment_asset_id,
                     handles_per_spend,
                     start_time,
+                    registration_period,
                     testnet11,
                     fee,
                 )

@@ -7,7 +7,7 @@ use chia_wallet_sdk::{
 use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, load_catalog_state_schedule_csv, new_sk,
+    get_coinset_client, hex_string_to_bytes32, load_xchandles_state_schedule_csv, new_sk,
     parse_amount, parse_one_sided_offer, quick_sync_xchandles, spend_security_coin,
     sync_multisig_singleton, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db,
     DefaultCatMakerArgs, DelegatedStateAction, MultisigSingleton, SageClient,
@@ -78,13 +78,17 @@ pub async fn xchandles_unroll_state_scheduler(
     } else {
         "xchandles_price_schedule_mainnet.csv"
     };
-    let schedule = load_catalog_state_schedule_csv(filename)?;
+    let schedule = load_xchandles_state_schedule_csv(filename)?;
     let mut found = false;
     for record in schedule.iter() {
         let cmph = DefaultCatMakerArgs::curry_tree_hash(record.asset_id.tree_hash().into());
-        let pph = XchandlesFactorPricingPuzzleArgs::curry_tree_hash(record.registration_price);
+        let pph = XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+            record.registration_price,
+            record.registration_period,
+        );
         let eph = XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
             record.registration_price,
+            record.registration_period,
             1000,
         );
         if cmph == new_state.cat_maker_puzzle_hash.into()

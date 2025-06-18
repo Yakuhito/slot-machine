@@ -3,10 +3,10 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    get_coinset_client, get_prefix, launch_xchandles_registry, load_catalog_state_schedule_csv,
-    load_xchandles_premine_csv, parse_amount, print_medieval_vault_configuration, wait_for_coin,
-    MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo, XchandlesConstants,
-    XchandlesFactorPricingPuzzleArgs, XchandlesRegistryState,
+    get_coinset_client, get_prefix, launch_xchandles_registry, load_xchandles_premine_csv,
+    load_xchandles_state_schedule_csv, parse_amount, print_medieval_vault_configuration,
+    wait_for_coin, MedievalVaultHint, MedievalVaultInfo, SageClient, StateSchedulerInfo,
+    XchandlesConstants, XchandlesFactorPricingPuzzleArgs, XchandlesRegistryState,
 };
 use chia::{
     bls::PublicKey,
@@ -103,6 +103,7 @@ pub async fn xchandles_initiate_launch(
     m: usize,
     payout_address: String,
     relative_block_height: u32,
+    registration_period: u64,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -138,7 +139,7 @@ pub async fn xchandles_initiate_launch(
         price_schedule_csv_filename
     );
 
-    let price_schedule = load_catalog_state_schedule_csv(price_schedule_csv_filename)?;
+    let price_schedule = load_xchandles_state_schedule_csv(price_schedule_csv_filename)?;
     println!("Price schedule:");
     for record in price_schedule.iter() {
         println!(
@@ -260,6 +261,7 @@ pub async fn xchandles_initiate_launch(
         &mut ctx,
         Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
         1,
+        registration_period,
         get_additional_info_for_launch,
         if testnet11 {
             &TESTNET11_CONSTANTS
@@ -276,6 +278,7 @@ pub async fn xchandles_initiate_launch(
                         XchandlesRegistryState::from(
                             ps.asset_id.tree_hash().into(),
                             ps.registration_price,
+                            ps.registration_period,
                         ),
                     )
                 })

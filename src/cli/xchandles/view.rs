@@ -13,6 +13,7 @@ pub async fn xchandles_view(
     testnet11: bool,
     payment_asset_id_str: Option<String>,
     payment_cat_base_price_str: Option<String>,
+    registration_period: Option<u64>,
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
 
@@ -52,13 +53,20 @@ pub async fn xchandles_view(
         "  Expired handle pricing puzzle hash: {}",
         hex::encode(registry.info.state.expired_handle_pricing_puzzle_hash)
     );
-    if let Some(payment_cat_base_price) = payment_cat_base_price_str {
+    if let (Some(payment_cat_base_price), Some(registration_period)) =
+        (payment_cat_base_price_str, registration_period)
+    {
         let payment_cat_base_price = parse_amount(&payment_cat_base_price, true)?;
         if registry.info.state.pricing_puzzle_hash
-            == XchandlesFactorPricingPuzzleArgs::curry_tree_hash(payment_cat_base_price).into()
+            == XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+                payment_cat_base_price,
+                registration_period,
+            )
+            .into()
             && registry.info.state.expired_handle_pricing_puzzle_hash
                 == XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
                     payment_cat_base_price,
+                    registration_period,
                     1000,
                 )
                 .into()
