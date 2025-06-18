@@ -1164,11 +1164,7 @@ mod tests {
             ctx,
             &mut catalog,
             tail_hash.into(),
-            if let Some(found_slot) = slot {
-                found_slot.info.value.neighbors.tree_hash().into()
-            } else {
-                Bytes32::default()
-            },
+            slot.map(|s| s.info.value.neighbors),
             precommit_coin,
             slot.cloned(),
         )?;

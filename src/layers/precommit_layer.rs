@@ -189,11 +189,12 @@ pub struct PrecommitLayerSolution {
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(list)]
-pub struct CatalogPrecommitValue<T = NodePtr> {
-    pub refund_info_hash: Bytes32,
-    pub initial_inner_puzzle_hash: Bytes32,
-    #[clvm(rest)]
+pub struct CatalogPrecommitValue<T = NodePtr, S = ()> {
     pub tail_reveal: T,
+    pub initial_inner_puzzle_hash: Bytes32,
+    pub cat_maker_hash: Bytes32,
+    #[clvm(rest)]
+    pub cat_maker_solution: S,
 }
 
 impl<T> CatalogPrecommitValue<T> {
@@ -203,14 +204,13 @@ impl<T> CatalogPrecommitValue<T> {
         tail_reveal: T,
     ) -> Self {
         Self {
-            refund_info_hash: clvm_tuple!(
-                DefaultCatMakerArgs::curry_tree_hash(payment_asset_tail_hash_hash.into()),
-                ()
-            )
-            .tree_hash()
-            .into(),
-            initial_inner_puzzle_hash,
             tail_reveal,
+            initial_inner_puzzle_hash,
+            cat_maker_hash: DefaultCatMakerArgs::curry_tree_hash(
+                payment_asset_tail_hash_hash.into(),
+            )
+            .into(),
+            cat_maker_solution: (),
         }
     }
 

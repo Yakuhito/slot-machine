@@ -369,11 +369,7 @@ pub async fn catalog_register(
                     &mut ctx,
                     &mut catalog,
                     registered_asset_id,
-                    if let Some(slot) = slot {
-                        slot.info.value.neighbors.tree_hash().into()
-                    } else {
-                        Bytes32::default()
-                    },
+                    slot.map(|s| s.info.value.neighbors),
                     precommit_coin,
                     slot,
                 )?

@@ -13,7 +13,7 @@ use hex_literal::hex;
 
 use crate::{
     Action, CatalogPrecommitValue, CatalogRegistry, CatalogRegistryConstants, CatalogSlotValue,
-    DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SpendContextExt,
+    DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SlotNeigborsInfo, SpendContextExt,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,7 +62,7 @@ impl CatalogRefundAction {
         ctx: &mut SpendContext,
         catalog: &mut CatalogRegistry,
         tail_hash: Bytes32,
-        neighbors_hash: Bytes32,
+        neighbors: Option<SlotNeigborsInfo>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         slot: Option<Slot<CatalogSlotValue>>,
     ) -> Result<Conditions, DriverError> {
@@ -108,7 +108,7 @@ impl CatalogRefundAction {
             initial_nft_owner_ph: initial_inner_puzzle_hash,
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
             precommit_amount: precommit_coin.coin.amount,
-            neighbors_hash,
+            neighbors,
         };
         let action_solution = action_solution.to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
@@ -172,13 +172,13 @@ impl CatalogRefundActionArgs {
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct CatalogRefundActionSolution<P, S> {
-    pub precommited_cat_maker_reveal: P,
     pub precommited_cat_maker_hash: Bytes32,
+    pub precommited_cat_maker_reveal: P,
     pub precommited_cat_maker_solution: S,
     pub tail_hash: Bytes32,
     pub initial_nft_owner_ph: Bytes32,
     pub refund_puzzle_hash_hash: Bytes32,
     pub precommit_amount: u64,
     #[clvm(rest)]
-    pub neighbors_hash: Bytes32,
+    pub neighbors: Option<SlotNeigborsInfo>,
 }
