@@ -104,17 +104,16 @@
                             (c
                                 (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
                                     refund_puzzle_hash_hash
-                                    (sha256 1 (sha256tree
-                                        (c
-                                            (c
-                                                (c precommited_cat_maker_reveal_hash precommited_cat_maker_solution)
-                                                (c precommited_pricing_puzzle_reveal_hash precommited_pricing_puzzle_solution)
-                                            )
-                                            (c
-                                                (c handle secret)
-                                                (c precommited_start_time (c precommited_owner_launcher_id precommited_resolved_launcher_id))
-                                            )
-                                        )
+                                    (sha256 1 (xchandles_precommitment_value
+                                        precommited_cat_maker_reveal_hash
+                                        precommited_cat_maker_solution
+                                        precommited_pricing_puzzle_reveal_hash
+                                        precommited_pricing_puzzle_solution
+                                        handle
+                                        secret
+                                        precommited_start_time
+                                        precommited_owner_launcher_id
+                                        precommited_resolved_launcher_id
                                     )) ; hash of precommit value, which is itself a hash :)
                                 ) ; Inner_Puzzle_Hash
                                 precommited_cat_maker_solution
