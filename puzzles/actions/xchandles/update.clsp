@@ -1,5 +1,5 @@
 ; update.clsp by yakuhito
-;; Used to update the owner_launcher_id and/or resolved_launcher_id of a record
+;; Used to update the owner_launcher_id and/or resolved_data of a record
 
 ;; Note: The update is final.
 
@@ -17,84 +17,60 @@
         )
     )
     (
-        handle_hash
-        neighbors_hash ; (sha256tree (left_value . right_value))
-        expiration
-        current_owner_launcher_id
-        current_resolved_launcher_id
-        new_owner_launcher_id
-        new_resolved_launcher_id .
+        (@
+            current_slot
+            (handle_hash neighbors expiration . (@ current_data (current_owner_launcher_id . current_resolved_data)))
+        )
+        (@ new_data (new_owner_launcher_id . new_resolved_data)) .
         announcer_inner_puzzle_hash
     )
 )
     (include condition_codes.clib)
+    (include sha256tree.clib)
+    (include xchandles.clib)
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_slot_data_hash (handle_hash neighbors_hash expiration owner_launcher_id resolved_launcher_id)
-        (sha256 2
-            (sha256 1 handle_hash)
-            (sha256 2
-                neighbors_hash
-                (sha256 2
-                    (sha256 1 expiration)
-                    (sha256 2
-                        (sha256 1 owner_launcher_id)
-                        (sha256 1 resolved_launcher_id)
-                    )
-                )
-            )
-        )
+    (if (all
+        (= (strlen new_owner_launcher_id) 32)
+        (> 65 (strlen new_resolved_data))
     )
-
-    (c
-        Truth
-        (list
-            ; spend slot
-            (spend_slot_inline SLOT_1ST_CURRY_HASH 
-                (get_slot_data_hash
-                    handle_hash
-                    neighbors_hash
-                    expiration
-                    current_owner_launcher_id
-                    current_resolved_launcher_id
-                )
-            )
-
-            ; create new slot
-            (create_slot_inline SLOT_1ST_CURRY_HASH
-                (get_slot_data_hash
-                    handle_hash
-                    neighbors_hash
-                    expiration
-                    new_owner_launcher_id
-                    new_resolved_launcher_id
-                )
-                handle_hash
-            )
-
-            ; assert message from current owner
+        (c
+            Truth
             (list
-                RECEIVE_MESSAGE
-                18 ; puzzle-puzzle
-                (sha256 2
-                    (sha256 1 handle_hash)
-                    (sha256 2
-                        (sha256 1 new_owner_launcher_id)
-                        (sha256 1 new_resolved_launcher_id)
+                ; can't update expired handles
+                (list ASSERT_SECONDS_ABSOLUTE expiration)
+
+                ; spend slot
+                (spend_slot_inline SLOT_1ST_CURRY_HASH 
+                    (sha256tree current_slot)
+                )
+
+                ; create new slot
+                (create_slot_inline SLOT_1ST_CURRY_HASH
+                    (get_xchandles_slot_value_hash
+                        handle_hash
+                        neighbors
+                        expiration
+                        new_data
                     )
                 )
-                (curry_hashes_inline SINGLETON_MOD_HASH
-                    (sha256 2
-                        (sha256 1 SINGLETON_MOD_HASH)
-                        (sha256 2
-                            (sha256 1 current_owner_launcher_id)
-                            SINGLETON_LAUNCHER_PUZZLE_HASH_HASH
-                        )
-                    ) ; sha256tree of announcer SINGLETON_MOD
-                    announcer_inner_puzzle_hash
+
+                ; assert message from current owner
+                (list
+                    RECEIVE_MESSAGE
+                    18 ; puzzle-puzzle
+                    (sha256tree (c handle_hash new_data))
+                    (curry_hashes_inline SINGLETON_MOD_HASH
+                        (sha256tree
+                            (c SINGLETON_MOD_HASH (c current_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH_HASH))
+                        ) ; tree hash of announcer SINGLETON_STRUCT
+                        announcer_inner_puzzle_hash
+                    )
                 )
             )
         )
+        ; else
+        (x)
     )
 )
