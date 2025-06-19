@@ -28,6 +28,7 @@
     )
     ; pricing_solution's first element MUST be handle_reveal
     (
+        handle_hash
         pricing_puzzle_reveal
         (@ pricing_solution (this_is_zero handle . solution_rest))
         cat_maker_puzzle_reveal
@@ -46,7 +47,7 @@
         (@ data (owner_launcher_id . resolved_data))
         ; info needed to compute precommit coin puzzle hash
         refund_puzzle_hash_hash
-        secret_hash
+        secret
     )
 )
     (include condition_codes.clib)
@@ -55,102 +56,90 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun-inline main ((total_price . registered_time))
-        (list
-            (list ASSERT_SECONDS_ABSOLUTE start_time)
-            
-            ; spend left slot
-            (spend_slot_inline SLOT_1ST_CURRY_HASH 
-                (get_xchandles_slot_value_hash left_value (c left_left_value right_value) left_expiration left_data)
-            )
-            ; spend right slot
-            (spend_slot_inline SLOT_1ST_CURRY_HASH
-                (get_xchandles_slot_value_hash right_value (c left_value right_right_value) right_expiration right_data)
-            )
-            
-            ; create new slot
-            (create_slot_inline SLOT_1ST_CURRY_HASH
-                (get_xchandles_slot_value_hash
-                    (sha256 1 handle)
-                    (c left_value right_value)
-                    (+ start_time registered_time)
-                    data
-                )
-            )
-
-            ; create new left slot
-            (create_slot_inline SLOT_1ST_CURRY_HASH 
-                (get_xchandles_slot_value_hash left_value (c left_left_value (sha256 1 handle)) left_expiration left_data)
-            ) 
-            ; create new right slot
-            (create_slot_inline SLOT_1ST_CURRY_HASH
-                (get_xchandles_slot_value_hash right_value (c (sha256 1 handle) right_right_value) right_expiration right_data)
-            )
-
-            ; announcement
-            (list
-                CREATE_PUZZLE_ANNOUNCEMENT
-                (concat 'r'
-                    (sha256 2 
-                        handle_hash
-                        (sha256 2
-                            (sha256 1 (+ registered_time start_time))
-                            rest_data_hash
-                        )
-                    ) ; (sha256tree (handle new_expiration new_owner_launcher_id . new_resolved_launcher_id))
-                ) 
-            )
-            
+    (defun consume_precommit_and_announce (
+        precommit_puzzle_hash
+        precommit_amount
+        base_conditions
+    )
+        (c
             ; consume precommit coin
             (list
                 SEND_MESSAGE
                 19 ; sender puzzle + receiver puzzle + receiver amount
                 1 ; message = 1 = spend to payout puzzle hash
-                (a
-                    cat_maker_puzzle_reveal
-                    (c
-                        (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
-                            refund_puzzle_hash_hash
-                            (sha256 1 (xchandles_precommitment_value
-                                Cat_Maker_Puzzle_Hash
-                                cat_maker_solution
-                                Pricing_Puzzle_Hash
-                                pricing_solution_hash
-                                handle
-                                secret
-                                start_time
-                                owner_launcher_id
-                                resolved_launcher_id
-                            ))
-                            (sha256 2
-                                (sha256 1
-                                    (sha256 2
-                                        (sha256 2  (sha256tree ))
-                                        (sha256 2  )
-                                    ) ; refund_info_hash where REFUND_INFO = (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution))
-                                ) ; hash of refund_info_hash
-                                (sha256 2
-                                    (sha256 2 
-                                        secret_hash
-                                        handle_hash
-                                    )
-                                    (sha256 2
-                                        (sha256 1 start_time)
-                                        rest_data_hash
-                                    )
-                                )
-                            ) ; data in precommit coin reveal will be (c refund_info_hash (c (c secret handle) (c start_time (c new_owner_launcher_id new_resolved_launcher_id))))))
-                        ) ; Inner_Puzzle_Hash
-                        cat_maker_solution
+                precommit_puzzle_hash
+                precommit_amount
+            )
+            (c 
+                ; announcement
+                (list
+                    CREATE_PUZZLE_ANNOUNCEMENT
+                    (concat 'r' precommit_puzzle_hash) 
+                )
+                base_conditions
+            )
+        )
+    )
+
+    (defun-inline main ((total_price . registered_time))
+        (consume_precommit_and_announce
+            (a
+                cat_maker_puzzle_reveal
+                (c
+                    (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
+                        refund_puzzle_hash_hash
+                        (sha256 1 (xchandles_precommitment_value
+                            Cat_Maker_Puzzle_Hash
+                            cat_maker_solution
+                            Pricing_Puzzle_Hash
+                            pricing_solution
+                            handle
+                            secret
+                            start_time
+                            owner_launcher_id
+                            resolved_data
+                        ))
+                    ) ; Inner_Puzzle_Hash
+                    cat_maker_solution
+                )
+            ) ; precommit_puzzle_hash
+            total_price ; precommit_amount
+            (list
+                (list ASSERT_SECONDS_ABSOLUTE start_time)
+                
+                ; spend left slot
+                (spend_slot_inline SLOT_1ST_CURRY_HASH 
+                    (get_xchandles_slot_value_hash left_value (c left_left_value right_value) left_expiration left_data)
+                )
+                ; spend right slot
+                (spend_slot_inline SLOT_1ST_CURRY_HASH
+                    (get_xchandles_slot_value_hash right_value (c left_value right_right_value) right_expiration right_data)
+                )
+                
+                ; create new slot
+                (create_slot_inline SLOT_1ST_CURRY_HASH
+                    (get_xchandles_slot_value_hash
+                        handle_hash
+                        (c left_value right_value)
+                        (+ start_time registered_time)
+                        data
                     )
                 )
-                total_price
-            )
-        ) ; conditions
+
+                ; create new left slot
+                (create_slot_inline SLOT_1ST_CURRY_HASH 
+                    (get_xchandles_slot_value_hash left_value (c left_left_value handle_hash) left_expiration left_data)
+                ) 
+                ; create new right slot
+                (create_slot_inline SLOT_1ST_CURRY_HASH
+                    (get_xchandles_slot_value_hash right_value (c handle_hash right_right_value) right_expiration right_data)
+                )
+            ) ; base_conditions
+        )
     )
 
     (if (all
-            (= handle_hash (sha256 1 (f (r pricing_solution))))
+            (= handle_hash (sha256 1 handle))
             (not this_is_zero) ; Current_Expiry = 0 since handle is being registered
             (>s handle_hash left_value)
             (>s right_value handle_hash)
