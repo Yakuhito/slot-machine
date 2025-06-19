@@ -24,8 +24,8 @@
         refund_puzzle_hash_hash
         secret
         neighbors ; (c left right)
-        old_rest . ; (c old_owner_launcher_id old_resolved_launcher_id)
-        (@ new_rest (new_owner_launcher_id . new_resolved_launcher_id))
+        old_rest . ; (c old_owner_launcher_id old_resolved_data)
+        (@ new_rest (new_owner_launcher_id . new_resolved_data))
     )
 )
     (include condition_codes.clib)
@@ -83,7 +83,7 @@
                             (c
                                 (c secret handle)
                                 (c buy_time new_rest)
-                            ) ; data = (c (c secret handle) (c start_time (c new_owner_launcher_id new_resolved_launcher_id))))
+                            ) ; data = (c (c secret handle) (c start_time (c new_owner_launcher_id new_resolved_data))))
                         )
                     ) ; precommit coin value = (c REFUND_INFO data)
                 ) ; precommit coin inner puzzle hash
@@ -110,8 +110,8 @@
     (if (all
         (= (sha256tree cat_maker_puzzle_reveal) Cat_Maker_Puzzle_Hash)
         (= (sha256tree expired_handle_pricing_puzzle_reveal) Expired_Handle_Pricing_Puzzle_Hash)
-        (= (strlen new_owner_launcher_id) 32)
-        (not (l new_resolved_launcher_id))
+        (= (strlen new_resolved_data) 32)
+        (> 65 (strlen new_resolved_data))
     )
         (main
             (sha256 1 handle)

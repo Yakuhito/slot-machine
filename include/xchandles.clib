@@ -1,8 +1,8 @@
 (
-    (defun-inline get_xchandles_slot_value_hash (handle_hash neighbors expiration launcher_ids)
+    (defun-inline get_xchandles_slot_value_hash (handle_hash neighbors expiration data)
         (sha256tree (c
             (c handle_hash neighbors)
-            (c expiration launcher_ids)
+            (c expiration data)
         ))
     )
 

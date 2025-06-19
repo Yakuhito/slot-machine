@@ -23,7 +23,7 @@
         cat_maker_puzzle_reveal
         cat_maker_solution
         neighbors . 
-        launcher_ids
+        rest_data
     )
 )
     (include condition_codes.clib)
@@ -38,7 +38,7 @@
             (list
                 ; spend slot
                 (spend_slot_inline SLOT_1ST_CURRY_HASH 
-                    (get_xchandles_slot_value_hash (sha256 1 handle) neighbors expiration launcher_ids)
+                    (get_xchandles_slot_value_hash (sha256 1 handle) neighbors expiration rest_data)
                 )
 
                 ; announcement
@@ -53,7 +53,7 @@
                         (sha256 1 handle)
                         neighbors
                         (+ expiration registered_time)
-                        launcher_ids
+                        rest_data
                     )
                 ) 
                 
