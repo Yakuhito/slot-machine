@@ -41,17 +41,37 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun main (SLOT_1ST_CURRY_HASH slot_value_hash slot_spend_needed base_conditions)
-        (if slot_spend_needed
-            (c 
-                (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
-                (c 
-                    (create_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
-                    base_conditions
+    (defun main (
+        SLOT_1ST_CURRY_HASH
+        slot_value_hash
+        slot_spend_needed
+        precommit_puzzle_hash
+        precommit_amount
+    )
+        (c
+            ; consume precommit coin
+            (list
+                SEND_MESSAGE
+                19 ; sender puzzle + receiver puzzle + receiver amount
+                0 ; message = 0 = refund
+                precommit_puzzle_hash
+                precommit_amount
+            )
+            (c
+                ; announcement
+                (list
+                    CREATE_PUZZLE_ANNOUNCEMENT
+                    (concat '$' precommit_puzzle_hash)
+                )
+                (if slot_spend_needed
+                    (list
+                        (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
+                        (create_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
+                    )
+                    ; else
+                    ()
                 )
             )
-            ; else
-            base_conditions
         )
     )
 
@@ -79,49 +99,27 @@
                     ; not (c)
                     (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
                 ) ; slot spend needed if (a), (b), and (c) are not met - we need (d)
-                (list
-                    ; announcement
-                    (list
-                        CREATE_PUZZLE_ANNOUNCEMENT
-                        (concat '$'
-                            (sha256 2
-                                (sha256 2 
-                                    secret_hash
-                                    handle_hash
-                                )
-                                precommit_value_rest_hash
-                            )
-                        ) 
-                    )
-
-                    ; consume precommit coin
-                    (list
-                        SEND_MESSAGE
-                        19 ; sender puzzle + receiver puzzle + receiver amount
-                        0 ; message = 0 = refund
-                        (a
-                            precommited_cat_maker_reveal
-                            (c
-                                (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
-                                    refund_puzzle_hash_hash
-                                    (sha256 1 (xchandles_precommitment_value
-                                        precommited_cat_maker_reveal_hash
-                                        precommited_cat_maker_solution
-                                        precommited_pricing_puzzle_reveal_hash
-                                        precommited_pricing_puzzle_solution
-                                        handle
-                                        secret
-                                        precommited_start_time
-                                        precommited_owner_launcher_id
-                                        precommited_resolved_data
-                                    )) ; hash of precommit value, which is itself a hash :)
-                                ) ; Inner_Puzzle_Hash
+                (a
+                    precommited_cat_maker_reveal
+                    (c
+                        (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
+                            refund_puzzle_hash_hash
+                            (sha256 1 (xchandles_precommitment_value
+                                precommited_cat_maker_reveal_hash
                                 precommited_cat_maker_solution
-                            )
-                        ) ; receiver puzzle hash
-                        precommit_amount
+                                precommited_pricing_puzzle_reveal_hash
+                                precommited_pricing_puzzle_solution
+                                handle
+                                secret
+                                precommited_start_time
+                                precommited_owner_launcher_id
+                                precommited_resolved_data
+                            )) ; hash of precommit value, which is itself a hash :)
+                        ) ; Inner_Puzzle_Hash
+                        precommited_cat_maker_solution
                     )
-                ) ; base_conditions
+                ) ; receiver puzzle hash
+                precommit_amount
             ) ; conditions
         )
         ; else
