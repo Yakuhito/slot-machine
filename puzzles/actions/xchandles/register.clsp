@@ -1,9 +1,9 @@
 ; register.clsp by yakuhito
 ;; Responsible for registering new handles into the handle registry (XCHandles)
 
-;; Unlike CATalog, a slot's value is (value (left_value . right_value) expiration owner_launcher_id . resolved_launcher_id) where:
+;; Unlike CATalog, a slot's value is (c (c handle_hash (c left right)) (c expiration (c owner resolved))) where:
 ;;  value is the slot 'key'/id and is defined as (sha256 1 handle)
-;;  left_value/right_value are the key's of the slot's neighbors
+;;  left_value/right_value are the keys of the slot's neighbors
 ;;  expiration is a timestamp that says when the handle will expire
 ;;  owner_launcher_id is a 32-byte value that specifies the owner of the record, who can
 ;;       update the owner_launcher_id (i.e., transfer the handle) and resolved_launcher_id
@@ -162,6 +162,8 @@
             (>s right_value handle_hash)
             (= Cat_Maker_Puzzle_Hash (sha256tree (f solution))) ; cat maker puzzle reveal is correct
             (= Pricing_Puzzle_Hash (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
+            (= (strlen new_owner_launcher_id) 32)
+            (not (l new_resolved_launcher_id))
         )
         (c
             Truth ; new ephemeral state and state
