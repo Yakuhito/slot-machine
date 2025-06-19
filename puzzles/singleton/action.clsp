@@ -5,7 +5,7 @@
 
 ;; An action's solution will always be: (list (Ephemeral_State . Current_State) solution)
 ;;    (where capital first letters are used to denote Truths)
-;; It returns three values: (c (new_ephemeral_state . new_state) . new_conditions)
+;; It returns three values: ((new_ephemeral_state . new_state) . new_conditions)
 ;;    state is passed from one action to the next and the latest value is saved between spends
 ;;        (it is persistent)
 ;;    ephemeral_state is not persistent - it's () for the first action of any new spend

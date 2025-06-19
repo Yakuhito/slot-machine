@@ -94,8 +94,7 @@ impl XchandlesRefundAction {
         slot: Option<Slot<XchandlesSlotValue>>,
     ) -> Result<(Conditions, Option<Slot<XchandlesSlotValue>>), DriverError> {
         // calculate announcement
-        let refund_announcement = precommit_coin.value.after_refund_info_hash();
-        let mut refund_announcement: Vec<u8> = refund_announcement.to_vec();
+        let mut refund_announcement: Vec<u8> = precommit_coin.coin.puzzle_hash.to_vec();
         refund_announcement.insert(0, b'$');
 
         // spend precommit coin

@@ -1,7 +1,12 @@
 use std::cmp::Ordering;
 
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
-use clvm_traits::{FromClvm, ToClvm};
+use chia::{
+    clvm_utils::ToTreeHash,
+    protocol::{Bytes, Bytes32},
+};
+use clvm_traits::{
+    clvm_tuple, ClvmDecoder, ClvmEncoder, FromClvm, FromClvmError, ToClvm, ToClvmError,
+};
 use hex_literal::hex;
 
 // comparison is >s, not >
@@ -108,35 +113,21 @@ impl PartialOrd for CatalogSlotValue {
     }
 }
 
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
-pub struct XchandlesSlotFirstPart {
-    pub handle_hash: Bytes32,
-    #[clvm(rest)]
-    pub neighbors: SlotNeigborsInfo,
-}
-
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
-pub struct XchandlesSlotLauncherIds {
+pub struct XchandlesDataValue {
     pub owner_launcher_id: Bytes32,
     #[clvm(rest)]
-    pub resolved_launcher_id: Bytes32,
+    pub resolved_data: Bytes,
 }
 
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
-pub struct XchandlesSlotSecondPart {
-    pub expiration: u64,
-    #[clvm(rest)]
-    pub launcher_ids: XchandlesSlotLauncherIds,
-}
-
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesSlotValue {
-    pub first_part: XchandlesSlotFirstPart,
-    pub second_part: XchandlesSlotSecondPart,
+    pub handle_hash: Bytes32,
+    pub neighbors: SlotNeigborsInfo,
+    pub expiration: u64,
+    pub owner_launcher_id: Bytes32,
+    pub resolved_data: Bytes,
 }
 
 impl XchandlesSlotValue {
@@ -146,23 +137,24 @@ impl XchandlesSlotValue {
         right_handle_hash: Bytes32,
         expiration: u64,
         owner_launcher_id: Bytes32,
-        resolved_launcher_id: Bytes32,
+        resolved_data: Bytes,
     ) -> Self {
         Self {
-            first_part: XchandlesSlotFirstPart {
-                handle_hash,
-                neighbors: SlotNeigborsInfo {
-                    left_value: left_handle_hash,
-                    right_value: right_handle_hash,
-                },
+            handle_hash,
+            neighbors: SlotNeigborsInfo {
+                left_value: left_handle_hash,
+                right_value: right_handle_hash,
             },
-            second_part: XchandlesSlotSecondPart {
-                expiration,
-                launcher_ids: XchandlesSlotLauncherIds {
-                    owner_launcher_id,
-                    resolved_launcher_id,
-                },
-            },
+            expiration,
+            owner_launcher_id,
+            resolved_data,
+        }
+    }
+
+    pub fn data(&self) -> XchandlesDataValue {
+        XchandlesDataValue {
+            owner_launcher_id: self.owner_launcher_id,
+            resolved_data: self.resolved_data.clone(),
         }
     }
 
@@ -173,7 +165,7 @@ impl XchandlesSlotValue {
             SLOT32_MAX_VALUE.into(),
             u64::MAX,
             Bytes32::default(),
-            Bytes32::default(),
+            Bytes::default(),
         )
     }
 
@@ -184,56 +176,82 @@ impl XchandlesSlotValue {
             SLOT32_MAX_VALUE.into(),
             u64::MAX,
             Bytes32::default(),
-            Bytes32::default(),
+            Bytes::default(),
         )
     }
 
-    pub fn with_neighbors(&self, left_handle_hash: Bytes32, right_handle_hash: Bytes32) -> Self {
+    pub fn with_neighbors(self, left_handle_hash: Bytes32, right_handle_hash: Bytes32) -> Self {
         Self {
-            first_part: XchandlesSlotFirstPart {
-                handle_hash: self.first_part.handle_hash,
-                neighbors: SlotNeigborsInfo {
-                    left_value: left_handle_hash,
-                    right_value: right_handle_hash,
-                },
+            handle_hash: self.handle_hash,
+            neighbors: SlotNeigborsInfo {
+                left_value: left_handle_hash,
+                right_value: right_handle_hash,
             },
-            second_part: self.second_part,
+            expiration: self.expiration,
+            owner_launcher_id: self.owner_launcher_id,
+            resolved_data: self.resolved_data,
         }
     }
 
     pub fn with_expiration(self, expiration: u64) -> Self {
         Self {
-            first_part: self.first_part,
-            second_part: XchandlesSlotSecondPart {
-                expiration,
-                launcher_ids: self.second_part.launcher_ids,
-            },
+            handle_hash: self.handle_hash,
+            neighbors: self.neighbors,
+            expiration,
+            owner_launcher_id: self.owner_launcher_id,
+            resolved_data: self.resolved_data.clone(),
         }
     }
 
-    pub fn with_launcher_ids(
-        self,
-        owner_launcher_id: Bytes32,
-        resolved_launcher_id: Bytes32,
-    ) -> Self {
+    pub fn with_data(self, owner_launcher_id: Bytes32, resolved_data: Bytes) -> Self {
         Self {
-            first_part: self.first_part,
-            second_part: XchandlesSlotSecondPart {
-                expiration: self.second_part.expiration,
-                launcher_ids: XchandlesSlotLauncherIds {
-                    owner_launcher_id,
-                    resolved_launcher_id,
-                },
-            },
+            handle_hash: self.handle_hash,
+            neighbors: self.neighbors,
+            expiration: self.expiration,
+            owner_launcher_id,
+            resolved_data,
         }
+    }
+}
+
+impl<N, D: ClvmDecoder<Node = N>> FromClvm<D> for XchandlesSlotValue {
+    fn from_clvm(decoder: &D, node: N) -> Result<Self, FromClvmError> {
+        let ((handle_hash, (left, right)), (expiration, (owner_launcher_id, resolved_data))): (
+            (Bytes32, (Bytes32, Bytes32)),
+            (u64, (Bytes32, Bytes)),
+        ) = FromClvm::from_clvm(decoder, node)?;
+
+        Ok(Self::new(
+            handle_hash,
+            left,
+            right,
+            expiration,
+            owner_launcher_id,
+            resolved_data,
+        ))
+    }
+}
+
+impl<N, E: ClvmEncoder<Node = N>> ToClvm<E> for XchandlesSlotValue {
+    fn to_clvm(&self, encoder: &mut E) -> Result<N, ToClvmError> {
+        let obj = clvm_tuple!(
+            clvm_tuple!(
+                self.handle_hash,
+                clvm_tuple!(self.neighbors.left_value, self.neighbors.right_value)
+            ),
+            clvm_tuple!(
+                self.expiration,
+                clvm_tuple!(self.owner_launcher_id, self.resolved_data.clone())
+            ),
+        );
+
+        obj.to_clvm(encoder)
     }
 }
 
 impl Ord for XchandlesSlotValue {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.first_part
-            .handle_hash
-            .cmp(&other.first_part.handle_hash)
+        self.handle_hash.cmp(&other.handle_hash)
     }
 }
 

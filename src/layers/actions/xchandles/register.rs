@@ -181,19 +181,7 @@ impl XchandlesRegisterAction {
         let expiration = precommit_coin.value.start_time + num_periods * registration_period;
 
         // calculate announcement
-        let register_announcement: Bytes32 = clvm_tuple!(
-            handle.clone(),
-            clvm_tuple!(
-                expiration,
-                clvm_tuple!(
-                    precommit_coin.value.owner_launcher_id,
-                    precommit_coin.value.resolved_launcher_id
-                )
-            )
-        )
-        .tree_hash()
-        .into();
-        let mut register_announcement: Vec<u8> = register_announcement.to_vec();
+        let mut register_announcement: Vec<u8> = precommit_coin.coin.puzzle_hash.to_vec();
         register_announcement.insert(0, b'r');
 
         // spend precommit coin
