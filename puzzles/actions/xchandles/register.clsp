@@ -36,17 +36,14 @@
         left_value
         left_left_value
         left_expiration
-        left_owner_launcher_id
-        left_resolved_data
+        left_data
         right_value
         right_right_value
         right_expiration
-        right_owner_launcher_id
-        right_resolved_data
+        right_data
         ; end neighbor slots info
         start_time
-        owner_launcher_id
-        resolved_data
+        (@ data (owner_launcher_id . resolved_data))
         ; info needed to compute precommit coin puzzle hash
         refund_puzzle_hash_hash
         secret_hash
@@ -64,36 +61,30 @@
             
             ; spend left slot
             (spend_slot_inline SLOT_1ST_CURRY_HASH 
-                (get_xchandles_slot_value_hash left_value left_left_value right_value left_data_hash)
+                (get_xchandles_slot_value_hash left_value (c left_left_value right_value) left_expiration left_data)
             )
             ; spend right slot
             (spend_slot_inline SLOT_1ST_CURRY_HASH
-                (get_xchandles_slot_value_hash right_value left_value right_right_value right_data_hash)
+                (get_xchandles_slot_value_hash right_value (c left_value right_right_value) right_expiration right_data)
             )
             
             ; create new slot
             (create_slot_inline SLOT_1ST_CURRY_HASH
-                (get_slot_value_hash
-                    handle_hash
-                    left_value
-                    right_value
-                    (sha256 2 
-                        (sha256 1 (+ start_time registered_time))
-                        rest_data_hash
-                    ) ; sha256tree data
+                (get_xchandles_slot_value_hash
+                    (sha256 1 handle)
+                    (c left_value right_value)
+                    (+ start_time registered_time)
+                    data
                 )
-                handle_hash
             )
 
             ; create new left slot
             (create_slot_inline SLOT_1ST_CURRY_HASH 
-                (get_slot_value_hash left_value left_left_value handle_hash left_data_hash)
-                left_value
+                (get_xchandles_slot_value_hash left_value (c left_left_value (sha256 1 handle)) left_expiration left_data)
             ) 
             ; create new right slot
             (create_slot_inline SLOT_1ST_CURRY_HASH
-                (get_slot_value_hash right_value handle_hash right_right_value right_data_hash)
-                right_value
+                (get_xchandles_slot_value_hash right_value (c (sha256 1 handle) right_right_value) right_expiration right_data)
             )
 
             ; announcement
