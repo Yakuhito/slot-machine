@@ -30,15 +30,9 @@
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
+    (include xchandles.clib)
     (include curry.clib)
     (include slots.clib)
-
-    (defun-inline get_slot_value_hash (handle_hash neighbors expiration launcher_ids)
-        (sha256tree (c
-            (c handle_hash neighbors)
-            (c expiration launcher_ids)
-        ))
-    )
 
     (defun spend_precommit_coin_and_announce (
         cat_maker_puzzle_reveal
@@ -101,12 +95,12 @@
 
                     ; spend slot
                     (spend_slot_inline SLOT_1ST_CURRY_HASH 
-                        (get_slot_value_hash handle_hash neighbors current_expiration old_rest)
+                        (get_xchandles_slot_value_hash handle_hash neighbors current_expiration old_rest)
                     )
                     
                     ; create new slot
                     (create_slot_inline SLOT_1ST_CURRY_HASH
-                        (get_slot_value_hash handle_hash neighbors (+ registered_time buy_time) new_rest)
+                        (get_xchandles_slot_value_hash handle_hash neighbors (+ registered_time buy_time) new_rest)
                     )
                 ) ; base conditions
             ) ; conditions
