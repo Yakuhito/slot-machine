@@ -1,26 +1,25 @@
 ; oracle.clsp by yakuhito
 ;; Used to 'confirm' a registration on-chain by creating a puzzle announcement
 
+;; The slot format is (c (c handle_hash (c left right)) (c expiration (c owner resolved)))
+
 (mod (
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Truth
-    (
-        handle_hash .
-        rest_treehash ; (sha256tree ((left_value . right_value) expiration owner_launcher_id . resolved_launcher_id))
-    )
+    slot ; solution = slot value :)
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
     (include curry.clib)
     (include slots.clib)
 
-    (defun get_conditions (SLOT_1ST_CURRY_HASH hint data_treehash)
+    (defun get_conditions (SLOT_1ST_CURRY_HASH data_treehash)
         (list
             ; spend slot
             (spend_slot_inline SLOT_1ST_CURRY_HASH data_treehash)
 
             ; create new slot
-            (create_slot_inline SLOT_1ST_CURRY_HASH data_treehash hint)
+            (create_slot_inline SLOT_1ST_CURRY_HASH data_treehash)
 
             ; announce value
             (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'o' data_treehash))
@@ -31,8 +30,7 @@
         Truth
         (get_conditions
             SLOT_1ST_CURRY_HASH
-            handle_hash
-            (sha256 2 (sha256 1 handle_hash) rest_treehash)
+            (sha256tree slot)
         ) ; conditions
     )
 )
