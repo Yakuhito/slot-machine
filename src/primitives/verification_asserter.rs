@@ -6,7 +6,6 @@ use chia_puzzle_types::{singleton::SingletonStruct, LineageProof};
 use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
 use chia_wallet_sdk::driver::{DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
-use clvmr::serde::node_to_bytes;
 use hex_literal::hex;
 
 use crate::{SpendContextExt, VerificationLayer1stCurryArgs};
@@ -102,8 +101,6 @@ impl VerificationAsserter {
             ),
         })?;
 
-        println!("puzzle: {:?}", hex::encode(node_to_bytes(ctx, puzzle)?)); // todo: debug
-
         let solution = ctx.alloc(&VerificationAsserterSolution {
             verifier_proof,
             verification_inner_puzzle_maker_solution: CatalogVerificationInnerPuzzleMakerSolution {
@@ -111,8 +108,6 @@ impl VerificationAsserter {
             },
             launcher_amount,
         })?;
-
-        println!("solution: {:?}", hex::encode(node_to_bytes(ctx, solution)?)); // todo: debug
 
         Ok(Spend::new(puzzle, solution))
     }
