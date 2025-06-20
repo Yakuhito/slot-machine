@@ -70,13 +70,13 @@ impl XchandlesOracleAction {
         registry.insert(Spend::new(action_puzzle, action_solution));
 
         let new_slot = Self::get_created_slot_value(slot.info.value.clone());
-        registry.pending_items.slot_values.push(new_slot.clone());
+        registry.pending_items.created_slots.push(new_slot.clone());
 
         // spend slot
         registry
             .pending_items
             .spent_slots
-            .push(slot.info.value_hash);
+            .push(slot.info.value.clone());
         slot.spend(ctx, registry.info.inner_puzzle_hash().into())?;
 
         let mut oracle_ann = new_slot.tree_hash().to_vec();

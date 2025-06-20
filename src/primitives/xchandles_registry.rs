@@ -1,22 +1,20 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin},
+    protocol::{Bytes, Bytes32, Coin},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_puzzle_types::singleton::{LauncherSolution, SingletonArgs};
 use chia_wallet_sdk::{
-    coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{CatLayer, DriverError, Layer, Puzzle, Spend, SpendContext},
-    types::{run_puzzle, Condition, Conditions},
+    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
+    types::run_puzzle,
 };
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, CliError, Db,
-    DelegatedStateAction, PrecommitLayer, Registry, XchandlesExpireAction, XchandlesExtendAction,
-    XchandlesOracleAction, XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRegisterAction,
-    XchandlesUpdateAction,
+    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, CliError,
+    DelegatedStateAction, Registry, XchandlesExpireAction, XchandlesExtendAction,
+    XchandlesOracleAction, XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
 };
 
 use super::{
@@ -28,9 +26,8 @@ use super::{
 pub struct XchandlesRegistryPendingItems {
     pub actions: Vec<Spend>,
 
-    pub spent_slots: Vec<Bytes32>, // (value hash)
-
-    pub slot_values: Vec<XchandlesSlotValue>,
+    pub spent_slots: Vec<XchandlesSlotValue>,
+    pub created_slots: Vec<XchandlesSlotValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -307,43 +304,9 @@ impl XchandlesRegistry {
         Ok(state.1)
     }
 
-    pub async fn get_spent_slot_value(
-        &self,
-        ctx: &mut SpendContext,
-        pending_slot_values: &[XchandlesSlotValue],
-        slot_value_hash: Bytes32,
-        db: &mut Db,
-    ) -> Result<XchandlesSlotValue, CliError> {
-        if let Some(slot_value) = pending_slot_values
-            .iter()
-            .find(|s| s.tree_hash() == slot_value_hash.into())
-        {
-            return Ok(*slot_value);
-        };
-
-        if let Some(slot_value) = db
-            .get_slot_value::<XchandlesSlotValue>(
-                ctx,
-                self.info.constants.launcher_id,
-                0,
-                slot_value_hash,
-            )
-            .await?
-        {
-            return Ok(slot_value);
-        }
-
-        Err(CliError::Custom(format!(
-            "Slot value {} not found",
-            slot_value_hash
-        )))
-    }
-
     pub async fn get_pending_items_from_spend(
         &self,
         ctx: &mut SpendContext,
-        db: &mut Db,
-        client: &CoinsetClient,
         solution: NodePtr,
     ) -> Result<XchandlesRegistryPendingItems, CliError> {
         let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
@@ -353,8 +316,8 @@ impl XchandlesRegistry {
         )?;
 
         let mut actions: Vec<Spend> = vec![];
-        let mut spent_slots: Vec<Bytes32> = vec![];
-        let mut slot_values: Vec<XchandlesSlotValue> = vec![];
+        let mut spent_slots: Vec<XchandlesSlotValue> = vec![];
+        let mut created_slots: Vec<XchandlesSlotValue> = vec![];
 
         let expire_action = XchandlesExpireAction::from_constants(&self.info.constants);
         let expire_action_hash = expire_action.tree_hash();
@@ -381,7 +344,6 @@ impl XchandlesRegistry {
         let delegated_state_action_hash = delegated_state_action.tree_hash();
 
         let mut current_state = (NodePtr::NIL, self.info.state);
-        let mut output_conditions: Conditions<NodePtr>;
         for raw_action in inner_solution.action_spends {
             actions.push(Spend::new(raw_action.puzzle, raw_action.solution));
 
@@ -389,8 +351,8 @@ impl XchandlesRegistry {
 
             let action_output =
                 run_puzzle(ctx, raw_action.puzzle, actual_solution).map_err(DriverError::from)?;
-            (current_state, output_conditions) = ctx
-                .extract::<match_tuple!((NodePtr, XchandlesRegistryState), Conditions<NodePtr>)>(
+            (current_state, _) = ctx
+                .extract::<match_tuple!((NodePtr, XchandlesRegistryState), NodePtr)>(
                     action_output,
                 )?;
 
@@ -402,60 +364,42 @@ impl XchandlesRegistry {
             }
 
             if raw_action_hash == extend_action_hash {
-                let spent_slot_value_hash =
-                    XchandlesExtendAction::get_spent_slot_value_hash_from_solution(
-                        ctx,
-                        raw_action.solution,
-                    )?;
-                let spent_slot_value = self
-                    .get_spent_slot_value(ctx, &slot_values, spent_slot_value_hash, db)
-                    .await?;
-
-                let new_slot_value = XchandlesExtendAction::get_slot_value_from_solution(
+                let spent_slot_value = XchandlesExtendAction::get_spent_slot_value_from_solution(
                     ctx,
-                    spent_slot_value,
                     raw_action.solution,
                 )?;
 
-                spent_slots.push(spent_slot_value_hash);
-                slot_values.push(new_slot_value);
+                let new_slot_value = XchandlesExtendAction::get_created_slot_value_from_solution(
+                    ctx,
+                    raw_action.solution,
+                )?;
+
+                spent_slots.push(spent_slot_value);
+                created_slots.push(new_slot_value);
             } else if raw_action_hash == oracle_action_hash {
-                let spent_slot_value_hash =
-                    XchandlesOracleAction::get_spent_slot_value_hash_from_solution(
-                        ctx,
-                        raw_action.solution,
-                    )?;
-
-                let spent_slot_value = self
-                    .get_spent_slot_value(ctx, &slot_values, spent_slot_value_hash, db)
-                    .await?;
-
-                let new_slot_value = XchandlesOracleAction::get_slot_value(spent_slot_value);
-
-                spent_slots.push(spent_slot_value_hash);
-                slot_values.push(new_slot_value);
-            } else if raw_action_hash == update_action_hash {
-                let spent_slot_value_hash =
-                    XchandlesUpdateAction::get_spent_slot_value_hash_from_solution(
-                        ctx,
-                        raw_action.solution,
-                    )?;
-
-                let spent_slot_value = self
-                    .get_spent_slot_value(ctx, &slot_values, spent_slot_value_hash, db)
-                    .await?;
-
-                let new_slot_value = XchandlesUpdateAction::get_slot_value_from_solution(
+                let spent_slot_value = XchandlesOracleAction::get_spent_slot_value_from_solution(
                     ctx,
-                    spent_slot_value,
                     raw_action.solution,
                 )?;
 
-                spent_slots.push(spent_slot_value_hash);
-                slot_values.push(new_slot_value);
+                spent_slots.push(spent_slot_value.clone());
+                created_slots.push(spent_slot_value);
+            } else if raw_action_hash == update_action_hash {
+                let spent_slot_value = XchandlesUpdateAction::get_spent_slot_value_from_solution(
+                    ctx,
+                    raw_action.solution,
+                )?;
+
+                let new_slot_value = XchandlesUpdateAction::get_created_slot_value_from_solution(
+                    ctx,
+                    raw_action.solution,
+                )?;
+
+                spent_slots.push(spent_slot_value);
+                created_slots.push(new_slot_value);
             } else if raw_action_hash == refund_action_hash {
-                let Some(spent_slot_value_hash) =
-                    XchandlesRefundAction::get_spent_slot_value_hash_from_solution(
+                let Some(spent_slot_value) =
+                    XchandlesRefundAction::get_spent_slot_value_from_solution(
                         ctx,
                         raw_action.solution,
                     )?
@@ -463,127 +407,37 @@ impl XchandlesRegistry {
                     continue;
                 };
 
-                let spent_slot_value = self
-                    .get_spent_slot_value(ctx, &slot_values, spent_slot_value_hash, db)
-                    .await?;
+                spent_slots.push(spent_slot_value.clone());
+                created_slots.push(spent_slot_value);
+            } else if raw_action_hash == expire_action_hash {
+                let spent_slot_value = XchandlesExpireAction::get_spent_slot_value_from_solution(
+                    ctx,
+                    raw_action.solution,
+                )?;
 
-                let new_slot_value = XchandlesRefundAction::get_slot_value(Some(spent_slot_value));
+                let new_slot_value = XchandlesExpireAction::get_created_slot_value_from_solution(
+                    ctx,
+                    raw_action.solution,
+                )?;
 
-                spent_slots.push(spent_slot_value_hash);
-                // if there's a spent_slot_value_hash, there's also a new_slot_value
-                slot_values.push(new_slot_value.unwrap());
-            } else if raw_action_hash == expire_action_hash
-                || raw_action_hash == register_action_hash
-            {
-                let precommit_message_cond = output_conditions
-                    .iter()
-                    .filter_map(|c| {
-                        if let Condition::SendMessage(sm) = c {
-                            if sm.mode == 19 {
-                                Some(sm)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    })
-                    .next()
-                    .ok_or(CliError::Custom(
-                        "No message to precommit found".to_string(),
-                    ))?;
-
-                let precommit_coin_puzzle_hash =
-                    ctx.extract::<Bytes32>(precommit_message_cond.data[0])?;
-                let precommit_amount = ctx.extract::<u64>(precommit_message_cond.data[1])?;
-                let precommit_coin_record = client
-                    .get_coin_records_by_puzzle_hash(
-                        precommit_coin_puzzle_hash,
-                        None,
-                        None,
-                        Some(true),
-                    )
-                    .await?
-                    .coin_records
-                    .ok_or(CliError::CoinNotFound(precommit_coin_puzzle_hash))?
-                    .into_iter()
-                    .find(|c| c.coin.amount == precommit_amount && c.spent)
-                    .ok_or(CliError::CoinNotFound(precommit_coin_puzzle_hash))?;
-
-                let precommit_coin_spend = client
-                    .get_puzzle_and_solution(
-                        precommit_coin_record.coin.coin_id(),
-                        Some(precommit_coin_record.spent_block_index),
-                    )
-                    .await?
-                    .coin_solution
-                    .ok_or(CliError::CoinNotSpent(precommit_coin_record.coin.coin_id()))?;
-
-                let precommit_coin_puzzle_ptr = ctx.alloc(&precommit_coin_spend.puzzle_reveal)?;
-                let precommit_coin_puzzle = Puzzle::parse(ctx, precommit_coin_puzzle_ptr);
-
-                let parsed_layers =
-                    CatLayer::<PrecommitLayer<XchandlesPrecommitValue>>::parse_puzzle(
+                spent_slots.push(spent_slot_value);
+                created_slots.push(new_slot_value);
+            } else if raw_action_hash == register_action_hash {
+                // register
+                let spent_slot_values =
+                    XchandlesRegisterAction::get_spent_slot_values_from_solution(
                         ctx,
-                        precommit_coin_puzzle,
-                    )?;
-                let precommit_coin_value = parsed_layers.unwrap().inner_puzzle.value;
-
-                if raw_action_hash == expire_action_hash {
-                    let spent_slot_value_hash =
-                        XchandlesExpireAction::get_spent_slot_value_hash_from_solution(
-                            ctx,
-                            raw_action.solution,
-                        )?;
-
-                    let spent_slot_value = self
-                        .get_spent_slot_value(ctx, &slot_values, spent_slot_value_hash, db)
-                        .await?;
-
-                    let new_slot_value = XchandlesExpireAction::get_slot_value_from_solution(
-                        ctx,
-                        spent_slot_value,
-                        precommit_coin_value,
                         raw_action.solution,
                     )?;
 
-                    spent_slots.push(spent_slot_value_hash);
-                    slot_values.push(new_slot_value);
-                } else {
-                    // register
-                    let spent_slot_value_hashes =
-                        XchandlesRegisterAction::get_spent_slot_value_hashes_from_solution(
-                            ctx,
-                            raw_action.solution,
-                        )?;
-
-                    let spent_slot_values = [
-                        self.get_spent_slot_value(
-                            ctx,
-                            &slot_values,
-                            spent_slot_value_hashes[0],
-                            db,
-                        )
-                        .await?,
-                        self.get_spent_slot_value(
-                            ctx,
-                            &slot_values,
-                            spent_slot_value_hashes[1],
-                            db,
-                        )
-                        .await?,
-                    ];
-
-                    let new_slot_values = XchandlesRegisterAction::get_slot_values_from_solution(
+                let new_slot_values =
+                    XchandlesRegisterAction::get_created_slot_values_from_solution(
                         ctx,
-                        spent_slot_values,
-                        precommit_coin_value,
                         raw_action.solution,
                     )?;
 
-                    spent_slots.extend(spent_slot_value_hashes);
-                    slot_values.extend(new_slot_values);
-                }
+                spent_slots.extend(spent_slot_values);
+                created_slots.extend(new_slot_values);
             } else {
                 return Err(CliError::Custom("Unknown action".to_string()));
             }
@@ -592,7 +446,7 @@ impl XchandlesRegistry {
         Ok(XchandlesRegistryPendingItems {
             actions,
             spent_slots,
-            slot_values,
+            created_slots,
         })
     }
 
@@ -611,15 +465,15 @@ impl XchandlesRegistry {
             Bytes32::default(),
             0,
             Bytes32::default(),
-            Bytes32::default(),
+            Bytes::default(),
         );
 
-        for slot_value in self.pending_items.slot_values.iter() {
+        for slot_value in self.pending_items.created_slots.iter() {
             if slot_value.handle_hash < new_slot_value.handle_hash
                 && slot_value.handle_hash >= left.info.value.handle_hash
             {
                 left = self
-                    .created_slot_values_to_slots(vec![*slot_value])
+                    .created_slot_values_to_slots(vec![slot_value.clone()])
                     .remove(0);
             }
 
@@ -627,7 +481,7 @@ impl XchandlesRegistry {
                 && slot_value.handle_hash <= right.info.value.handle_hash
             {
                 right = self
-                    .created_slot_values_to_slots(vec![*slot_value])
+                    .created_slot_values_to_slots(vec![slot_value.clone()])
                     .remove(0);
             }
         }

@@ -212,11 +212,11 @@ impl XchandlesRegisterAction {
         registry
             .pending_items
             .spent_slots
-            .push(left_slot.info.value_hash);
+            .push(left_slot.info.value.clone());
         registry
             .pending_items
             .spent_slots
-            .push(right_slot.info.value_hash);
+            .push(right_slot.info.value.clone());
 
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
         right_slot.spend(ctx, my_inner_puzzle_hash)?;
@@ -225,15 +225,15 @@ impl XchandlesRegisterAction {
 
         registry
             .pending_items
-            .slot_values
+            .created_slots
             .push(new_slots_values[0].clone());
         registry
             .pending_items
-            .slot_values
+            .created_slots
             .push(new_slots_values[1].clone());
         registry
             .pending_items
-            .slot_values
+            .created_slots
             .push(new_slots_values[2].clone());
 
         Ok((

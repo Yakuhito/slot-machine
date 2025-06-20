@@ -133,7 +133,10 @@ impl XchandlesRefundAction {
         let new_slot_value = if let Some(slot) = &slot {
             let slot_value = slot.info.value.clone();
 
-            registry.pending_items.slot_values.push(slot_value.clone());
+            registry
+                .pending_items
+                .created_slots
+                .push(slot_value.clone());
 
             Some(
                 registry
@@ -149,7 +152,7 @@ impl XchandlesRefundAction {
             registry
                 .pending_items
                 .spent_slots
-                .push(slot.info.value_hash);
+                .push(slot.info.value.clone());
             slot.spend(ctx, my_inner_puzzle_hash)?;
         }
 

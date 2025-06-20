@@ -95,7 +95,7 @@ impl XchandlesUpdateAction {
 
         registry
             .pending_items
-            .slot_values
+            .created_slots
             .push(new_slot_value.clone());
 
         // spend slot
@@ -111,7 +111,7 @@ impl XchandlesUpdateAction {
         registry
             .pending_items
             .spent_slots
-            .push(slot.info.value_hash);
+            .push(slot.info.value.clone());
         slot.spend(ctx, my_inner_puzzle_hash)?;
 
         Ok((
