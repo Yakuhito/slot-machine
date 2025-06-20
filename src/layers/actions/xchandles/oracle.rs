@@ -46,9 +46,9 @@ impl XchandlesOracleAction {
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution = ctx.extract::<XchandlesOracleActionSolution>(solution)?;
+        let slot_value = ctx.extract::<XchandlesSlotValue>(solution)?;
 
-        Ok(solution.slot_value)
+        Ok(slot_value)
     }
 
     pub fn get_created_slot_value(spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
@@ -62,9 +62,7 @@ impl XchandlesOracleAction {
         slot: Slot<XchandlesSlotValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
         // spend self
-        let action_solution = ctx.alloc(&XchandlesOracleActionSolution {
-            slot_value: slot.info.value.clone(),
-        })?;
+        let action_solution = ctx.alloc(&slot.info.value)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
@@ -121,10 +119,4 @@ impl XchandlesOracleActionArgs {
         }
         .tree_hash()
     }
-}
-
-#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(transparent)]
-pub struct XchandlesOracleActionSolution {
-    pub slot_value: XchandlesSlotValue,
 }

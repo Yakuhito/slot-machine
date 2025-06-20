@@ -104,19 +104,6 @@
             ) ; precommit_puzzle_hash
             total_price ; precommit_amount
             (list
-                ; todo: debug-----------
-                (list REMARK (xchandles_precommitment_value
-                            Cat_Maker_Puzzle_Hash
-                            cat_maker_solution
-                            Pricing_Puzzle_Hash
-                            pricing_solution
-                            handle
-                            secret
-                            start_time
-                            owner_launcher_id
-                            resolved_data
-                        ))
-                ; todo: debug-----------
                 (list ASSERT_SECONDS_ABSOLUTE start_time)
                 
                 ; spend left slot

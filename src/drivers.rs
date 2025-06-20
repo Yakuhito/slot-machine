@@ -1563,8 +1563,8 @@ mod tests {
             payment_cat.asset_id.tree_hash(),
             pricing_puzzle_hash,
             pricing_solution_hash,
-            Bytes32::default(),
             handle_to_refund.clone(),
+            Bytes32::default(),
             if let Some(existing_slot) = &slot {
                 existing_slot.info.value.expiration + 28 * 24 * 60 * 60 + 1
             } else {
@@ -1813,8 +1813,8 @@ mod tests {
                     num_periods: 1,
                 }
                 .tree_hash(),
-                secret,
                 handle.clone(),
+                secret,
                 100,
                 handle_owner_launcher_id,
                 handle_resolved_data,
@@ -2162,8 +2162,8 @@ mod tests {
                 },
             }
             .tree_hash(),
-            Bytes32::default(),
             handle_to_expire.clone(),
+            Bytes32::default(),
             buy_time,
             Bytes32::from([42; 32]),
             Bytes32::from([69; 32]).into(),

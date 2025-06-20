@@ -253,57 +253,48 @@ impl<T> CatalogPrecommitValue<T> {
 //   (c (c secret handle) (c start_time (c owner_launcher_id resolved_data))))
 // )
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct XchandlesPrecommitValue<
-    CP = TreeHash,
-    CS = (),
-    PP = TreeHash,
-    PS = TreeHash,
-    S = Bytes32,
-> where
-    CP: ToTreeHash,
+pub struct XchandlesPrecommitValue<CS = (), PS = TreeHash, S = Bytes32>
+where
     CS: ToTreeHash,
-    PP: ToTreeHash,
     PS: ToTreeHash,
     S: ToTreeHash,
 {
-    pub cat_maker_reveal: CP,
+    pub cat_maker_hash: Bytes32,
     pub cat_maker_solution: CS,
-    pub pricing_puzzle_reveal: PP,
+    pub pricing_puzzle_hash: Bytes32,
     pub pricing_solution: PS,
-    pub secret: S,
     pub handle: String,
+    pub secret: S,
     pub start_time: u64,
     pub owner_launcher_id: Bytes32,
     pub resolved_data: Bytes,
 }
 
-impl<CP, CS, PP, PS, S> XchandlesPrecommitValue<CP, CS, PP, PS, S>
+impl<CS, PS, S> XchandlesPrecommitValue<CS, PS, S>
 where
-    CP: ToTreeHash,
     CS: ToTreeHash,
-    PP: ToTreeHash,
     PS: ToTreeHash,
     S: ToTreeHash,
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        cat_maker_reveal: CP,
+        cat_maker_hash: Bytes32,
         cat_maker_solution: CS,
-        pricing_puzzle_reveal: PP,
+        pricing_puzzle_hash: Bytes32,
         pricing_solution: PS,
-        secret: S,
         handle: String,
+        secret: S,
         start_time: u64,
         owner_launcher_id: Bytes32,
         resolved_data: Bytes,
     ) -> Self {
         Self {
-            cat_maker_reveal,
+            cat_maker_hash,
             cat_maker_solution,
-            pricing_puzzle_reveal,
+            pricing_puzzle_hash,
             pricing_solution,
-            secret,
             handle,
+            secret,
             start_time,
             owner_launcher_id,
             resolved_data,
@@ -311,14 +302,14 @@ where
     }
 }
 
-impl XchandlesPrecommitValue<TreeHash, (), TreeHash, TreeHash, Bytes32> {
+impl XchandlesPrecommitValue<(), TreeHash, Bytes32> {
     #[allow(clippy::too_many_arguments)]
     pub fn for_normal_registration<PS>(
         payment_tail_hash_hash: TreeHash,
         pricing_puzzle_hash: TreeHash,
         pricing_puzzle_solution: PS,
-        secret: Bytes32,
         handle: String,
+        secret: Bytes32,
         start_time: u64,
         owner_launcher_id: Bytes32,
         resolved_data: Bytes,
@@ -327,12 +318,12 @@ impl XchandlesPrecommitValue<TreeHash, (), TreeHash, TreeHash, Bytes32> {
         PS: ToTreeHash,
     {
         Self::new(
-            DefaultCatMakerArgs::curry_tree_hash(payment_tail_hash_hash.into()),
+            DefaultCatMakerArgs::curry_tree_hash(payment_tail_hash_hash.into()).into(),
             (),
-            pricing_puzzle_hash,
+            pricing_puzzle_hash.into(),
             pricing_puzzle_solution.tree_hash(),
-            secret,
             handle,
+            secret,
             start_time,
             owner_launcher_id,
             resolved_data,
@@ -341,29 +332,20 @@ impl XchandlesPrecommitValue<TreeHash, (), TreeHash, TreeHash, Bytes32> {
 }
 
 // On-chain, the precommit value is just a hash of the data it stores
-impl<N, E: ClvmEncoder<Node = N>, CP, CS, PP, PS, S> ToClvm<E>
-    for XchandlesPrecommitValue<CP, CS, PP, PS, S>
+impl<N, E: ClvmEncoder<Node = N>, CS, PS, S> ToClvm<E> for XchandlesPrecommitValue<CS, PS, S>
 where
-    CP: ToTreeHash,
     CS: ToTreeHash,
-    PP: ToTreeHash,
     PS: ToTreeHash,
     S: ToTreeHash,
 {
     fn to_clvm(&self, encoder: &mut E) -> Result<N, ToClvmError> {
         let data_hash: Bytes32 = clvm_tuple!(
             clvm_tuple!(
-                clvm_tuple!(
-                    self.cat_maker_reveal.tree_hash(),
-                    self.cat_maker_solution.tree_hash()
-                ),
-                clvm_tuple!(
-                    self.pricing_puzzle_reveal.tree_hash(),
-                    self.pricing_solution.tree_hash()
-                )
+                clvm_tuple!(self.cat_maker_hash, self.cat_maker_solution.tree_hash()),
+                clvm_tuple!(self.pricing_puzzle_hash, self.pricing_solution.tree_hash())
             ),
             clvm_tuple!(
-                clvm_tuple!(self.secret.tree_hash(), self.handle.tree_hash()),
+                clvm_tuple!(self.handle.tree_hash(), self.secret.tree_hash()),
                 clvm_tuple!(
                     self.start_time,
                     clvm_tuple!(self.owner_launcher_id, self.resolved_data.tree_hash())

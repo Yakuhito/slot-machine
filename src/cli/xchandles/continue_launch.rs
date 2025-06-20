@@ -41,8 +41,8 @@ fn precommit_value_for_handle(
             num_periods: 1,
         }
         .tree_hash(),
-        Bytes32::default(),
         handle.handle.clone(),
+        Bytes32::default(),
         start_time,
         owner_nft_launcher_id,
         owner_nft_launcher_id.into(),
