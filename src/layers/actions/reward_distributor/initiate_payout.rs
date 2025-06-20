@@ -105,9 +105,6 @@ impl RewardDistributorInitiatePayoutAction {
         let mut initiate_payout_announcement: Vec<u8> = initiate_payout_announcement.to_vec();
         initiate_payout_announcement.insert(0, b'p');
 
-        // spend entry slot
-        entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
-
         // spend self
         let action_solution = ctx.alloc(&RewardDistributorInitiatePayoutActionSolution {
             entry_payout_amount: withdrawal_amount,
@@ -116,6 +113,9 @@ impl RewardDistributorInitiatePayoutAction {
             entry_shares: entry_slot.info.value.shares,
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
+
+        // spend entry slot
+        entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         let slot_value = self
             .get_slot_value_from_solution(ctx, &my_state, action_solution)?
@@ -126,9 +126,11 @@ impl RewardDistributorInitiatePayoutAction {
                 distributor.coin.puzzle_hash,
                 initiate_payout_announcement,
             )),
-            distributor
-                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
-                [0],
+            distributor.created_slot_values_to_slots(
+                vec![slot_value.clone()],
+                RewardDistributorSlotNonce::ENTRY,
+            )[0]
+            .clone(),
             withdrawal_amount,
         ))
     }

@@ -98,9 +98,6 @@ impl RewardDistributorUnstakeAction {
             )
             .assert_concurrent_puzzle(entry_slot.coin.puzzle_hash);
 
-        // spend entry slot
-        entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
-
         // spend self
         let my_state = distributor.get_latest_pending_state(ctx)?;
         let entry_payout_amount = entry_slot.info.value.shares
@@ -162,6 +159,9 @@ impl RewardDistributorUnstakeAction {
         )?;
 
         locked_nft.spend(ctx, Spend::new(nft_inner_puzzle, nft_inner_solution))?;
+
+        // spend entry slot
+        entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         Ok((remove_entry_conditions, entry_payout_amount))
     }

@@ -149,9 +149,6 @@ impl RewardDistributorCommitIncentivesAction {
             new_commitment_slot_value.tree_hash().to_vec();
         commit_reward_announcement.insert(0, b'c');
 
-        // spend reward slot
-        reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
-
         // spend self
         let action_solution = ctx.alloc(&RewardDistributorCommitIncentivesActionSolution {
             slot_epoch_time: reward_slot.info.value.epoch_start,
@@ -162,6 +159,9 @@ impl RewardDistributorCommitIncentivesAction {
             rewards_to_add,
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
+
+        // spend reward slot
+        reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         let (_commitment_slot_value, reward_slot_values, _spent) = self
             .get_slot_values_from_solution(
@@ -176,9 +176,10 @@ impl RewardDistributorCommitIncentivesAction {
                 commit_reward_announcement,
             )),
             distributor.created_slot_values_to_slots(
-                vec![new_commitment_slot_value],
+                vec![new_commitment_slot_value.clone()],
                 RewardDistributorSlotNonce::COMMITMENT,
-            )[0],
+            )[0]
+            .clone(),
             distributor.created_slot_values_to_slots(
                 reward_slot_values,
                 RewardDistributorSlotNonce::REWARD,

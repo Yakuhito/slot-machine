@@ -85,9 +85,6 @@ impl RewardDistributorRemoveEntryAction {
             )
             .assert_concurrent_puzzle(entry_slot.coin.puzzle_hash);
 
-        // spend entry slot
-        entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
-
         // spend self
         let my_state = distributor.get_latest_pending_state(ctx)?;
         let entry_payout_amount = entry_slot.info.value.shares
@@ -101,6 +98,9 @@ impl RewardDistributorRemoveEntryAction {
             entry_shares: entry_slot.info.value.shares,
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
+
+        // spend entry slot
+        entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((remove_entry_conditions, entry_payout_amount))

@@ -222,11 +222,11 @@ impl CatalogRegistry {
 
         for slot in self.pending_slots.iter() {
             if slot.info.value < new_slot_value && slot.info.value >= left.info.value {
-                left = *slot;
+                left = slot.clone();
             }
 
             if slot.info.value > new_slot_value && slot.info.value <= right.info.value {
-                right = *slot;
+                right = slot.clone();
             }
         }
 
