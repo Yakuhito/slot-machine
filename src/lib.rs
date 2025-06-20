@@ -57,6 +57,8 @@ pub trait SpendContextExt {
     fn state_scheduler_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn p2_m_of_n_delegate_direct_puzzle(&mut self) -> Result<NodePtr, DriverError>;
     fn default_reserve_amount_from_state_program(&mut self) -> Result<NodePtr, DriverError>;
+    fn verification_asserter_puzzle(&mut self) -> Result<NodePtr, DriverError>;
+    fn catalog_verification_maker_puzzle(&mut self) -> Result<NodePtr, DriverError>;
 }
 
 impl SpendContextExt for SpendContext {
@@ -289,6 +291,22 @@ impl SpendContextExt for SpendContext {
             &RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM,
         )
     }
+
+    /// Allocate the verification asserter puzzle and return its pointer.
+    fn verification_asserter_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            VERIFICATION_ASSERTER_PUZZLE_HASH,
+            &VERIFICATION_ASSERTER_PUZZLE,
+        )
+    }
+
+    /// Allocate the catalog verification maker puzzle and return its pointer.
+    fn catalog_verification_maker_puzzle(&mut self) -> Result<NodePtr, DriverError> {
+        self.puzzle(
+            CATALOG_VERIFICATION_MAKER_PUZZLE_HASH,
+            &CATALOG_VERIFICATION_MAKER_PUZZLE,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -346,6 +364,8 @@ mod tests {
             RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM =>
                 RESERVE_FINALIZER_DEFAULT_RESERVE_AMOUNT_FROM_STATE_PROGRAM_HASH
         );
+        assert_puzzle_hash!(VERIFICATION_ASSERTER_PUZZLE => VERIFICATION_ASSERTER_PUZZLE_HASH);
+        assert_puzzle_hash!(CATALOG_VERIFICATION_MAKER_PUZZLE => CATALOG_VERIFICATION_MAKER_PUZZLE_HASH);
         Ok(())
     }
 }

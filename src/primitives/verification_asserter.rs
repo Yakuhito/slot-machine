@@ -8,21 +8,32 @@ use chia_wallet_sdk::driver::{DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use hex_literal::hex;
 
+use crate::SpendContextExt;
+
 #[derive(Debug, Copy, Clone)]
 #[must_use]
 pub struct VerificationAsserter {
     pub verifier_singleton_struct_hash: Bytes32,
-    pub verification_inner_puzzle_hash: Bytes32,
+    pub verification_inner_puzzle_self_hash: Bytes32,
+    pub version: u64,
+    pub tail_hash_hash: Bytes32,
+    pub data_hash_hash: Bytes32,
 }
 
 impl VerificationAsserter {
     pub fn new(
         verifier_singleton_struct_hash: Bytes32,
-        verification_inner_puzzle_hash: Bytes32,
+        verification_inner_puzzle_self_hash: Bytes32,
+        version: u64,
+        tail_hash_hash: TreeHash,
+        data_hash_hash: TreeHash,
     ) -> Self {
         Self {
             verifier_singleton_struct_hash,
-            verification_inner_puzzle_hash,
+            verification_inner_puzzle_self_hash,
+            version,
+            tail_hash_hash: tail_hash_hash.into(),
+            data_hash_hash: data_hash_hash.into(),
         }
     }
 
@@ -31,27 +42,55 @@ impl VerificationAsserter {
             program: VERIFICATION_ASSERTER_PUZZLE_HASH,
             args: VerificationAsserterArgs::new(
                 self.verifier_singleton_struct_hash,
-                self.verification_inner_puzzle_hash,
+                CurriedProgram {
+                    program: CATALOG_VERIFICATION_MAKER_PUZZLE_HASH,
+                    args: CatalogVerificationInnerPuzzleMakerArgs::new(
+                        self.verification_inner_puzzle_self_hash,
+                        self.version,
+                        self.tail_hash_hash.into(),
+                        self.data_hash_hash.into(),
+                    ),
+                }
+                .tree_hash(),
             ),
         }
         .tree_hash()
     }
 
-    pub fn inner_spend(
+    pub fn spend(
         &self,
         ctx: &mut SpendContext,
-        solution: &VerificationAsserterSolution,
+        verifier_proof: LineageProof,
+        launcher_amount: u64,
+        comment: String,
     ) -> Result<Spend, DriverError> {
+        let inner_program = ctx.catalog_verification_maker_puzzle()?;
+        let verification_inner_puzzle_maker = ctx.alloc(&CurriedProgram {
+            program: inner_program,
+            args: CatalogVerificationInnerPuzzleMakerArgs::new(
+                self.verification_inner_puzzle_self_hash,
+                self.version,
+                self.tail_hash_hash.into(),
+                self.data_hash_hash.into(),
+            ),
+        })?;
+
         let program = ctx.verification_asserter_puzzle()?;
         let puzzle = ctx.alloc(&CurriedProgram {
             program,
             args: VerificationAsserterArgs::new(
                 self.verifier_singleton_struct_hash,
-                self.verification_inner_puzzle_hash,
+                verification_inner_puzzle_maker,
             ),
         })?;
 
-        let solution = ctx.alloc(&solution)?;
+        let solution = ctx.alloc(&VerificationAsserterSolution {
+            verifier_proof,
+            verification_inner_puzzle_maker_solution: CatalogVerificationInnerPuzzleMakerSolution {
+                comment,
+            },
+            launcher_amount,
+        })?;
 
         Ok(Spend::new(puzzle, solution))
     }
@@ -65,33 +104,33 @@ pub const VERIFICATION_ASSERTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
 ));
 
-pub const CATALOG_VERIFICATION_MAKER_PUZZLE: [u8; 299] = hex!("ff02ffff01ff0bff16ffff0bff04ffff0bff04ff1aff0580ffff0bff04ffff0bff1effff0bff04ffff0bff04ff1affff0bffff0101ff058080ffff0bff04ffff0bff1effff0bff04ffff0bff04ff1affff0bffff0102ffff0bffff0101ff1380ffff0bffff0102ff2bffff0bffff0102ff3bffff0bffff0101ff178080808080ffff0bff04ff1aff12808080ff12808080ff12808080ffff04ffff01ff02ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff018080");
+pub const CATALOG_VERIFICATION_MAKER_PUZZLE: [u8; 299] = hex!("ff02ffff01ff0bff16ffff0bff04ffff0bff04ff1aff0580ffff0bff04ffff0bff1effff0bff04ffff0bff04ff1affff0bffff0101ff058080ffff0bff04ffff0bff1effff0bff04ffff0bff04ff1affff0bffff0102ffff0bffff0101ff0b80ffff0bffff0102ff17ffff0bffff0102ff2fffff0bffff0101ff5f8080808080ffff0bff04ff1aff12808080ff12808080ff12808080ffff04ffff01ff02ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff018080");
 
 pub const CATALOG_VERIFICATION_MAKER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    0beb6422b95501474de0ce47e8c29478f263902179cf72c06ba9b63622e63885
+    cd2caba380e2bb21e209f8b5cad9d832a20bec53b5ffd3e29db51e4041a3d266
     "
 ));
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
 #[clvm(curry)]
-pub struct VerificationAsserterArgs {
+pub struct VerificationAsserterArgs<P> {
     pub singleton_mod_hash: Bytes32,
     pub launcher_puzzle_hash: Bytes32,
     pub verifier_singleton_struct_hash: Bytes32,
-    pub verification_inner_puzzle_hash: Bytes32,
+    pub verification_inner_puzzle_maker: P,
 }
 
-impl VerificationAsserterArgs {
+impl<P> VerificationAsserterArgs<P> {
     pub fn new(
         verifier_singleton_struct_hash: Bytes32,
-        verification_inner_puzzle_hash: Bytes32,
+        verification_inner_puzzle_maker: P,
     ) -> Self {
         Self {
             singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
             launcher_puzzle_hash: SINGLETON_LAUNCHER_HASH.into(),
             verifier_singleton_struct_hash,
-            verification_inner_puzzle_hash,
+            verification_inner_puzzle_maker,
         }
     }
 }
@@ -103,6 +142,31 @@ pub struct VerificationAsserterSolution<S> {
     pub verification_inner_puzzle_maker_solution: S,
     #[clvm(rest)]
     pub launcher_amount: u64,
+}
+
+#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[clvm(curry)]
+pub struct CatalogVerificationInnerPuzzleMakerArgs {
+    pub verification_inner_puzzle_self_hash: Bytes32,
+    pub version: u64,
+    pub tail_hash_hash: Bytes32,
+    pub data_hash_hash: Bytes32,
+}
+
+impl CatalogVerificationInnerPuzzleMakerArgs {
+    pub fn new(
+        verification_inner_puzzle_self_hash: Bytes32,
+        version: u64,
+        tail_hash_hash: TreeHash,
+        data_hash_hash: TreeHash,
+    ) -> Self {
+        Self {
+            verification_inner_puzzle_self_hash,
+            version,
+            tail_hash_hash: tail_hash_hash.into(),
+            data_hash_hash: data_hash_hash.into(),
+        }
+    }
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]

@@ -1,6 +1,8 @@
 (mod (
     VERIFICATION_INNER_PUZZLE_SELF_HASH
-    (VERSION ASSET_ID_HASH . DATA_HASH_HASH) ; verification 'locked params'
+    VERSION
+    ASSET_ID_HASH
+    DATA_HASH_HASH ; verification 'locked params'
     comment ; verifier free to comment anything
 )
     (include curry.clib)
