@@ -6,7 +6,7 @@
 (mod (
     SLOT_1ST_CURRY_HASH ; after 1st curry
     Truth
-    slot ; solution = slot value :)
+    slot_value ; solution = slot value :)
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
@@ -30,7 +30,7 @@
         Truth
         (get_conditions
             SLOT_1ST_CURRY_HASH
-            (sha256tree slot)
+            (sha256tree slot_value)
         ) ; conditions
     )
 )

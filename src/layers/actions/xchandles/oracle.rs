@@ -1,7 +1,6 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    sha2::Sha256,
 };
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
@@ -43,22 +42,17 @@ impl XchandlesOracleAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_hash_from_solution(
+    pub fn get_spent_slot_value_from_solution(
         ctx: &SpendContext,
         solution: NodePtr,
-    ) -> Result<Bytes32, DriverError> {
+    ) -> Result<XchandlesSlotValue, DriverError> {
         let solution = ctx.extract::<XchandlesOracleActionSolution>(solution)?;
 
-        let mut hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.handle_hash.tree_hash());
-        hasher.update(solution.rest_treehash);
-
-        Ok(hasher.finalize().into())
+        Ok(solution.slot_value)
     }
 
-    pub fn get_slot_value(old_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
-        old_slot_value // nothing changed
+    pub fn get_created_slot_value(spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
+        spent_slot_value
     }
 
     pub fn spend(
@@ -67,6 +61,17 @@ impl XchandlesOracleAction {
         registry: &mut XchandlesRegistry,
         slot: Slot<XchandlesSlotValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
+        // spend self
+        let action_solution = ctx.alloc(&XchandlesOracleActionSolution {
+            slot_value: slot.info.value.clone(),
+        })?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        registry.insert(Spend::new(action_puzzle, action_solution));
+
+        let new_slot = Self::get_created_slot_value(slot.info.value.clone());
+        registry.pending_items.slot_values.push(new_slot.clone());
+
         // spend slot
         registry
             .pending_items
@@ -74,24 +79,12 @@ impl XchandlesOracleAction {
             .push(slot.info.value_hash);
         slot.spend(ctx, registry.info.inner_puzzle_hash().into())?;
 
-        // finally, spend self
-        let action_solution = ctx.alloc(&XchandlesOracleActionSolution {
-            handle_hash: slot.info.value.handle_hash,
-            rest_treehash: slot.info.value.after_handle_data_hash().into(),
-        })?;
-        let action_puzzle = self.construct_puzzle(ctx)?;
-
-        registry.insert(Spend::new(action_puzzle, action_solution));
-
-        let new_slot = Self::get_slot_value(slot.info.value);
-        registry.pending_items.slot_values.push(new_slot);
-
-        let mut oracle_ann = slot.info.value.tree_hash().to_vec();
+        let mut oracle_ann = new_slot.tree_hash().to_vec();
         oracle_ann.insert(0, b'o');
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, oracle_ann)),
-            registry.created_slot_values_to_slots(vec![new_slot])[0],
+            registry.created_slot_values_to_slots(vec![new_slot.clone()])[0].clone(),
         ))
     }
 }
@@ -128,10 +121,8 @@ impl XchandlesOracleActionArgs {
     }
 }
 
-#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(transparent)]
 pub struct XchandlesOracleActionSolution {
-    pub handle_hash: Bytes32,
-    #[clvm(rest)]
-    pub rest_treehash: Bytes32,
+    pub slot_value: XchandlesSlotValue,
 }
