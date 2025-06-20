@@ -1,7 +1,6 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
-    sha2::Sha256,
+    protocol::{Bytes, Bytes32},
 };
 use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
 use chia_wallet_sdk::{
@@ -13,7 +12,8 @@ use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    Action, Slot, SpendContextExt, XchandlesConstants, XchandlesRegistry, XchandlesSlotValue,
+    Action, Slot, SpendContextExt, XchandlesConstants, XchandlesDataValue, XchandlesRegistry,
+    XchandlesSlotValue,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,45 +44,24 @@ impl XchandlesUpdateAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_hash_from_solution(
+    pub fn get_spent_slot_value_from_solution(
         ctx: &SpendContext,
-        solution: NodePtr,
-    ) -> Result<Bytes32, DriverError> {
-        let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
-
-        let mut hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.neighbors_hash);
-        hasher.update(
-            clvm_tuple!(
-                solution.expiration,
-                clvm_tuple!(
-                    solution.current_owner_launcher_id,
-                    solution.current_resolved_launcher_id
-                )
-            )
-            .tree_hash(),
-        );
-        let after_handle_hash = hasher.finalize();
-
-        hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.handle_hash.tree_hash());
-        hasher.update(after_handle_hash);
-
-        Ok(hasher.finalize().into())
-    }
-
-    pub fn get_slot_value_from_solution(
-        ctx: &mut SpendContext,
-        spent_slot_value: XchandlesSlotValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
         let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
 
-        Ok(spent_slot_value.with_launcher_ids(
-            solution.new_owner_launcher_id,
-            solution.new_resolved_launcher_id,
+        Ok(solution.current_slot_value)
+    }
+
+    pub fn get_created_slot_value_from_solution(
+        ctx: &mut SpendContext,
+        solution: NodePtr,
+    ) -> Result<XchandlesSlotValue, DriverError> {
+        let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
+
+        Ok(solution.current_slot_value.with_data(
+            solution.new_data.owner_launcher_id,
+            solution.new_data.resolved_data,
         ))
     }
 
@@ -92,11 +71,42 @@ impl XchandlesUpdateAction {
         registry: &mut XchandlesRegistry,
         slot: Slot<XchandlesSlotValue>,
         new_owner_launcher_id: Bytes32,
-        new_resolved_launcher_id: Bytes32,
+        new_resolved_data: Bytes,
         announcer_inner_puzzle_hash: Bytes32,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
-        // spend slots
+        // spend self
+        let action_solution = ctx.alloc(&XchandlesUpdateActionSolution {
+            current_slot_value: slot.info.value.clone(),
+            new_data: XchandlesDataValue {
+                owner_launcher_id: new_owner_launcher_id,
+                resolved_data: new_resolved_data.clone(),
+            },
+            announcer_inner_puzzle_hash,
+        })?;
+        let action_puzzle = self.construct_puzzle(ctx)?;
+
+        registry.insert(Spend::new(action_puzzle, action_solution));
+
+        let new_slot_value = slot
+            .info
+            .value
+            .clone()
+            .with_data(new_owner_launcher_id, new_resolved_data.clone());
+
+        registry
+            .pending_items
+            .slot_values
+            .push(new_slot_value.clone());
+
+        // spend slot
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
+
+        let msg: Bytes32 = clvm_tuple!(
+            slot.info.value.handle_hash,
+            clvm_tuple!(new_owner_launcher_id, new_resolved_data.clone())
+        )
+        .tree_hash()
+        .into();
 
         registry
             .pending_items
@@ -104,39 +114,13 @@ impl XchandlesUpdateAction {
             .push(slot.info.value_hash);
         slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        // spend self
-        let action_solution = ctx.alloc(&XchandlesUpdateActionSolution {
-            handle_hash: slot.info.value.handle_hash,
-            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
-            expiration: slot.info.value.expiration,
-            current_owner_launcher_id: slot.info.value.owner_launcher_id,
-            current_resolved_launcher_id: slot.info.value.resolved_launcher_id,
-            new_owner_launcher_id,
-            new_resolved_launcher_id,
-            announcer_inner_puzzle_hash,
-        })?;
-        let action_puzzle = self.construct_puzzle(ctx)?;
-
-        registry.insert(Spend::new(action_puzzle, action_solution));
-
-        let new_slot_value =
-            Self::get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
-
-        registry.pending_items.slot_values.push(new_slot_value);
-
-        let msg: Bytes32 = clvm_tuple!(
-            slot.info.value.handle_hash,
-            clvm_tuple!(new_owner_launcher_id, new_resolved_launcher_id)
-        )
-        .tree_hash()
-        .into();
         Ok((
             Conditions::new().send_message(
                 18,
                 msg.into(),
                 vec![ctx.alloc(&registry.coin.puzzle_hash)?],
             ),
-            registry.created_slot_values_to_slots(vec![new_slot_value])[0],
+            registry.created_slot_values_to_slots(vec![new_slot_value.clone()])[0].clone(),
         ))
     }
 }
@@ -181,13 +165,8 @@ impl XchandlesUpdateActionArgs {
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct XchandlesUpdateActionSolution {
-    pub handle_hash: Bytes32,
-    pub neighbors_hash: Bytes32,
-    pub expiration: u64,
-    pub current_owner_launcher_id: Bytes32,
-    pub current_resolved_launcher_id: Bytes32,
-    pub new_owner_launcher_id: Bytes32,
-    pub new_resolved_launcher_id: Bytes32,
+    pub current_slot_value: XchandlesSlotValue,
+    pub new_data: XchandlesDataValue,
     #[clvm(rest)]
     pub announcer_inner_puzzle_hash: Bytes32,
 }
