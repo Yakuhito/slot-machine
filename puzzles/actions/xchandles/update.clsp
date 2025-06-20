@@ -5,7 +5,7 @@
 
 (mod (
     SINGLETON_MOD_HASH
-    SINGLETON_LAUNCHER_PUZZLE_HASH_HASH
+    SINGLETON_LAUNCHER_PUZZLE_HASH
     SLOT_1ST_CURRY_HASH ; after 1st curry
     (@ Truth
         (
@@ -41,8 +41,8 @@
         (c
             Truth
             (list
-                ; can't update expired handles
-                (list ASSERT_SECONDS_ABSOLUTE expiration)
+                ; can't update if expired
+                (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
 
                 ; spend slot
                 (spend_slot_inline SLOT_1ST_CURRY_HASH 
@@ -66,7 +66,7 @@
                     (sha256tree (c handle_hash new_data))
                     (curry_hashes_inline SINGLETON_MOD_HASH
                         (sha256tree
-                            (c SINGLETON_MOD_HASH (c current_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH_HASH))
+                            (c SINGLETON_MOD_HASH (c current_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
                         ) ; tree hash of announcer SINGLETON_STRUCT
                         announcer_inner_puzzle_hash
                     )
