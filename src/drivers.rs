@@ -459,7 +459,7 @@ fn spend_eve_coin_and_create_registry<S, M, KV>(
     launcher_kv_list: KV,
 ) -> Result<(Conditions, Coin, Proof, [Slot<S>; 2]), DriverError>
 where
-    S: Copy + ToTreeHash,
+    S: Clone + ToTreeHash,
     M: ToClvm<Allocator>,
     KV: ToClvm<Allocator>,
 {
@@ -470,8 +470,8 @@ where
     let eve_singleton_inner_puzzle = eve_singleton_inner_puzzle(
         ctx,
         launcher_id,
-        left_slot_value,
-        right_slot_value,
+        left_slot_value.clone(),
+        right_slot_value.clone(),
         memos_after_hint,
         target_inner_puzzle_hash,
     )?;
@@ -923,7 +923,7 @@ pub fn launch_dig_reward_distributor(
 #[cfg(test)]
 mod tests {
     use chia::{
-        protocol::SpendBundle,
+        protocol::{Bytes, SpendBundle},
         puzzles::{
             cat::GenesisByCoinIdTailArgs,
             singleton::{SingletonSolution, SingletonStruct},
@@ -1363,13 +1363,21 @@ mod tests {
 
                 if slot_value < slot_value_to_insert {
                     // slot belongs to the left
-                    if left_slot.is_none() || slot_value > left_slot.unwrap().info.value {
-                        left_slot = Some(*slot);
+                    if let Some(left_slot_ref) = &left_slot {
+                        if slot_value > left_slot_ref.info.value.clone() {
+                            left_slot = Some(slot.clone());
+                        }
+                    } else {
+                        left_slot = Some(slot.clone());
                     }
                 } else {
                     // slot belongs to the right
-                    if right_slot.is_none() || slot_value < right_slot.unwrap().info.value {
-                        right_slot = Some(*slot);
+                    if let Some(right_slot_ref) = &right_slot {
+                        if slot_value < right_slot_ref.info.value.clone() {
+                            right_slot = Some(slot.clone());
+                        }
+                    } else {
+                        right_slot = Some(slot.clone());
                     }
                 }
             }
@@ -1421,8 +1429,8 @@ mod tests {
                 ctx,
                 &mut catalog,
                 tail_hash.into(),
-                left_slot,
-                right_slot,
+                left_slot.clone(),
+                right_slot.clone(),
                 precommit_coin,
                 Spend {
                     puzzle: eve_nft_inner_puzzle,
@@ -1437,7 +1445,10 @@ mod tests {
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
             benchmark.add_spends(ctx, &mut sim, "register", &[user_bls.sk.clone()])?;
 
-            slots.retain(|s| *s != left_slot && *s != right_slot);
+            slots.retain(|s| {
+                s.info.value_hash != left_slot.info.value_hash
+                    && s.info.value_hash != right_slot.info.value_hash
+            });
             slots.extend(new_slots);
         }
 
@@ -1554,13 +1565,13 @@ mod tests {
             pricing_solution_hash,
             Bytes32::default(),
             handle_to_refund.clone(),
-            if let Some(existing_slot) = slot {
+            if let Some(existing_slot) = &slot {
                 existing_slot.info.value.expiration + 28 * 24 * 60 * 60 + 1
             } else {
                 0
             },
             Bytes32::default(),
-            Bytes32::default(),
+            Bytes::default(),
         );
 
         let refund_puzzle = ctx.alloc(&1)?;
@@ -1613,7 +1624,7 @@ mod tests {
         )?;
 
         let mut registry = registry;
-        let used_slot_value_hash = slot.map(|s| s.info.value_hash);
+        let used_slot_value_hash = slot.clone().map(|s| s.info.value_hash);
         let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
             ctx,
             &mut registry,
@@ -1624,10 +1635,11 @@ mod tests {
         )?;
         assert_eq!(
             used_slot_value_hash,
-            XchandlesRefundAction::get_spent_slot_value_hash_from_solution(
+            XchandlesRefundAction::get_spent_slot_value_from_solution(
                 ctx,
                 registry.pending_items.actions[registry.pending_items.actions.len() - 1].solution
             )?
+            .map(|s| s.tree_hash().into())
         );
 
         let new_registry = registry.finish_spend(ctx)?;
@@ -1789,7 +1801,7 @@ mod tests {
             let reg_amount = XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, 1);
 
             let handle_owner_launcher_id = did.info.launcher_id;
-            let handle_resolved_launcher_id = Bytes32::from([u8::MAX - i as u8; 32]);
+            let handle_resolved_data: Bytes = Bytes32::from([u8::MAX - i as u8; 32]).into();
             let secret = Bytes32::default();
 
             let value = XchandlesPrecommitValue::for_normal_registration(
@@ -1805,7 +1817,7 @@ mod tests {
                 handle.clone(),
                 100,
                 handle_owner_launcher_id,
-                handle_resolved_launcher_id,
+                handle_resolved_data,
             );
 
             let refund_puzzle = ctx.alloc(&1)?;
@@ -1864,23 +1876,31 @@ mod tests {
                 Bytes32::default(),
                 0,
                 Bytes32::default(),
-                Bytes32::default(),
+                Bytes::default(),
             );
 
             let mut left_slot: Option<Slot<XchandlesSlotValue>> = None;
             let mut right_slot: Option<Slot<XchandlesSlotValue>> = None;
             for slot in slots.iter() {
-                let slot_value = slot.info.value;
+                let slot_value = slot.info.value.clone();
 
                 if slot_value < slot_value_to_insert {
                     // slot belongs to the left
-                    if left_slot.is_none() || slot_value > left_slot.unwrap().info.value {
-                        left_slot = Some(*slot);
+                    if let Some(left_slot_ref) = &left_slot {
+                        if slot_value > left_slot_ref.info.value {
+                            left_slot = Some(slot.clone());
+                        }
+                    } else {
+                        left_slot = Some(slot.clone());
                     }
                 } else {
                     // slot belongs to the right
-                    if right_slot.is_none() || slot_value < right_slot.unwrap().info.value {
-                        right_slot = Some(*slot);
+                    if let Some(right_slot_ref) = &right_slot {
+                        if slot_value < right_slot_ref.info.value {
+                            right_slot = Some(slot.clone());
+                        }
+                    } else {
+                        right_slot = Some(slot.clone());
                     }
                 }
             }
@@ -1930,12 +1950,12 @@ mod tests {
                 benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
             };
 
-            let spent_value_hashes = [left_slot.info.value_hash, right_slot.info.value_hash];
+            let spent_values = [left_slot.info.value.clone(), right_slot.info.value.clone()];
             let (secure_cond, new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
                 ctx,
                 &mut registry,
-                left_slot,
-                right_slot,
+                left_slot.clone(),
+                right_slot.clone(),
                 precommit_coin,
                 base_price,
                 reg_period,
@@ -1944,8 +1964,8 @@ mod tests {
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
             assert_eq!(
-                spent_value_hashes,
-                XchandlesRegisterAction::get_spent_slot_value_hashes_from_solution(
+                spent_values,
+                XchandlesRegisterAction::get_spent_slot_values_from_solution(
                     ctx,
                     registry.pending_items.actions[registry.pending_items.actions.len() - 1]
                         .solution
@@ -1957,9 +1977,12 @@ mod tests {
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
             benchmark.add_spends(ctx, &mut sim, "register", &[user_bls.sk.clone()])?;
 
-            slots.retain(|s| *s != left_slot && *s != right_slot);
+            slots.retain(|s| {
+                s.info.value_hash != left_slot.info.value_hash
+                    && s.info.value_hash != right_slot.info.value_hash
+            });
 
-            let oracle_slot = new_slots[1];
+            let oracle_slot = new_slots[1].clone();
             slots.extend(new_slots);
 
             // test on-chain oracle for current handle
@@ -1967,26 +1990,28 @@ mod tests {
             let (oracle_conds, new_slot) = registry.new_action::<XchandlesOracleAction>().spend(
                 ctx,
                 &mut registry,
-                oracle_slot,
+                oracle_slot.clone(),
             )?;
 
             ensure_conditions_met(ctx, &mut sim, oracle_conds, 0)?;
 
             assert_eq!(
                 spent_slot_value_hash,
-                XchandlesOracleAction::get_spent_slot_value_hash_from_solution(
+                XchandlesOracleAction::get_spent_slot_value_from_solution(
                     ctx,
                     registry.pending_items.actions[registry.pending_items.actions.len() - 1]
                         .solution
                 )?
+                .tree_hash()
+                .into()
             );
             registry = registry.finish_spend(ctx)?;
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
             benchmark.add_spends(ctx, &mut sim, "oracle", &[user_bls.sk.clone()])?;
 
-            slots.retain(|s| *s != oracle_slot);
-            slots.push(new_slot);
+            slots.retain(|s| s.info.value_hash != oracle_slot.info.value_hash);
+            slots.push(new_slot.clone());
 
             // test on-chain extend mechanism for current handle
             let extension_years: u64 = i as u64 + 1;
@@ -2000,7 +2025,7 @@ mod tests {
                     ctx,
                     &mut registry,
                     handle,
-                    extension_slot,
+                    extension_slot.clone(),
                     payment_cat.asset_id,
                     base_price,
                     reg_period,
@@ -2009,11 +2034,13 @@ mod tests {
 
             assert_eq!(
                 spent_slot_value_hash,
-                XchandlesExtendAction::get_spent_slot_value_hash_from_solution(
+                XchandlesExtendAction::get_spent_slot_value_from_solution(
                     ctx,
                     registry.pending_items.actions[registry.pending_items.actions.len() - 1]
                         .solution
                 )?
+                .tree_hash()
+                .into()
             );
 
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
@@ -2062,21 +2089,21 @@ mod tests {
                 &[user_bls.sk.clone(), minter_bls.sk.clone()],
             )?;
 
-            slots.retain(|s| *s != extension_slot);
-            slots.push(new_slot);
+            slots.retain(|s| s.info.value_hash != extension_slot.info.value_hash);
+            slots.push(new_slot.clone());
 
             // test on-chain mechanism for handle updates
             let new_owner_launcher_id = Bytes32::new([4 + i as u8; 32]);
-            let new_resolved_launcher_id = Bytes32::new([u8::MAX - i as u8 - 1; 32]);
+            let new_resolved_data: Bytes = Bytes32::new([u8::MAX - i as u8 - 1; 32]).into();
             let update_slot = new_slot;
-            let update_slot_value_hash = new_slot.info.value_hash;
+            let update_slot_value_hash = update_slot.info.value_hash;
 
             let (update_conds, new_slot) = registry.new_action::<XchandlesUpdateAction>().spend(
                 ctx,
                 &mut registry,
-                update_slot,
+                update_slot.clone(),
                 new_owner_launcher_id,
-                new_resolved_launcher_id,
+                new_resolved_data,
                 did.info.inner_puzzle_hash().into(),
             )?;
 
@@ -2084,19 +2111,21 @@ mod tests {
 
             assert_eq!(
                 update_slot_value_hash,
-                XchandlesUpdateAction::get_spent_slot_value_hash_from_solution(
+                XchandlesUpdateAction::get_spent_slot_value_from_solution(
                     ctx,
                     registry.pending_items.actions[registry.pending_items.actions.len() - 1]
                         .solution
                 )?
+                .tree_hash()
+                .into()
             );
             registry = registry.finish_spend(ctx)?;
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
             benchmark.add_spends(ctx, &mut sim, "update", &[user_bls.sk.clone()])?;
 
-            slots.retain(|s| *s != update_slot);
-            slots.push(new_slot);
+            slots.retain(|s| s.info.value_hash != update_slot.info.value_hash);
+            slots.push(new_slot.clone());
         }
 
         assert_eq!(
@@ -2137,7 +2166,7 @@ mod tests {
             handle_to_expire.clone(),
             buy_time,
             Bytes32::from([42; 32]),
-            Bytes32::from([69; 32]),
+            Bytes32::from([69; 32]).into(),
         );
 
         let pricing_puzzle = XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
@@ -2197,7 +2226,7 @@ mod tests {
         let (expire_conds, _new_slot) = registry.new_action::<XchandlesExpireAction>().spend(
             ctx,
             &mut registry,
-            *initial_slot,
+            initial_slot.clone(),
             1,
             base_price,
             reg_period,
@@ -2209,10 +2238,12 @@ mod tests {
 
         assert_eq!(
             spent_slot_value_hash,
-            XchandlesExpireAction::get_spent_slot_value_hash_from_solution(
+            XchandlesExpireAction::get_spent_slot_value_from_solution(
                 ctx,
                 registry.pending_items.actions[registry.pending_items.actions.len() - 1].solution
             )?
+            .tree_hash()
+            .into()
         );
         registry = registry.finish_spend(ctx)?;
 
@@ -2273,10 +2304,11 @@ mod tests {
             } else {
                 "aaaa2".to_string()
             };
-            let existing_slot = *slots
+            let existing_slot = slots
                 .iter()
                 .find(|s| s.info.value.handle_hash == existing_handle.tree_hash().into())
-                .unwrap();
+                .unwrap()
+                .clone();
             let existing_handle_pricing_solution = if use_factor_pricing {
                 ctx.alloc(&XchandlesFactorPricingSolution {
                     current_expiration: existing_slot.info.value.expiration,
@@ -2809,7 +2841,7 @@ mod tests {
             .spend(
                 ctx,
                 &mut registry,
-                *incentive_slots.last().unwrap(),
+                incentive_slots.last().unwrap().clone(),
                 fifth_epoch_start,
                 cat_minter.puzzle_hash,
                 rewards_to_add,
@@ -2857,10 +2889,11 @@ mod tests {
             .spend(
                 ctx,
                 &mut registry,
-                *incentive_slots
+                incentive_slots
                     .iter()
                     .find(|s| s.info.value.epoch_start == fifth_epoch_start)
-                    .unwrap(),
+                    .unwrap()
+                    .clone(),
                 fifth_epoch_start,
                 cat_minter.puzzle_hash,
                 rewards_to_add,
@@ -2912,11 +2945,12 @@ mod tests {
             .spend(
                 ctx,
                 &mut registry,
-                fifth_epoch_commitment_slot,
-                *incentive_slots
+                fifth_epoch_commitment_slot.clone(),
+                incentive_slots
                     .iter()
                     .find(|s| s.info.value.epoch_start == fifth_epoch_start)
-                    .unwrap(),
+                    .unwrap()
+                    .clone(),
             )?;
 
         let payout_coin_id = registry
@@ -2959,16 +2993,17 @@ mod tests {
 
         // start first epoch
         let reserve_cat = registry.reserve.to_cat();
-        let first_epoch_incentives_slot = *incentive_slots
+        let first_epoch_incentives_slot = incentive_slots
             .iter()
             .find(|s| s.info.value.epoch_start == first_epoch_start)
-            .unwrap();
+            .unwrap()
+            .clone();
         let (new_epoch_conditions, new_reward_slot, fee) = registry
             .new_action::<RewardDistributorNewEpochAction>()
             .spend(
                 ctx,
                 &mut registry,
-                first_epoch_incentives_slot,
+                first_epoch_incentives_slot.clone(),
                 // first_epoch_incentives_slot.info.value.rewards,
             )?;
         let payout_coin_id = reserve_cat
@@ -3294,10 +3329,10 @@ mod tests {
 
             let (custody2_conds, payout2_amount) = registry
                 .new_action::<RewardDistributorUnstakeAction>()
-                .spend(ctx, &mut registry, entry2_slot, locked_nft2)?;
+                .spend(ctx, &mut registry, entry2_slot.clone(), locked_nft2)?;
             let (custody3_conds, payout3_amount) = registry
                 .new_action::<RewardDistributorUnstakeAction>()
-                .spend(ctx, &mut registry, entry3_slot, locked_nft3)?;
+                .spend(ctx, &mut registry, entry3_slot.clone(), locked_nft3)?;
 
             StandardLayer::new(nft2_bls.pk).spend(ctx, nft2_bls.coin, custody2_conds)?;
             StandardLayer::new(nft3_bls.pk).spend(ctx, nft3_bls.coin, custody3_conds)?;
@@ -3336,7 +3371,7 @@ mod tests {
                 .spend(
                     ctx,
                     &mut registry,
-                    entry2_slot,
+                    entry2_slot.clone(),
                     manager_or_did_singleton_inner_puzzle_hash,
                 )?;
 
@@ -3381,14 +3416,15 @@ mod tests {
                 update_time,
             )?;
 
-            let reward_slot = *incentive_slots
+            let reward_slot = incentive_slots
                 .iter()
                 .find(|s| {
                     s.info.value.epoch_start
                         == first_epoch_start
                             + if epoch <= 4 { epoch } else { 4 } * constants.epoch_seconds
                 })
-                .unwrap();
+                .unwrap()
+                .clone();
 
             let (new_epoch_conditions, new_reward_slot, _manager_fee) = registry
                 .new_action::<RewardDistributorNewEpochAction>()
@@ -3420,7 +3456,7 @@ mod tests {
             .spend(
                 ctx,
                 &mut registry,
-                *incentive_slots.last().unwrap(),
+                incentive_slots.last().unwrap().clone(),
                 tenth_epoch_start,
                 cat_minter.puzzle_hash,
                 rewards_to_add,
@@ -3468,18 +3504,19 @@ mod tests {
                 update_time,
             )?;
 
-            let reward_slot = *incentive_slots
+            let reward_slot = incentive_slots
                 .iter()
                 .find(|s| {
                     s.info.value.epoch_start == first_epoch_start + epoch * constants.epoch_seconds
                 })
-                .unwrap();
+                .unwrap()
+                .clone();
             let (new_epoch_conditions, new_reward_slot, _manager_fee) = registry
                 .new_action::<RewardDistributorNewEpochAction>()
                 .spend(
                     ctx,
                     &mut registry,
-                    reward_slot,
+                    reward_slot.clone(),
                     // reward_slot.info.value.rewards,
                 )?;
             incentive_slots
