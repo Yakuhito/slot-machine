@@ -34,11 +34,10 @@
         cat_maker_puzzle_reveal
         cat_maker_solution
         ; start neighbor slots info
-        left_value
+        (@ neighbors (left_value . right_value))
         left_left_value
         left_expiration
         left_data
-        right_value
         right_right_value
         right_expiration
         right_data
@@ -120,7 +119,7 @@
                 (create_slot_inline SLOT_1ST_CURRY_HASH
                     (get_xchandles_slot_value_hash
                         handle_hash
-                        (c left_value right_value)
+                        neighbors
                         (+ start_time registered_time)
                         data
                     )
