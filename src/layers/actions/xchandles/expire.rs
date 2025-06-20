@@ -171,20 +171,13 @@ impl XchandlesExpireAction {
                     },
                 },
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
-            secret_hash: precommit_coin
-                .value
-                .secret_and_handle
-                .secret
-                .tree_hash()
-                .into(),
-            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
-            old_rest_hash: slot.info.value.launcher_ids_data_hash().into(),
-            new_rest_hash: clvm_tuple!(
-                precommit_coin.value.owner_launcher_id,
-                precommit_coin.value.resolved_launcher_id
-            )
-            .tree_hash()
-            .into(),
+            secret: precommit_coin.value.secret,
+            neighbors: slot.info.value.neighbors,
+            old_rest: slot.info.value.rest_data(),
+            new_rest: XchandlesDataValue {
+                owner_launcher_id: precommit_coin.value.owner_launcher_id,
+                resolved_data: precommit_coin.value.resolved_launcher_id,
+            },
         }
         .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;

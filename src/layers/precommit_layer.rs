@@ -1,6 +1,6 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
+    protocol::{Bytes, Bytes32},
 };
 use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
 use chia_wallet_sdk::{
@@ -244,67 +244,71 @@ pub struct XchandlesPrecommitValue {
 }
 
 impl XchandlesPrecommitValue {
-    pub fn new(
-        refund_info_hash: Bytes32,
-        secret: Bytes32,
-        handle: String,
-        start_time: u64,
-        owner_launcher_id: Bytes32,
-        resolved_launcher_id: Bytes32,
-    ) -> Self {
-        Self {
-            refund_info_hash,
-            secret_and_handle: XchandlesSecretAndHandle { secret, handle },
-            start_time,
-            owner_launcher_id,
-            resolved_launcher_id,
-        }
+    pub fn new(value: Bytes32) -> Self {
+        Self { value }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn for_normal_registration(
-        payment_tail_hash_hash: TreeHash,
-        pricing_puzzle_hash: TreeHash,
-        pricing_puzzle_solution_hash: TreeHash,
-        secret: Bytes32,
+    pub fn from_data<CP, CS, PP, PS, S>(
+        cat_maker_reveal: CP,
+        cat_maker_solution: CS,
+        pricing_puzzle_reveal: PP,
+        pricing_solution: PS,
+        secret: S,
         handle: String,
         start_time: u64,
         owner_launcher_id: Bytes32,
-        resolved_launcher_id: Bytes32,
-    ) -> Self {
-        Self {
-            refund_info_hash: clvm_tuple!(
+        resolved_data: Bytes,
+    ) -> Self
+    where
+        CP: ToTreeHash,
+        CS: ToTreeHash,
+        PP: ToTreeHash,
+        PS: ToTreeHash,
+        S: ToTreeHash,
+    {
+        Self::new(
+            clvm_tuple!(
                 clvm_tuple!(
-                    DefaultCatMakerArgs::curry_tree_hash(payment_tail_hash_hash.into()),
-                    ()
+                    clvm_tuple!(cat_maker_reveal.tree_hash(), cat_maker_solution.tree_hash()),
+                    clvm_tuple!(
+                        pricing_puzzle_reveal.tree_hash(),
+                        pricing_solution.tree_hash()
+                    )
                 ),
-                clvm_tuple!(pricing_puzzle_hash, pricing_puzzle_solution_hash)
+                clvm_tuple!(
+                    clvm_tuple!(secret.tree_hash(), handle),
+                    clvm_tuple!(start_time, clvm_tuple!(owner_launcher_id, resolved_data))
+                )
             )
             .tree_hash()
             .into(),
-            secret_and_handle: XchandlesSecretAndHandle { secret, handle },
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn for_normal_registration<PS>(
+        payment_tail_hash_hash: TreeHash,
+        pricing_puzzle_hash: TreeHash,
+        pricing_puzzle_solution: PS,
+        secret: Bytes32,
+        handle: String,
+        start_time: u64,
+        owner_launcher_id: Bytes32,
+        resolved_data: Bytes,
+    ) -> Self
+    where
+        PS: ToTreeHash,
+    {
+        Self::from_data(
+            DefaultCatMakerArgs::curry_tree_hash(payment_tail_hash_hash.into()),
+            (),
+            pricing_puzzle_hash,
+            pricing_puzzle_solution.tree_hash(),
+            secret,
+            handle,
             start_time,
             owner_launcher_id,
-            resolved_launcher_id,
-        }
-    }
-
-    pub fn after_refund_info_hash(&self) -> TreeHash {
-        clvm_tuple!(
-            self.secret_and_handle.clone(),
-            clvm_tuple!(
-                self.start_time,
-                clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id)
-            )
+            resolved_data,
         )
-        .tree_hash()
-    }
-
-    pub fn after_secret_and_handle_hash(&self) -> TreeHash {
-        clvm_tuple!(
-            self.start_time,
-            clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id)
-        )
-        .tree_hash()
     }
 }

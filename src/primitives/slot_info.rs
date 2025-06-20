@@ -145,7 +145,7 @@ impl XchandlesSlotValue {
         }
     }
 
-    pub fn data(&self) -> XchandlesDataValue {
+    pub fn rest_data(&self) -> XchandlesDataValue {
         XchandlesDataValue {
             owner_launcher_id: self.owner_launcher_id,
             resolved_data: self.resolved_data.clone(),
