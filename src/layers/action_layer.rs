@@ -10,7 +10,7 @@ use chia_wallet_sdk::{
     types::{run_puzzle, MerkleProof, MerkleTree},
 };
 use clvm_traits::{clvm_list, match_tuple};
-use clvmr::{serde::node_to_bytes, Allocator, NodePtr};
+use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
 use crate::SpendContextExt;
@@ -123,14 +123,6 @@ impl<S, P> ActionLayer<S, P> {
             let actual_solution =
                 clvm_list!(state_incl_ephemeral, raw_action.solution).to_clvm(allocator)?;
 
-            println!(
-                "puzzle: {:}",
-                hex::encode(node_to_bytes(allocator, actual_solution)?)
-            ); // todo: debug
-            println!(
-                "solution: {:}",
-                hex::encode(node_to_bytes(allocator, raw_action.solution)?)
-            ); // todo: debug
             let output = run_puzzle(allocator, raw_action.puzzle, actual_solution)?;
 
             (state_incl_ephemeral, _) =

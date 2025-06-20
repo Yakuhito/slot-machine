@@ -79,13 +79,11 @@ impl XchandlesRegistry {
         });
 
         let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
-        println!("before new state"); // todo: debug
         let new_state = ActionLayer::<XchandlesRegistryState>::get_new_state(
             allocator,
             parent_info.state,
             parent_solution.inner_solution,
         )?;
-        println!("after new state"); // todo: debug
 
         let new_info = parent_info.with_state(new_state);
 

@@ -19,7 +19,10 @@
     (
         (@
             current_slot
-            (handle_hash neighbors expiration . (@ current_data (current_owner_launcher_id . current_resolved_data)))
+            (
+                (handle_hash . neighbors) .
+                (expiration . (@ current_data (current_owner_launcher_id . current_resolved_data)))
+            )
         )
         (@ new_data (new_owner_launcher_id . new_resolved_data)) .
         announcer_inner_puzzle_hash
