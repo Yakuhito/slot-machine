@@ -1,8 +1,7 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
+    protocol::{Bytes, Bytes32},
     puzzles::singleton::SingletonStruct,
-    sha2::Sha256,
 };
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
@@ -57,28 +56,22 @@ impl XchandlesRefundAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_hash_from_solution(
+    pub fn get_spent_slot_value_from_solution(
         ctx: &SpendContext,
         solution: NodePtr,
-    ) -> Result<Option<Bytes32>, DriverError> {
+    ) -> Result<Option<XchandlesSlotValue>, DriverError> {
         let solution =
-            XchandlesRefundActionSolution::<NodePtr, NodePtr, NodePtr, NodePtr>::from_clvm(
+            XchandlesRefundActionSolution::<NodePtr, NodePtr, NodePtr, NodePtr, NodePtr>::from_clvm(
                 ctx, solution,
             )?;
 
-        let Some(rest_hash) = solution.rest_hash else {
-            return Ok(None);
-        };
-
-        let mut hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.handle_hash.tree_hash());
-        hasher.update(rest_hash);
-
-        Ok(Some(hasher.finalize().into()))
+        Ok(match solution.handle_or_slot_value {
+            HandleOrSlotValue::Handle(_handle) => None,
+            HandleOrSlotValue::Slot(slot_value) => Some(slot_value),
+        })
     }
 
-    pub fn get_slot_value(
+    pub fn get_created_slot_value(
         spent_slot_value: Option<XchandlesSlotValue>,
     ) -> Option<XchandlesSlotValue> {
         spent_slot_value // nothing changed; just oracle
@@ -105,23 +98,8 @@ impl XchandlesRefundAction {
             my_inner_puzzle_hash,
         )?;
 
-        // if there's a slot, spend it
-        if let Some(slot) = slot {
-            registry
-                .pending_items
-                .spent_slots
-                .push(slot.info.value_hash);
-            slot.spend(ctx, my_inner_puzzle_hash)?;
-        }
-
-        // then, spend self
+        // spend self
         let action_solution = XchandlesRefundActionSolution {
-            handle_hash: precommit_coin
-                .value
-                .secret_and_handle
-                .handle
-                .tree_hash()
-                .into(),
             precommited_cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
                 precommit_coin.asset_id.tree_hash().into(),
@@ -136,31 +114,40 @@ impl XchandlesRefundAction {
                 .tree_hash(precommited_pricing_puzzle_reveal)
                 .into(),
             precommited_pricing_puzzle_solution,
-            secret_hash: precommit_coin
-                .value
-                .secret_and_handle
-                .secret
-                .tree_hash()
-                .into(),
-            precommit_value_rest_hash: precommit_coin.value.after_secret_and_handle_hash().into(),
-            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
+            secret: precommit_coin.value.secret,
+            precommited_start_time: precommit_coin.value.start_time,
+            precommited_owner_launcher_id: precommit_coin.value.owner_launcher_id,
+            precommited_resolved_data: precommit_coin.value.resolved_data.clone(),
             precommit_amount: precommit_coin.coin.amount,
-            rest_hash: slot.map(|s| s.info.value.after_handle_data_hash().into()),
+            handle_or_slot_value: if let Some(slot) = &slot {
+                HandleOrSlotValue::Slot(slot.info.value.clone())
+            } else {
+                HandleOrSlotValue::Handle(precommit_coin.value.handle.clone())
+            },
         }
         .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
-        let new_slot_value = if let Some(slot) = slot {
-            let slot_value = Self::get_slot_value(Some(slot.info.value)).unwrap();
+        let new_slot_value = if let Some(slot) = &slot {
+            let slot_value = slot.info.value.clone();
 
-            registry.pending_items.slot_values.push(slot_value);
+            registry.pending_items.slot_values.push(slot_value.clone());
 
-            Some(registry.created_slot_values_to_slots(vec![slot_value])[0])
+            Some(registry.created_slot_values_to_slots(vec![slot_value.clone()])[0].clone())
         } else {
             None
         };
+
+        // if there's a slot, spend it
+        if let Some(slot) = slot {
+            registry
+                .pending_items
+                .spent_slots
+                .push(slot.info.value_hash);
+            slot.spend(ctx, my_inner_puzzle_hash)?;
+        }
 
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(
@@ -225,19 +212,26 @@ impl XchandlesRefundActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
+#[clvm(transparent)]
+pub enum HandleOrSlotValue {
+    Handle(String),
+    Slot(XchandlesSlotValue),
+}
+
+#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct XchandlesRefundActionSolution<CMP, CMS, PP, PS> {
-    pub handle_hash: Bytes32,
+pub struct XchandlesRefundActionSolution<CMP, CMS, PP, PS, S> {
     pub precommited_cat_maker_reveal: CMP,
     pub precommited_cat_maker_hash: Bytes32,
     pub precommited_cat_maker_solution: CMS,
     pub precommited_pricing_puzzle_reveal: PP,
     pub precommited_pricing_puzzle_hash: Bytes32,
     pub precommited_pricing_puzzle_solution: PS,
-    pub secret_hash: Bytes32,
-    pub precommit_value_rest_hash: Bytes32,
-    pub refund_puzzle_hash_hash: Bytes32,
+    pub secret: S,
+    pub precommited_start_time: u64,
+    pub precommited_owner_launcher_id: Bytes32,
+    pub precommited_resolved_data: Bytes,
     pub precommit_amount: u64,
     #[clvm(rest)]
-    pub rest_hash: Option<Bytes32>,
+    pub handle_or_slot_value: HandleOrSlotValue,
 }
