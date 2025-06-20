@@ -171,12 +171,12 @@ mod tests {
         types::Conditions,
     };
 
-    use crate::VerifiedData;
+    use crate::{VerificationAsserter, VerifiedData};
 
     use super::*;
 
     #[test]
-    fn test_verifications() -> anyhow::Result<()> {
+    fn test_verifications_and_asserter() -> anyhow::Result<()> {
         let mut sim = Simulator::new();
         let ctx = &mut SpendContext::new();
         let bls = sim.bls(1);
@@ -186,6 +186,7 @@ mod tests {
         let (create_did, did) = did_launcher.create_simple_did(ctx, &p2)?;
         p2.spend(ctx, bls.coin, create_did)?;
 
+        let verifier_proof = did.child_lineage_proof();
         let did = did.update(
             ctx,
             &p2,
@@ -194,15 +195,16 @@ mod tests {
         let verification_launcher = Launcher::new(did.coin.parent_coin_info, 0);
         // we don't need an extra mojo for the verification coin since it's melted in the same tx
 
+        let verified_data = VerifiedData {
+            version: 1,
+            asset_id: Bytes32::new([2; 32]),
+            data_hash: Bytes32::new([3; 32]),
+            comment: "Test verification for test testing purposes only.".to_string(),
+        };
         let test_info = VerificationInfo::new(
             verification_launcher.coin().coin_id(),
             did.info.launcher_id,
-            VerifiedData {
-                version: 1,
-                asset_id: Bytes32::new([2; 32]),
-                data_hash: Bytes32::new([3; 32]),
-                comment: "Test verification for test testing purposes only.".to_string(),
-            },
+            verified_data.clone(),
         );
         let verification =
             Verification::after_mint(verification_launcher.coin().parent_coin_info, test_info);
@@ -226,6 +228,17 @@ mod tests {
         let parent_puzzle = Puzzle::parse(ctx, parent_puzzle);
         let verification =
             Verification::from_parent_spend(ctx, verification.coin, parent_puzzle)?.unwrap();
+
+        // create verification payment and spend it
+        let verification_asserter = VerificationAsserter::from(
+            did.info.launcher_id,
+            verified_data.version,
+            verified_data.asset_id.tree_hash(),
+            verified_data.data_hash.tree_hash(),
+        );
+
+        let payment_coin = sim.new_coin(verification_asserter.tree_hash().into(), 1337);
+        verification_asserter.spend(ctx, payment_coin, verifier_proof, 0, verified_data.comment)?;
 
         // melt verification coin
         let revocation_singleton_inner_ph = did.info.inner_puzzle_hash().into();

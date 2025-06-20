@@ -1,21 +1,21 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
+    protocol::{Bytes32, Coin},
 };
-use chia_puzzle_types::LineageProof;
+use chia_puzzle_types::{singleton::SingletonStruct, LineageProof};
 use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
 use chia_wallet_sdk::driver::{DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use hex_literal::hex;
 
-use crate::SpendContextExt;
+use crate::{SpendContextExt, VerificationLayer1stCurryArgs};
 
 #[derive(Debug, Copy, Clone)]
 #[must_use]
 pub struct VerificationAsserter {
     pub verifier_singleton_struct_hash: Bytes32,
     pub verification_inner_puzzle_self_hash: Bytes32,
-    pub version: u64,
+    pub version: u32,
     pub tail_hash_hash: Bytes32,
     pub data_hash_hash: Bytes32,
 }
@@ -24,7 +24,7 @@ impl VerificationAsserter {
     pub fn new(
         verifier_singleton_struct_hash: Bytes32,
         verification_inner_puzzle_self_hash: Bytes32,
-        version: u64,
+        version: u32,
         tail_hash_hash: TreeHash,
         data_hash_hash: TreeHash,
     ) -> Self {
@@ -35,6 +35,23 @@ impl VerificationAsserter {
             tail_hash_hash: tail_hash_hash.into(),
             data_hash_hash: data_hash_hash.into(),
         }
+    }
+
+    pub fn from(
+        verifier_launcher_id: Bytes32,
+        version: u32,
+        tail_hash_hash: TreeHash,
+        data_hash_hash: TreeHash,
+    ) -> Self {
+        Self::new(
+            SingletonStruct::new(verifier_launcher_id)
+                .tree_hash()
+                .into(),
+            VerificationLayer1stCurryArgs::curry_tree_hash(verifier_launcher_id).into(),
+            version,
+            tail_hash_hash,
+            data_hash_hash,
+        )
     }
 
     pub fn tree_hash(&self) -> TreeHash {
@@ -57,7 +74,7 @@ impl VerificationAsserter {
         .tree_hash()
     }
 
-    pub fn spend(
+    pub fn inner_spend(
         &self,
         ctx: &mut SpendContext,
         verifier_proof: LineageProof,
@@ -93,6 +110,20 @@ impl VerificationAsserter {
         })?;
 
         Ok(Spend::new(puzzle, solution))
+    }
+
+    pub fn spend(
+        &self,
+        ctx: &mut SpendContext,
+        coin: Coin,
+        verifier_proof: LineageProof,
+        launcher_amount: u64,
+        comment: String,
+    ) -> Result<(), DriverError> {
+        let spend = self.inner_spend(ctx, verifier_proof, launcher_amount, comment)?;
+
+        ctx.spend(coin, spend)?;
+        Ok(())
     }
 }
 
@@ -148,7 +179,7 @@ pub struct VerificationAsserterSolution<S> {
 #[clvm(curry)]
 pub struct CatalogVerificationInnerPuzzleMakerArgs {
     pub verification_inner_puzzle_self_hash: Bytes32,
-    pub version: u64,
+    pub version: u32,
     pub tail_hash_hash: Bytes32,
     pub data_hash_hash: Bytes32,
 }
@@ -156,7 +187,7 @@ pub struct CatalogVerificationInnerPuzzleMakerArgs {
 impl CatalogVerificationInnerPuzzleMakerArgs {
     pub fn new(
         verification_inner_puzzle_self_hash: Bytes32,
-        version: u64,
+        version: u32,
         tail_hash_hash: TreeHash,
         data_hash_hash: TreeHash,
     ) -> Self {
