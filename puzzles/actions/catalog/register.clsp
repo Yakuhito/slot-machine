@@ -136,10 +136,13 @@
                             (c
                                 (curry_hashes PRECOMMIT_1ST_CURRY_HASH
                                     refund_puzzle_hash_hash
-                                    ; full precommit value reveal is (TAIL initial_nft_owner_ph cat_maker_hash . cat_maker_solution)
+                                    ; full precommit value reveal is (TAIL . HASH)
+                                    ; where HASH = (sha256tree initial_nft_owner_ph cat_maker_hash . cat_maker_solution)
                                     (sha256 2
                                         tail_hash
-                                        (sha256tree (c initial_nft_owner_ph (c Cat_Maker_Puzzle_Hash cat_maker_solution)))
+                                        (sha256 1
+                                            (sha256tree (c initial_nft_owner_ph (c Cat_Maker_Puzzle_Hash cat_maker_solution)))
+                                        )
                                     )
                                 ) ; Inner_Puzzle_Hash
                                 cat_maker_solution

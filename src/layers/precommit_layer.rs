@@ -202,13 +202,14 @@ pub struct PrecommitLayerSolution {
     pub singleton_inner_puzzle_hash: Bytes32,
 }
 
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
-pub struct CatalogPrecommitValue<T = NodePtr, S = ()> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CatalogPrecommitValue<T = NodePtr, S = ()>
+where
+    S: ToTreeHash,
+{
     pub tail_reveal: T,
     pub initial_inner_puzzle_hash: Bytes32,
     pub cat_maker_hash: Bytes32,
-    #[clvm(rest)]
     pub cat_maker_solution: S,
 }
 
@@ -244,6 +245,24 @@ impl<T> CatalogPrecommitValue<T> {
         conds = conds.remark(ctx.alloc(&"MEOW".to_string())?);
 
         ctx.alloc(&clvm_quote!(conds))
+    }
+}
+
+// On-chain, the CATalog precommit value is just (TAIL . HASH)
+impl<N, E: ClvmEncoder<Node = N>, T, S> ToClvm<E> for CatalogPrecommitValue<T, S>
+where
+    S: ToTreeHash,
+    T: ToClvm<E> + Clone,
+{
+    fn to_clvm(&self, encoder: &mut E) -> Result<N, ToClvmError> {
+        let hash: Bytes32 = clvm_tuple!(
+            self.initial_inner_puzzle_hash,
+            clvm_tuple!(self.cat_maker_hash, self.cat_maker_solution.tree_hash())
+        )
+        .tree_hash()
+        .into();
+
+        clvm_tuple!(self.tail_reveal.clone(), hash).to_clvm(encoder)
     }
 }
 
