@@ -2329,6 +2329,7 @@ mod tests {
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &existing_handle, 1);
 
             // a - the CAT maker puzzle has changed
+            println!("testing refund a"); // todo: debug
             let alternative_payment_cat_amount = 10_000_000;
             let minter2 = sim.bls(alternative_payment_cat_amount);
             let minter_p2_2 = StandardLayer::new(minter2.pk);
@@ -2369,6 +2370,7 @@ mod tests {
             .0;
 
             // b - the amount is wrong
+            println!("testing refund b"); // todo: debug
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
@@ -2388,6 +2390,7 @@ mod tests {
             )?;
 
             // c - the pricing puzzle has changed
+            println!("testing refund c"); // todo: debug
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,

@@ -118,6 +118,7 @@ impl XchandlesRefundAction {
             precommited_start_time: precommit_coin.value.start_time,
             precommited_owner_launcher_id: precommit_coin.value.owner_launcher_id,
             precommited_resolved_data: precommit_coin.value.resolved_data.clone(),
+            refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
             precommit_amount: precommit_coin.coin.amount,
             handle_or_slot_value: if let Some(slot) = &slot {
                 HandleOrSlotValue::Slot(slot.info.value.clone())
@@ -238,6 +239,7 @@ pub struct XchandlesRefundActionSolution<CMP, CMS, PP, PS, S> {
     pub precommited_start_time: u64,
     pub precommited_owner_launcher_id: Bytes32,
     pub precommited_resolved_data: Bytes,
+    pub refund_puzzle_hash_hash: Bytes32,
     pub precommit_amount: u64,
     #[clvm(rest)]
     pub handle_or_slot_value: HandleOrSlotValue,

@@ -11,7 +11,6 @@ pub mod tests {
     use chia_wallet_sdk::{driver::SpendContext, test::Simulator, types::TESTNET11_CONSTANTS};
     use prettytable::{row, Table};
 
-    use crate::print_spend_bundle_to_file;
     pub struct Benchmark {
         pub title: String,
         pub data_keys: Vec<String>,
@@ -34,13 +33,7 @@ pub mod tests {
             key: &str,
             keys: &[SecretKey],
         ) -> anyhow::Result<()> {
-            println!("add_spends {}", key); // todo: debug
             let sb = SpendBundle::new(ctx.take(), Signature::default());
-            print_spend_bundle_to_file(
-                sb.coin_spends.clone(),
-                sb.aggregated_signature.clone(),
-                "sb.debug",
-            ); // todo: debug
             let sb_conds = get_conditions_from_spendbundle(
                 ctx,
                 &sb,
@@ -56,7 +49,6 @@ pub mod tests {
             self.data.entry(key).or_default().push(sb_conds.cost);
 
             sim.spend_coins(sb.coin_spends, keys)?;
-            println!("coins spent :)"); // todo: debug
             Ok(())
         }
 
