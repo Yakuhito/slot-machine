@@ -15,7 +15,7 @@
         secret
         start_time
         owner_launcher_id
-        resolved_launcher_id
+        resolved_data
     )
         (sha256tree
             (c
@@ -25,7 +25,7 @@
                 )
                 (c
                     (c handle secret)
-                    (c start_time (c owner_launcher_id resolved_launcher_id))
+                    (c start_time (c owner_launcher_id resolved_data))
                 )
             )
         )
