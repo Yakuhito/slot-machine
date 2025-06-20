@@ -6,6 +6,7 @@ use chia_puzzle_types::{singleton::SingletonStruct, LineageProof};
 use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
 use chia_wallet_sdk::driver::{DriverError, Spend, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
+use clvmr::serde::node_to_bytes;
 use hex_literal::hex;
 
 use crate::{SpendContextExt, VerificationLayer1stCurryArgs};
@@ -101,6 +102,8 @@ impl VerificationAsserter {
             ),
         })?;
 
+        println!("puzzle: {:?}", hex::encode(node_to_bytes(ctx, puzzle)?)); // todo: debug
+
         let solution = ctx.alloc(&VerificationAsserterSolution {
             verifier_proof,
             verification_inner_puzzle_maker_solution: CatalogVerificationInnerPuzzleMakerSolution {
@@ -108,6 +111,8 @@ impl VerificationAsserter {
             },
             launcher_amount,
         })?;
+
+        println!("solution: {:?}", hex::encode(node_to_bytes(ctx, solution)?)); // todo: debug
 
         Ok(Spend::new(puzzle, solution))
     }
@@ -127,11 +132,11 @@ impl VerificationAsserter {
     }
 }
 
-pub const VERIFICATION_ASSERTER_PUZZLE: [u8; 434] = hex!("ff02ffff01ff04ffff04ff04ffff04ffff0bffff0bff2effff0bff0affff0bff0aff36ff0580ffff0bff0affff0bff3effff0bff0affff0bff0aff36ffff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ffff0bffff0101ffff30ffff30ff819fffff0bff2effff0bff0affff0bff0aff36ff0580ffff0bff0affff0bff3effff0bff0affff0bff0aff36ff1780ffff0bff0affff0bff3effff0bff0affff0bff0aff36ff82015f80ffff0bff0aff36ff26808080ff26808080ff26808080ff8201df80ff0bff81ff8080ffff0bffff0101ff0b80808080ffff0bff0affff0bff3effff0bff0affff0bff0aff36ffff02ff2fff81bf8080ffff0bff0aff36ff26808080ff26808080ff26808080ff8080ff808080ff8080ffff04ffff01ff3fff02ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff018080");
+pub const VERIFICATION_ASSERTER_PUZZLE: [u8; 434] = hex!("ff02ffff01ff04ffff04ff04ffff04ffff0bffff0bff2effff0bff0affff0bff0aff36ff0580ffff0bff0affff0bff3effff0bff0affff0bff0aff36ffff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ffff0bffff0101ffff30ffff30ff819fffff0bff2effff0bff0affff0bff0aff36ff0580ffff0bff0affff0bff3effff0bff0affff0bff0aff36ff1780ffff0bff0affff0bff3effff0bff0affff0bff0aff36ff82015f80ffff0bff0aff36ff26808080ff26808080ff26808080ff8202df80ff0bff81ff8080ffff0bffff0101ff0b80808080ffff0bff0affff0bff3effff0bff0affff0bff0aff36ffff02ff2fff81bf8080ffff0bff0aff36ff26808080ff26808080ff26808080ff8080ff808080ff8080ffff04ffff01ff3fff02ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff018080");
 
 pub const VERIFICATION_ASSERTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    eb7809960285f33123a900f3098b60b76dec74abe0484517fb4ec83071a7e945
+    d33c552997cea95b0b66253b34f93c9126bd72839853194a2d03d95d1cc902a4
     "
 ));
 

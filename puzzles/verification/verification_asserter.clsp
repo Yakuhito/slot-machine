@@ -11,7 +11,7 @@
     LAUNCHER_PUZZLE_HASH
     VERIFIER_SINGLETON_STRUCT_HASH
     VERIFICATION_INNER_PUZZLE_MAKER
-    (verifier_parent_info verifier_inner_puzzle_hash . verifier_amount)
+    (verifier_parent_info verifier_inner_puzzle_hash verifier_amount) ; verifier proof
     verification_inner_puzzle_maker_solution .
     launcher_amount ; usually 0
 )
