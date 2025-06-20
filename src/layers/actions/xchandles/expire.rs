@@ -68,6 +68,7 @@ impl XchandlesExpireAction {
             NodePtr,
             NodePtr,
             XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
+            NodePtr,
         >::from_clvm(ctx, solution)?;
 
         Ok(XchandlesSlotValue::new(
@@ -92,8 +93,10 @@ impl XchandlesExpireAction {
         ctx: &mut SpendContext,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution =
-            ctx.extract::<XchandlesExpireActionSolution<NodePtr, (), NodePtr, NodePtr>>(solution)?;
+        let solution = ctx
+            .extract::<XchandlesExpireActionSolution<NodePtr, (), NodePtr, NodePtr, NodePtr>>(
+                solution,
+            )?;
 
         let pricing_output = ctx.run(
             solution.expired_handle_pricing_puzzle_reveal,
@@ -128,13 +131,7 @@ impl XchandlesExpireAction {
         registration_period: u64,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
-        // spend slot
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
-        registry
-            .pending_items
-            .spent_slots
-            .push(slot.info.value_hash);
-        slot.spend(ctx, my_inner_puzzle_hash)?;
 
         // announcement is simply premcommitment coin inner ph
         let expire_ann: Bytes32 = precommit_coin.inner_puzzle_hash;
@@ -146,7 +143,7 @@ impl XchandlesExpireAction {
             my_inner_puzzle_hash,
         )?;
 
-        // finally, spend self
+        // spend self
         let action_solution = XchandlesExpireActionSolution {
             cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
@@ -166,7 +163,7 @@ impl XchandlesExpireAction {
                     buy_time: precommit_coin.value.start_time,
                     pricing_program_solution: XchandlesFactorPricingSolution {
                         current_expiration: slot.info.value.expiration,
-                        handle: precommit_coin.value.secret_and_handle.handle.clone(),
+                        handle: precommit_coin.value.handle.clone(),
                         num_periods,
                     },
                 },
@@ -176,27 +173,32 @@ impl XchandlesExpireAction {
             old_rest: slot.info.value.rest_data(),
             new_rest: XchandlesDataValue {
                 owner_launcher_id: precommit_coin.value.owner_launcher_id,
-                resolved_data: precommit_coin.value.resolved_launcher_id,
+                resolved_data: precommit_coin.value.resolved_data,
             },
         }
         .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
-        let new_slot_value = Self::get_slot_value_from_solution(
-            ctx,
-            slot.info.value,
-            precommit_coin.value,
-            action_solution,
-        )?;
-        registry.pending_items.slot_values.push(new_slot_value);
+        let new_slot_value = Self::get_created_slot_value_from_solution(ctx, action_solution)?;
+        registry
+            .pending_items
+            .slot_values
+            .push(new_slot_value.clone());
+
+        // spend slot
+        registry
+            .pending_items
+            .spent_slots
+            .push(slot.info.value_hash);
+        slot.spend(ctx, my_inner_puzzle_hash)?;
 
         let mut expire_ann: Vec<u8> = expire_ann.to_vec();
         expire_ann.insert(0, b'x');
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, expire_ann)),
-            registry.created_slot_values_to_slots(vec![new_slot_value])[0],
+            registry.created_slot_values_to_slots(vec![new_slot_value])[0].clone(),
         ))
     }
 }
@@ -255,13 +257,13 @@ impl XchandlesExpireActionArgs {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct XchandlesExpireActionSolution<CMP, CMS, P, S> {
+pub struct XchandlesExpireActionSolution<CMP, CMS, EP, ES, S> {
     pub cat_maker_puzzle_reveal: CMP,
     pub cat_maker_puzzle_solution: CMS,
-    pub expired_handle_pricing_puzzle_reveal: P,
-    pub expired_handle_pricing_puzzle_solution: S,
+    pub expired_handle_pricing_puzzle_reveal: EP,
+    pub expired_handle_pricing_puzzle_solution: ES,
     pub refund_puzzle_hash_hash: Bytes32,
-    pub secret: String,
+    pub secret: S,
     pub neighbors: SlotNeigborsInfo,
     pub old_rest: XchandlesDataValue,
     #[clvm(rest)]
