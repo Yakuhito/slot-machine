@@ -55,7 +55,7 @@ impl XchandlesExtendAction {
     ) -> Result<XchandlesSlotValue, DriverError> {
         let solution = ctx.extract::<XchandlesExtendActionSolution<
             NodePtr,
-            (u64, NodePtr),
+            (u64, (String, NodePtr)),
             NodePtr,
             NodePtr,
         >>(solution)?;
@@ -64,7 +64,7 @@ impl XchandlesExtendAction {
         let current_expiration = solution.pricing_solution.0;
 
         Ok(XchandlesSlotValue::new(
-            solution.handle_hash,
+            solution.pricing_solution.1 .0.tree_hash().into(),
             solution.neighbors.left_value,
             solution.neighbors.right_value,
             current_expiration,
@@ -85,11 +85,14 @@ impl XchandlesExtendAction {
         let pricing_output = ctx.run(solution.pricing_puzzle_reveal, solution.pricing_solution)?;
         let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
 
+        let (_, (handle, _)) =
+            ctx.extract::<(NodePtr, (String, NodePtr))>(solution.pricing_solution)?;
+
         // current expiration is the first truth given to a pricing puzzle
         let current_expiration = ctx.extract::<(u64, NodePtr)>(solution.pricing_solution)?.0;
 
         Ok(XchandlesSlotValue::new(
-            solution.handle_hash,
+            handle.tree_hash().into(),
             solution.neighbors.left_value,
             solution.neighbors.right_value,
             current_expiration + registration_time_delta,
@@ -121,7 +124,6 @@ impl XchandlesExtendAction {
             registration_period,
         )?;
         let action_solution = ctx.alloc(&XchandlesExtendActionSolution {
-            handle_hash: slot.info.value.handle_hash,
             pricing_puzzle_reveal,
             pricing_solution: XchandlesFactorPricingSolution {
                 current_expiration: slot.info.value.expiration,
@@ -217,7 +219,6 @@ impl XchandlesExtendActionArgs {
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct XchandlesExtendActionSolution<PP, PS, CMP, CMS> {
-    pub handle_hash: Bytes32,
     pub pricing_puzzle_reveal: PP,
     pub pricing_solution: PS,
     pub cat_maker_puzzle_reveal: CMP,

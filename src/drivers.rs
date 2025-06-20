@@ -2020,6 +2020,7 @@ mod tests {
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, extension_years);
 
             let spent_slot_value_hash = extension_slot.info.value_hash;
+            println!("aaa"); // todo: debug
             let (notarized_payment, extend_conds, new_slot) =
                 registry.new_action::<XchandlesExtendAction>().spend(
                     ctx,
@@ -2031,6 +2032,7 @@ mod tests {
                     reg_period,
                     extension_years,
                 )?;
+            println!("bbb"); // todo: debug
 
             assert_eq!(
                 spent_slot_value_hash,
@@ -2042,6 +2044,7 @@ mod tests {
                 .tree_hash()
                 .into()
             );
+            println!("ccc"); // todo: debug
 
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
                 ctx,
@@ -2053,11 +2056,13 @@ mod tests {
                         None,
                     ),
             )?;
+            println!("ddd"); // todo: debug
 
             let cat_offer_inner_spend = Spend::new(
                 ctx.alloc_mod::<SettlementPayment>()?,
                 ctx.alloc(&clvm_list!(notarized_payment))?,
             );
+            println!("eee"); // todo: debug
 
             Cat::spend_all(
                 ctx,
@@ -2075,11 +2080,14 @@ mod tests {
                     },
                 ],
             )?;
+            println!("fff"); // todo: debug
 
             payment_cat_amount -= pay_for_extension;
             payment_cat = payment_cat.wrapped_child(minter_bls.puzzle_hash, payment_cat_amount);
 
+            println!("ggg"); // todo: debug
             registry = registry.finish_spend(ctx)?;
+            println!("hhh"); // todo: debug
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
             benchmark.add_spends(
@@ -2088,6 +2096,7 @@ mod tests {
                 "extend",
                 &[user_bls.sk.clone(), minter_bls.sk.clone()],
             )?;
+            println!("iii"); // todo: debug
 
             slots.retain(|s| s.info.value_hash != extension_slot.info.value_hash);
             slots.push(new_slot.clone());

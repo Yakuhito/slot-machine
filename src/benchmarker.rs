@@ -56,6 +56,7 @@ pub mod tests {
             self.data.entry(key).or_default().push(sb_conds.cost);
 
             sim.spend_coins(sb.coin_spends, keys)?;
+            println!("coins spent :)"); // todo: debug
             Ok(())
         }
 
