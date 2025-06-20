@@ -35,10 +35,8 @@
     (include slots.clib)
 
     (defun spend_precommit_coin_and_announce (
-        cat_maker_puzzle_reveal
-        cat_maker_puzzle_solution
+        precommit_coin_ph
         total_price
-        precommit_coin_inner_ph
         base_conditions
     )
         (c
@@ -46,17 +44,11 @@
                 SEND_MESSAGE
                 19 ; sender puzzle + receiver puzzle + receiver amount
                 1 ; message = 1 = spend to payout puzzle hash
-                (a
-                    cat_maker_puzzle_reveal
-                    (c
-                        precommit_coin_inner_ph ; Inner_Puzzle_Hash
-                        cat_maker_puzzle_solution
-                    )
-                )
+                precommit_coin_ph
                 total_price
             )
             (c 
-                (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'x' precommit_coin_inner_ph))
+                (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'x' precommit_coin_ph))
                 base_conditions
             )
         )
@@ -69,23 +61,27 @@
         (c
             Truth ; nothing changes
             (spend_precommit_coin_and_announce
-                cat_maker_puzzle_reveal
-                cat_maker_puzzle_solution
-                total_price
-                (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
-                    refund_puzzle_hash_hash
-                    (sha256 1 (xchandles_precommitment_value
-                        Cat_Maker_Puzzle_Hash
+                (a
+                    cat_maker_puzzle_reveal
+                    (c
+                        (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
+                            refund_puzzle_hash_hash
+                            (sha256 1 (xchandles_precommitment_value
+                                Cat_Maker_Puzzle_Hash
+                                cat_maker_puzzle_solution
+                                Expired_Handle_Pricing_Puzzle_Hash
+                                expired_handle_pricing_puzzle_solution
+                                secret
+                                handle
+                                buy_time
+                                new_owner_launcher_id
+                                new_resolved_data
+                            ))
+                        ) ; Inner_Puzzle_Hash
                         cat_maker_puzzle_solution
-                        Expired_Handle_Pricing_Puzzle_Hash
-                        expired_handle_pricing_puzzle_solution
-                        secret
-                        handle
-                        buy_time
-                        new_owner_launcher_id
-                        new_resolved_data
-                    ))
-                ) ; precommit coin inner puzzle hash
+                    )
+                ) ; precommit coin full puzzle hash
+                total_price ; precommit coin amount
                 (list
                     (list ASSERT_SECONDS_ABSOLUTE buy_time)
 
