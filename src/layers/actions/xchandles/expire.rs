@@ -2,7 +2,6 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
-    sha2::Sha256,
 };
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
@@ -14,8 +13,8 @@ use hex_literal::hex;
 
 use crate::{
     Action, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SlotNeigborsInfo,
-    SpendContextExt, XchandlesConstants, XchandlesPrecommitValue, XchandlesRegistry,
-    XchandlesSlotValue,
+    SpendContextExt, XchandlesConstants, XchandlesDataValue, XchandlesPrecommitValue,
+    XchandlesRegistry, XchandlesSlotValue,
 };
 
 use super::{XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution};
@@ -60,10 +59,10 @@ impl XchandlesExpireAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_hash_from_solution(
+    pub fn get_spent_slot_value_from_solution(
         ctx: &SpendContext,
         solution: NodePtr,
-    ) -> Result<Bytes32, DriverError> {
+    ) -> Result<XchandlesSlotValue, DriverError> {
         let solution = XchandlesExpireActionSolution::<
             NodePtr,
             NodePtr,
@@ -71,47 +70,30 @@ impl XchandlesExpireAction {
             XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
         >::from_clvm(ctx, solution)?;
 
-        let mut hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(
+        Ok(XchandlesSlotValue::new(
             solution
                 .expired_handle_pricing_puzzle_solution
                 .pricing_program_solution
-                .current_expiration
-                .tree_hash(),
-        );
-        hasher.update(solution.old_rest_hash);
-        let expiration_rest_hash = hasher.finalize();
-
-        hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.neighbors_hash);
-        hasher.update(expiration_rest_hash);
-        let neighbors_expiration_rest_hash = hasher.finalize();
-
-        let handle_hash: Bytes32 = solution
-            .expired_handle_pricing_puzzle_solution
-            .pricing_program_solution
-            .handle
-            .tree_hash()
-            .into();
-        hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(handle_hash.tree_hash());
-        hasher.update(neighbors_expiration_rest_hash);
-
-        Ok(hasher.finalize().into())
+                .handle
+                .tree_hash()
+                .into(),
+            solution.neighbors.left_value,
+            solution.neighbors.right_value,
+            solution
+                .expired_handle_pricing_puzzle_solution
+                .pricing_program_solution
+                .current_expiration,
+            solution.old_rest.owner_launcher_id,
+            solution.old_rest.resolved_data,
+        ))
     }
 
-    pub fn get_slot_value_from_solution(
+    pub fn get_created_slot_value_from_solution(
         ctx: &mut SpendContext,
-        old_slot_value: XchandlesSlotValue,
-        precommit_coin_value: XchandlesPrecommitValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution = XchandlesExpireActionSolution::<NodePtr, (), NodePtr, NodePtr>::from_clvm(
-            ctx, solution,
-        )?;
+        let solution =
+            ctx.extract::<XchandlesExpireActionSolution<NodePtr, (), NodePtr, NodePtr>>(solution)?;
 
         let pricing_output = ctx.run(
             solution.expired_handle_pricing_puzzle_reveal,
@@ -119,21 +101,20 @@ impl XchandlesExpireAction {
         )?;
         let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
 
-        let expired_solution = ctx.extract::<XchandlesExponentialPremiumRenewPuzzleSolution<
-            XchandlesFactorPricingSolution,
-        >>(solution.expired_handle_pricing_puzzle_solution)?;
+        let pricing_puzzle_solution = ctx.extract::<XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>>(solution.expired_handle_pricing_puzzle_solution)?;
 
-        Ok(XchandlesSlotValue {
-            handle_hash: expired_solution
+        Ok(XchandlesSlotValue::new(
+            pricing_puzzle_solution
                 .pricing_program_solution
                 .handle
                 .tree_hash()
                 .into(),
-            neighbors: old_slot_value.neighbors,
-            expiration: precommit_coin_value.start_time + registration_time_delta,
-            owner_launcher_id: precommit_coin_value.owner_launcher_id,
-            resolved_launcher_id: precommit_coin_value.resolved_launcher_id,
-        })
+            solution.neighbors.left_value,
+            solution.neighbors.right_value,
+            pricing_puzzle_solution.buy_time + registration_time_delta,
+            solution.new_rest.owner_launcher_id,
+            solution.new_rest.resolved_data,
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -289,9 +270,9 @@ pub struct XchandlesExpireActionSolution<CMP, CMS, P, S> {
     pub refund_puzzle_hash_hash: Bytes32,
     pub secret: String,
     pub neighbors: SlotNeigborsInfo,
-    pub old_rest: Bytes32,
+    pub old_rest: XchandlesDataValue,
     #[clvm(rest)]
-    pub new_rest: Bytes32,
+    pub new_rest: XchandlesDataValue,
 }
 
 pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 351] =

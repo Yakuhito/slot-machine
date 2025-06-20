@@ -18,12 +18,9 @@ pub static SLOT32_MIN_VALUE: [u8; 32] =
 pub static SLOT32_MAX_VALUE: [u8; 32] =
     hex!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub struct SlotInfo<V>
-where
-    V: Copy,
-{
+pub struct SlotInfo<V> {
     pub nonce: u64,
     pub launcher_id: Bytes32,
 
@@ -31,10 +28,7 @@ where
     pub value: V,
 }
 
-impl<V> SlotInfo<V>
-where
-    V: Copy,
-{
+impl<V> SlotInfo<V> {
     pub fn new(launcher_id: Bytes32, nonce: u64, value_hash: Bytes32, value: V) -> Self {
         Self {
             launcher_id,
