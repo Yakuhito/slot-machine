@@ -74,18 +74,17 @@
                 total_price
                 (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
                     refund_puzzle_hash_hash
-                    (sha256tree
-                        (c
-                            (sha256tree (c
-                                (c Cat_Maker_Puzzle_Hash cat_maker_puzzle_solution)
-                                (c Expired_Handle_Pricing_Puzzle_Hash expired_handle_pricing_puzzle_solution)
-                            )) ; REFUND_INFO = (sha256tree (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution)))
-                            (c
-                                (c secret handle)
-                                (c buy_time new_rest)
-                            ) ; data = (c (c secret handle) (c start_time (c new_owner_launcher_id new_resolved_data))))
-                        )
-                    ) ; precommit coin value = (c REFUND_INFO data)
+                    (sha256 1 (xchandles_precommitment_value
+                        Cat_Maker_Puzzle_Hash
+                        cat_maker_puzzle_solution
+                        Expired_Handle_Pricing_Puzzle_Hash
+                        expired_handle_pricing_puzzle_solution
+                        secret
+                        handle
+                        buy_time
+                        new_owner_launcher_id
+                        new_resolved_data
+                    ))
                 ) ; precommit coin inner puzzle hash
                 (list
                     (list ASSERT_SECONDS_ABSOLUTE buy_time)

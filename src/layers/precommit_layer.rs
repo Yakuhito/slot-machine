@@ -232,23 +232,15 @@ impl<T> CatalogPrecommitValue<T> {
     }
 }
 
+// value is:
+// (c
+//   (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution))
+//   (c (c secret handle) (c start_time (c new_owner_launcher_id new_resolved_data))))
+// )
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
-pub struct XchandlesSecretAndHandle {
-    pub secret: Bytes32,
-    #[clvm(rest)]
-    pub handle: String,
-}
-
-#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
+#[clvm(transparent)]
 pub struct XchandlesPrecommitValue {
-    pub refund_info_hash: Bytes32,
-    pub secret_and_handle: XchandlesSecretAndHandle,
-    pub start_time: u64,
-    pub owner_launcher_id: Bytes32,
-    #[clvm(rest)]
-    pub resolved_launcher_id: Bytes32,
+    pub value: Bytes32,
 }
 
 impl XchandlesPrecommitValue {
