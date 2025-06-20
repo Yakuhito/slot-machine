@@ -175,11 +175,12 @@ impl RewardDistributorCommitIncentivesAction {
                 distributor.coin.puzzle_hash,
                 commit_reward_announcement,
             )),
-            distributor.created_slot_values_to_slots(
-                vec![new_commitment_slot_value.clone()],
-                RewardDistributorSlotNonce::COMMITMENT,
-            )[0]
-            .clone(),
+            distributor
+                .created_slot_values_to_slots(
+                    vec![new_commitment_slot_value.clone()],
+                    RewardDistributorSlotNonce::COMMITMENT,
+                )
+                .remove(0),
             distributor.created_slot_values_to_slots(
                 reward_slot_values,
                 RewardDistributorSlotNonce::REWARD,

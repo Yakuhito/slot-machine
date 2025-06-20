@@ -618,13 +618,17 @@ impl XchandlesRegistry {
             if slot_value.handle_hash < new_slot_value.handle_hash
                 && slot_value.handle_hash >= left.info.value.handle_hash
             {
-                left = self.created_slot_values_to_slots(vec![*slot_value])[0];
+                left = self
+                    .created_slot_values_to_slots(vec![*slot_value])
+                    .remove(0);
             }
 
             if slot_value.handle_hash > new_slot_value.handle_hash
                 && slot_value.handle_hash <= right.info.value.handle_hash
             {
-                right = self.created_slot_values_to_slots(vec![*slot_value])[0];
+                right = self
+                    .created_slot_values_to_slots(vec![*slot_value])
+                    .remove(0);
             }
         }
 

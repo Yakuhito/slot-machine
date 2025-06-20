@@ -104,11 +104,12 @@ impl RewardDistributorAddEntryAction {
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             add_entry_message,
-            distributor.created_slot_values_to_slots(
-                vec![slot_value.clone()],
-                RewardDistributorSlotNonce::ENTRY,
-            )[0]
-            .clone(),
+            distributor
+                .created_slot_values_to_slots(
+                    vec![slot_value.clone()],
+                    RewardDistributorSlotNonce::ENTRY,
+                )
+                .remove(0),
         ))
     }
 }

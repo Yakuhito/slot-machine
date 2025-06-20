@@ -196,7 +196,9 @@ impl XchandlesExpireAction {
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, expire_ann)),
-            registry.created_slot_values_to_slots(vec![new_slot_value])[0].clone(),
+            registry
+                .created_slot_values_to_slots(vec![new_slot_value.clone()])
+                .remove(0),
         ))
     }
 }

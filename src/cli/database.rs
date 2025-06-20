@@ -193,7 +193,7 @@ impl Db {
 
     fn row_to_slot<SV>(allocator: &mut Allocator, row: &SqliteRow) -> Result<Slot<SV>, CliError>
     where
-        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+        SV: FromClvm<Allocator> + ToTreeHash,
     {
         let launcher_id = column_to_bytes32(row.get::<&[u8], _>("singleton_launcher_id"))?;
         let nonce = row.get::<i64, _>("nonce") as u64;
@@ -254,7 +254,7 @@ impl Db {
         slot_value_hash: Bytes32,
     ) -> Result<Option<SV>, CliError>
     where
-        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+        SV: FromClvm<Allocator> + ToTreeHash,
     {
         let row = sqlx::query(
             "
@@ -546,7 +546,7 @@ impl Db {
             return Err(CliError::DbColumnNotFound());
         }
 
-        Ok((left_slots[0], right_slots[0]))
+        Ok((left_slots[0].clone(), right_slots[0].clone()))
     }
 
     pub async fn get_xchandles_neighbors<SV>(
@@ -609,7 +609,7 @@ impl Db {
             return Err(CliError::DbColumnNotFound());
         }
 
-        Ok((left_slots[0], right_slots[0]))
+        Ok((left_slots.remove(0), right_slots.remove(0)))
     }
 
     pub async fn delete_slots_spent_before(

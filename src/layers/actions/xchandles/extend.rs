@@ -171,7 +171,9 @@ impl XchandlesExtendAction {
             notarized_payment,
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, extend_ann)),
-            registry.created_slot_values_to_slots(vec![new_slot_value])[0].clone(),
+            registry
+                .created_slot_values_to_slots(vec![new_slot_value])
+                .remove(0),
         ))
     }
 }

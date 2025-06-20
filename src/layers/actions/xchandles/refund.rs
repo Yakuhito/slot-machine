@@ -135,7 +135,11 @@ impl XchandlesRefundAction {
 
             registry.pending_items.slot_values.push(slot_value.clone());
 
-            Some(registry.created_slot_values_to_slots(vec![slot_value.clone()])[0].clone())
+            Some(
+                registry
+                    .created_slot_values_to_slots(vec![slot_value.clone()])
+                    .remove(0),
+            )
         } else {
             None
         };

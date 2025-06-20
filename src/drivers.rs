@@ -424,7 +424,7 @@ pub fn eve_singleton_inner_puzzle<S>(
     target_inner_puzzle_hash: Bytes32,
 ) -> Result<NodePtr, DriverError>
 where
-    S: Copy + ToTreeHash,
+    S: ToTreeHash,
 {
     let left_slot_info = SlotInfo::from_value(launcher_id, 0, left_slot_value);
     let left_slot_puzzle_hash = Slot::<S>::puzzle_hash(&left_slot_info);

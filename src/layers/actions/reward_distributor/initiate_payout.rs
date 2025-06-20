@@ -126,11 +126,12 @@ impl RewardDistributorInitiatePayoutAction {
                 distributor.coin.puzzle_hash,
                 initiate_payout_announcement,
             )),
-            distributor.created_slot_values_to_slots(
-                vec![slot_value.clone()],
-                RewardDistributorSlotNonce::ENTRY,
-            )[0]
-            .clone(),
+            distributor
+                .created_slot_values_to_slots(
+                    vec![slot_value.clone()],
+                    RewardDistributorSlotNonce::ENTRY,
+                )
+                .remove(0),
             withdrawal_amount,
         ))
     }

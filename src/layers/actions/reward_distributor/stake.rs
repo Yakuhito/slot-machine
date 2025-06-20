@@ -154,11 +154,12 @@ impl RewardDistributorStakeAction {
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(nft.coin.puzzle_hash, msg)),
             notarized_payment,
-            distributor.created_slot_values_to_slots(
-                vec![slot_value.clone()],
-                RewardDistributorSlotNonce::ENTRY,
-            )[0]
-            .clone(),
+            distributor
+                .created_slot_values_to_slots(
+                    vec![slot_value.clone()],
+                    RewardDistributorSlotNonce::ENTRY,
+                )
+                .remove(0),
             nft.wrapped_child(payment_puzzle_hash, None, nft.info.metadata),
         ))
     }

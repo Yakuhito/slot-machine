@@ -132,11 +132,12 @@ impl RewardDistributorNewEpochAction {
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             new_epoch_conditions,
-            distributor.created_slot_values_to_slots(
-                vec![slot_value.clone()],
-                RewardDistributorSlotNonce::REWARD,
-            )[0]
-            .clone(),
+            distributor
+                .created_slot_values_to_slots(
+                    vec![slot_value.clone()],
+                    RewardDistributorSlotNonce::REWARD,
+                )
+                .remove(0),
             fee,
         ))
     }

@@ -84,7 +84,9 @@ impl XchandlesOracleAction {
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, oracle_ann)),
-            registry.created_slot_values_to_slots(vec![new_slot.clone()])[0].clone(),
+            registry
+                .created_slot_values_to_slots(vec![new_slot.clone()])
+                .remove(0),
         ))
     }
 }
