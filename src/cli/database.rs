@@ -158,7 +158,7 @@ impl Db {
         spent_block_height: u32,
     ) -> Result<(), CliError>
     where
-        SV: ToClvm<Allocator> + FromClvm<Allocator> + Copy,
+        SV: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
     {
         let slot_value_ptr = slot
             .info
@@ -223,7 +223,7 @@ impl Db {
         spent_block_height: u32,
     ) -> Result<Option<Slot<SV>>, CliError>
     where
-        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+        SV: FromClvm<Allocator> + Clone + ToTreeHash,
     {
         let row = sqlx::query(
             "
@@ -556,7 +556,7 @@ impl Db {
         handle_hash: Bytes32,
     ) -> Result<(Slot<SV>, Slot<SV>), CliError>
     where
-        SV: FromClvm<Allocator> + Copy + ToTreeHash,
+        SV: FromClvm<Allocator> + Clone + ToTreeHash,
     {
         let query = sqlx::query(
             "

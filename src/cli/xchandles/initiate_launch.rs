@@ -304,13 +304,13 @@ pub async fn xchandles_initiate_launch(
         .await?;
 
     for slot in slots {
-        db.save_slot(&mut ctx, slot, 0).await?;
         db.save_xchandles_indexed_slot_value(
             registry.info.constants.launcher_id,
             slot.info.value.handle_hash,
             slot.info.value_hash,
         )
         .await?;
+        db.save_slot(&mut ctx, slot, 0).await?;
     }
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);

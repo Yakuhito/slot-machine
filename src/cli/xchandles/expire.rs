@@ -166,7 +166,7 @@ pub async fn xchandles_expire(
         handle.clone(),
         expire_time,
         nft_launcher_id,
-        nft_launcher_id,
+        nft_launcher_id.into(),
     );
 
     let refund_address = if let Some(provided_refund_address) = refund_address {

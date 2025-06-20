@@ -270,49 +270,48 @@ pub async fn sync_distributor(
                         0
                     };
 
-                    db.save_slot(ctx, slot, spent_block_index).await?;
-
                     if spent_block_index == 0 {
                         // ephemeral slot for this spend
-                        db.save_dig_indexed_slot_value_by_epoch_start(
-                            slot.info.value.epoch_start,
-                            RewardDistributorSlotNonce::COMMITMENT.to_u64(),
-                            slot.info.value_hash,
-                        )
-                        .await?;
                         db.save_dig_indexed_slot_value_by_puzzle_hash(
                             slot.info.value.clawback_ph,
                             RewardDistributorSlotNonce::COMMITMENT.to_u64(),
                             slot.info.value_hash,
                         )
                         .await?;
+                        db.save_dig_indexed_slot_value_by_epoch_start(
+                            slot.info.value.epoch_start,
+                            RewardDistributorSlotNonce::COMMITMENT.to_u64(),
+                            slot.info.value_hash,
+                        )
+                        .await?;
                     }
+                    db.save_slot(ctx, slot, spent_block_index).await?;
                 }
 
                 for slot in prev_distributor.created_slot_values_to_slots(
                     pending_items.pending_entry_slot_values,
                     RewardDistributorSlotNonce::ENTRY,
                 ) {
-                    db.save_slot(ctx, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_puzzle_hash(
                         slot.info.value.payout_puzzle_hash,
                         RewardDistributorSlotNonce::ENTRY.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
+                    db.save_slot(ctx, slot, 0).await?;
                 }
 
                 for slot in prev_distributor.created_slot_values_to_slots(
                     pending_items.pending_reward_slot_values,
                     RewardDistributorSlotNonce::REWARD,
                 ) {
-                    db.save_slot(ctx, slot, 0).await?;
                     db.save_dig_indexed_slot_value_by_epoch_start(
                         slot.info.value.epoch_start,
                         RewardDistributorSlotNonce::REWARD.to_u64(),
                         slot.info.value_hash,
                     )
                     .await?;
+                    db.save_slot(ctx, slot, 0).await?;
                 }
             }
         }

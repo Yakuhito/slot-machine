@@ -45,7 +45,7 @@ fn precommit_value_for_handle(
         handle.handle.clone(),
         start_time,
         owner_nft_launcher_id,
-        owner_nft_launcher_id,
+        owner_nft_launcher_id.into(),
     ))
 }
 
@@ -518,12 +518,7 @@ pub async fn xchandles_continue_launch(
             .get(&precommit_coin_record.coin.parent_coin_info)
             .unwrap();
 
-        let handle_hash = precommit_value
-            .secret_and_handle
-            .handle
-            .clone()
-            .tree_hash()
-            .into();
+        let handle_hash = precommit_value.handle.clone().tree_hash().into();
 
         let precommit_coin = PrecommitCoin::new(
             &mut ctx,
@@ -537,11 +532,7 @@ pub async fn xchandles_continue_launch(
             constants.precommit_payout_puzzle_hash,
             Bytes32::default(),
             precommit_value.clone(),
-            XchandlesFactorPricingPuzzleArgs::get_price(
-                1,
-                &precommit_value.secret_and_handle.handle,
-                1,
-            ),
+            XchandlesFactorPricingPuzzleArgs::get_price(1, &precommit_value.handle, 1),
         )?;
 
         let (left_slot, right_slot) = db

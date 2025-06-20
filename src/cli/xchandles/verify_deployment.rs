@@ -5,7 +5,6 @@ use chia_wallet_sdk::{
     driver::{Layer, Puzzle, SpendContext},
     utils::Address,
 };
-use clvm_traits::clvm_tuple;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
@@ -114,19 +113,20 @@ pub async fn xchandles_verify_deployment(
             parsed_solution.inner_solution,
         )?;
         for action_spend in inner_solution.action_spends {
-            let action_solution =
-                ctx.extract::<XchandlesRegisterActionSolution<NodePtr, NodePtr, NodePtr, NodePtr>>(
-                    action_spend.solution,
-                )?;
+            let action_solution = ctx.extract::<XchandlesRegisterActionSolution<
+                NodePtr,
+                NodePtr,
+                NodePtr,
+                NodePtr,
+                NodePtr,
+            >>(action_spend.solution)?;
 
             let nft_launcher_id =
                 Address::decode(&handles_to_launch[handle_index].owner_nft)?.puzzle_hash;
             if action_solution.handle_hash
                 != handles_to_launch[handle_index].handle.tree_hash().into()
-                || action_solution.rest_data_hash
-                    != clvm_tuple!(nft_launcher_id, nft_launcher_id)
-                        .tree_hash()
-                        .into()
+                || action_solution.data.owner_launcher_id != nft_launcher_id
+                || action_solution.data.resolved_data != nft_launcher_id.into()
             {
                 return Err(CliError::Custom(format!(
                     "Wrong handle registered at index {}",

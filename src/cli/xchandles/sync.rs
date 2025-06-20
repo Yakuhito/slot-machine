@@ -1,4 +1,4 @@
-use chia::protocol::Bytes32;
+use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinRecord, CoinsetClient},
     driver::{Puzzle, SpendContext},
@@ -54,14 +54,14 @@ pub async fn sync_xchandles(
         if !skip_db_save {
             if let Some(ref prev_registry) = registry {
                 let pending_items = prev_registry
-                    .get_pending_items_from_spend(ctx, db, client, solution_ptr)
+                    .get_pending_items_from_spend(ctx, solution_ptr)
                     .await?;
 
-                for value_hash in pending_items.spent_slots.iter() {
+                for value in pending_items.spent_slots.iter() {
                     db.mark_slot_as_spent(
                         launcher_id,
                         0,
-                        *value_hash,
+                        value.tree_hash().into(),
                         coin_record.spent_block_index,
                     )
                     .await?;
@@ -71,14 +71,15 @@ pub async fn sync_xchandles(
                     //   from the list
                 }
 
-                for slot in prev_registry.created_slot_values_to_slots(pending_items.slot_values) {
-                    db.save_slot(ctx, slot, 0).await?;
+                for slot in prev_registry.created_slot_values_to_slots(pending_items.created_slots)
+                {
                     db.save_xchandles_indexed_slot_value(
                         slot.info.launcher_id,
                         slot.info.value.handle_hash,
                         slot.info.value_hash,
                     )
                     .await?;
+                    db.save_slot(ctx, slot, 0).await?;
                 }
             }
         }
@@ -94,7 +95,7 @@ pub async fn sync_xchandles(
                 return Err(CliError::CoinNotFound(last_coin_id));
             };
 
-            db.save_slot(ctx, initial_slots[0], 0).await?;
+            db.save_slot(ctx, initial_slots[0].clone(), 0).await?;
             db.save_xchandles_indexed_slot_value(
                 initial_slots[0].info.launcher_id,
                 initial_slots[0].info.value.handle_hash,
@@ -102,7 +103,7 @@ pub async fn sync_xchandles(
             )
             .await?;
 
-            db.save_slot(ctx, initial_slots[1], 0).await?;
+            db.save_slot(ctx, initial_slots[1].clone(), 0).await?;
             db.save_xchandles_indexed_slot_value(
                 initial_slots[1].info.launcher_id,
                 initial_slots[1].info.value.handle_hash,

@@ -2,7 +2,10 @@ use chia::protocol::Bytes32;
 use reqwest::Client;
 use std::time::Duration;
 
-use crate::{hex_string_to_bytes32, CliError, Slot, SlotInfo, SlotProof, XchandlesSlotValue};
+use crate::{
+    hex_string_to_bytes, hex_string_to_bytes32, CliError, Slot, SlotInfo, SlotProof,
+    XchandlesSlotValue,
+};
 
 use super::XchandlesNeighborsResponse;
 
@@ -79,15 +82,14 @@ impl XchandlesApiClient {
         let left_left_handle_hash = hex_string_to_bytes32(&neighbors_resp.left_left_handle_hash)?;
         let left_expiration = neighbors_resp.left_expiration;
         let left_owner_launcher_id = hex_string_to_bytes32(&neighbors_resp.left_owner_launcher_id)?;
-        let left_resolved_launcher_id =
-            hex_string_to_bytes32(&neighbors_resp.left_resolved_launcher_id)?;
+        let left_resolved_data = hex_string_to_bytes(&neighbors_resp.left_resolved_data)?;
         let left_value = XchandlesSlotValue::new(
             left_handle_hash,
             left_left_handle_hash,
             right_handle_hash,
             left_expiration,
             left_owner_launcher_id,
-            left_resolved_launcher_id,
+            left_resolved_data,
         );
 
         let right_right_handle_hash =
@@ -95,15 +97,14 @@ impl XchandlesApiClient {
         let right_expiration = neighbors_resp.right_expiration;
         let right_owner_launcher_id =
             hex_string_to_bytes32(&neighbors_resp.right_owner_launcher_id)?;
-        let right_resolved_launcher_id =
-            hex_string_to_bytes32(&neighbors_resp.right_resolved_launcher_id)?;
+        let right_resolved_data = hex_string_to_bytes(&neighbors_resp.right_resolved_data)?;
         let right_value = XchandlesSlotValue::new(
             right_handle_hash,
             left_handle_hash,
             right_right_handle_hash,
             right_expiration,
             right_owner_launcher_id,
-            right_resolved_launcher_id,
+            right_resolved_data,
         );
 
         let left_parent_parent_info =

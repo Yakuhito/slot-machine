@@ -76,10 +76,10 @@ pub async fn xchandles_update(
     } else {
         slot.info.value.owner_launcher_id
     };
-    let new_resolved_launcher_id = if let Some(new_resolved_nft) = new_resolved_nft {
-        Address::decode(&new_resolved_nft)?.puzzle_hash
+    let new_resolved_data = if let Some(new_resolved_nft) = new_resolved_nft {
+        Address::decode(&new_resolved_nft)?.puzzle_hash.into()
     } else {
-        slot.info.value.resolved_launcher_id
+        slot.info.value.resolved_data.clone()
     };
 
     let return_address = sage
@@ -99,13 +99,21 @@ pub async fn xchandles_update(
         encode_nft(slot.info.value.owner_launcher_id)?
     );
     println!(
-        "Current resolved NFT: {}",
-        encode_nft(slot.info.value.resolved_launcher_id)?
+        "Current resolved data: {}",
+        if let Some(resolved_data) = slot.info.value.resolved_data.clone().try_into().ok() {
+            encode_nft(resolved_data)?
+        } else {
+            hex::encode(slot.info.value.resolved_data.clone())
+        }
     );
     println!("New owner: {}", encode_nft(new_owner_launcher_id)?);
     println!(
-        "New resolved NFT: {}",
-        encode_nft(new_resolved_launcher_id)?
+        "New resolved data: {}",
+        if let Some(resolved_data) = new_resolved_data.clone().try_into().ok() {
+            encode_nft(resolved_data)?
+        } else {
+            hex::encode(new_resolved_data.clone())
+        }
     );
     println!("NFT return address: {}", return_address);
 
@@ -160,7 +168,7 @@ pub async fn xchandles_update(
         &mut registry,
         slot,
         new_owner_launcher_id,
-        new_resolved_launcher_id,
+        new_resolved_data,
         nft.info.inner_puzzle_hash().into(),
     )?;
 

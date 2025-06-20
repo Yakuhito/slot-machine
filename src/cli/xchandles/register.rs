@@ -148,7 +148,7 @@ pub async fn xchandles_register(
         handle.clone(),
         start_time,
         nft_launcher_id,
-        nft_launcher_id,
+        nft_launcher_id.into(),
     );
     let precommit_value_ptr = ctx.alloc(&precommit_value)?;
 

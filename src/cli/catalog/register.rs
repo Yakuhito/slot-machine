@@ -369,7 +369,7 @@ pub async fn catalog_register(
                     &mut ctx,
                     &mut catalog,
                     registered_asset_id,
-                    slot.map(|s| s.info.value.neighbors),
+                    slot.as_ref().map(|s| s.info.value.neighbors),
                     precommit_coin,
                     slot,
                 )?

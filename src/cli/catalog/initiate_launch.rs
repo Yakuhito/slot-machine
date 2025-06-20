@@ -295,9 +295,9 @@ pub async fn catalog_initiate_launch(
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
     for slot in slots {
-        db.save_slot(&mut ctx, slot, 0).await?;
         db.save_catalog_indexed_slot_value(slot.info.value.asset_id, slot.info.value_hash)
             .await?;
+        db.save_slot(&mut ctx, slot, 0).await?;
     }
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);
