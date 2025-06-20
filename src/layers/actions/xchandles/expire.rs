@@ -7,7 +7,7 @@ use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
     types::{announcement_id, Conditions},
 };
-use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 

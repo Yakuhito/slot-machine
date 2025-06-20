@@ -77,6 +77,39 @@ impl<V> PrecommitLayer<V> {
         }
         .tree_hash()
     }
+
+    pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>
+    where
+        V: Clone + ToClvm<Allocator>,
+    {
+        let prog_1st_curry = CurriedProgram {
+            program: ctx.precommit_layer_puzzle()?,
+            args: PrecommitLayer1stCurryArgs {
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
+                singleton_struct_hash: self.controller_singleton_struct_hash,
+                relative_block_height: self.relative_block_height,
+                payout_puzzle_hash: self.payout_puzzle_hash,
+            },
+        }
+        .to_clvm(ctx)?;
+
+        Ok(CurriedProgram {
+            program: prog_1st_curry,
+            args: PrecommitLayer2ndCurryArgs {
+                refund_puzzle_hash: self.refund_puzzle_hash,
+                value: self.value.clone(),
+            },
+        }
+        .to_clvm(ctx)?)
+    }
+
+    pub fn construct_solution(
+        &self,
+        ctx: &mut SpendContext,
+        solution: PrecommitLayerSolution,
+    ) -> Result<NodePtr, DriverError> {
+        ctx.alloc(&solution)
+    }
 }
 
 impl<V> Layer for PrecommitLayer<V>
@@ -125,25 +158,7 @@ where
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        let prog_1st_curry = CurriedProgram {
-            program: ctx.precommit_layer_puzzle()?,
-            args: PrecommitLayer1stCurryArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
-                singleton_struct_hash: self.controller_singleton_struct_hash,
-                relative_block_height: self.relative_block_height,
-                payout_puzzle_hash: self.payout_puzzle_hash,
-            },
-        }
-        .to_clvm(ctx)?;
-
-        Ok(CurriedProgram {
-            program: prog_1st_curry,
-            args: PrecommitLayer2ndCurryArgs {
-                refund_puzzle_hash: self.refund_puzzle_hash,
-                value: self.value.clone(),
-            },
-        }
-        .to_clvm(ctx)?)
+        self.construct_puzzle(ctx)
     }
 
     fn construct_solution(
@@ -151,7 +166,7 @@ where
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        ctx.alloc(&solution)
+        self.construct_solution(ctx, solution)
     }
 }
 
@@ -238,8 +253,13 @@ impl<T> CatalogPrecommitValue<T> {
 //   (c (c secret handle) (c start_time (c owner_launcher_id resolved_data))))
 // )
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct XchandlesPrecommitValue<CP, CS, PP, PS, S>
-where
+pub struct XchandlesPrecommitValue<
+    CP = TreeHash,
+    CS = (),
+    PP = TreeHash,
+    PS = TreeHash,
+    S = Bytes32,
+> where
     CP: ToTreeHash,
     CS: ToTreeHash,
     PP: ToTreeHash,
