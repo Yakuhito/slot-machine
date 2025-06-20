@@ -2410,6 +2410,7 @@ mod tests {
             )?;
 
             // d - the handle has already been registered
+            println!("testing refund d"); // todo: debug
             (registry, payment_cat) = test_refund_for_xchandles(
                 ctx,
                 &mut sim,
@@ -2427,6 +2428,7 @@ mod tests {
                 &minter_bls.sk,
                 &user_bls.sk,
             )?;
+            println!("done testing refunds"); // todo: debug
         }
 
         benchmark.print_summary(Some("xchandles.costs"));

@@ -82,6 +82,7 @@
         (c
             Truth
             (main
+                SLOT_1ST_CURRY_HASH
                 (sha256tree slot_value)
                 (all
                     ; not (a)
