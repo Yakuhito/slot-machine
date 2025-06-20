@@ -1364,7 +1364,7 @@ mod tests {
                 if slot_value < slot_value_to_insert {
                     // slot belongs to the left
                     if let Some(left_slot_ref) = &left_slot {
-                        if slot_value > left_slot_ref.info.value.clone() {
+                        if slot_value > left_slot_ref.info.value {
                             left_slot = Some(slot.clone());
                         }
                     } else {
@@ -1373,7 +1373,7 @@ mod tests {
                 } else {
                     // slot belongs to the right
                     if let Some(right_slot_ref) = &right_slot {
-                        if slot_value < right_slot_ref.info.value.clone() {
+                        if slot_value < right_slot_ref.info.value {
                             right_slot = Some(slot.clone());
                         }
                     } else {

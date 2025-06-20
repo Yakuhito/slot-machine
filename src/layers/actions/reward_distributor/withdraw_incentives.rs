@@ -144,10 +144,7 @@ impl RewardDistributorWithdrawIncentivesAction {
         Ok((
             withdraw_incentives_conditions,
             distributor
-                .created_slot_values_to_slots(
-                    vec![slot_value.clone()],
-                    RewardDistributorSlotNonce::REWARD,
-                )
+                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::REWARD)
                 .remove(0),
             withdrawal_share,
         ))

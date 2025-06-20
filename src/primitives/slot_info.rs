@@ -210,6 +210,7 @@ impl XchandlesSlotValue {
 
 impl<N, D: ClvmDecoder<Node = N>> FromClvm<D> for XchandlesSlotValue {
     fn from_clvm(decoder: &D, node: N) -> Result<Self, FromClvmError> {
+        #[allow(clippy::type_complexity)]
         let ((handle_hash, (left, right)), (expiration, (owner_launcher_id, resolved_data))): (
             (Bytes32, (Bytes32, Bytes32)),
             (u64, (Bytes32, Bytes)),

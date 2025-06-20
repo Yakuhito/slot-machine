@@ -100,7 +100,7 @@ pub async fn xchandles_update(
     );
     println!(
         "Current resolved data: {}",
-        if let Some(resolved_data) = slot.info.value.resolved_data.clone().try_into().ok() {
+        if let Ok(resolved_data) = slot.info.value.resolved_data.clone().try_into() {
             encode_nft(resolved_data)?
         } else {
             hex::encode(slot.info.value.resolved_data.clone())
@@ -109,7 +109,7 @@ pub async fn xchandles_update(
     println!("New owner: {}", encode_nft(new_owner_launcher_id)?);
     println!(
         "New resolved data: {}",
-        if let Some(resolved_data) = new_resolved_data.clone().try_into().ok() {
+        if let Ok(resolved_data) = new_resolved_data.clone().try_into() {
             encode_nft(resolved_data)?
         } else {
             hex::encode(new_resolved_data.clone())

@@ -177,7 +177,7 @@ impl RewardDistributorCommitIncentivesAction {
             )),
             distributor
                 .created_slot_values_to_slots(
-                    vec![new_commitment_slot_value.clone()],
+                    vec![new_commitment_slot_value],
                     RewardDistributorSlotNonce::COMMITMENT,
                 )
                 .remove(0),

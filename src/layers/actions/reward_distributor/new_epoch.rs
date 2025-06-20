@@ -133,10 +133,7 @@ impl RewardDistributorNewEpochAction {
         Ok((
             new_epoch_conditions,
             distributor
-                .created_slot_values_to_slots(
-                    vec![slot_value.clone()],
-                    RewardDistributorSlotNonce::REWARD,
-                )
+                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::REWARD)
                 .remove(0),
             fee,
         ))

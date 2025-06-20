@@ -127,10 +127,7 @@ impl RewardDistributorInitiatePayoutAction {
                 initiate_payout_announcement,
             )),
             distributor
-                .created_slot_values_to_slots(
-                    vec![slot_value.clone()],
-                    RewardDistributorSlotNonce::ENTRY,
-                )
+                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
                 .remove(0),
             withdrawal_amount,
         ))

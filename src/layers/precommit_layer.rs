@@ -285,6 +285,7 @@ where
     PS: ToTreeHash,
     S: ToTreeHash,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cat_maker_reveal: CP,
         cat_maker_solution: CS,
