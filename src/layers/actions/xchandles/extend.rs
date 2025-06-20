@@ -2,7 +2,6 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
     puzzles::offer::{NotarizedPayment, Payment},
-    sha2::Sha256,
 };
 use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
 use chia_wallet_sdk::{
@@ -14,8 +13,8 @@ use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    Action, DefaultCatMakerArgs, Slot, SpendContextExt, XchandlesConstants, XchandlesRegistry,
-    XchandlesSlotValue,
+    Action, DefaultCatMakerArgs, Slot, SlotNeigborsInfo, SpendContextExt, XchandlesConstants,
+    XchandlesDataValue, XchandlesRegistry, XchandlesSlotValue,
 };
 
 use super::{XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution};
@@ -50,51 +49,53 @@ impl XchandlesExtendAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_hash_from_solution(
-        ctx: &SpendContext,
-        solution: NodePtr,
-    ) -> Result<Bytes32, DriverError> {
-        let solution = XchandlesExtendActionSolution::<
-            NodePtr,
-            XchandlesFactorPricingSolution,
-            NodePtr,
-            (),
-        >::from_clvm(ctx, solution)?;
-
-        let mut hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.pricing_solution.current_expiration.tree_hash());
-        hasher.update(solution.rest_hash);
-        let expiration_rest_hash = hasher.finalize();
-
-        hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.neighbors_hash);
-        hasher.update(expiration_rest_hash);
-        let neighbors_expiration_rest_hash = hasher.finalize();
-
-        hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.handle_hash.tree_hash());
-        hasher.update(neighbors_expiration_rest_hash);
-
-        Ok(hasher.finalize().into())
-    }
-
-    pub fn get_slot_value_from_solution(
+    pub fn get_spent_slot_value_from_solution(
         ctx: &mut SpendContext,
-        old_slot_value: XchandlesSlotValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution =
-            XchandlesExtendActionSolution::<NodePtr, NodePtr, NodePtr, NodePtr>::from_clvm(
-                ctx, solution,
+        let solution = ctx.extract::<XchandlesExtendActionSolution<
+            NodePtr,
+            (u64, NodePtr),
+            NodePtr,
+            NodePtr,
+        >>(solution)?;
+
+        // current expiration is the first truth given to a pricing puzzle
+        let current_expiration = solution.pricing_solution.0;
+
+        Ok(XchandlesSlotValue::new(
+            solution.handle_hash,
+            solution.neighbors.left_value,
+            solution.neighbors.right_value,
+            current_expiration,
+            solution.rest.owner_launcher_id,
+            solution.rest.resolved_data,
+        ))
+    }
+
+    pub fn get_created_slot_value_from_solution(
+        ctx: &mut SpendContext,
+        solution: NodePtr,
+    ) -> Result<XchandlesSlotValue, DriverError> {
+        let solution = ctx
+            .extract::<XchandlesExtendActionSolution<NodePtr, NodePtr, NodePtr, NodePtr>>(
+                solution,
             )?;
 
         let pricing_output = ctx.run(solution.pricing_puzzle_reveal, solution.pricing_solution)?;
         let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
 
-        Ok(old_slot_value.with_expiration(old_slot_value.expiration + registration_time_delta))
+        // current expiration is the first truth given to a pricing puzzle
+        let current_expiration = ctx.extract::<(u64, NodePtr)>(solution.pricing_solution)?.0;
+
+        Ok(XchandlesSlotValue::new(
+            solution.handle_hash,
+            solution.neighbors.left_value,
+            solution.neighbors.right_value,
+            current_expiration + registration_time_delta,
+            solution.rest.owner_launcher_id,
+            solution.rest.resolved_data,
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -217,7 +218,7 @@ pub struct XchandlesExtendActionSolution<PP, PS, CMP, CMS> {
     pub pricing_solution: PS,
     pub cat_maker_puzzle_reveal: CMP,
     pub cat_maker_solution: CMS,
-    pub neighbors_hash: Bytes32,
+    pub neighbors: SlotNeigborsInfo,
     #[clvm(rest)]
-    pub rest_hash: Bytes32,
+    pub rest: XchandlesDataValue,
 }

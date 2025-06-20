@@ -63,27 +63,23 @@ impl XchandlesExpireAction {
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
+        // truths for epired solution are: Buy_Time, Current_Expiration, Handle
         let solution = XchandlesExpireActionSolution::<
             NodePtr,
             NodePtr,
             NodePtr,
-            XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
+            (NodePtr, (u64, (String, NodePtr))),
             NodePtr,
         >::from_clvm(ctx, solution)?;
 
+        let handle = solution.expired_handle_pricing_puzzle_solution.1 .1 .0;
+        let current_expiration = solution.expired_handle_pricing_puzzle_solution.1 .0;
+
         Ok(XchandlesSlotValue::new(
-            solution
-                .expired_handle_pricing_puzzle_solution
-                .pricing_program_solution
-                .handle
-                .tree_hash()
-                .into(),
+            handle.tree_hash().into(),
             solution.neighbors.left_value,
             solution.neighbors.right_value,
-            solution
-                .expired_handle_pricing_puzzle_solution
-                .pricing_program_solution
-                .current_expiration,
+            current_expiration,
             solution.old_rest.owner_launcher_id,
             solution.old_rest.resolved_data,
         ))
@@ -93,10 +89,13 @@ impl XchandlesExpireAction {
         ctx: &mut SpendContext,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
-        let solution = ctx
-            .extract::<XchandlesExpireActionSolution<NodePtr, (), NodePtr, NodePtr, NodePtr>>(
-                solution,
-            )?;
+        let solution = ctx.extract::<XchandlesExpireActionSolution<
+            NodePtr,
+            NodePtr,
+            NodePtr,
+            NodePtr,
+            NodePtr,
+        >>(solution)?;
 
         let pricing_output = ctx.run(
             solution.expired_handle_pricing_puzzle_reveal,
@@ -104,17 +103,16 @@ impl XchandlesExpireAction {
         )?;
         let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
 
-        let pricing_puzzle_solution = ctx.extract::<XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>>(solution.expired_handle_pricing_puzzle_solution)?;
+        // truths are: Buy_Time, Current_Expiration, Handle
+        let (buy_time, (_, (handle, _))) = ctx.extract::<(u64, (NodePtr, (String, NodePtr)))>(
+            solution.expired_handle_pricing_puzzle_solution,
+        )?;
 
         Ok(XchandlesSlotValue::new(
-            pricing_puzzle_solution
-                .pricing_program_solution
-                .handle
-                .tree_hash()
-                .into(),
+            handle.tree_hash().into(),
             solution.neighbors.left_value,
             solution.neighbors.right_value,
-            pricing_puzzle_solution.buy_time + registration_time_delta,
+            buy_time + registration_time_delta,
             solution.new_rest.owner_launcher_id,
             solution.new_rest.resolved_data,
         ))
