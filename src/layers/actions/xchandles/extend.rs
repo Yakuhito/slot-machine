@@ -110,16 +110,9 @@ impl XchandlesExtendAction {
         registration_period: u64,
         num_periods: u64,
     ) -> Result<(NotarizedPayment, Conditions, Slot<XchandlesSlotValue>), DriverError> {
-        // spend slots
         let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
-        registry
-            .pending_items
-            .spent_slots
-            .push(slot.info.value_hash);
-        slot.spend(ctx, spender_inner_puzzle_hash)?;
-
-        // finally, spend self
+        // spend self
         let cat_maker_puzzle_reveal =
             DefaultCatMakerArgs::get_puzzle(ctx, payment_asset_id.tree_hash().into())?;
         let pricing_puzzle_reveal = XchandlesFactorPricingPuzzleArgs::get_puzzle(
@@ -137,8 +130,8 @@ impl XchandlesExtendAction {
             },
             cat_maker_puzzle_reveal,
             cat_maker_solution: (),
-            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
-            rest_hash: slot.info.value.launcher_ids_data_hash().into(),
+            neighbors: slot.info.value.neighbors,
+            rest: slot.info.value.rest_data(),
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
@@ -158,18 +151,27 @@ impl XchandlesExtendAction {
             )],
         };
 
+        // spend slot
+        registry
+            .pending_items
+            .spent_slots
+            .push(slot.info.value_hash);
+        slot.spend(ctx, spender_inner_puzzle_hash)?;
+
         let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, handle).tree_hash().to_vec();
         extend_ann.insert(0, b'e');
 
-        let new_slot_value =
-            Self::get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
-        registry.pending_items.slot_values.push(new_slot_value);
+        let new_slot_value = Self::get_created_slot_value_from_solution(ctx, action_solution)?;
+        registry
+            .pending_items
+            .slot_values
+            .push(new_slot_value.clone());
 
         Ok((
             notarized_payment,
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, extend_ann)),
-            registry.created_slot_values_to_slots(vec![new_slot_value])[0],
+            registry.created_slot_values_to_slots(vec![new_slot_value])[0].clone(),
         ))
     }
 }
