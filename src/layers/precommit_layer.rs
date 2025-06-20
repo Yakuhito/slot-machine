@@ -7,7 +7,7 @@ use chia_wallet_sdk::{
     driver::{DriverError, Layer, Puzzle, SpendContext},
     types::Conditions,
 };
-use clvm_traits::{clvm_quote, clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{clvm_quote, clvm_tuple, ClvmEncoder, FromClvm, ToClvm, ToClvmError};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
@@ -235,20 +235,37 @@ impl<T> CatalogPrecommitValue<T> {
 // value is:
 // (c
 //   (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution))
-//   (c (c secret handle) (c start_time (c new_owner_launcher_id new_resolved_data))))
+//   (c (c secret handle) (c start_time (c owner_launcher_id resolved_data))))
 // )
-#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(transparent)]
-pub struct XchandlesPrecommitValue {
-    pub value: Bytes32,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XchandlesPrecommitValue<CP, CS, PP, PS, S>
+where
+    CP: ToTreeHash,
+    CS: ToTreeHash,
+    PP: ToTreeHash,
+    PS: ToTreeHash,
+    S: ToTreeHash,
+{
+    pub cat_maker_reveal: CP,
+    pub cat_maker_solution: CS,
+    pub pricing_puzzle_reveal: PP,
+    pub pricing_solution: PS,
+    pub secret: S,
+    pub handle: String,
+    pub start_time: u64,
+    pub owner_launcher_id: Bytes32,
+    pub resolved_data: Bytes,
 }
 
-impl XchandlesPrecommitValue {
-    pub fn new(value: Bytes32) -> Self {
-        Self { value }
-    }
-
-    pub fn from_data<CP, CS, PP, PS, S>(
+impl<CP, CS, PP, PS, S> XchandlesPrecommitValue<CP, CS, PP, PS, S>
+where
+    CP: ToTreeHash,
+    CS: ToTreeHash,
+    PP: ToTreeHash,
+    PS: ToTreeHash,
+    S: ToTreeHash,
+{
+    pub fn new(
         cat_maker_reveal: CP,
         cat_maker_solution: CS,
         pricing_puzzle_reveal: PP,
@@ -258,33 +275,22 @@ impl XchandlesPrecommitValue {
         start_time: u64,
         owner_launcher_id: Bytes32,
         resolved_data: Bytes,
-    ) -> Self
-    where
-        CP: ToTreeHash,
-        CS: ToTreeHash,
-        PP: ToTreeHash,
-        PS: ToTreeHash,
-        S: ToTreeHash,
-    {
-        Self::new(
-            clvm_tuple!(
-                clvm_tuple!(
-                    clvm_tuple!(cat_maker_reveal.tree_hash(), cat_maker_solution.tree_hash()),
-                    clvm_tuple!(
-                        pricing_puzzle_reveal.tree_hash(),
-                        pricing_solution.tree_hash()
-                    )
-                ),
-                clvm_tuple!(
-                    clvm_tuple!(secret.tree_hash(), handle),
-                    clvm_tuple!(start_time, clvm_tuple!(owner_launcher_id, resolved_data))
-                )
-            )
-            .tree_hash()
-            .into(),
-        )
+    ) -> Self {
+        Self {
+            cat_maker_reveal,
+            cat_maker_solution,
+            pricing_puzzle_reveal,
+            pricing_solution,
+            secret,
+            handle,
+            start_time,
+            owner_launcher_id,
+            resolved_data,
+        }
     }
+}
 
+impl XchandlesPrecommitValue<TreeHash, (), TreeHash, TreeHash, Bytes32> {
     #[allow(clippy::too_many_arguments)]
     pub fn for_normal_registration<PS>(
         payment_tail_hash_hash: TreeHash,
@@ -299,7 +305,7 @@ impl XchandlesPrecommitValue {
     where
         PS: ToTreeHash,
     {
-        Self::from_data(
+        Self::new(
             DefaultCatMakerArgs::curry_tree_hash(payment_tail_hash_hash.into()),
             (),
             pricing_puzzle_hash,
@@ -310,5 +316,42 @@ impl XchandlesPrecommitValue {
             owner_launcher_id,
             resolved_data,
         )
+    }
+}
+
+// On-chain, the precommit value is just a hash of the data it stores
+impl<N, E: ClvmEncoder<Node = N>, CP, CS, PP, PS, S> ToClvm<E>
+    for XchandlesPrecommitValue<CP, CS, PP, PS, S>
+where
+    CP: ToTreeHash,
+    CS: ToTreeHash,
+    PP: ToTreeHash,
+    PS: ToTreeHash,
+    S: ToTreeHash,
+{
+    fn to_clvm(&self, encoder: &mut E) -> Result<N, ToClvmError> {
+        let data_hash: Bytes32 = clvm_tuple!(
+            clvm_tuple!(
+                clvm_tuple!(
+                    self.cat_maker_reveal.tree_hash(),
+                    self.cat_maker_solution.tree_hash()
+                ),
+                clvm_tuple!(
+                    self.pricing_puzzle_reveal.tree_hash(),
+                    self.pricing_solution.tree_hash()
+                )
+            ),
+            clvm_tuple!(
+                clvm_tuple!(self.secret.tree_hash(), self.handle.tree_hash()),
+                clvm_tuple!(
+                    self.start_time,
+                    clvm_tuple!(self.owner_launcher_id, self.resolved_data.tree_hash())
+                )
+            )
+        )
+        .tree_hash()
+        .into();
+
+        data_hash.to_clvm(encoder)
     }
 }
