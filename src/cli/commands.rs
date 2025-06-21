@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::{reward_distributor_stake, reward_distributor_unstake};
+use crate::{reward_distributor_stake, reward_distributor_unstake, verifications_create_offer};
 
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
@@ -1061,6 +1061,32 @@ enum VerificationsCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+
+    CreateRequestOffer {
+        /// Verifier multisig launcher id (hex string)
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Payment asset id (hex string)
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Payment asset amount
+        #[arg(long)]
+        payment_amount: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
 }
 
 pub async fn run_cli() {
@@ -1600,6 +1626,24 @@ pub async fn run_cli() {
             } => {
                 verifications_broadcast_revocation(launcher_id, asset_id, sigs, testnet11, fee)
                     .await
+            }
+            VerificationsCliAction::CreateRequestOffer {
+                launcher_id,
+                asset_id,
+                payment_asset_id,
+                payment_amount,
+                testnet11,
+                fee,
+            } => {
+                verifications_create_offer(
+                    launcher_id,
+                    asset_id,
+                    payment_asset_id,
+                    payment_amount,
+                    testnet11,
+                    fee,
+                )
+                .await
             }
         },
     };

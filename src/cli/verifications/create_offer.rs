@@ -23,7 +23,6 @@ use crate::{
 pub async fn verifications_create_offer(
     launcher_id_str: String,
     asset_id_str: String,
-    comment: String,
     payment_asset_id_str: String,
     payment_amount_str: String,
     testnet11: bool,
@@ -79,8 +78,7 @@ pub async fn verifications_create_offer(
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let verified_data =
-        VerifiedData::from_cat_nft_metadata(asset_id, &latest_data, comment.clone());
+    let verified_data = VerifiedData::from_cat_nft_metadata(asset_id, &latest_data, "".to_string());
     let verification_asserter = VerificationAsserter::from(
         launcher_id,
         verified_data.version,
@@ -129,7 +127,6 @@ pub async fn verifications_create_offer(
     let whole_sig = offer.aggregated_signature + &security_coin_sig;
     let data = clvm_list!(
         asset_id,
-        comment,
         SpendBundle::new(ctx.take(), whole_sig)
             .to_bytes()
             .map_err(|_| CliError::Custom(
