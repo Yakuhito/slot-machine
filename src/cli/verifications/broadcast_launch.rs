@@ -6,12 +6,13 @@ use chia::{
 };
 use chia_puzzle_types::{
     cat::CatArgs,
-    offer::{NotarizedPayment, Payment},
+    offer::{NotarizedPayment, Payment, SettlementPaymentsSolution},
+    LineageProof,
 };
 use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH};
 use chia_wallet_sdk::{
-    driver::{decompress_offer_bytes, Launcher, Puzzle},
-    types::{announcement_id, Condition, Conditions},
+    driver::{decompress_offer_bytes, Cat, CatSpend, HashedPtr, Launcher, Puzzle, Spend},
+    types::{announcement_id, puzzles::SettlementPayment, Condition, Conditions},
     utils::Address,
 };
 use clvm_traits::clvm_quote;
@@ -23,6 +24,7 @@ use crate::{
     MedievalVault, Verification, VerificationAsserter, VerificationLauncherKVList, VerifiedData,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub async fn verifications_broadcast_launch(
     launcher_id_str: String,
     asset_id_str: String,
@@ -50,7 +52,8 @@ pub async fn verifications_broadcast_launch(
     println!("Note: Attestations cover the following: ticker, name, description, image hash, metadata hash, license hash.");
     println!("It is your responsibility to ensure the hashes are correct.");
 
-    let verified_data = VerifiedData::from_cat_nft_metadata(asset_id, &latest_data, comment);
+    let verified_data =
+        VerifiedData::from_cat_nft_metadata(asset_id, &latest_data, comment.clone());
 
     let launcher = Launcher::with_memos(
         medieval_vault.coin.coin_id(),
@@ -86,6 +89,11 @@ pub async fn verifications_broadcast_launch(
     )))?;
 
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
+    let verifier_proof = LineageProof {
+        parent_parent_coin_info: medieval_vault.coin.parent_coin_info,
+        parent_inner_puzzle_hash: medieval_vault.info.inner_puzzle_hash().into(),
+        parent_amount: medieval_vault.coin.amount,
+    };
     medieval_vault.spend_sunsafe(&mut ctx, &pubkeys, delegated_puzzle, NodePtr::NIL)?;
 
     let additional_conditions = if let Some(request_offer) = request_offer {
@@ -95,8 +103,6 @@ pub async fn verifications_broadcast_launch(
             launcher_id,
             verified_data.clone(),
         );
-        let verification_inner_ph =
-            Verification::inner_puzzle_hash(launcher_id, verified_data.clone());
         verification.spend(&mut ctx, None)?;
 
         let (hrp, data, variant) = bech32::decode(&request_offer)?;
@@ -125,16 +131,15 @@ pub async fn verifications_broadcast_launch(
         );
         let verification_asserter_puzzle_hash: Bytes32 = verification_asserter.tree_hash().into();
 
+        let recipient_puzzle_hash = Address::decode(&request_offer_recipient.ok_or(
+            CliError::Custom("Verification offer provided but recipient not specified".to_string()),
+        )?)?
+        .puzzle_hash;
+
         let mut payment_sent = false;
         let mut verification_asserter_spent = false;
         let mut conds = Conditions::new();
         for coin_spend in spend_bundle.coin_spends.into_iter() {
-            let recipient_puzzle_hash =
-                Address::decode(&request_offer_recipient.ok_or(CliError::Custom(
-                    "Verification offer provided but recipient not specified".to_string(),
-                ))?)?
-                .puzzle_hash;
-
             let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
             let solution_ptr = ctx.alloc(&coin_spend.solution)?;
             let output = ctx.run(puzzle_ptr, solution_ptr)?;
@@ -144,8 +149,8 @@ pub async fn verifications_broadcast_launch(
             match puzzle {
                 Puzzle::Curried(puzzle) => {
                     if puzzle.mod_hash == CAT_PUZZLE_HASH.into() {
-                        let payment_cat_asset_id =
-                            ctx.extract::<CatArgs<NodePtr>>(puzzle.args)?.asset_id;
+                        let spent_cat_args = ctx.extract::<CatArgs<HashedPtr>>(puzzle.args)?;
+                        let payment_cat_asset_id = spent_cat_args.asset_id;
                         let offer_puzzle_hash: Bytes32 = CatArgs::curry_tree_hash(
                             payment_cat_asset_id,
                             SETTLEMENT_PAYMENT_HASH.into(),
@@ -172,13 +177,40 @@ pub async fn verifications_broadcast_launch(
                                 )],
                             };
 
-                            // todo: spend CAT
+                            let offer_cat = Cat::new(
+                                Coin::new(coin_spend.coin.coin_id(), offer_puzzle_hash, cc.amount),
+                                Some(LineageProof {
+                                    parent_parent_coin_info: coin_spend.coin.parent_coin_info,
+                                    parent_inner_puzzle_hash: spent_cat_args
+                                        .inner_puzzle
+                                        .tree_hash()
+                                        .into(),
+                                    parent_amount: coin_spend.coin.amount,
+                                }),
+                                payment_cat_asset_id,
+                                SETTLEMENT_PAYMENT_HASH.into(),
+                            );
+
+                            let offer_cat_inner_solution =
+                                ctx.alloc(&SettlementPaymentsSolution {
+                                    notarized_payments: vec![notarized_payment.clone()],
+                                })?;
+
+                            let offer_cat_spend = CatSpend::new(
+                                offer_cat,
+                                Spend::new(
+                                    ctx.alloc_mod::<SettlementPayment>()?,
+                                    offer_cat_inner_solution,
+                                ),
+                            );
+
+                            Cat::spend_all(&mut ctx, &[offer_cat_spend])?;
 
                             payment_sent = true;
                             let msg: Bytes32 = notarized_payment.tree_hash().into();
                             conds = conds.assert_puzzle_announcement(announcement_id(
                                 offer_puzzle_hash,
-                                &msg,
+                                msg,
                             ));
                         }
                     }
@@ -198,9 +230,9 @@ pub async fn verifications_broadcast_launch(
                             &mut ctx,
                             Coin::new(coin_spend.coin.coin_id(), cc.puzzle_hash, cc.amount),
                             verifier_proof,
-                            0,
-                            comment,
-                        );
+                            launcher_coin.amount,
+                            comment.clone(),
+                        )?;
                         verification_asserter_spent = true;
                     }
                 }
