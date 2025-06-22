@@ -992,6 +992,10 @@ enum VerificationsCliAction {
         #[arg(long)]
         request_offer: Option<String>,
 
+        /// Address to send funds from verification request offer to
+        #[arg(long)]
+        request_offer_recipient: Option<String>,
+
         /// Signatures (comma-separated list)
         #[arg(long)]
         sigs: String,
@@ -1600,6 +1604,7 @@ pub async fn run_cli() {
                 asset_id,
                 comment,
                 request_offer,
+                request_offer_recipient,
                 sigs,
                 testnet11,
                 fee,
@@ -1609,6 +1614,7 @@ pub async fn run_cli() {
                     asset_id,
                     comment,
                     request_offer,
+                    request_offer_recipient,
                     sigs,
                     testnet11,
                     fee,
