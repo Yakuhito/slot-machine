@@ -947,7 +947,7 @@ enum RewardDistributorCliAction {
 
 #[derive(Subcommand)]
 enum VerificationsCliAction {
-    /// Signs the launch of a new CATalog verification (no offer)
+    /// Signs the launch of a new CATalog verification
     SignLaunch {
         /// Multisig launcher id (hex string)
         #[arg(long)]
@@ -974,7 +974,7 @@ enum VerificationsCliAction {
         testnet11: bool,
     },
 
-    /// Broadcasts the launch of a new CATalog verification (no offer)
+    /// Broadcasts the launch of a new CATalog verification
     BroadcastLaunch {
         /// Multisig launcher id (hex string)
         #[arg(long)]
@@ -987,6 +987,10 @@ enum VerificationsCliAction {
         /// Verification comment (on-chain)
         #[arg(long)]
         comment: String,
+
+        /// Verification request offer to accept
+        #[arg(long)]
+        request_offer: Option<String>,
 
         /// Signatures (comma-separated list)
         #[arg(long)]
@@ -1595,12 +1599,21 @@ pub async fn run_cli() {
                 launcher_id,
                 asset_id,
                 comment,
+                request_offer,
                 sigs,
                 testnet11,
                 fee,
             } => {
-                verifications_broadcast_launch(launcher_id, asset_id, comment, sigs, testnet11, fee)
-                    .await
+                verifications_broadcast_launch(
+                    launcher_id,
+                    asset_id,
+                    comment,
+                    request_offer,
+                    sigs,
+                    testnet11,
+                    fee,
+                )
+                .await
             }
             VerificationsCliAction::View {
                 asset_id,

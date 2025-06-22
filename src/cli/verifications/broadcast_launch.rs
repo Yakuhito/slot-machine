@@ -12,6 +12,7 @@ pub async fn verifications_broadcast_launch(
     launcher_id_str: String,
     asset_id_str: String,
     comment: String,
+    request_offer: Option<String>,
     signatures_str: String,
     testnet11: bool,
     fee_str: String,
@@ -69,6 +70,8 @@ pub async fn verifications_broadcast_launch(
 
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
     medieval_vault.spend_sunsafe(&mut ctx, &pubkeys, delegated_puzzle, NodePtr::NIL)?;
+
+    if let Some(request_offer) = request_offer {}
 
     multisig_broadcast_thing_finish(
         client,

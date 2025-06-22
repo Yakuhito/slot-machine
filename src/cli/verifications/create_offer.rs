@@ -107,7 +107,7 @@ pub async fn verifications_create_offer(
 
     let security_coin_conditions = offer
         .security_base_conditions
-        .create_coin(SETTLEMENT_PAYMENT_HASH.into(), 1, None)
+        .reserve_fee(1)
         .assert_concurrent_spend(offer.created_cat.unwrap().coin.coin_id())
         .create_coin(verification_asserter_puzzle_hash, 0, None)
         .assert_concurrent_puzzle(verification_asserter_puzzle_hash);
@@ -127,6 +127,10 @@ pub async fn verifications_create_offer(
     let whole_sig = offer.aggregated_signature + &security_coin_sig;
     let data = clvm_list!(
         asset_id,
+        payment_asset_id,
+        payment_amount,
+        offer.security_coin.coin_id(), // verification asserter parent id
+        verification_asserter_puzzle_hash,
         SpendBundle::new(ctx.take(), whole_sig)
             .to_bytes()
             .map_err(|_| CliError::Custom(
@@ -137,7 +141,7 @@ pub async fn verifications_create_offer(
 
     let bytes = node_to_bytes(&ctx, data)?
         .to_bytes()
-        .map_err(|_| CliError::Custom("Verification request serialization error 2".to_string()))?;
+        .map_err(|_| CliError::Custom("Verification request serialization error 3".to_string()))?;
     let bytes = compress_offer_bytes(&bytes)?;
     let bytes = bech32::convert_bits(&bytes, 8, 5, true)?
         .into_iter()
