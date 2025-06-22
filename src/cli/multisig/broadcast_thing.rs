@@ -5,7 +5,7 @@ use chia::{
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{Offer, SpendContext},
-    types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
+    types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
 use sage_api::{Amount, Assets, MakeOffer};
 
@@ -83,6 +83,7 @@ pub async fn multisig_broadcast_thing_finish(
     fee_str: String,
     testnet11: bool,
     medieval_vault_coin_id: Bytes32,
+    additional_security_conditions: Option<Conditions>,
 ) -> Result<(), CliError> {
     let fee = parse_amount(&fee_str, false)?;
 
@@ -121,12 +122,17 @@ pub async fn multisig_broadcast_thing_finish(
     let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
+    let mut conditions = offer
+        .security_base_conditions
+        .assert_concurrent_spend(medieval_vault_coin_id);
+    if let Some(additional_security_conditions) = additional_security_conditions {
+        conditions = conditions.extend(additional_security_conditions);
+    }
+
     let security_coin_sig = spend_security_coin(
         ctx,
         offer.security_coin,
-        offer
-            .security_base_conditions
-            .assert_concurrent_spend(medieval_vault_coin_id),
+        conditions,
         &security_coin_sk,
         if testnet11 {
             &TESTNET11_CONSTANTS

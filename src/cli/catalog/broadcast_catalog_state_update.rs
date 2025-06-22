@@ -99,6 +99,7 @@ pub async fn catalog_broadcast_state_update(
         fee_str,
         testnet11,
         medieval_vault_coin_id,
+        None,
     )
     .await
 }

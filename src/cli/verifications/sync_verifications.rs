@@ -7,7 +7,7 @@ use chia_wallet_sdk::{
 };
 use clvmr::NodePtr;
 
-use crate::{CliError, Verification, VerificationInfo, VerificationLauncherKVList};
+use crate::{CliError, Verification, VerificationLauncherKVList};
 
 pub async fn sync_verifications(
     ctx: &mut SpendContext,
@@ -51,13 +51,8 @@ pub async fn sync_verifications(
         let solution = ctx.extract::<LauncherSolution<VerificationLauncherKVList>>(solution_ptr)?;
         let verification = Verification::after_mint(
             coin_record.coin.parent_coin_info,
-            VerificationInfo {
-                launcher_id: coin_record.coin.coin_id(),
-                revocation_singleton_launcher_id: solution
-                    .key_value_list
-                    .revocation_singleton_launcher_id,
-                verified_data: solution.key_value_list.verified_data,
-            },
+            solution.key_value_list.revocation_singleton_launcher_id,
+            solution.key_value_list.verified_data,
         );
 
         if verification.coin.puzzle_hash != solution.singleton_puzzle_hash {

@@ -6,6 +6,7 @@ use chia::{
         EveProof, LineageProof, Proof,
     },
 };
+use chia_puzzles::SINGLETON_LAUNCHER_HASH;
 use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
@@ -32,9 +33,22 @@ impl Verification {
         Self { coin, proof, info }
     }
 
-    pub fn after_mint(launcher_parent: Bytes32, info: VerificationInfo) -> Self {
+    pub fn after_mint(
+        launcher_parent: Bytes32,
+        revocation_singleton_launcher_id: Bytes32,
+        verified_data: VerifiedData,
+    ) -> Self {
+        let launcher_coin = Coin::new(launcher_parent, SINGLETON_LAUNCHER_HASH.into(), 0);
+        let verification_launcher_id = launcher_coin.coin_id();
+
+        let info = VerificationInfo {
+            launcher_id: verification_launcher_id,
+            revocation_singleton_launcher_id,
+            verified_data,
+        };
+
         Self {
-            coin: Coin::new(info.launcher_id, Self::puzzle_hash(&info).into(), 1),
+            coin: Coin::new(verification_launcher_id, Self::puzzle_hash(&info).into(), 1),
             proof: Proof::Eve(EveProof {
                 parent_parent_coin_info: launcher_parent,
                 parent_amount: 0,
@@ -201,13 +215,11 @@ mod tests {
             data_hash: Bytes32::new([3; 32]),
             comment: "Test verification for test testing purposes only.".to_string(),
         };
-        let test_info = VerificationInfo::new(
-            verification_launcher.coin().coin_id(),
+        let verification = Verification::after_mint(
+            verification_launcher.coin().parent_coin_info,
             did.info.launcher_id,
             verified_data.clone(),
         );
-        let verification =
-            Verification::after_mint(verification_launcher.coin().parent_coin_info, test_info);
 
         let (_conds, new_coin) = verification_launcher.with_singleton_amount(1).spend(
             ctx,

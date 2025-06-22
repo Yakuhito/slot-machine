@@ -127,10 +127,6 @@ pub async fn verifications_create_offer(
     let whole_sig = offer.aggregated_signature + &security_coin_sig;
     let data = clvm_list!(
         asset_id,
-        payment_asset_id,
-        payment_amount,
-        offer.security_coin.coin_id(), // verification asserter parent id
-        verification_asserter_puzzle_hash,
         SpendBundle::new(ctx.take(), whole_sig)
             .to_bytes()
             .map_err(|_| CliError::Custom(

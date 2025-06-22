@@ -1,11 +1,19 @@
-use chia_wallet_sdk::driver::Launcher;
+use bech32::Variant;
+use chia::{
+    protocol::{Bytes, Bytes32, SpendBundle},
+    traits::Streamable,
+};
+use chia_wallet_sdk::{
+    driver::{decompress_offer_bytes, DriverError, Launcher, OfferError},
+    types::Conditions,
+};
 use clvm_traits::clvm_quote;
-use clvmr::NodePtr;
+use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
     get_constants, get_latest_data_for_asset_id, hex_string_to_bytes32,
     multisig_broadcast_thing_finish, multisig_broadcast_thing_start, CliError, MedievalVault,
-    Verification, VerificationLauncherKVList, VerifiedData,
+    Verification, VerificationInfo, VerificationLauncherKVList, VerifiedData,
 };
 
 pub async fn verifications_broadcast_launch(
@@ -42,9 +50,10 @@ pub async fn verifications_broadcast_launch(
         ctx.hint(verified_data.get_hint())?,
     )
     .with_singleton_amount(1);
+    let launcher_coin = launcher.coin();
     println!(
         "Verification launcher id: {}",
-        hex::encode(launcher.coin().coin_id())
+        hex::encode(launcher_coin.coin_id())
     );
 
     let (launch_conds, _coin) = launcher.spend(
@@ -52,7 +61,7 @@ pub async fn verifications_broadcast_launch(
         Verification::inner_puzzle_hash(launcher_id, verified_data.clone()).into(),
         &VerificationLauncherKVList {
             revocation_singleton_launcher_id: launcher_id,
-            verified_data,
+            verified_data: verified_data.clone(),
         },
     )?;
 
@@ -71,7 +80,43 @@ pub async fn verifications_broadcast_launch(
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
     medieval_vault.spend_sunsafe(&mut ctx, &pubkeys, delegated_puzzle, NodePtr::NIL)?;
 
-    if let Some(request_offer) = request_offer {}
+    let additional_conditions = if let Some(request_offer) = request_offer {
+        // spend verification as well to make offer work
+        let verification = Verification::after_mint(
+            launcher_coin.parent_coin_info,
+            launcher_id,
+            verified_data.clone(),
+        );
+        let verification_inner_ph =
+            Verification::inner_puzzle_hash(launcher_id, verified_data.clone());
+        verification.spend(&mut ctx, None)?;
+
+        let (hrp, data, variant) = bech32::decode(&request_offer)?;
+        if variant != Variant::Bech32m || hrp.as_str() != "verificationrequest" {
+            return Err(CliError::Custom(
+                "Invalid verification request offer provided".to_string(),
+            ));
+        }
+        let bytes = bech32::convert_bits(&data, 5, 8, false)?;
+        let decompressed = decompress_offer_bytes(&bytes)?;
+        let ptr = node_from_bytes(&mut ctx, &decompressed)?;
+        let (asset_id_verif, (spend_bundle_bytes, ())) =
+            ctx.extract::<(Bytes32, (Bytes, ()))>(ptr)?;
+        if asset_id_verif != asset_id {
+            return Err(CliError::Custom(
+                "Verification request offer made for another asset id :(".to_string(),
+            ));
+        }
+        let spend_bundle = SpendBundle::from_bytes(&spend_bundle_bytes).unwrap();
+
+        // todo: find payment and send it to recipient
+        // todo: find verification asserter
+        // todo: spend verification asserter
+
+        Some(Conditions::new()) // todo
+    } else {
+        None
+    };
 
     multisig_broadcast_thing_finish(
         client,
@@ -80,6 +125,7 @@ pub async fn verifications_broadcast_launch(
         fee_str,
         testnet11,
         medieval_vault_coin_id,
+        additional_conditions,
     )
     .await
 }
