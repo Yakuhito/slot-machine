@@ -4,13 +4,12 @@ use chia_wallet_sdk::{
     driver::{Offer, SpendContext},
     types::Conditions,
 };
-use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    find_entry_slot_for_puzzle_hash, get_coinset_client, get_constants, get_last_onchain_timestamp,
-    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, spend_security_coin,
-    sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
-    RewardDistributorInitiatePayoutAction, RewardDistributorSyncAction, SageClient,
+    assets_xch_only, find_entry_slot_for_puzzle_hash, get_coinset_client, get_constants,
+    get_last_onchain_timestamp, hex_string_to_bytes32, new_sk, no_assets, parse_amount,
+    parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
+    CliError, Db, RewardDistributorInitiatePayoutAction, RewardDistributorSyncAction, SageClient,
 };
 
 pub async fn reward_distributor_initiate_payout(
@@ -60,22 +59,7 @@ pub async fn reward_distributor_initiate_payout(
     let sage = SageClient::new()?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 

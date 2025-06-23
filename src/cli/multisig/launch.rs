@@ -3,12 +3,11 @@ use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{Launcher, Offer, SpendContext},
 };
-use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, new_sk, parse_amount, parse_one_sided_offer,
-    print_medieval_vault_configuration, spend_security_coin, wait_for_coin, yes_no_prompt,
-    CliError, MedievalVaultHint, P2MOfNDelegateDirectArgs, SageClient,
+    assets_xch_only, get_coinset_client, get_constants, new_sk, no_assets, parse_amount,
+    parse_one_sided_offer, print_medieval_vault_configuration, spend_security_coin, wait_for_coin,
+    yes_no_prompt, CliError, MedievalVaultHint, P2MOfNDelegateDirectArgs, SageClient,
 };
 
 pub async fn multisig_launch(
@@ -42,22 +41,7 @@ pub async fn multisig_launch(
     let mut ctx = SpendContext::new();
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
         .await?;
 
     println!("Offer with id {} generated.", offer_resp.offer_id);

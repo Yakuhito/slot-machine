@@ -259,3 +259,11 @@ pub fn assets_xch_and_cat(xch_amount: u64, asset_id: String, cat_amount: u64) ->
         nfts: vec![],
     }
 }
+
+pub fn assets_xch_and_nft(xch_amount: u64, nft_id: String) -> Assets {
+    Assets {
+        xch: Amount::u64(xch_amount),
+        cats: vec![],
+        nfts: vec![nft_id],
+    }
+}

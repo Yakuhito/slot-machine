@@ -2,11 +2,11 @@ use super::{ClientError, SageClient};
 use chia::{
     bls::{self, PublicKey, SecretKey, Signature},
     consensus::consensus_constants::ConsensusConstants,
-    protocol::{Bytes, Bytes32},
+    protocol::{Bytes, Bytes32, Coin, CoinSpend, Program},
 };
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{DriverError, OfferError},
+    driver::{DriverError, OfferError, Spend, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
     utils::AddressError,
 };
@@ -274,6 +274,18 @@ pub async fn get_last_onchain_timestamp(client: &CoinsetClient) -> Result<u64, C
 
         Ok(block.timestamp.unwrap())
     }
+}
+
+pub fn spend_to_coin_spend(
+    ctx: &mut SpendContext,
+    coin: Coin,
+    spend: Spend,
+) -> Result<CoinSpend, CliError> {
+    Ok(CoinSpend {
+        coin,
+        puzzle_reveal: Program::new(ctx.serialize(&spend.puzzle)?.to_vec().into()),
+        solution: Program::new(ctx.serialize(&spend.solution)?.to_vec().into()),
+    })
 }
 
 #[cfg(test)]

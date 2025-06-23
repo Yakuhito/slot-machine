@@ -1,15 +1,13 @@
+use crate::{
+    assets_xch_only, find_reward_slot_for_epoch, get_coinset_client, get_constants,
+    hex_string_to_bytes32, new_sk, no_assets, parse_amount, parse_one_sided_offer,
+    spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
+    RewardDistributorNewEpochAction, RewardDistributorSyncAction, SageClient,
+};
 use chia::protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{Offer, SpendContext},
-};
-use sage_api::{Amount, Assets, MakeOffer};
-
-use crate::{
-    find_reward_slot_for_epoch, get_coinset_client, get_constants, hex_string_to_bytes32, new_sk,
-    parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, RewardDistributorNewEpochAction, RewardDistributorSyncAction,
-    SageClient,
 };
 
 pub async fn reward_distributor_new_epoch(
@@ -61,22 +59,7 @@ pub async fn reward_distributor_new_epoch(
     let sage = SageClient::new()?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 

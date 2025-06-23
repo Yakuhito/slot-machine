@@ -6,13 +6,13 @@ use chia_wallet_sdk::{
 };
 use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
-use sage_api::{Amount, Assets, CoinJson, CoinSpendJson, MakeOffer, SignCoinSpends};
 
 use crate::{
-    find_commitment_slot_for_puzzle_hash, find_reward_slot_for_epoch, get_coin_public_key,
-    get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, new_sk,
-    parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, RewardDistributorWithdrawIncentivesAction, SageClient,
+    assets_xch_only, find_commitment_slot_for_puzzle_hash, find_reward_slot_for_epoch,
+    get_coin_public_key, get_coinset_client, get_constants, hex_string_to_bytes32,
+    hex_string_to_signature, new_sk, no_assets, parse_amount, parse_one_sided_offer,
+    spend_security_coin, spend_to_coin_spend, sync_distributor, wait_for_coin, yes_no_prompt,
+    CliError, Db, RewardDistributorWithdrawIncentivesAction, SageClient,
 };
 
 pub async fn reward_distributor_clawback_rewards(
@@ -72,22 +72,7 @@ pub async fn reward_distributor_clawback_rewards(
     let sage = SageClient::new()?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
@@ -128,25 +113,11 @@ pub async fn reward_distributor_clawback_rewards(
 
     println!("Signing spend...");
     let resp = sage
-        .sign_coin_spends(SignCoinSpends {
-            coin_spends: vec![CoinSpendJson {
-                coin: CoinJson {
-                    parent_coin_info: format!("0x{}", hex::encode(message_coin.parent_coin_info)),
-                    puzzle_hash: format!("0x{}", hex::encode(message_coin.puzzle_hash)),
-                    amount: Amount::u64(message_coin.amount),
-                },
-                puzzle_reveal: format!(
-                    "0x{:}",
-                    hex::encode(ctx.serialize(&spend.puzzle)?.to_vec())
-                ),
-                solution: format!(
-                    "0x{:}",
-                    hex::encode(ctx.serialize(&spend.solution)?.to_vec())
-                ),
-            }],
-            auto_submit: false,
-            partial: true,
-        })
+        .sign_coin_spends(
+            vec![spend_to_coin_spend(&mut ctx, message_coin, spend)?],
+            false,
+            true,
+        )
         .await?;
     ctx.spend(message_coin, spend)?;
 

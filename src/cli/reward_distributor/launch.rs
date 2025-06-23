@@ -4,12 +4,11 @@ use chia_wallet_sdk::{
     driver::{Offer, SpendContext},
     utils::Address,
 };
-use sage_api::{Amount, Assets, CatAmount, GetDerivations, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, hex_string_to_bytes32, launch_dig_reward_distributor,
-    parse_amount, wait_for_coin, yes_no_prompt, CliError, Db, RewardDistributorConstants,
-    RewardDistributorType, SageClient,
+    assets_xch_and_cat, get_coinset_client, get_constants, hex_string_to_bytes32,
+    launch_dig_reward_distributor, no_assets, parse_amount, wait_for_coin, yes_no_prompt, CliError,
+    Db, RewardDistributorConstants, RewardDistributorType, SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -61,13 +60,7 @@ pub async fn reward_distributor_launch(
     yes_no_prompt("Proceed?")?;
 
     let sage = SageClient::new()?;
-    let derivation_resp = sage
-        .get_derivations(GetDerivations {
-            hardened: false,
-            offset: 0,
-            limit: 1,
-        })
-        .await?;
+    let derivation_resp = sage.get_derivations(false, 0, 1).await?;
     let user_address = &derivation_resp.derivations[0].address;
     let user_puzzle_hash = Address::decode(user_address)?.puzzle_hash;
     println!(
@@ -76,25 +69,14 @@ pub async fn reward_distributor_launch(
     );
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![CatAmount {
-                    asset_id: hex::encode(reserve_asset_id),
-                    amount: Amount::u64(1),
-                }],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(
+            no_assets(),
+            assets_xch_and_cat(1, hex::encode(reserve_asset_id), 1),
+            fee,
+            None,
+            None,
+            false,
+        )
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
