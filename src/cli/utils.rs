@@ -11,7 +11,6 @@ use chia_wallet_sdk::{
     utils::AddressError,
 };
 use hex::FromHex;
-use sage_api::GetDerivations;
 use std::{
     io::{self, Write},
     num::ParseIntError,
@@ -226,11 +225,7 @@ pub async fn get_coin_public_key(
     let mut offset = 0;
     while offset < address_limit {
         let resp = client
-            .get_derivations(GetDerivations {
-                hardened: false,
-                offset,
-                limit: addresses_per_request,
-            })
+            .get_derivations(false, offset, addresses_per_request)
             .await?;
         for derivation in resp.derivations {
             if derivation.address.eq(address) {
