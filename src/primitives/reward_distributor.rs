@@ -132,7 +132,7 @@ impl RewardDistributor {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn from_launcher(
+    pub fn from_launcher_solution(
         ctx: &mut SpendContext,
         launcher_coin: Coin,
         launcher_solution: NodePtr,

@@ -1,23 +1,17 @@
 use chia::{
-    clvm_utils::{tree_hash, ToTreeHash},
-    protocol::{Bytes32, Coin},
-    puzzles::{
-        cat::CatArgs,
-        singleton::{LauncherSolution, SingletonArgs, SingletonStruct},
-        LineageProof, Proof,
-    },
+    clvm_utils::ToTreeHash,
+    protocol::Bytes32,
+    puzzles::{cat::CatArgs, singleton::SingletonStruct, LineageProof},
 };
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{CatLayer, Layer, Puzzle, SingletonLayer, SpendContext},
-    types::{Condition, Conditions},
+    driver::{CatLayer, Layer, Puzzle, SpendContext},
 };
 use clvmr::NodePtr;
 
 use crate::{
     CliError, Db, P2DelegatedBySingletonLayerArgs, Reserve, RewardDistributor,
-    RewardDistributorConstants, RewardDistributorInfo, RewardDistributorRewardSlotValue,
-    RewardDistributorSlotNonce, RewardDistributorState, Slot, SlotInfo, SlotProof,
+    RewardDistributorSlotNonce,
 };
 
 pub async fn sync_distributor(
@@ -62,74 +56,29 @@ pub async fn sync_distributor(
             };
 
             let launcher_solution_ptr = ctx.alloc(&launcher_coin_spend.solution)?;
-            let launcher_solution = ctx
-                .extract::<LauncherSolution<(u64, RewardDistributorConstants)>>(
+            let Some((constants, initial_state, distributor_eve_coin)) =
+                RewardDistributor::from_launcher_solution(
+                    ctx,
+                    launcher_coin_spend.coin,
                     launcher_solution_ptr,
-                )?;
-
-            let distributor_eve_coin =
-                Coin::new(launcher_id, launcher_solution.singleton_puzzle_hash, 1);
-            let distributor_eve_coin_id = distributor_eve_coin.coin_id();
+                )?
+            else {
+                return Err(CliError::Custom(
+                    "Could not parse launcher spend".to_string(),
+                ));
+            };
 
             let Some(distributor_eve_coin_spend) = client
                 .get_puzzle_and_solution(
-                    distributor_eve_coin_id,
+                    distributor_eve_coin.coin_id(),
                     Some(launcher_coin_record.spent_block_index),
                 )
                 .await?
                 .coin_solution
             else {
-                return Err(CliError::CoinNotSpent(distributor_eve_coin_id));
+                return Err(CliError::CoinNotSpent(distributor_eve_coin.coin_id()));
             };
 
-            let eve_coin_puzzle_ptr = ctx.alloc(&distributor_eve_coin_spend.puzzle_reveal)?;
-            let eve_coin_puzzle = Puzzle::parse(ctx, eve_coin_puzzle_ptr);
-            let Some(eve_coin_puzzle) =
-                SingletonLayer::<NodePtr>::parse_puzzle(ctx, eve_coin_puzzle)?
-            else {
-                return Err(CliError::Custom("Eve coin not a singleton".to_string()));
-            };
-
-            let eve_coin_inner_puzzle_hash = tree_hash(ctx, eve_coin_puzzle.inner_puzzle);
-
-            let eve_coin_solution_ptr = ctx.alloc(&distributor_eve_coin_spend.solution)?;
-            let eve_coin_output = ctx.run(eve_coin_puzzle_ptr, eve_coin_solution_ptr)?;
-            let eve_coin_output = ctx.extract::<Conditions<NodePtr>>(eve_coin_output)?;
-
-            let Some(Condition::CreateCoin(odd_create_coin)) =
-                eve_coin_output.into_iter().find(|c| {
-                    if let Condition::CreateCoin(create_coin) = c {
-                        // singletons with amount != 1 are weird and I don't support them
-                        create_coin.amount % 2 == 1
-                    } else {
-                        false
-                    }
-                })
-            else {
-                return Err(CliError::Custom(
-                    "Eve coin did not create a coin".to_string(),
-                ));
-            };
-
-            let first_epoch_start = launcher_solution.key_value_list.0;
-            let initial_state = RewardDistributorState::initial(first_epoch_start);
-            let constants = launcher_solution.key_value_list.1;
-            if constants != constants.with_launcher_id(launcher_id) {
-                return Err(CliError::Custom(
-                    "Distributor constants invalid".to_string(),
-                ));
-            }
-
-            let new_coin = Coin::new(
-                distributor_eve_coin_id,
-                odd_create_coin.puzzle_hash,
-                odd_create_coin.amount,
-            );
-            let lineage_proof = LineageProof {
-                parent_parent_coin_info: distributor_eve_coin.parent_coin_info,
-                parent_inner_puzzle_hash: eve_coin_inner_puzzle_hash.into(),
-                parent_amount: distributor_eve_coin.amount,
-            };
             let reserve = find_reserve(
                 ctx,
                 client,
@@ -140,46 +89,23 @@ pub async fn sync_distributor(
                 true,
             )
             .await?;
-            let new_distributor = RewardDistributor::new(
-                new_coin,
-                Proof::Lineage(lineage_proof),
-                RewardDistributorInfo::new(initial_state, constants),
-                reserve,
-            );
 
-            if SingletonArgs::curry_tree_hash(
-                constants.launcher_id,
-                new_distributor.info.inner_puzzle_hash(),
-            ) != new_distributor.coin.puzzle_hash.into()
-            {
-                return Err(CliError::Custom(
-                    "Distributor singleton puzzle hash mismatch".to_string(),
-                ));
-            }
-
-            let slot_proof = SlotProof {
-                parent_parent_info: lineage_proof.parent_parent_coin_info,
-                parent_inner_puzzle_hash: lineage_proof.parent_inner_puzzle_hash,
-            };
-            let slot_value = RewardDistributorRewardSlotValue {
-                epoch_start: first_epoch_start,
-                next_epoch_initialized: false,
-                rewards: 0,
-            };
-
-            db.save_slot(
+            let Some((new_distributor, slot)) = RewardDistributor::from_eve_coin_spend(
                 ctx,
-                Slot::new(
-                    slot_proof,
-                    SlotInfo::from_value(
-                        constants.launcher_id,
-                        RewardDistributorSlotNonce::REWARD.to_u64(),
-                        slot_value,
-                    ),
-                ),
-                0,
-            )
-            .await?;
+                constants,
+                initial_state,
+                distributor_eve_coin_spend,
+                reserve.coin.parent_coin_info,
+                reserve.proof,
+            )?
+            else {
+                return Err(CliError::Custom(
+                    "Could not parse eve coin spend".to_string(),
+                ));
+            };
+
+            let slot_value = slot.info.value;
+            db.save_slot(ctx, slot, 0).await?;
             db.save_dig_indexed_slot_value_by_epoch_start(
                 slot_value.epoch_start,
                 RewardDistributorSlotNonce::REWARD.to_u64(),
