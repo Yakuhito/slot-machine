@@ -14,14 +14,14 @@ use chia_wallet_sdk::{
 };
 use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
-use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    get_last_onchain_timestamp, hex_string_to_bytes32, load_xchandles_premine_csv, new_sk,
-    parse_amount, parse_one_sided_offer, spend_security_coin, sync_xchandles, wait_for_coin,
-    yes_no_prompt, CatalogPrecommitValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
-    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
-    XchandlesPremineRecord, XchandlesRegisterAction,
+    assets_xch_and_cat, assets_xch_only, get_last_onchain_timestamp, hex_string_to_bytes32,
+    load_xchandles_premine_csv, new_sk, no_assets, parse_amount, parse_one_sided_offer,
+    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CatalogPrecommitValue,
+    CliError, Db, PrecommitCoin, PrecommitLayer, SageClient, XchandlesFactorPricingPuzzleArgs,
+    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesPremineRecord,
+    XchandlesRegisterAction,
 };
 
 fn precommit_value_for_handle(
@@ -210,25 +210,14 @@ pub async fn xchandles_continue_launch(
             yes_no_prompt("Proceed?")?;
 
             let offer_resp = sage
-                .make_offer(MakeOffer {
-                    requested_assets: Assets {
-                        xch: Amount::u64(0),
-                        cats: vec![],
-                        nfts: vec![],
-                    },
-                    offered_assets: Assets {
-                        xch: Amount::u64(1),
-                        cats: vec![CatAmount {
-                            asset_id: payment_asset_id_str,
-                            amount: Amount::u64(handles_payment_total),
-                        }],
-                        nfts: vec![],
-                    },
-                    fee: Amount::u64(fee),
-                    receive_address: None,
-                    expires_at_second: None,
-                    auto_import: false,
-                })
+                .make_offer(
+                    no_assets(),
+                    assets_xch_and_cat(1, payment_asset_id_str, handles_payment_total),
+                    fee,
+                    None,
+                    None,
+                    false,
+                )
                 .await?;
             println!("Offer with id {} generated.", offer_resp.offer_id);
 
@@ -480,22 +469,7 @@ pub async fn xchandles_continue_launch(
     yes_no_prompt("Proceed?")?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
         .await?;
 
     println!("Offer with id {} generated.", offer_resp.offer_id);

@@ -9,14 +9,13 @@ use chia_wallet_sdk::{
     utils::Address,
 };
 use clvmr::{serde::node_from_bytes, NodePtr};
-use sage_api::{Amount, Assets, GetDerivations, MakeOffer, SendCat};
 
 use crate::{
-    get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, new_sk, parse_amount, parse_one_sided_offer, quick_sync_xchandles,
-    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db,
-    DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot, XchandlesApiClient,
-    XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
+    assets_xch_only, get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
+    hex_string_to_bytes32, new_sk, no_assets, parse_amount, parse_one_sided_offer,
+    quick_sync_xchandles, spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt,
+    CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
+    XchandlesApiClient, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
     XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesFactorPricingPuzzleArgs,
     XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesRefundAction,
     XchandlesSlotValue,
@@ -172,13 +171,7 @@ pub async fn xchandles_expire(
     let refund_address = if let Some(provided_refund_address) = refund_address {
         provided_refund_address
     } else {
-        let derivation_resp = sage
-            .get_derivations(GetDerivations {
-                hardened: false,
-                offset: 0,
-                limit: 1,
-            })
-            .await?;
+        let derivation_resp = sage.get_derivations(false, 0, 1).await?;
         derivation_resp.derivations[0].address.clone()
     };
     let refund_puzzle_hash = Address::decode(&refund_address)?.puzzle_hash;
@@ -298,22 +291,7 @@ pub async fn xchandles_expire(
         yes_no_prompt("Proceed?")?;
 
         let offer_resp = sage
-            .make_offer(MakeOffer {
-                requested_assets: Assets {
-                    xch: Amount::u64(0),
-                    cats: vec![],
-                    nfts: vec![],
-                },
-                offered_assets: Assets {
-                    xch: Amount::u64(1),
-                    cats: vec![],
-                    nfts: vec![],
-                },
-                fee: Amount::u64(fee),
-                receive_address: None,
-                expires_at_second: None,
-                auto_import: false,
-            })
+            .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
             .await?;
 
         println!("Offer with id {} generated.", offer_resp.offer_id);
@@ -423,15 +401,15 @@ pub async fn xchandles_expire(
     let precommit_coin_address =
         Address::new(precommit_inner_puzzle_hash.into(), get_prefix(testnet11)).encode()?;
     let send_resp = sage
-        .send_cat(SendCat {
-            asset_id: hex::encode(payment_asset_id),
-            address: precommit_coin_address,
-            amount: Amount::Number(payment_cat_amount),
-            fee: Amount::Number(fee),
-            memos: None,
-            auto_submit: true,
-            include_hint: true,
-        })
+        .send_cat(
+            hex::encode(payment_asset_id),
+            precommit_coin_address,
+            payment_cat_amount,
+            fee,
+            true,
+            None,
+            true,
+        )
         .await?;
     println!("Transaction sent.");
 

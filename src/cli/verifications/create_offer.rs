@@ -12,12 +12,11 @@ use chia_wallet_sdk::{
 };
 use clvm_traits::clvm_list;
 use clvmr::serde::node_to_bytes;
-use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_latest_data_for_asset_id, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, spend_security_coin, yes_no_prompt, CliError, SageClient,
-    VerificationAsserter, VerifiedData,
+    assets_xch_and_cat, get_coinset_client, get_latest_data_for_asset_id, hex_string_to_bytes32,
+    new_sk, no_assets, parse_amount, parse_one_sided_offer, spend_security_coin, yes_no_prompt,
+    CliError, SageClient, VerificationAsserter, VerifiedData,
 };
 
 pub async fn verifications_create_offer(
@@ -55,25 +54,14 @@ pub async fn verifications_create_offer(
 
     let sage = SageClient::new()?;
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![CatAmount {
-                    asset_id: hex::encode(payment_asset_id),
-                    amount: Amount::u64(payment_amount),
-                }],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: true,
-        })
+        .make_offer(
+            no_assets(),
+            assets_xch_and_cat(1, hex::encode(payment_asset_id), payment_amount),
+            fee,
+            None,
+            None,
+            true,
+        )
         .await?;
 
     println!("Offer with id {} generated.", offer_resp.offer_id);

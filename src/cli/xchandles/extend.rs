@@ -3,12 +3,11 @@ use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{Offer, SpendContext},
 };
-use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, quick_sync_xchandles, spend_security_coin, sync_xchandles,
-    wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs, SageClient,
+    assets_xch_and_cat, get_coinset_client, get_constants, hex_string_to_bytes32, new_sk,
+    no_assets, parse_amount, parse_one_sided_offer, quick_sync_xchandles, spend_security_coin,
+    sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs, SageClient,
     XchandlesApiClient, XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs,
 };
 
@@ -97,25 +96,14 @@ pub async fn xchandles_extend(
     yes_no_prompt("Continue with extension?")?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![CatAmount {
-                    asset_id: payment_asset_id_str,
-                    amount: Amount::u64(payment_cat_amount),
-                }],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(
+            no_assets(),
+            assets_xch_and_cat(1, payment_asset_id_str, payment_cat_amount),
+            fee,
+            None,
+            None,
+            false,
+        )
         .await?;
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
