@@ -7,7 +7,7 @@ use chia::{
     },
 };
 use chia_wallet_sdk::driver::{CatLayer, DriverError, Layer, Spend, SpendContext};
-use clvm_traits::{FromClvm, ToClvm};
+use clvm_traits::ToClvm;
 use clvmr::{Allocator, NodePtr};
 
 use crate::{PrecommitLayer, PrecommitLayerSolution};
@@ -92,22 +92,27 @@ impl<V> PrecommitCoin<V> {
         )
     }
 
+    pub fn inner_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>
+    where
+        V: Clone + ToClvm<Allocator>,
+    {
+        PrecommitLayer::<V>::new(
+            self.controller_singleton_struct_hash,
+            self.relative_block_height,
+            self.payout_puzzle_hash,
+            self.refund_puzzle_hash,
+            self.value.clone(),
+        )
+        .construct_puzzle(ctx)
+    }
+
     pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>
     where
-        V: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
+        V: Clone + ToClvm<Allocator>,
     {
-        let layers = CatLayer::<PrecommitLayer<V>>::new(
-            self.asset_id,
-            PrecommitLayer::<V>::new(
-                self.controller_singleton_struct_hash,
-                self.relative_block_height,
-                self.payout_puzzle_hash,
-                self.refund_puzzle_hash,
-                self.value.clone(),
-            ),
-        );
+        let inner_puzzle = self.inner_puzzle(ctx)?;
 
-        layers.construct_puzzle(ctx)
+        CatLayer::<NodePtr>::new(self.asset_id, inner_puzzle).construct_puzzle(ctx)
     }
 
     pub fn construct_solution(
@@ -117,27 +122,20 @@ impl<V> PrecommitCoin<V> {
         singleton_inner_puzzle_hash: Bytes32,
     ) -> Result<NodePtr, DriverError>
     where
-        V: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
+        V: ToClvm<Allocator> + Clone,
     {
-        let layers = CatLayer::<PrecommitLayer<V>>::new(
-            self.asset_id,
-            PrecommitLayer::<V>::new(
-                self.controller_singleton_struct_hash,
-                self.relative_block_height,
-                self.payout_puzzle_hash,
-                self.refund_puzzle_hash,
-                self.value.clone(),
-            ),
-        );
+        let layers = CatLayer::<NodePtr>::new(self.asset_id, self.inner_puzzle(ctx)?);
+
+        let inner_puzzle_solution = ctx.alloc(&PrecommitLayerSolution {
+            mode,
+            my_amount: self.coin.amount,
+            singleton_inner_puzzle_hash,
+        })?;
 
         layers.construct_solution(
             ctx,
             CatSolution {
-                inner_puzzle_solution: PrecommitLayerSolution {
-                    mode,
-                    my_amount: self.coin.amount,
-                    singleton_inner_puzzle_hash,
-                },
+                inner_puzzle_solution,
                 lineage_proof: Some(self.proof),
                 prev_coin_id: self.coin.coin_id(),
                 this_coin_info: self.coin,
@@ -159,7 +157,7 @@ impl<V> PrecommitCoin<V> {
         spender_inner_puzzle_hash: Bytes32,
     ) -> Result<(), DriverError>
     where
-        V: ToClvm<Allocator> + FromClvm<Allocator> + Clone,
+        V: ToClvm<Allocator> + Clone,
     {
         let puzzle = self.construct_puzzle(ctx)?;
         let solution = self.construct_solution(ctx, mode, spender_inner_puzzle_hash)?;

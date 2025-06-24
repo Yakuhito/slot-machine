@@ -1,7 +1,6 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
-    sha2::Sha256,
 };
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
@@ -43,22 +42,17 @@ impl XchandlesOracleAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_hash_from_solution(
+    pub fn get_spent_slot_value_from_solution(
         ctx: &SpendContext,
         solution: NodePtr,
-    ) -> Result<Bytes32, DriverError> {
-        let solution = ctx.extract::<XchandlesOracleActionSolution>(solution)?;
+    ) -> Result<XchandlesSlotValue, DriverError> {
+        let slot_value = ctx.extract::<XchandlesSlotValue>(solution)?;
 
-        let mut hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.handle_hash.tree_hash());
-        hasher.update(solution.rest_treehash);
-
-        Ok(hasher.finalize().into())
+        Ok(slot_value)
     }
 
-    pub fn get_slot_value(old_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
-        old_slot_value // nothing changed
+    pub fn get_created_slot_value(spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
+        spent_slot_value
     }
 
     pub fn spend(
@@ -67,40 +61,39 @@ impl XchandlesOracleAction {
         registry: &mut XchandlesRegistry,
         slot: Slot<XchandlesSlotValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
-        // spend slot
-        registry
-            .pending_items
-            .spent_slots
-            .push(slot.info.value_hash);
-        slot.spend(ctx, registry.info.inner_puzzle_hash().into())?;
-
-        // finally, spend self
-        let action_solution = ctx.alloc(&XchandlesOracleActionSolution {
-            handle_hash: slot.info.value.handle_hash,
-            rest_treehash: slot.info.value.after_handle_data_hash().into(),
-        })?;
+        // spend self
+        let action_solution = ctx.alloc(&slot.info.value)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
-        let new_slot = Self::get_slot_value(slot.info.value);
-        registry.pending_items.slot_values.push(new_slot);
+        let new_slot = Self::get_created_slot_value(slot.info.value.clone());
+        registry.pending_items.created_slots.push(new_slot.clone());
 
-        let mut oracle_ann = slot.info.value.tree_hash().to_vec();
+        // spend slot
+        registry
+            .pending_items
+            .spent_slots
+            .push(slot.info.value.clone());
+        slot.spend(ctx, registry.info.inner_puzzle_hash().into())?;
+
+        let mut oracle_ann = new_slot.tree_hash().to_vec();
         oracle_ann.insert(0, b'o');
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, oracle_ann)),
-            registry.created_slot_values_to_slots(vec![new_slot])[0],
+            registry
+                .created_slot_values_to_slots(vec![new_slot.clone()])
+                .remove(0),
         ))
     }
 }
 
-pub const XCHANDLES_ORACLE_PUZZLE: [u8; 505] = hex!("ff02ffff01ff04ff0bffff02ff16ffff04ff02ffff04ff05ffff04ff27ffff04ffff0bffff0102ffff0bffff0101ff2780ff3780ff80808080808080ffff04ffff01ffffff333eff4202ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff04ff10ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0101ff0b8080ffff0bff1cff62ff42808080ff42808080ffff04ff80ffff04ffff04ff17ff8080ff8080808080ffff04ffff02ff1effff04ff02ffff04ff05ffff04ff17ff8080808080ffff04ffff02ff1affff04ff02ffff04ff05ffff04ff17ffff04ff0bff808080808080ffff04ffff04ff18ffff04ffff0effff016fff1780ff808080ff80808080ff04ff14ffff04ffff0112ffff04ff80ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0101ff0b8080ffff0bff1cff62ff42808080ff42808080ff8080808080ff018080");
+pub const XCHANDLES_ORACLE_PUZZLE: [u8; 571] = hex!("ff02ffff01ff04ff0bffff02ff16ffff04ff02ffff04ff05ffff04ffff02ff2effff04ff02ffff04ff17ff80808080ff808080808080ffff04ffff01ffffff333eff4202ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff04ff10ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0101ff0b8080ffff0bff1cff62ff42808080ff42808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff05ffff04ff0bff8080808080ffff04ffff02ff1affff04ff02ffff04ff05ffff04ff0bff8080808080ffff04ffff04ff18ffff04ffff0effff016fff0b80ff808080ff80808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff14ffff04ffff0112ffff04ff80ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0101ff0b8080ffff0bff1cff62ff42808080ff42808080ff8080808080ff018080");
 
 pub const XCHANDLES_ORACLE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    731118428ecceb53c3053625d28f4668e1566c496d6b22f46f15aacee9a39fd4
+    1ba03341b929f37687610644f24a0cd36cb6ef019dc7289a0c2172d61482c23c
     "
 ));
 
@@ -126,12 +119,4 @@ impl XchandlesOracleActionArgs {
         }
         .tree_hash()
     }
-}
-
-#[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
-pub struct XchandlesOracleActionSolution {
-    pub handle_hash: Bytes32,
-    #[clvm(rest)]
-    pub rest_treehash: Bytes32,
 }

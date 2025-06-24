@@ -1,13 +1,14 @@
 use crate::{
+    assets_xch_only,
     cli::{
         csv::load_catalog_premine_csv,
         utils::{yes_no_prompt, CliError},
         Db,
     },
     get_coinset_client, get_prefix, launch_catalog_registry, load_catalog_state_schedule_csv,
-    parse_amount, print_medieval_vault_configuration, wait_for_coin, CatalogRegistryConstants,
-    CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint, MedievalVaultInfo, SageClient,
-    StateSchedulerInfo,
+    no_assets, parse_amount, print_medieval_vault_configuration, wait_for_coin,
+    CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint,
+    MedievalVaultInfo, SageClient, StateSchedulerInfo,
 };
 use chia::{
     bls::PublicKey,
@@ -23,7 +24,6 @@ use chia_wallet_sdk::{
     utils::Address,
 };
 use clvmr::NodePtr;
-use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 
 #[allow(clippy::type_complexity)]
 fn get_additional_info_for_launch(
@@ -213,13 +213,7 @@ pub async fn catalog_initiate_launch(
     );
 
     let sage = SageClient::new()?;
-    let derivation_resp = sage
-        .get_derivations(GetDerivations {
-            hardened: false,
-            offset: 0,
-            limit: 1,
-        })
-        .await?;
+    let derivation_resp = sage.get_derivations(false, 0, 1).await?;
     println!(
         "Newly-minted CATs will be sent to the active wallet (address: {})",
         derivation_resp.derivations[0].address
@@ -228,22 +222,14 @@ pub async fn catalog_initiate_launch(
     yes_no_prompt("Do you want to continue generating the offer?")?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(2 + cats_to_launch.len() as u64),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(
+            no_assets(),
+            assets_xch_only(2 + cats_to_launch.len() as u64),
+            fee,
+            None,
+            None,
+            false,
+        )
         .await?;
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
@@ -295,9 +281,9 @@ pub async fn catalog_initiate_launch(
     yes_no_prompt("Spend bundle built - do you want to commence with launch?")?;
 
     for slot in slots {
-        db.save_slot(&mut ctx, slot, 0).await?;
         db.save_catalog_indexed_slot_value(slot.info.value.asset_id, slot.info.value_hash)
             .await?;
+        db.save_slot(&mut ctx, slot, 0).await?;
     }
 
     let spend_bundle = SpendBundle::new(ctx.take(), sig);

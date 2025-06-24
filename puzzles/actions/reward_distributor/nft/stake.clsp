@@ -98,7 +98,7 @@
                         nft_metadata_updater_hash_hash  
                         (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
                             (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
-                            (sha256 1 ())
+                            (sha256_one)
                             nft_transfer_porgram_hash
                             OFFER_MOD_HASH
                         )
@@ -117,13 +117,9 @@
             (list
                 (list ASSERT_MY_COIN_ID my_id)
 
-                (create_slot ENTRY_SLOT_1ST_CURRY_HASH
-                    (sha256 2
-                        (sha256 1 entry_custody_puzzle_hash)
-                        (sha256 2
-                            (sha256 1 cumulative_payout)
-                            (sha256 1 1)
-                        )
+                (create_slot_with_hint ENTRY_SLOT_1ST_CURRY_HASH
+                    (sha256tree
+                        (c entry_custody_puzzle_hash (c cumulative_payout 1))
                     ) ; slot value = (payout_puzzle_hash initial_cumulative_payout . shares)
                     entry_custody_puzzle_hash
                 )

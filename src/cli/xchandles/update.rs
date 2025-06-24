@@ -14,13 +14,12 @@ use chia_wallet_sdk::{
 };
 use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
-use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, quick_sync_xchandles, sign_standard_transaction, spend_security_coin,
-    sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
-    XchandlesSlotValue, XchandlesUpdateAction,
+    assets_xch_and_nft, get_coinset_client, get_constants, hex_string_to_bytes32, new_sk,
+    no_assets, parse_amount, parse_one_sided_offer, quick_sync_xchandles,
+    sign_standard_transaction, spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt,
+    CliError, Db, SageClient, XchandlesApiClient, XchandlesSlotValue, XchandlesUpdateAction,
 };
 
 fn encode_nft(nft_launcher_id: Bytes32) -> Result<String, CliError> {
@@ -76,20 +75,13 @@ pub async fn xchandles_update(
     } else {
         slot.info.value.owner_launcher_id
     };
-    let new_resolved_launcher_id = if let Some(new_resolved_nft) = new_resolved_nft {
-        Address::decode(&new_resolved_nft)?.puzzle_hash
+    let new_resolved_data = if let Some(new_resolved_nft) = new_resolved_nft {
+        Address::decode(&new_resolved_nft)?.puzzle_hash.into()
     } else {
-        slot.info.value.resolved_launcher_id
+        slot.info.value.resolved_data.clone()
     };
 
-    let return_address = sage
-        .get_derivations(GetDerivations {
-            hardened: false,
-            offset: 0,
-            limit: 1,
-        })
-        .await?
-        .derivations[0]
+    let return_address = sage.get_derivations(false, 0, 1).await?.derivations[0]
         .clone()
         .address;
 
@@ -99,35 +91,35 @@ pub async fn xchandles_update(
         encode_nft(slot.info.value.owner_launcher_id)?
     );
     println!(
-        "Current resolved NFT: {}",
-        encode_nft(slot.info.value.resolved_launcher_id)?
+        "Current resolved data: {}",
+        if let Ok(resolved_data) = slot.info.value.resolved_data.clone().try_into() {
+            encode_nft(resolved_data)?
+        } else {
+            hex::encode(slot.info.value.resolved_data.clone())
+        }
     );
     println!("New owner: {}", encode_nft(new_owner_launcher_id)?);
     println!(
-        "New resolved NFT: {}",
-        encode_nft(new_resolved_launcher_id)?
+        "New resolved data: {}",
+        if let Ok(resolved_data) = new_resolved_data.clone().try_into() {
+            encode_nft(resolved_data)?
+        } else {
+            hex::encode(new_resolved_data.clone())
+        }
     );
     println!("NFT return address: {}", return_address);
 
     yes_no_prompt("Continue with update?")?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![encode_nft(slot.info.value.owner_launcher_id)?],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(
+            no_assets(),
+            assets_xch_and_nft(1, encode_nft(slot.info.value.owner_launcher_id)?),
+            fee,
+            None,
+            None,
+            false,
+        )
         .await?;
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
@@ -160,7 +152,7 @@ pub async fn xchandles_update(
         &mut registry,
         slot,
         new_owner_launcher_id,
-        new_resolved_launcher_id,
+        new_resolved_data,
         nft.info.inner_puzzle_hash().into(),
     )?;
 

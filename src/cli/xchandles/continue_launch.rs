@@ -14,37 +14,38 @@ use chia_wallet_sdk::{
 };
 use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
-use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    get_last_onchain_timestamp, hex_string_to_bytes32, load_xchandles_premine_csv, new_sk,
-    parse_amount, parse_one_sided_offer, spend_security_coin, sync_xchandles, wait_for_coin,
-    yes_no_prompt, CatalogPrecommitValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
-    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
-    XchandlesPremineRecord, XchandlesRegisterAction,
+    assets_xch_and_cat, assets_xch_only, get_last_onchain_timestamp, hex_string_to_bytes32,
+    load_xchandles_premine_csv, new_sk, no_assets, parse_amount, parse_one_sided_offer,
+    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CatalogPrecommitValue,
+    CliError, Db, PrecommitCoin, PrecommitLayer, SageClient, XchandlesFactorPricingPuzzleArgs,
+    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesPremineRecord,
+    XchandlesRegisterAction,
 };
 
 fn precommit_value_for_handle(
     handle: &XchandlesPremineRecord,
     payment_asset_id: Bytes32,
     start_time: u64,
+    registration_period: u64,
 ) -> Result<XchandlesPrecommitValue, CliError> {
     let owner_nft_launcher_id = Address::decode(&handle.owner_nft)?.puzzle_hash;
 
     Ok(XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
-        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(1),
+        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(1, registration_period),
         XchandlesFactorPricingSolution {
             current_expiration: 0,
             handle: handle.handle.clone(),
-            num_years: 1,
+            num_periods: 1,
         }
         .tree_hash(),
-        Bytes32::default(),
         handle.handle.clone(),
+        Bytes32::default(),
         start_time,
         owner_nft_launcher_id,
-        owner_nft_launcher_id,
+        owner_nft_launcher_id.into(),
     ))
 }
 
@@ -53,6 +54,7 @@ pub async fn xchandles_continue_launch(
     payment_asset_id_str: String,
     handles_per_spend: usize,
     start_time: Option<u64>,
+    registration_period: u64,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -126,8 +128,12 @@ pub async fn xchandles_continue_launch(
         let inner_puzzle_hashes = handles_to_launch
             .iter()
             .map(|handle| {
-                let precommit_value =
-                    precommit_value_for_handle(handle, payment_asset_id, start_time)?;
+                let precommit_value = precommit_value_for_handle(
+                    handle,
+                    payment_asset_id,
+                    start_time,
+                    registration_period,
+                )?;
                 let precommit_value_ptr = ctx.alloc(&precommit_value)?;
                 let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
 
@@ -204,25 +210,14 @@ pub async fn xchandles_continue_launch(
             yes_no_prompt("Proceed?")?;
 
             let offer_resp = sage
-                .make_offer(MakeOffer {
-                    requested_assets: Assets {
-                        xch: Amount::u64(0),
-                        cats: vec![],
-                        nfts: vec![],
-                    },
-                    offered_assets: Assets {
-                        xch: Amount::u64(1),
-                        cats: vec![CatAmount {
-                            asset_id: payment_asset_id_str,
-                            amount: Amount::u64(handles_payment_total),
-                        }],
-                        nfts: vec![],
-                    },
-                    fee: Amount::u64(fee),
-                    receive_address: None,
-                    expires_at_second: None,
-                    auto_import: false,
-                })
+                .make_offer(
+                    no_assets(),
+                    assets_xch_and_cat(1, payment_asset_id_str, handles_payment_total),
+                    fee,
+                    None,
+                    None,
+                    false,
+                )
                 .await?;
             println!("Offer with id {} generated.", offer_resp.offer_id);
 
@@ -341,7 +336,9 @@ pub async fn xchandles_continue_launch(
     println!("Checking precommitment coins...");
     let precommit_values = handles
         .iter()
-        .map(|handle| precommit_value_for_handle(handle, payment_asset_id, start_time))
+        .map(|handle| {
+            precommit_value_for_handle(handle, payment_asset_id, start_time, registration_period)
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     let precommit_puzzle_hashes = precommit_values
@@ -472,22 +469,7 @@ pub async fn xchandles_continue_launch(
     yes_no_prompt("Proceed?")?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
         .await?;
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
@@ -510,12 +492,7 @@ pub async fn xchandles_continue_launch(
             .get(&precommit_coin_record.coin.parent_coin_info)
             .unwrap();
 
-        let handle_hash = precommit_value
-            .secret_and_handle
-            .handle
-            .clone()
-            .tree_hash()
-            .into();
+        let handle_hash = precommit_value.handle.clone().tree_hash().into();
 
         let precommit_coin = PrecommitCoin::new(
             &mut ctx,
@@ -529,11 +506,7 @@ pub async fn xchandles_continue_launch(
             constants.precommit_payout_puzzle_hash,
             Bytes32::default(),
             precommit_value.clone(),
-            XchandlesFactorPricingPuzzleArgs::get_price(
-                1,
-                &precommit_value.secret_and_handle.handle,
-                1,
-            ),
+            XchandlesFactorPricingPuzzleArgs::get_price(1, &precommit_value.handle, 1),
         )?;
 
         let (left_slot, right_slot) = db
@@ -549,6 +522,7 @@ pub async fn xchandles_continue_launch(
             right_slot,
             precommit_coin,
             1,
+            registration_period,
         )?;
 
         security_coin_conditions = security_coin_conditions.extend(sec_conds);

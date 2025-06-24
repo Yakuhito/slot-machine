@@ -3,12 +3,11 @@ use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{Offer, SpendContext},
 };
-use sage_api::{Amount, Assets, CatAmount, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, hex_string_to_bytes32, new_sk, parse_amount,
-    parse_one_sided_offer, quick_sync_xchandles, spend_security_coin, sync_xchandles,
-    wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs, SageClient,
+    assets_xch_and_cat, get_coinset_client, get_constants, hex_string_to_bytes32, new_sk,
+    no_assets, parse_amount, parse_one_sided_offer, quick_sync_xchandles, spend_security_coin,
+    sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs, SageClient,
     XchandlesApiClient, XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs,
 };
 
@@ -16,10 +15,11 @@ use crate::{
 pub async fn xchandles_extend(
     launcher_id_str: String,
     handle: String,
-    num_years: u64,
+    num_periods: u64,
     testnet11: bool,
     payment_asset_id_str: String,
     payment_cat_base_price_str: String,
+    registration_period: u64,
     local: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -44,7 +44,11 @@ pub async fn xchandles_extend(
     if DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
         != registry.info.state.cat_maker_puzzle_hash.into()
         || registry.info.state.pricing_puzzle_hash
-            != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(payment_cat_base_price).into()
+            != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+                payment_cat_base_price,
+                registration_period,
+            )
+            .into()
     {
         return Err(CliError::Custom(
             "Given payment asset id & base price do not match the current registry's state."
@@ -53,7 +57,7 @@ pub async fn xchandles_extend(
     }
 
     let payment_cat_amount =
-        XchandlesFactorPricingPuzzleArgs::get_price(payment_cat_base_price, &handle, num_years);
+        XchandlesFactorPricingPuzzleArgs::get_price(payment_cat_base_price, &handle, num_periods);
 
     println!("Handle: {}", handle);
     println!(
@@ -85,31 +89,21 @@ pub async fn xchandles_extend(
             slot,
             payment_asset_id,
             payment_cat_base_price,
-            num_years,
+            registration_period,
+            num_periods,
         )?;
 
     yes_no_prompt("Continue with extension?")?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![CatAmount {
-                    asset_id: payment_asset_id_str,
-                    amount: Amount::u64(payment_cat_amount),
-                }],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(
+            no_assets(),
+            assets_xch_and_cat(1, payment_asset_id_str, payment_cat_amount),
+            fee,
+            None,
+            None,
+            false,
+        )
         .await?;
 
     println!("Offer with id {} generated.", offer_resp.offer_id);

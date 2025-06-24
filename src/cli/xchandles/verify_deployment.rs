@@ -5,12 +5,11 @@ use chia_wallet_sdk::{
     driver::{Layer, Puzzle, SpendContext},
     utils::Address,
 };
-use clvm_traits::clvm_tuple;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, load_catalog_state_schedule_csv,
-    load_xchandles_premine_csv, print_medieval_vault_configuration, ActionLayer, CliError,
+    get_coinset_client, hex_string_to_bytes32, load_xchandles_premine_csv,
+    load_xchandles_state_schedule_csv, print_medieval_vault_configuration, ActionLayer, CliError,
     DefaultCatMakerArgs, MultisigSingleton, XchandlesExponentialPremiumRenewPuzzleArgs,
     XchandlesFactorPricingPuzzleArgs, XchandlesRegisterActionSolution, XchandlesRegistry,
     XchandlesRegistryState,
@@ -114,19 +113,20 @@ pub async fn xchandles_verify_deployment(
             parsed_solution.inner_solution,
         )?;
         for action_spend in inner_solution.action_spends {
-            let action_solution =
-                ctx.extract::<XchandlesRegisterActionSolution<NodePtr, NodePtr, NodePtr, NodePtr>>(
-                    action_spend.solution,
-                )?;
+            let action_solution = ctx.extract::<XchandlesRegisterActionSolution<
+                NodePtr,
+                NodePtr,
+                NodePtr,
+                NodePtr,
+                NodePtr,
+            >>(action_spend.solution)?;
 
             let nft_launcher_id =
                 Address::decode(&handles_to_launch[handle_index].owner_nft)?.puzzle_hash;
             if action_solution.handle_hash
                 != handles_to_launch[handle_index].handle.tree_hash().into()
-                || action_solution.rest_data_hash
-                    != clvm_tuple!(nft_launcher_id, nft_launcher_id)
-                        .tree_hash()
-                        .into()
+                || action_solution.data.owner_launcher_id != nft_launcher_id
+                || action_solution.data.resolved_data != nft_launcher_id.into()
             {
                 return Err(CliError::Custom(format!(
                     "Wrong handle registered at index {}",
@@ -177,17 +177,21 @@ pub async fn xchandles_verify_deployment(
         price_schedule_csv_filename
     );
 
-    let price_schedule = load_catalog_state_schedule_csv(price_schedule_csv_filename)?;
+    let price_schedule = load_xchandles_state_schedule_csv(price_schedule_csv_filename)?;
     let mut price_schedule_ok = true;
     for (i, record) in price_schedule.iter().enumerate() {
         let (block, state) = state_scheduler_info.state_schedule[i];
         if record.block_height != block
             || state.pricing_puzzle_hash
-                != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(record.registration_price)
-                    .into()
+                != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+                    record.registration_price,
+                    record.registration_period,
+                )
+                .into()
             || state.expired_handle_pricing_puzzle_hash
                 != XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
                     record.registration_price,
+                    record.registration_period,
                     1000,
                 )
                 .into()

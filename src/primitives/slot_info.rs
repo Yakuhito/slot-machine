@@ -1,10 +1,12 @@
 use std::cmp::Ordering;
 
 use chia::{
-    clvm_utils::{ToTreeHash, TreeHash},
-    protocol::Bytes32,
+    clvm_utils::ToTreeHash,
+    protocol::{Bytes, Bytes32},
 };
-use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{
+    clvm_tuple, ClvmDecoder, ClvmEncoder, FromClvm, FromClvmError, ToClvm, ToClvmError,
+};
 use hex_literal::hex;
 
 // comparison is >s, not >
@@ -16,12 +18,9 @@ pub static SLOT32_MIN_VALUE: [u8; 32] =
 pub static SLOT32_MAX_VALUE: [u8; 32] =
     hex!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub struct SlotInfo<V>
-where
-    V: Copy,
-{
+pub struct SlotInfo<V> {
     pub nonce: u64,
     pub launcher_id: Bytes32,
 
@@ -29,10 +28,7 @@ where
     pub value: V,
 }
 
-impl<V> SlotInfo<V>
-where
-    V: Copy,
-{
+impl<V> SlotInfo<V> {
     pub fn new(launcher_id: Bytes32, nonce: u64, value_hash: Bytes32, value: V) -> Self {
         Self {
             launcher_id,
@@ -111,15 +107,21 @@ impl PartialOrd for CatalogSlotValue {
     }
 }
 
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(list)]
+pub struct XchandlesDataValue {
+    pub owner_launcher_id: Bytes32,
+    #[clvm(rest)]
+    pub resolved_data: Bytes,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesSlotValue {
     pub handle_hash: Bytes32,
     pub neighbors: SlotNeigborsInfo,
     pub expiration: u64,
     pub owner_launcher_id: Bytes32,
-    #[clvm(rest)]
-    pub resolved_launcher_id: Bytes32,
+    pub resolved_data: Bytes,
 }
 
 impl XchandlesSlotValue {
@@ -129,7 +131,7 @@ impl XchandlesSlotValue {
         right_handle_hash: Bytes32,
         expiration: u64,
         owner_launcher_id: Bytes32,
-        resolved_launcher_id: Bytes32,
+        resolved_data: Bytes,
     ) -> Self {
         Self {
             handle_hash,
@@ -139,7 +141,14 @@ impl XchandlesSlotValue {
             },
             expiration,
             owner_launcher_id,
-            resolved_launcher_id,
+            resolved_data,
+        }
+    }
+
+    pub fn rest_data(&self) -> XchandlesDataValue {
+        XchandlesDataValue {
+            owner_launcher_id: self.owner_launcher_id,
+            resolved_data: self.resolved_data.clone(),
         }
     }
 
@@ -150,7 +159,7 @@ impl XchandlesSlotValue {
             SLOT32_MAX_VALUE.into(),
             u64::MAX,
             Bytes32::default(),
-            Bytes32::default(),
+            Bytes::default(),
         )
     }
 
@@ -161,11 +170,11 @@ impl XchandlesSlotValue {
             SLOT32_MAX_VALUE.into(),
             u64::MAX,
             Bytes32::default(),
-            Bytes32::default(),
+            Bytes::default(),
         )
     }
 
-    pub fn with_neighbors(&self, left_handle_hash: Bytes32, right_handle_hash: Bytes32) -> Self {
+    pub fn with_neighbors(self, left_handle_hash: Bytes32, right_handle_hash: Bytes32) -> Self {
         Self {
             handle_hash: self.handle_hash,
             neighbors: SlotNeigborsInfo {
@@ -174,31 +183,8 @@ impl XchandlesSlotValue {
             },
             expiration: self.expiration,
             owner_launcher_id: self.owner_launcher_id,
-            resolved_launcher_id: self.resolved_launcher_id,
+            resolved_data: self.resolved_data,
         }
-    }
-
-    pub fn after_handle_data_hash(&self) -> TreeHash {
-        clvm_tuple!(
-            self.neighbors,
-            clvm_tuple!(
-                self.expiration,
-                clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id),
-            )
-        )
-        .tree_hash()
-    }
-
-    pub fn after_neigbors_data_hash(&self) -> TreeHash {
-        clvm_tuple!(
-            self.expiration,
-            clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id),
-        )
-        .tree_hash()
-    }
-
-    pub fn launcher_ids_data_hash(&self) -> TreeHash {
-        clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id).tree_hash()
     }
 
     pub fn with_expiration(self, expiration: u64) -> Self {
@@ -207,22 +193,54 @@ impl XchandlesSlotValue {
             neighbors: self.neighbors,
             expiration,
             owner_launcher_id: self.owner_launcher_id,
-            resolved_launcher_id: self.resolved_launcher_id,
+            resolved_data: self.resolved_data.clone(),
         }
     }
 
-    pub fn with_launcher_ids(
-        self,
-        owner_launcher_id: Bytes32,
-        resolved_launcher_id: Bytes32,
-    ) -> Self {
+    pub fn with_data(self, owner_launcher_id: Bytes32, resolved_data: Bytes) -> Self {
         Self {
             handle_hash: self.handle_hash,
             neighbors: self.neighbors,
             expiration: self.expiration,
             owner_launcher_id,
-            resolved_launcher_id,
+            resolved_data,
         }
+    }
+}
+
+impl<N, D: ClvmDecoder<Node = N>> FromClvm<D> for XchandlesSlotValue {
+    fn from_clvm(decoder: &D, node: N) -> Result<Self, FromClvmError> {
+        #[allow(clippy::type_complexity)]
+        let ((handle_hash, (left, right)), (expiration, (owner_launcher_id, resolved_data))): (
+            (Bytes32, (Bytes32, Bytes32)),
+            (u64, (Bytes32, Bytes)),
+        ) = FromClvm::from_clvm(decoder, node)?;
+
+        Ok(Self::new(
+            handle_hash,
+            left,
+            right,
+            expiration,
+            owner_launcher_id,
+            resolved_data,
+        ))
+    }
+}
+
+impl<N, E: ClvmEncoder<Node = N>> ToClvm<E> for XchandlesSlotValue {
+    fn to_clvm(&self, encoder: &mut E) -> Result<N, ToClvmError> {
+        let obj = clvm_tuple!(
+            clvm_tuple!(
+                self.handle_hash,
+                clvm_tuple!(self.neighbors.left_value, self.neighbors.right_value)
+            ),
+            clvm_tuple!(
+                self.expiration,
+                clvm_tuple!(self.owner_launcher_id, self.resolved_data.clone())
+            ),
+        );
+
+        obj.to_clvm(encoder)
     }
 }
 

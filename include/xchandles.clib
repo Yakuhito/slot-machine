@@ -1,0 +1,33 @@
+(
+    (defun-inline get_xchandles_slot_value_hash (handle_hash neighbors expiration data)
+        (sha256tree (c
+            (c handle_hash neighbors)
+            (c expiration data)
+        ))
+    )
+
+    (defun-inline xchandles_precommitment_value (
+        cat_maker_hash
+        cat_maker_solution
+        pricing_puzzle_hash
+        pricing_puzzle_solution
+        handle
+        secret
+        start_time
+        owner_launcher_id
+        resolved_data
+    )
+        (sha256tree
+            (c
+                (c
+                    (c cat_maker_hash cat_maker_solution)
+                    (c pricing_puzzle_hash pricing_puzzle_solution)
+                )
+                (c
+                    (c handle secret)
+                    (c start_time (c owner_launcher_id resolved_data))
+                )
+            )
+        )
+    )
+)

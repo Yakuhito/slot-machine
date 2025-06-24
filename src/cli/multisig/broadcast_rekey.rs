@@ -49,6 +49,7 @@ pub async fn multisig_broadcast_rekey(
         fee_str,
         testnet11,
         medieval_vault_coin_id,
+        None,
     )
     .await
 }

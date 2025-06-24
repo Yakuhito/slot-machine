@@ -4,13 +4,12 @@ use chia_wallet_sdk::{
     driver::{Offer, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
-use sage_api::{Amount, Assets, MakeOffer};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, load_catalog_state_schedule_csv, new_sk,
-    parse_amount, parse_one_sided_offer, quick_sync_xchandles, spend_security_coin,
-    sync_multisig_singleton, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db,
-    DefaultCatMakerArgs, DelegatedStateAction, MultisigSingleton, SageClient,
+    assets_xch_only, get_coinset_client, hex_string_to_bytes32, load_xchandles_state_schedule_csv,
+    new_sk, no_assets, parse_amount, parse_one_sided_offer, quick_sync_xchandles,
+    spend_security_coin, sync_multisig_singleton, sync_xchandles, wait_for_coin, yes_no_prompt,
+    CliError, Db, DefaultCatMakerArgs, DelegatedStateAction, MultisigSingleton, SageClient,
     XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
     XchandlesRegistryState,
 };
@@ -78,13 +77,17 @@ pub async fn xchandles_unroll_state_scheduler(
     } else {
         "xchandles_price_schedule_mainnet.csv"
     };
-    let schedule = load_catalog_state_schedule_csv(filename)?;
+    let schedule = load_xchandles_state_schedule_csv(filename)?;
     let mut found = false;
     for record in schedule.iter() {
         let cmph = DefaultCatMakerArgs::curry_tree_hash(record.asset_id.tree_hash().into());
-        let pph = XchandlesFactorPricingPuzzleArgs::curry_tree_hash(record.registration_price);
+        let pph = XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+            record.registration_price,
+            record.registration_period,
+        );
         let eph = XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
             record.registration_price,
+            record.registration_period,
             1000,
         );
         if cmph == new_state.cat_maker_puzzle_hash.into()
@@ -127,22 +130,7 @@ pub async fn xchandles_unroll_state_scheduler(
     let _new_registry = registry.finish_spend(&mut ctx)?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 

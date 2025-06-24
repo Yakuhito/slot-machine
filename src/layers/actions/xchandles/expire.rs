@@ -2,19 +2,19 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
     puzzles::singleton::SingletonStruct,
-    sha2::Sha256,
 };
 use chia_wallet_sdk::{
     driver::{DriverError, Spend, SpendContext},
     types::{announcement_id, Conditions},
 };
-use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{FromClvm, ToClvm};
 use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    Action, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SpendContextExt,
-    XchandlesConstants, XchandlesPrecommitValue, XchandlesRegistry, XchandlesSlotValue,
+    Action, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, Slot, SlotNeigborsInfo,
+    SpendContextExt, XchandlesConstants, XchandlesDataValue, XchandlesPrecommitValue,
+    XchandlesRegistry, XchandlesSlotValue,
 };
 
 use super::{XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution};
@@ -59,103 +59,80 @@ impl XchandlesExpireAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_hash_from_solution(
+    pub fn get_spent_slot_value_from_solution(
         ctx: &SpendContext,
-        solution: NodePtr,
-    ) -> Result<Bytes32, DriverError> {
-        let solution = XchandlesExpireActionSolution::<
-            NodePtr,
-            NodePtr,
-            NodePtr,
-            XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
-        >::from_clvm(ctx, solution)?;
-
-        let mut hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(
-            solution
-                .expired_handle_pricing_puzzle_solution
-                .pricing_program_solution
-                .current_expiration
-                .tree_hash(),
-        );
-        hasher.update(solution.old_rest_hash);
-        let expiration_rest_hash = hasher.finalize();
-
-        hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.neighbors_hash);
-        hasher.update(expiration_rest_hash);
-        let neighbors_expiration_rest_hash = hasher.finalize();
-
-        let handle_hash: Bytes32 = solution
-            .expired_handle_pricing_puzzle_solution
-            .pricing_program_solution
-            .handle
-            .tree_hash()
-            .into();
-        hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(handle_hash.tree_hash());
-        hasher.update(neighbors_expiration_rest_hash);
-
-        Ok(hasher.finalize().into())
-    }
-
-    pub fn get_slot_value_from_solution(
-        ctx: &SpendContext,
-        old_slot_value: XchandlesSlotValue,
-        precommit_coin_value: XchandlesPrecommitValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
+        // truths for epired solution are: Buy_Time, Current_Expiration, Handle
         let solution = XchandlesExpireActionSolution::<
             NodePtr,
-            (),
             NodePtr,
-            XchandlesExponentialPremiumRenewPuzzleSolution<XchandlesFactorPricingSolution>,
+            NodePtr,
+            (NodePtr, (u64, (String, NodePtr))),
+            NodePtr,
         >::from_clvm(ctx, solution)?;
 
-        Ok(XchandlesSlotValue {
-            handle_hash: solution
-                .expired_handle_pricing_puzzle_solution
-                .pricing_program_solution
-                .handle
-                .tree_hash()
-                .into(),
-            neighbors: old_slot_value.neighbors,
-            expiration: precommit_coin_value.start_time
-                + 366
-                    * 24
-                    * 60
-                    * 60
-                    * solution
-                        .expired_handle_pricing_puzzle_solution
-                        .pricing_program_solution
-                        .num_years,
-            owner_launcher_id: precommit_coin_value.owner_launcher_id,
-            resolved_launcher_id: precommit_coin_value.resolved_launcher_id,
-        })
+        let handle = solution.expired_handle_pricing_puzzle_solution.1 .1 .0;
+        let current_expiration = solution.expired_handle_pricing_puzzle_solution.1 .0;
+
+        Ok(XchandlesSlotValue::new(
+            handle.tree_hash().into(),
+            solution.neighbors.left_value,
+            solution.neighbors.right_value,
+            current_expiration,
+            solution.old_rest.owner_launcher_id,
+            solution.old_rest.resolved_data,
+        ))
     }
 
+    pub fn get_created_slot_value_from_solution(
+        ctx: &mut SpendContext,
+        solution: NodePtr,
+    ) -> Result<XchandlesSlotValue, DriverError> {
+        let solution = ctx.extract::<XchandlesExpireActionSolution<
+            NodePtr,
+            NodePtr,
+            NodePtr,
+            NodePtr,
+            NodePtr,
+        >>(solution)?;
+
+        let pricing_output = ctx.run(
+            solution.expired_handle_pricing_puzzle_reveal,
+            solution.expired_handle_pricing_puzzle_solution,
+        )?;
+        let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
+
+        // truths are: Buy_Time, Current_Expiration, Handle
+        let (buy_time, (_, (handle, _))) = ctx.extract::<(u64, (NodePtr, (String, NodePtr)))>(
+            solution.expired_handle_pricing_puzzle_solution,
+        )?;
+
+        Ok(XchandlesSlotValue::new(
+            handle.tree_hash().into(),
+            solution.neighbors.left_value,
+            solution.neighbors.right_value,
+            buy_time + registration_time_delta,
+            solution.new_rest.owner_launcher_id,
+            solution.new_rest.resolved_data,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
         ctx: &mut SpendContext,
         registry: &mut XchandlesRegistry,
         slot: Slot<XchandlesSlotValue>,
-        num_years: u64,
+        num_periods: u64,
         base_handle_price: u64,
+        registration_period: u64,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
-        // spend slot
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
-        registry
-            .pending_items
-            .spent_slots
-            .push(slot.info.value_hash);
-        slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        // announcement is simply premcommitment coin inner ph
-        let expire_ann: Bytes32 = precommit_coin.inner_puzzle_hash;
+        // announcement is simply premcommitment coin ph
+        let expire_ann: Bytes32 = precommit_coin.coin.puzzle_hash;
 
         // spend precommit coin
         precommit_coin.spend(
@@ -164,7 +141,7 @@ impl XchandlesExpireAction {
             my_inner_puzzle_hash,
         )?;
 
-        // finally, spend self
+        // spend self
         let action_solution = XchandlesExpireActionSolution {
             cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
@@ -175,6 +152,7 @@ impl XchandlesExpireAction {
                 XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
                     ctx,
                     base_handle_price,
+                    registration_period,
                     1000,
                 )?
                 .get_puzzle(ctx)?,
@@ -183,54 +161,54 @@ impl XchandlesExpireAction {
                     buy_time: precommit_coin.value.start_time,
                     pricing_program_solution: XchandlesFactorPricingSolution {
                         current_expiration: slot.info.value.expiration,
-                        handle: precommit_coin.value.secret_and_handle.handle.clone(),
-                        num_years,
+                        handle: precommit_coin.value.handle.clone(),
+                        num_periods,
                     },
                 },
             refund_puzzle_hash_hash: precommit_coin.refund_puzzle_hash.tree_hash().into(),
-            secret_hash: precommit_coin
-                .value
-                .secret_and_handle
-                .secret
-                .tree_hash()
-                .into(),
-            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
-            old_rest_hash: slot.info.value.launcher_ids_data_hash().into(),
-            new_rest_hash: clvm_tuple!(
-                precommit_coin.value.owner_launcher_id,
-                precommit_coin.value.resolved_launcher_id
-            )
-            .tree_hash()
-            .into(),
+            secret: precommit_coin.value.secret,
+            neighbors: slot.info.value.neighbors,
+            old_rest: slot.info.value.rest_data(),
+            new_rest: XchandlesDataValue {
+                owner_launcher_id: precommit_coin.value.owner_launcher_id,
+                resolved_data: precommit_coin.value.resolved_data,
+            },
         }
         .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
-        let new_slot_value = Self::get_slot_value_from_solution(
-            ctx,
-            slot.info.value,
-            precommit_coin.value,
-            action_solution,
-        )?;
-        registry.pending_items.slot_values.push(new_slot_value);
+        let new_slot_value = Self::get_created_slot_value_from_solution(ctx, action_solution)?;
+        registry
+            .pending_items
+            .created_slots
+            .push(new_slot_value.clone());
+
+        // spend slot
+        registry
+            .pending_items
+            .spent_slots
+            .push(slot.info.value.clone());
+        slot.spend(ctx, my_inner_puzzle_hash)?;
 
         let mut expire_ann: Vec<u8> = expire_ann.to_vec();
         expire_ann.insert(0, b'x');
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, expire_ann)),
-            registry.created_slot_values_to_slots(vec![new_slot_value])[0],
+            registry
+                .created_slot_values_to_slots(vec![new_slot_value.clone()])
+                .remove(0),
         ))
     }
 }
 
-pub const XCHANDLES_EXPIRE_PUZZLE: [u8; 1185] =
-    hex!("ff02ffff01ff02ffff03ffff22ffff09ffff02ff16ffff04ff02ffff04ff4fff80808080ff5780ffff09ffff02ff16ffff04ff02ffff04ff82016fff80808080ff81f78080ffff01ff04ff17ffff02ff2effff04ff02ffff04ff4fffff04ff81afffff04ffff05ffff02ff82016fff8202ef8080ffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ff8205ef80ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0102ffff0bffff0101ffff0bffff0102ffff0bffff0102ff57ffff02ff16ffff04ff02ffff04ff81afff8080808080ffff0bffff0102ff81f7ffff02ff16ffff04ff02ffff04ff8202efff80808080808080ffff0bffff0102ffff0bffff0102ff820befffff0bffff0101ff8216ef8080ffff0bffff0102ffff0bffff0101ff8204ef80ff823fef80808080ffff0bff3cff62ff42808080ff42808080ff42808080ffff04ffff04ffff04ff10ffff04ff8204efff808080ffff04ffff04ff10ffff04ff820aefff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ffff0bffff0101ff8216ef80ffff04ff8217efffff04ff820aefffff04ff822fefff80808080808080ff8080808080ffff04ffff02ff2affff04ff02ffff04ff0bffff04ffff02ff3affff04ff02ffff04ffff0bffff0101ff8216ef80ffff04ff8217efffff04ffff10ffff06ffff02ff82016fff8202ef8080ff8204ef80ffff04ff823fefff80808080808080ffff04ffff0bffff0101ff8216ef80ff808080808080ff8080808080ff808080808080808080ffff01ff088080ff0180ffff04ffff01ffffff5133ff3eff4202ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff04ff18ffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ff0b8080ffff0bff3cff62ff42808080ff42808080ffff04ff80ffff04ffff04ff17ff8080ff8080808080ff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ff0bffff0bffff0102ffff0bffff0101ff1780ff2f808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff16ffff04ff02ffff04ff09ff80808080ffff02ff16ffff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ffff04ffff04ff2cffff04ffff0113ffff04ffff0101ffff04ffff02ff05ffff04ff2fffff04ff0bff80808080ffff04ff17ff808080808080ffff04ffff04ff14ffff04ffff0effff0178ff2f80ff808080ff5f8080ff04ff2cffff04ffff0112ffff04ff80ffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ff0b8080ffff0bff3cff62ff42808080ff42808080ff8080808080ff018080");
+pub const XCHANDLES_EXPIRE_PUZZLE: [u8; 1081] =
+    hex!("ff02ffff01ff02ffff03ffff22ffff09ffff02ff16ffff04ff02ffff04ff4fff80808080ff5780ffff09ffff02ff16ffff04ff02ffff04ff82016fff80808080ff81f780ffff09ffff0dff827fef80ffff012080ffff15ffff0141ffff0dff827fef808080ffff01ff04ff17ffff02ff2effff04ff02ffff04ffff02ff4fffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ff8205ef80ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ffff02ff16ffff04ff02ffff04ffff04ffff04ffff04ff57ff81af80ffff04ff81f7ff8202ef8080ffff04ffff04ff8216efff820bef80ffff04ff8204efffff04ff825fefff827fef80808080ff808080808080ffff0bff3cff62ff42808080ff42808080ff42808080ff81af8080ffff04ffff05ffff02ff82016fff8202ef8080ffff04ffff04ffff04ff10ffff04ff8204efff808080ffff04ffff04ff10ffff04ff820aefff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff16ffff04ff02ffff04ffff04ffff04ffff0bffff0101ff8216ef80ff8217ef80ffff04ff820aefff822fef8080ff80808080ff8080808080ffff04ffff02ff1affff04ff02ffff04ff0bffff04ffff02ff16ffff04ff02ffff04ffff04ffff04ffff0bffff0101ff8216ef80ff8217ef80ffff04ffff10ffff06ffff02ff82016fff8202ef8080ff8204ef80ff823fef8080ff80808080ff8080808080ff8080808080ff80808080808080ffff01ff088080ff0180ffff04ffff01ffffff5133ff3eff4202ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff04ff18ffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ff0b8080ffff0bff3cff62ff42808080ff42808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff16ffff04ff02ffff04ff09ff80808080ffff02ff16ffff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ffff04ffff04ff2cffff04ffff0113ffff04ffff0101ffff04ff05ffff04ff0bff808080808080ffff04ffff04ff14ffff04ffff0effff0178ff0580ff808080ff178080ff04ff2cffff04ffff0112ffff04ff80ffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ff0b8080ffff0bff3cff62ff42808080ff42808080ff8080808080ff018080");
 
 pub const XCHANDLES_EXPIRE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    0d33fc040b5c86851db401c390fc3cd6fb3d1f51357f1abac3ddc20bb1176843
+    f17bc6e5a0503ce269c6ea2c9c51d74d34531638cc61349e6b1cfa104098001d
     "
 ));
 
@@ -279,25 +257,25 @@ impl XchandlesExpireActionArgs {
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
-pub struct XchandlesExpireActionSolution<CMP, CMS, P, S> {
+pub struct XchandlesExpireActionSolution<CMP, CMS, EP, ES, S> {
     pub cat_maker_puzzle_reveal: CMP,
     pub cat_maker_puzzle_solution: CMS,
-    pub expired_handle_pricing_puzzle_reveal: P,
-    pub expired_handle_pricing_puzzle_solution: S,
+    pub expired_handle_pricing_puzzle_reveal: EP,
+    pub expired_handle_pricing_puzzle_solution: ES,
     pub refund_puzzle_hash_hash: Bytes32,
-    pub secret_hash: Bytes32,
-    pub neighbors_hash: Bytes32,
-    pub old_rest_hash: Bytes32,
+    pub secret: S,
+    pub neighbors: SlotNeigborsInfo,
+    pub old_rest: XchandlesDataValue,
     #[clvm(rest)]
-    pub new_rest_hash: Bytes32,
+    pub new_rest: XchandlesDataValue,
 }
 
-pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 353] =
-    hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff82017fff8201ff808080ffff02ff0effff04ff02ffff04ffff02ff0affff04ff02ffff04ff2fffff04ff5fffff04ffff0101ffff04ffff05ffff14ffff12ffff0183010000ffff3dffff11ff81bfff82017f80ff048080ff048080ffff04ffff05ffff14ff0bffff17ffff0101ffff05ffff14ffff11ff81bfff82017f80ff048080808080ff8080808080808080ffff04ff17ff808080808080ffff06ffff02ff05ffff04ff82017fff8201ff80808080ffff04ffff01ff83015180ffff02ffff03ff0bffff01ff02ff0affff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ffff015f80ff0180ff8080808080808080ffff015f80ff0180ff02ffff03ffff15ff05ff0b80ffff01ff11ff05ff0b80ff8080ff0180ff018080");
+pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE: [u8; 351] =
+    hex!("ff02ffff01ff04ffff10ffff05ffff02ff05ffff04ff8202ffff8203ff808080ffff02ff06ffff04ff02ffff04ffff02ff04ffff04ff02ffff04ff5fffff04ff81bfffff04ffff0101ffff04ffff05ffff14ffff12ffff0183010000ffff3dffff11ff82017fff8202ff80ff0b8080ff0b8080ffff04ffff05ffff14ff17ffff17ffff0101ffff05ffff14ffff11ff82017fff8202ff80ff0b8080808080ff8080808080808080ffff04ff2fff808080808080ffff06ffff02ff05ffff04ff8202ffff8203ff80808080ffff04ffff01ffff02ffff03ff0bffff01ff02ff04ffff04ff02ffff04ff05ffff04ff1bffff04ffff17ff17ffff010180ffff04ff2fffff04ffff02ffff03ffff18ff2fff1780ffff01ff05ffff14ffff12ff5fff1380ff058080ffff015f80ff0180ff8080808080808080ffff015f80ff0180ff02ffff03ffff15ff05ff0b80ffff01ff11ff05ff0b80ff8080ff0180ff018080");
 
 pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    946e180f6006f656200ee6241d03de5bc5c3c6f7606a2159df598ccfd47d740a
+    1e690af48fe029e072638c4952929d3d17795592d59b6cc8c18ddf5921f50285
     "
 ));
 
@@ -305,6 +283,7 @@ pub const XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH: TreeHash = TreeHash::
 #[clvm(curry)]
 pub struct XchandlesExponentialPremiumRenewPuzzleArgs<P> {
     pub base_program: P,
+    pub halving_period: u64,
     pub start_premium: u64,
     pub end_value: u64,
     pub precision: u64,
@@ -348,10 +327,16 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
     pub fn from_scale_factor(
         ctx: &mut SpendContext,
         base_price: u64,
+        registration_period: u64,
         scale_factor: u64,
     ) -> Result<Self, DriverError> {
         Ok(Self {
-            base_program: XchandlesFactorPricingPuzzleArgs::get_puzzle(ctx, base_price)?,
+            base_program: XchandlesFactorPricingPuzzleArgs::get_puzzle(
+                ctx,
+                base_price,
+                registration_period,
+            )?,
+            halving_period: 86400, // one day = 86400 = 60 * 60 * 24 seconds
             start_premium: Self::get_start_premium(scale_factor),
             end_value: Self::get_end_value(scale_factor),
             precision: PREMIUM_PRECISION,
@@ -359,11 +344,19 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         })
     }
 
-    pub fn curry_tree_hash(base_price: u64, scale_factor: u64) -> TreeHash {
+    pub fn curry_tree_hash(
+        base_price: u64,
+        registration_period: u64,
+        scale_factor: u64,
+    ) -> TreeHash {
         CurriedProgram {
             program: XCHANDLES_EXPONENTIAL_PREMIUM_RENEW_PUZZLE_HASH,
             args: XchandlesExponentialPremiumRenewPuzzleArgs::<TreeHash> {
-                base_program: XchandlesFactorPricingPuzzleArgs::curry_tree_hash(base_price),
+                base_program: XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+                    base_price,
+                    registration_period,
+                ),
+                halving_period: 86400, // one day = 86400 = 60 * 60 * 24 seconds
                 start_premium: Self::get_start_premium(scale_factor),
                 end_value: Self::get_end_value(scale_factor),
                 precision: PREMIUM_PRECISION,
@@ -388,7 +381,7 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
         handle: String,
         expiration: u64,
         buy_time: u64,
-        num_years: u64,
+        num_periods: u64,
     ) -> Result<u128, DriverError> {
         let puzzle = self.get_puzzle(ctx)?;
         let solution = ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution::<
@@ -398,7 +391,7 @@ impl XchandlesExponentialPremiumRenewPuzzleArgs<NodePtr> {
             pricing_program_solution: XchandlesFactorPricingSolution {
                 current_expiration: expiration,
                 handle,
-                num_years,
+                num_periods,
             },
         })?;
         let output = ctx.run(puzzle, solution)?;
@@ -431,9 +424,14 @@ mod tests {
     fn test_exponential_premium_puzzle() -> Result<(), DriverError> {
         let mut ctx = SpendContext::new();
 
-        let puzzle =
-            XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(&mut ctx, 0, 1000)?
-                .get_puzzle(&mut ctx)?;
+        let registration_period = 366 * 24 * 60 * 60;
+        let puzzle = XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
+            &mut ctx,
+            0,
+            registration_period,
+            1000,
+        )?
+        .get_puzzle(&mut ctx)?;
 
         let mut last_price = 100_000_000_000;
         for day in 0..28 {
@@ -446,7 +444,7 @@ mod tests {
                     pricing_program_solution: XchandlesFactorPricingSolution {
                         current_expiration: 0,
                         handle: "yakuhito".to_string(),
-                        num_years: 1,
+                        num_periods: 1,
                     },
                 })?;
 
@@ -469,7 +467,10 @@ mod tests {
 
                 assert_eq!(
                     XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
-                        &mut ctx, 0, 1000
+                        &mut ctx,
+                        0,
+                        registration_period,
+                        1000
                     )?
                     .get_price(
                         &mut ctx,
@@ -491,7 +492,7 @@ mod tests {
             pricing_program_solution: XchandlesFactorPricingSolution {
                 current_expiration: 0,
                 handle: "yakuhito".to_string(),
-                num_years: 1,
+                num_periods: 1,
             },
         })?;
 

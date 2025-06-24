@@ -10,17 +10,13 @@ use chia_wallet_sdk::{
     utils::Address,
 };
 
-use sage_api::{
-    Amount, Assets, CoinJson, CoinSpendJson, GetDerivations, MakeOffer, SignCoinSpends,
-};
-
 use crate::{
-    get_coinset_client, get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32,
-    hex_string_to_pubkey, hex_string_to_signature, parse_amount, parse_one_sided_offer,
-    prompt_for_value, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
-    NonceWrapperArgs, RewardDistributorEntrySlotValue, RewardDistributorSlotNonce,
-    RewardDistributorStakeActionArgs, RewardDistributorSyncAction, RewardDistributorUnstakeAction,
-    SageClient, Slot, NONCE_WRAPPER_PUZZLE_HASH,
+    assets_xch_only, get_coinset_client, get_last_onchain_timestamp, get_prefix,
+    hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature, no_assets, parse_amount,
+    parse_one_sided_offer, prompt_for_value, spend_to_coin_spend, sync_distributor, wait_for_coin,
+    yes_no_prompt, CliError, Db, NonceWrapperArgs, RewardDistributorEntrySlotValue,
+    RewardDistributorSlotNonce, RewardDistributorStakeActionArgs, RewardDistributorSyncAction,
+    RewardDistributorUnstakeAction, SageClient, Slot, NONCE_WRAPPER_PUZZLE_HASH,
 };
 
 pub async fn reward_distributor_unstake(
@@ -53,15 +49,7 @@ pub async fn reward_distributor_unstake(
     }
 
     let sage = SageClient::new()?;
-    let custody_info = sage
-        .get_derivations(GetDerivations {
-            hardened: false,
-            offset: 0,
-            limit: 1,
-        })
-        .await?
-        .derivations[0]
-        .clone();
+    let custody_info = sage.get_derivations(false, 0, 1).await?.derivations[0].clone();
     let custody_puzzle_hash = Address::decode(&custody_info.address)?.puzzle_hash;
     let custody_public_key = hex_string_to_pubkey(&custody_info.public_key)?;
     if StandardArgs::curry_tree_hash(custody_public_key) != custody_puzzle_hash.into() {
@@ -183,22 +171,7 @@ pub async fn reward_distributor_unstake(
     yes_no_prompt("Proceed?")?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
@@ -236,28 +209,15 @@ pub async fn reward_distributor_unstake(
 
     let security_coin_sig = hex_string_to_signature(
         &sage
-            .sign_coin_spends(SignCoinSpends {
-                coin_spends: vec![CoinSpendJson {
-                    coin: CoinJson {
-                        parent_coin_info: format!(
-                            "0x{}",
-                            hex::encode(offer.security_coin.parent_coin_info)
-                        ),
-                        puzzle_hash: format!("0x{}", hex::encode(offer.security_coin.puzzle_hash)),
-                        amount: Amount::u64(offer.security_coin.amount),
-                    },
-                    puzzle_reveal: format!(
-                        "0x{:}",
-                        hex::encode(ctx.serialize(&security_coin_spend.puzzle)?.to_vec())
-                    ),
-                    solution: format!(
-                        "0x{:}",
-                        hex::encode(ctx.serialize(&security_coin_spend.solution)?.to_vec())
-                    ),
-                }],
-                auto_submit: false,
-                partial: true,
-            })
+            .sign_coin_spends(
+                vec![spend_to_coin_spend(
+                    &mut ctx,
+                    offer.security_coin,
+                    security_coin_spend,
+                )?],
+                false,
+                true,
+            )
             .await?
             .spend_bundle
             .aggregated_signature

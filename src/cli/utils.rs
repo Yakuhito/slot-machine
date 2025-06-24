@@ -2,16 +2,15 @@ use super::{ClientError, SageClient};
 use chia::{
     bls::{self, PublicKey, SecretKey, Signature},
     consensus::consensus_constants::ConsensusConstants,
-    protocol::{Bytes, Bytes32},
+    protocol::{Bytes, Bytes32, Coin, CoinSpend, Program},
 };
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{DriverError, OfferError},
+    driver::{DriverError, OfferError, Spend, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
     utils::AddressError,
 };
 use hex::FromHex;
-use sage_api::GetDerivations;
 use std::{
     io::{self, Write},
     num::ParseIntError,
@@ -226,11 +225,7 @@ pub async fn get_coin_public_key(
     let mut offset = 0;
     while offset < address_limit {
         let resp = client
-            .get_derivations(GetDerivations {
-                hardened: false,
-                offset,
-                limit: addresses_per_request,
-            })
+            .get_derivations(false, offset, addresses_per_request)
             .await?;
         for derivation in resp.derivations {
             if derivation.address.eq(address) {
@@ -279,6 +274,18 @@ pub async fn get_last_onchain_timestamp(client: &CoinsetClient) -> Result<u64, C
 
         Ok(block.timestamp.unwrap())
     }
+}
+
+pub fn spend_to_coin_spend(
+    ctx: &mut SpendContext,
+    coin: Coin,
+    spend: Spend,
+) -> Result<CoinSpend, CliError> {
+    Ok(CoinSpend {
+        coin,
+        puzzle_reveal: Program::new(ctx.serialize(&spend.puzzle)?.to_vec().into()),
+        solution: Program::new(ctx.serialize(&spend.solution)?.to_vec().into()),
+    })
 }
 
 #[cfg(test)]

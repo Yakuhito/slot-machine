@@ -14,13 +14,12 @@
 
 (mod (
     BASE_PRICE ; base price = price per month of a 6+ character handle with at least one number
+    REGISTRATION_PERIOD ; number of seconds to register a handle for, in seconds
+                        ; most likely 31622400 = 366 days * 24 hours/day * 60 minutes/hour * 60 seconds/minute
     Current_Expiration ; 0 if the handle is being registered, != 0 if extension
     Handle .
-    num_years ; number of years to register the handle for
+    num_periods ; number of periods to register the handle for (e.g., 1 year, 2 years, and so on)
 )
-
-    (defconstant SECONDS_IN_A_YEAR 31622400) ; 366 days * 24 hours/day * 60 minutes/hour * 60 seconds/minute
-
     (defun get_price_factor (length number_of_numbers)
         (/
             (if (> length 2)
@@ -67,10 +66,10 @@
     )
 
     ; main
-    (if (> num_years 0)
+    (if (> num_periods 0)
         (c 
-            (* num_years BASE_PRICE (get_price_factor (strlen Handle) (count_numbers_plus_validate Handle)))
-            (* num_years SECONDS_IN_A_YEAR)
+            (* num_periods BASE_PRICE (get_price_factor (strlen Handle) (count_numbers_plus_validate Handle)))
+            (* num_periods REGISTRATION_PERIOD)
         )
         ; else
         (x)

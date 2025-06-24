@@ -115,9 +115,6 @@ impl RewardDistributorNewEpochAction {
             ))
             .assert_concurrent_puzzle(reward_slot.coin.puzzle_hash);
 
-        // spend slots
-        reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
-
         // spend self
         let action_solution = ctx.alloc(&RewardDistributorNewEpochActionSolution {
             slot_epoch_time: reward_slot.info.value.epoch_start,
@@ -128,13 +125,16 @@ impl RewardDistributorNewEpochAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
+        // spend slot
+        reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
+
         let slot_value = self.get_slot_value_from_solution(ctx, action_solution)?.0;
         distributor.insert(Spend::new(action_puzzle, action_solution));
         Ok((
             new_epoch_conditions,
             distributor
                 .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::REWARD)
-                [0],
+                .remove(0),
             fee,
         ))
     }

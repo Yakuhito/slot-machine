@@ -30,22 +30,16 @@ impl SlotProof {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub struct Slot<V>
-where
-    V: Copy,
-{
+pub struct Slot<V> {
     pub coin: Coin,
     pub proof: SlotProof,
 
     pub info: SlotInfo<V>,
 }
 
-impl<V> Slot<V>
-where
-    V: Copy,
-{
+impl<V> Slot<V> {
     pub fn new(proof: SlotProof, info: SlotInfo<V>) -> Self {
         let parent_coin_id = proof.slot_parent_id(info.launcher_id);
 

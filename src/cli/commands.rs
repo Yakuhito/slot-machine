@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::{reward_distributor_stake, reward_distributor_unstake};
+use crate::{reward_distributor_stake, reward_distributor_unstake, verifications_create_offer};
 
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
@@ -366,8 +366,12 @@ enum XchandlesCliAction {
         payout_address: String,
 
         /// Relative block height for precommits
-        #[arg(long, default_value = "8")]
+        #[arg(long, default_value = "32")]
         relative_block_height: u32,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -394,6 +398,10 @@ enum XchandlesCliAction {
         /// Start timestamp for premine
         #[arg(long)]
         start_time: Option<u64>,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -445,9 +453,9 @@ enum XchandlesCliAction {
         #[arg(long)]
         nft: String,
 
-        /// Number of years to register the handle for
-        #[arg(long)]
-        num_years: u64,
+        /// Number of periods to register the handle for
+        #[arg(long, default_value = "1")]
+        num_periods: u64,
 
         /// Refund address
         #[arg(long)]
@@ -476,6 +484,10 @@ enum XchandlesCliAction {
         /// Payment CAT base price
         #[arg(long)]
         payment_cat_base_price: String,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
 
         /// Use local database instead of XCHandles API
         #[arg(long, default_value_t = false)]
@@ -514,6 +526,10 @@ enum XchandlesCliAction {
         /// Payment CAT base price
         #[arg(long)]
         payment_cat_base_price: String,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
 
         /// Use local database instead of XCHandles API
         #[arg(long, default_value_t = false)]
@@ -571,9 +587,9 @@ enum XchandlesCliAction {
         #[arg(long)]
         expire_time: Option<u64>,
 
-        /// Number of years to register the handle for
-        #[arg(long)]
-        num_years: u64,
+        /// Number of periods to register the handle for
+        #[arg(long, default_value = "1")]
+        num_periods: u64,
 
         /// Refund address
         #[arg(long)]
@@ -598,6 +614,10 @@ enum XchandlesCliAction {
         /// Payment CAT base price
         #[arg(long)]
         payment_cat_base_price: String,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: u64,
 
         /// Committed expiration (old expiration for refunds where someone re-registered the handle before you)
         #[arg(long)]
@@ -638,6 +658,10 @@ enum XchandlesCliAction {
         /// Payment CAT base price hint
         #[arg(long)]
         payment_cat_base_price: Option<String>,
+
+        /// Registration base period in seconds (e.g., a year)
+        #[arg(long, default_value = "31557600")]
+        registration_period: Option<u64>,
     },
 }
 
@@ -923,7 +947,7 @@ enum RewardDistributorCliAction {
 
 #[derive(Subcommand)]
 enum VerificationsCliAction {
-    /// Signs the launch of a new CATalog verification (no offer)
+    /// Signs the launch of a new CATalog verification
     SignLaunch {
         /// Multisig launcher id (hex string)
         #[arg(long)]
@@ -950,7 +974,7 @@ enum VerificationsCliAction {
         testnet11: bool,
     },
 
-    /// Broadcasts the launch of a new CATalog verification (no offer)
+    /// Broadcasts the launch of a new CATalog verification
     BroadcastLaunch {
         /// Multisig launcher id (hex string)
         #[arg(long)]
@@ -963,6 +987,14 @@ enum VerificationsCliAction {
         /// Verification comment (on-chain)
         #[arg(long)]
         comment: String,
+
+        /// Verification request offer to accept
+        #[arg(long)]
+        request_offer: Option<String>,
+
+        /// Address to send funds from verification request offer to
+        #[arg(long)]
+        request_offer_recipient: Option<String>,
 
         /// Signatures (comma-separated list)
         #[arg(long)]
@@ -1028,6 +1060,32 @@ enum VerificationsCliAction {
         /// Signatures (comma-separated list)
         #[arg(long)]
         sigs: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+
+    CreateRequestOffer {
+        /// Verifier multisig launcher id (hex string)
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Asset id (hex string)
+        #[arg(long)]
+        asset_id: String,
+
+        /// Payment asset id (hex string)
+        #[arg(long)]
+        payment_asset_id: String,
+
+        /// Payment asset amount
+        #[arg(long)]
+        payment_amount: String,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1189,6 +1247,7 @@ pub async fn run_cli() {
                 m,
                 payout_address,
                 relative_block_height,
+                registration_period,
                 testnet11,
                 fee,
             } => {
@@ -1197,6 +1256,7 @@ pub async fn run_cli() {
                     m,
                     payout_address,
                     relative_block_height,
+                    registration_period,
                     testnet11,
                     fee,
                 )
@@ -1207,6 +1267,7 @@ pub async fn run_cli() {
                 payment_asset_id,
                 handles_per_spend,
                 start_time,
+                registration_period,
                 testnet11,
                 fee,
             } => {
@@ -1215,6 +1276,7 @@ pub async fn run_cli() {
                     payment_asset_id,
                     handles_per_spend,
                     start_time,
+                    registration_period,
                     testnet11,
                     fee,
                 )
@@ -1234,7 +1296,7 @@ pub async fn run_cli() {
                 launcher_id,
                 handle,
                 nft,
-                num_years,
+                num_periods,
                 refund_address,
                 secret,
                 start_time,
@@ -1242,6 +1304,7 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                registration_period,
                 local,
                 log,
                 fee,
@@ -1250,7 +1313,7 @@ pub async fn run_cli() {
                     launcher_id,
                     handle,
                     nft,
-                    num_years,
+                    num_periods,
                     refund_address,
                     secret,
                     start_time,
@@ -1258,6 +1321,7 @@ pub async fn run_cli() {
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    registration_period,
                     log,
                     local,
                     fee,
@@ -1271,6 +1335,7 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                registration_period,
                 local,
                 fee,
             } => {
@@ -1281,6 +1346,7 @@ pub async fn run_cli() {
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    registration_period,
                     local,
                     fee,
                 )
@@ -1313,11 +1379,12 @@ pub async fn run_cli() {
                 refund_address,
                 secret,
                 expire_time,
-                num_years,
+                num_periods,
                 refund,
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                registration_period,
                 committed_expiration,
                 local,
                 fee,
@@ -1326,7 +1393,7 @@ pub async fn run_cli() {
                     launcher_id,
                     handle,
                     nft,
-                    num_years,
+                    num_periods,
                     refund_address,
                     secret,
                     expire_time,
@@ -1334,6 +1401,7 @@ pub async fn run_cli() {
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    registration_period,
                     committed_expiration,
                     local,
                     fee,
@@ -1349,12 +1417,14 @@ pub async fn run_cli() {
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
+                registration_period,
             } => {
                 xchandles_view(
                     launcher_id,
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,
+                    registration_period,
                 )
                 .await
             }
@@ -1533,12 +1603,23 @@ pub async fn run_cli() {
                 launcher_id,
                 asset_id,
                 comment,
+                request_offer,
+                request_offer_recipient,
                 sigs,
                 testnet11,
                 fee,
             } => {
-                verifications_broadcast_launch(launcher_id, asset_id, comment, sigs, testnet11, fee)
-                    .await
+                verifications_broadcast_launch(
+                    launcher_id,
+                    asset_id,
+                    comment,
+                    request_offer,
+                    request_offer_recipient,
+                    sigs,
+                    testnet11,
+                    fee,
+                )
+                .await
             }
             VerificationsCliAction::View {
                 asset_id,
@@ -1564,6 +1645,24 @@ pub async fn run_cli() {
             } => {
                 verifications_broadcast_revocation(launcher_id, asset_id, sigs, testnet11, fee)
                     .await
+            }
+            VerificationsCliAction::CreateRequestOffer {
+                launcher_id,
+                asset_id,
+                payment_asset_id,
+                payment_amount,
+                testnet11,
+                fee,
+            } => {
+                verifications_create_offer(
+                    launcher_id,
+                    asset_id,
+                    payment_asset_id,
+                    payment_amount,
+                    testnet11,
+                    fee,
+                )
+                .await
             }
         },
     };

@@ -106,7 +106,7 @@ impl RewardDistributorAddEntryAction {
             add_entry_message,
             distributor
                 .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
-                [0],
+                .remove(0),
         ))
     }
 }

@@ -1,15 +1,16 @@
 use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin},
+    clvm_utils::{tree_hash, ToTreeHash},
+    protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
         singleton::{SingletonSolution, SingletonStruct},
         LineageProof, Proof,
     },
 };
+use chia_puzzle_types::singleton::{LauncherSolution, SingletonArgs};
 use chia_wallet_sdk::{
-    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
+    driver::{DriverError, Layer, Puzzle, SingletonLayer, Spend, SpendContext},
     prelude::{Cat, CatSpend},
-    types::run_puzzle,
+    types::{run_puzzle, Condition, Conditions},
 };
 use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
@@ -128,6 +129,135 @@ impl RewardDistributor {
             reserve,
             pending_items: RewardDistributorPendingItems::default(),
         }))
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn from_launcher_solution(
+        ctx: &mut SpendContext,
+        launcher_coin: Coin,
+        launcher_solution: NodePtr,
+    ) -> Result<Option<(RewardDistributorConstants, RewardDistributorState, Coin)>, DriverError>
+    where
+        Self: Sized,
+    {
+        let Ok(launcher_solution) =
+            ctx.extract::<LauncherSolution<(u64, RewardDistributorConstants)>>(launcher_solution)
+        else {
+            return Ok(None);
+        };
+
+        let launcher_id = launcher_coin.coin_id();
+        let (first_epoch_start, constants) = launcher_solution.key_value_list;
+
+        if constants != constants.with_launcher_id(launcher_id) {
+            return Err(DriverError::Custom(
+                "Distributor constants invalid".to_string(),
+            ));
+        }
+
+        let distributor_eve_coin =
+            Coin::new(launcher_id, launcher_solution.singleton_puzzle_hash, 1);
+
+        let initial_state = RewardDistributorState::initial(first_epoch_start);
+
+        Ok(Some((constants, initial_state, distributor_eve_coin)))
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn from_eve_coin_spend(
+        ctx: &mut SpendContext,
+        constants: RewardDistributorConstants,
+        initial_state: RewardDistributorState,
+        eve_coin_spend: CoinSpend,
+        reserve_parent_id: Bytes32,
+        reserve_lineage_proof: LineageProof,
+    ) -> Result<Option<(RewardDistributor, Slot<RewardDistributorRewardSlotValue>)>, DriverError>
+    where
+        Self: Sized,
+    {
+        let eve_coin_puzzle_ptr = ctx.alloc(&eve_coin_spend.puzzle_reveal)?;
+        let eve_coin_puzzle = Puzzle::parse(ctx, eve_coin_puzzle_ptr);
+        let Some(eve_coin_puzzle) = SingletonLayer::<NodePtr>::parse_puzzle(ctx, eve_coin_puzzle)?
+        else {
+            return Err(DriverError::Custom("Eve coin not a singleton".to_string()));
+        };
+
+        let eve_coin_inner_puzzle_hash = tree_hash(ctx, eve_coin_puzzle.inner_puzzle);
+
+        let eve_coin_solution_ptr = ctx.alloc(&eve_coin_spend.solution)?;
+        let eve_coin_output = ctx.run(eve_coin_puzzle_ptr, eve_coin_solution_ptr)?;
+        let eve_coin_output = ctx.extract::<Conditions<NodePtr>>(eve_coin_output)?;
+
+        let Some(Condition::CreateCoin(odd_create_coin)) = eve_coin_output.into_iter().find(|c| {
+            if let Condition::CreateCoin(create_coin) = c {
+                // singletons with amount != 1 are weird and I don't support them
+                create_coin.amount % 2 == 1
+            } else {
+                false
+            }
+        }) else {
+            return Err(DriverError::Custom(
+                "Eve coin did not create a coin".to_string(),
+            ));
+        };
+
+        let new_coin = Coin::new(
+            eve_coin_spend.coin.coin_id(),
+            odd_create_coin.puzzle_hash,
+            odd_create_coin.amount,
+        );
+        let lineage_proof = LineageProof {
+            parent_parent_coin_info: eve_coin_spend.coin.parent_coin_info,
+            parent_inner_puzzle_hash: eve_coin_inner_puzzle_hash.into(),
+            parent_amount: eve_coin_spend.coin.amount,
+        };
+        let reserve = Reserve::new(
+            reserve_parent_id,
+            reserve_lineage_proof,
+            constants.reserve_asset_id,
+            SingletonStruct::new(constants.launcher_id)
+                .tree_hash()
+                .into(),
+            0,
+            0,
+        );
+        let new_distributor = RewardDistributor::new(
+            new_coin,
+            Proof::Lineage(lineage_proof),
+            RewardDistributorInfo::new(initial_state, constants),
+            reserve,
+        );
+
+        if SingletonArgs::curry_tree_hash(
+            constants.launcher_id,
+            new_distributor.info.inner_puzzle_hash(),
+        ) != new_distributor.coin.puzzle_hash.into()
+        {
+            return Err(DriverError::Custom(
+                "Distributor singleton puzzle hash mismatch".to_string(),
+            ));
+        }
+
+        let slot_proof = SlotProof {
+            parent_parent_info: lineage_proof.parent_parent_coin_info,
+            parent_inner_puzzle_hash: lineage_proof.parent_inner_puzzle_hash,
+        };
+        let slot_value = RewardDistributorRewardSlotValue {
+            epoch_start: initial_state.round_time_info.epoch_end,
+            next_epoch_initialized: false,
+            rewards: 0,
+        };
+
+        let slot = Slot::new(
+            slot_proof,
+            SlotInfo::from_value(
+                constants.launcher_id,
+                RewardDistributorSlotNonce::REWARD.to_u64(),
+                slot_value,
+            ),
+        );
+
+        Ok(Some((new_distributor, slot)))
     }
 }
 

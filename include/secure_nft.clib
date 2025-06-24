@@ -1,5 +1,6 @@
 (
     (include curry.clib)
+    (include sha256tree.clib)
     
     ; this function ensures that an NFT with a given inner puzzle hash is spent
     ; launcher_id is computed from the current coin's if (plus other truths)
@@ -24,13 +25,7 @@
             (coinid
                 launcher_id ; parent id
                 (curry_hashes SINGLETON_MOD_HASH
-                    (sha256 2
-                        (sha256 1 SINGLETON_MOD_HASH)
-                        (sha256 2
-                            (sha256 1 launcher_id)
-                            (sha256 1 LAUNCHER_MOD_HASH)
-                        )
-                    ) ; sha256tree singleton struct
+                    (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_MOD_HASH)))
                     (curry_hashes NFT_STATE_LAYER_MOD_HASH
                         (sha256 1 NFT_STATE_LAYER_MOD_HASH)
                         (sha256_one) ; metadata is ()
@@ -39,13 +34,7 @@
                             (sha256 1 NFT_OWNERSHIP_MOD_HASH)
                             (sha256_one) ; owner is ()
                             (curry_hashes TRANSFER_PROGRAM_MOD_HASH
-                                (sha256 2
-                                    (sha256 1 SINGLETON_MOD_HASH)
-                                    (sha256 2
-                                        (sha256 1 launcher_id)
-                                        (sha256 1 LAUNCHER_MOD_HASH)
-                                    )
-                                ) ; sha256tree singleton struct
+                                (sha256tree (c SINGLETON_MOD_HASH (c launcher_id LAUNCHER_MOD_HASH)))
                                 ROYALTY_ADDRESS_HASH
                                 (sha256 1 TRADE_PRICE_PERCENTAGE)
                             ) ; transfer program

@@ -1,13 +1,13 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
+    protocol::{Bytes, Bytes32},
 };
 use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
 use chia_wallet_sdk::{
     driver::{DriverError, Layer, Puzzle, SpendContext},
     types::Conditions,
 };
-use clvm_traits::{clvm_quote, clvm_tuple, FromClvm, ToClvm};
+use clvm_traits::{clvm_quote, clvm_tuple, ClvmEncoder, FromClvm, ToClvm, ToClvmError};
 use clvmr::{Allocator, NodePtr};
 use hex_literal::hex;
 
@@ -77,6 +77,39 @@ impl<V> PrecommitLayer<V> {
         }
         .tree_hash()
     }
+
+    pub fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError>
+    where
+        V: Clone + ToClvm<Allocator>,
+    {
+        let prog_1st_curry = CurriedProgram {
+            program: ctx.precommit_layer_puzzle()?,
+            args: PrecommitLayer1stCurryArgs {
+                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
+                singleton_struct_hash: self.controller_singleton_struct_hash,
+                relative_block_height: self.relative_block_height,
+                payout_puzzle_hash: self.payout_puzzle_hash,
+            },
+        }
+        .to_clvm(ctx)?;
+
+        Ok(CurriedProgram {
+            program: prog_1st_curry,
+            args: PrecommitLayer2ndCurryArgs {
+                refund_puzzle_hash: self.refund_puzzle_hash,
+                value: self.value.clone(),
+            },
+        }
+        .to_clvm(ctx)?)
+    }
+
+    pub fn construct_solution(
+        &self,
+        ctx: &mut SpendContext,
+        solution: PrecommitLayerSolution,
+    ) -> Result<NodePtr, DriverError> {
+        ctx.alloc(&solution)
+    }
 }
 
 impl<V> Layer for PrecommitLayer<V>
@@ -125,25 +158,7 @@ where
     }
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
-        let prog_1st_curry = CurriedProgram {
-            program: ctx.precommit_layer_puzzle()?,
-            args: PrecommitLayer1stCurryArgs {
-                singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
-                singleton_struct_hash: self.controller_singleton_struct_hash,
-                relative_block_height: self.relative_block_height,
-                payout_puzzle_hash: self.payout_puzzle_hash,
-            },
-        }
-        .to_clvm(ctx)?;
-
-        Ok(CurriedProgram {
-            program: prog_1st_curry,
-            args: PrecommitLayer2ndCurryArgs {
-                refund_puzzle_hash: self.refund_puzzle_hash,
-                value: self.value.clone(),
-            },
-        }
-        .to_clvm(ctx)?)
+        self.construct_puzzle(ctx)
     }
 
     fn construct_solution(
@@ -151,7 +166,7 @@ where
         ctx: &mut SpendContext,
         solution: Self::Solution,
     ) -> Result<NodePtr, DriverError> {
-        ctx.alloc(&solution)
+        self.construct_solution(ctx, solution)
     }
 }
 
@@ -187,13 +202,15 @@ pub struct PrecommitLayerSolution {
     pub singleton_inner_puzzle_hash: Bytes32,
 }
 
-#[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(list)]
-pub struct CatalogPrecommitValue<T = NodePtr> {
-    pub refund_info_hash: Bytes32,
-    pub initial_inner_puzzle_hash: Bytes32,
-    #[clvm(rest)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CatalogPrecommitValue<T = NodePtr, S = ()>
+where
+    S: ToTreeHash,
+{
     pub tail_reveal: T,
+    pub initial_inner_puzzle_hash: Bytes32,
+    pub cat_maker_hash: Bytes32,
+    pub cat_maker_solution: S,
 }
 
 impl<T> CatalogPrecommitValue<T> {
@@ -203,14 +220,13 @@ impl<T> CatalogPrecommitValue<T> {
         tail_reveal: T,
     ) -> Self {
         Self {
-            refund_info_hash: clvm_tuple!(
-                DefaultCatMakerArgs::curry_tree_hash(payment_asset_tail_hash_hash.into()),
-                ()
-            )
-            .tree_hash()
-            .into(),
-            initial_inner_puzzle_hash,
             tail_reveal,
+            initial_inner_puzzle_hash,
+            cat_maker_hash: DefaultCatMakerArgs::curry_tree_hash(
+                payment_asset_tail_hash_hash.into(),
+            )
+            .into(),
+            cat_maker_solution: (),
         }
     }
 
@@ -232,87 +248,132 @@ impl<T> CatalogPrecommitValue<T> {
     }
 }
 
-#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
-pub struct XchandlesSecretAndHandle {
-    pub secret: Bytes32,
-    #[clvm(rest)]
-    pub handle: String,
+// On-chain, the CATalog precommit value is just (TAIL . HASH)
+impl<N, E: ClvmEncoder<Node = N>, T, S> ToClvm<E> for CatalogPrecommitValue<T, S>
+where
+    S: ToTreeHash,
+    T: ToClvm<E> + Clone,
+{
+    fn to_clvm(&self, encoder: &mut E) -> Result<N, ToClvmError> {
+        let hash: Bytes32 = clvm_tuple!(
+            self.initial_inner_puzzle_hash,
+            clvm_tuple!(self.cat_maker_hash, self.cat_maker_solution.tree_hash())
+        )
+        .tree_hash()
+        .into();
+
+        clvm_tuple!(self.tail_reveal.clone(), hash).to_clvm(encoder)
+    }
 }
 
-#[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(list)]
-pub struct XchandlesPrecommitValue {
-    pub refund_info_hash: Bytes32,
-    pub secret_and_handle: XchandlesSecretAndHandle,
+// value is:
+// (c
+//   (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution))
+//   (c (c secret handle) (c start_time (c owner_launcher_id resolved_data))))
+// )
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XchandlesPrecommitValue<CS = (), PS = TreeHash, S = Bytes32>
+where
+    CS: ToTreeHash,
+    PS: ToTreeHash,
+    S: ToTreeHash,
+{
+    pub cat_maker_hash: Bytes32,
+    pub cat_maker_solution: CS,
+    pub pricing_puzzle_hash: Bytes32,
+    pub pricing_solution: PS,
+    pub handle: String,
+    pub secret: S,
     pub start_time: u64,
     pub owner_launcher_id: Bytes32,
-    #[clvm(rest)]
-    pub resolved_launcher_id: Bytes32,
+    pub resolved_data: Bytes,
 }
 
-impl XchandlesPrecommitValue {
+impl<CS, PS, S> XchandlesPrecommitValue<CS, PS, S>
+where
+    CS: ToTreeHash,
+    PS: ToTreeHash,
+    S: ToTreeHash,
+{
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        refund_info_hash: Bytes32,
-        secret: Bytes32,
+        cat_maker_hash: Bytes32,
+        cat_maker_solution: CS,
+        pricing_puzzle_hash: Bytes32,
+        pricing_solution: PS,
         handle: String,
+        secret: S,
         start_time: u64,
         owner_launcher_id: Bytes32,
-        resolved_launcher_id: Bytes32,
+        resolved_data: Bytes,
     ) -> Self {
         Self {
-            refund_info_hash,
-            secret_and_handle: XchandlesSecretAndHandle { secret, handle },
+            cat_maker_hash,
+            cat_maker_solution,
+            pricing_puzzle_hash,
+            pricing_solution,
+            handle,
+            secret,
             start_time,
             owner_launcher_id,
-            resolved_launcher_id,
+            resolved_data,
         }
     }
+}
 
+impl XchandlesPrecommitValue<(), TreeHash, Bytes32> {
     #[allow(clippy::too_many_arguments)]
-    pub fn for_normal_registration(
+    pub fn for_normal_registration<PS>(
         payment_tail_hash_hash: TreeHash,
         pricing_puzzle_hash: TreeHash,
-        pricing_puzzle_solution_hash: TreeHash,
-        secret: Bytes32,
+        pricing_puzzle_solution: PS,
         handle: String,
+        secret: Bytes32,
         start_time: u64,
         owner_launcher_id: Bytes32,
-        resolved_launcher_id: Bytes32,
-    ) -> Self {
-        Self {
-            refund_info_hash: clvm_tuple!(
-                clvm_tuple!(
-                    DefaultCatMakerArgs::curry_tree_hash(payment_tail_hash_hash.into()),
-                    ()
-                ),
-                clvm_tuple!(pricing_puzzle_hash, pricing_puzzle_solution_hash)
-            )
-            .tree_hash()
-            .into(),
-            secret_and_handle: XchandlesSecretAndHandle { secret, handle },
+        resolved_data: Bytes,
+    ) -> Self
+    where
+        PS: ToTreeHash,
+    {
+        Self::new(
+            DefaultCatMakerArgs::curry_tree_hash(payment_tail_hash_hash.into()).into(),
+            (),
+            pricing_puzzle_hash.into(),
+            pricing_puzzle_solution.tree_hash(),
+            handle,
+            secret,
             start_time,
             owner_launcher_id,
-            resolved_launcher_id,
-        }
+            resolved_data,
+        )
     }
+}
 
-    pub fn after_refund_info_hash(&self) -> TreeHash {
-        clvm_tuple!(
-            self.secret_and_handle.clone(),
+// On-chain, the precommit value is just a hash of the data it stores
+impl<N, E: ClvmEncoder<Node = N>, CS, PS, S> ToClvm<E> for XchandlesPrecommitValue<CS, PS, S>
+where
+    CS: ToTreeHash,
+    PS: ToTreeHash,
+    S: ToTreeHash,
+{
+    fn to_clvm(&self, encoder: &mut E) -> Result<N, ToClvmError> {
+        let data_hash: Bytes32 = clvm_tuple!(
             clvm_tuple!(
-                self.start_time,
-                clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id)
+                clvm_tuple!(self.cat_maker_hash, self.cat_maker_solution.tree_hash()),
+                clvm_tuple!(self.pricing_puzzle_hash, self.pricing_solution.tree_hash())
+            ),
+            clvm_tuple!(
+                clvm_tuple!(self.handle.tree_hash(), self.secret.tree_hash()),
+                clvm_tuple!(
+                    self.start_time,
+                    clvm_tuple!(self.owner_launcher_id, self.resolved_data.tree_hash())
+                )
             )
         )
         .tree_hash()
-    }
+        .into();
 
-    pub fn after_secret_and_handle_hash(&self) -> TreeHash {
-        clvm_tuple!(
-            self.start_time,
-            clvm_tuple!(self.owner_launcher_id, self.resolved_launcher_id)
-        )
-        .tree_hash()
+        data_hash.to_clvm(encoder)
     }
 }

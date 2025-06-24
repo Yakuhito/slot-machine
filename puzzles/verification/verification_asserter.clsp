@@ -1,0 +1,53 @@
+; verification_asserter.clsp by yakuhito
+;; This puzzle allows CAT issuers to create 'verification offers',
+;;  which are essentially offers where one side just wants to see
+;;  a verification from an issuer be created.
+
+;; In other words, it's a one-sided offer that's only valid if
+;;  the issuer creates a verification.
+
+(mod (
+    SINGLETON_MOD_HASH
+    LAUNCHER_PUZZLE_HASH
+    VERIFIER_SINGLETON_STRUCT_HASH
+    VERIFICATION_INNER_PUZZLE_MAKER
+    (verifier_parent_info verifier_inner_puzzle_hash verifier_amount) ; verifier proof
+    verification_inner_puzzle_maker_solution .
+    launcher_amount ; usually 0
+)
+    (include condition_codes.clib)
+    (include curry.clib)
+
+    (list
+        (list
+            ASSERT_PUZZLE_ANNOUNCEMENT
+            (sha256
+                (curry_hashes_inline SINGLETON_MOD_HASH
+                    (sha256 2
+                        (sha256 1 SINGLETON_MOD_HASH)
+                        (sha256 2 
+                            (sha256 1
+                                (coinid
+                                    (coinid
+                                        verifier_parent_info
+                                        (curry_hashes_inline SINGLETON_MOD_HASH
+                                            VERIFIER_SINGLETON_STRUCT_HASH
+                                            verifier_inner_puzzle_hash
+                                        )
+                                        verifier_amount
+                                    ) ; launcher parent must be verifier singleton
+                                    LAUNCHER_PUZZLE_HASH
+                                    launcher_amount
+                                ) ; verification launcher id is used to check that the intended
+                                ;     verifier created the verification
+                            )
+                            (sha256 1 LAUNCHER_PUZZLE_HASH)
+                        )
+                    ) ; verification SINGLETON_STRUCT hash
+                    (a VERIFICATION_INNER_PUZZLE_MAKER verification_inner_puzzle_maker_solution) ; verification inner puzzle hash
+                ) ; full verification singleton puzzle hash
+                ()
+            )
+        )
+    )
+)

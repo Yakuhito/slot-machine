@@ -1,7 +1,6 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::Bytes32,
-    sha2::Sha256,
+    protocol::{Bytes, Bytes32},
 };
 use chia_puzzles::{SINGLETON_LAUNCHER_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
 use chia_wallet_sdk::{
@@ -13,7 +12,8 @@ use clvmr::NodePtr;
 use hex_literal::hex;
 
 use crate::{
-    Action, Slot, SpendContextExt, XchandlesConstants, XchandlesRegistry, XchandlesSlotValue,
+    Action, Slot, SpendContextExt, XchandlesConstants, XchandlesDataValue, XchandlesRegistry,
+    XchandlesSlotValue,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,45 +44,24 @@ impl XchandlesUpdateAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_hash_from_solution(
+    pub fn get_spent_slot_value_from_solution(
         ctx: &SpendContext,
-        solution: NodePtr,
-    ) -> Result<Bytes32, DriverError> {
-        let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
-
-        let mut hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.neighbors_hash);
-        hasher.update(
-            clvm_tuple!(
-                solution.expiration,
-                clvm_tuple!(
-                    solution.current_owner_launcher_id,
-                    solution.current_resolved_launcher_id
-                )
-            )
-            .tree_hash(),
-        );
-        let after_handle_hash = hasher.finalize();
-
-        hasher = Sha256::new();
-        hasher.update(b"\x02");
-        hasher.update(solution.handle_hash.tree_hash());
-        hasher.update(after_handle_hash);
-
-        Ok(hasher.finalize().into())
-    }
-
-    pub fn get_slot_value_from_solution(
-        ctx: &mut SpendContext,
-        spent_slot_value: XchandlesSlotValue,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
         let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
 
-        Ok(spent_slot_value.with_launcher_ids(
-            solution.new_owner_launcher_id,
-            solution.new_resolved_launcher_id,
+        Ok(solution.current_slot_value)
+    }
+
+    pub fn get_created_slot_value_from_solution(
+        ctx: &mut SpendContext,
+        solution: NodePtr,
+    ) -> Result<XchandlesSlotValue, DriverError> {
+        let solution = ctx.extract::<XchandlesUpdateActionSolution>(solution)?;
+
+        Ok(solution.current_slot_value.with_data(
+            solution.new_data.owner_launcher_id,
+            solution.new_data.resolved_data,
         ))
     }
 
@@ -92,60 +71,67 @@ impl XchandlesUpdateAction {
         registry: &mut XchandlesRegistry,
         slot: Slot<XchandlesSlotValue>,
         new_owner_launcher_id: Bytes32,
-        new_resolved_launcher_id: Bytes32,
+        new_resolved_data: Bytes,
         announcer_inner_puzzle_hash: Bytes32,
     ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
-        // spend slots
-        let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
-
-        registry
-            .pending_items
-            .spent_slots
-            .push(slot.info.value_hash);
-        slot.spend(ctx, my_inner_puzzle_hash)?;
-
         // spend self
         let action_solution = ctx.alloc(&XchandlesUpdateActionSolution {
-            handle_hash: slot.info.value.handle_hash,
-            neighbors_hash: slot.info.value.neighbors.tree_hash().into(),
-            expiration: slot.info.value.expiration,
-            current_owner_launcher_id: slot.info.value.owner_launcher_id,
-            current_resolved_launcher_id: slot.info.value.resolved_launcher_id,
-            new_owner_launcher_id,
-            new_resolved_launcher_id,
+            current_slot_value: slot.info.value.clone(),
+            new_data: XchandlesDataValue {
+                owner_launcher_id: new_owner_launcher_id,
+                resolved_data: new_resolved_data.clone(),
+            },
             announcer_inner_puzzle_hash,
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert(Spend::new(action_puzzle, action_solution));
 
-        let new_slot_value =
-            Self::get_slot_value_from_solution(ctx, slot.info.value, action_solution)?;
+        let new_slot_value = slot
+            .info
+            .value
+            .clone()
+            .with_data(new_owner_launcher_id, new_resolved_data.clone());
 
-        registry.pending_items.slot_values.push(new_slot_value);
+        registry
+            .pending_items
+            .created_slots
+            .push(new_slot_value.clone());
+
+        // spend slot
+        let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
         let msg: Bytes32 = clvm_tuple!(
             slot.info.value.handle_hash,
-            clvm_tuple!(new_owner_launcher_id, new_resolved_launcher_id)
+            clvm_tuple!(new_owner_launcher_id, new_resolved_data.clone())
         )
         .tree_hash()
         .into();
+
+        registry
+            .pending_items
+            .spent_slots
+            .push(slot.info.value.clone());
+        slot.spend(ctx, my_inner_puzzle_hash)?;
+
         Ok((
             Conditions::new().send_message(
                 18,
                 msg.into(),
                 vec![ctx.alloc(&registry.coin.puzzle_hash)?],
             ),
-            registry.created_slot_values_to_slots(vec![new_slot_value])[0],
+            registry
+                .created_slot_values_to_slots(vec![new_slot_value.clone()])
+                .remove(0),
         ))
     }
 }
 
-pub const XCHANDLES_UPDATE_PUZZLE: [u8; 817] = hex!("ff02ffff01ff04ff2fffff04ffff02ff1effff04ff02ffff04ff17ffff04ffff02ff16ffff04ff02ffff04ff819fffff04ff82015fffff04ff8202dfffff04ff8205dfffff04ff820bdfff8080808080808080ff8080808080ffff04ffff02ff1affff04ff02ffff04ff17ffff04ffff02ff16ffff04ff02ffff04ff819fffff04ff82015fffff04ff8202dfffff04ff8217dfffff04ff822fdfff8080808080808080ffff04ff819fff808080808080ffff04ffff04ff18ffff04ffff0112ffff04ffff0bffff0102ffff0bffff0101ff819f80ffff0bffff0102ffff0bffff0101ff8217df80ffff0bffff0101ff822fdf808080ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ffff0bffff0101ff8205df80ff0b808080ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ff823fdf80ffff0bff1cff62ff42808080ff42808080ff42808080ff8080808080ff8080808080ffff04ffff01ffffff3343ff4202ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff04ff10ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0101ff0b8080ffff0bff1cff62ff42808080ff42808080ffff04ff80ffff04ffff04ff17ff8080ff8080808080ffff0bffff0102ffff0bffff0101ff0580ffff0bffff0102ff0bffff0bffff0102ffff0bffff0101ff1780ffff0bffff0102ffff0bffff0101ff2f80ffff0bffff0101ff5f8080808080ff04ff14ffff04ffff0112ffff04ff80ffff04ffff0bff52ffff0bff1cffff0bff1cff62ff0580ffff0bff1cffff0bff72ffff0bff1cffff0bff1cff62ffff0bffff0101ff0b8080ffff0bff1cff62ff42808080ff42808080ff8080808080ff018080");
+pub const XCHANDLES_UPDATE_PUZZLE: [u8; 824] = hex!("ff02ffff01ff02ffff03ffff22ffff09ffff0dff82025f80ffff012080ffff15ffff0141ffff0dff82035f808080ffff01ff04ff2fffff04ffff04ff10ffff04ff82029fff808080ffff04ffff02ff3effff04ff02ffff04ff17ffff04ffff02ff2effff04ff02ffff04ff819fff80808080ff8080808080ffff04ffff02ff16ffff04ff02ffff04ff17ffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff82021fff82031f80ffff04ff82029fff82015f8080ff80808080ff8080808080ffff04ffff04ff14ffff04ffff0112ffff04ffff02ff2effff04ff02ffff04ffff04ff82021fff82015f80ff80808080ffff04ffff0bff5affff0bff12ffff0bff12ff6aff0580ffff0bff12ffff0bff7affff0bff12ffff0bff12ff6affff02ff2effff04ff02ffff04ffff04ff05ffff04ff82059fff0b8080ff8080808080ffff0bff12ffff0bff7affff0bff12ffff0bff12ff6aff8201df80ffff0bff12ff6aff4a808080ff4a808080ff4a808080ff8080808080ff808080808080ffff01ff088080ff0180ffff04ffff01ffffff5533ff4342ffff02ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff04ff18ffff04ffff0bff5affff0bff12ffff0bff12ff6aff0580ffff0bff12ffff0bff7affff0bff12ffff0bff12ff6affff0bffff0101ff0b8080ffff0bff12ff6aff4a808080ff4a808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff1cffff04ffff0112ffff04ff80ffff04ffff0bff5affff0bff12ffff0bff12ff6aff0580ffff0bff12ffff0bff7affff0bff12ffff0bff12ff6affff0bffff0101ff0b8080ffff0bff12ff6aff4a808080ff4a808080ff8080808080ff018080");
 
 pub const XCHANDLES_UPDATE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    83b3d67f1ca1487af1e977b5c1f7b65a108007dadb9ee86ddea9c9ba3790f5a7
+    66824757990b68234d4540b28ea8442bfdb2e875952222f002ea93cd6f8d93cb
     "
 ));
 
@@ -153,16 +139,15 @@ pub const XCHANDLES_UPDATE_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
 #[clvm(curry)]
 pub struct XchandlesUpdateActionArgs {
     pub singleton_mod_hash: Bytes32,
-    pub singleton_launcher_mod_hash_hash: Bytes32,
+    pub singleton_launcher_mod_hash: Bytes32,
     pub slot_1st_curry_hash: Bytes32,
 }
 
 impl XchandlesUpdateActionArgs {
     pub fn new(launcher_id: Bytes32) -> Self {
-        let singleton_launcher_mod_hash: Bytes32 = SINGLETON_LAUNCHER_HASH.into();
         Self {
             singleton_mod_hash: SINGLETON_TOP_LAYER_V1_1_HASH.into(),
-            singleton_launcher_mod_hash_hash: singleton_launcher_mod_hash.tree_hash().into(),
+            singleton_launcher_mod_hash: SINGLETON_LAUNCHER_HASH.into(),
             slot_1st_curry_hash: Slot::<()>::first_curry_hash(launcher_id, 0).into(),
         }
     }
@@ -181,13 +166,8 @@ impl XchandlesUpdateActionArgs {
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
 #[clvm(solution)]
 pub struct XchandlesUpdateActionSolution {
-    pub handle_hash: Bytes32,
-    pub neighbors_hash: Bytes32,
-    pub expiration: u64,
-    pub current_owner_launcher_id: Bytes32,
-    pub current_resolved_launcher_id: Bytes32,
-    pub new_owner_launcher_id: Bytes32,
-    pub new_resolved_launcher_id: Bytes32,
+    pub current_slot_value: XchandlesSlotValue,
+    pub new_data: XchandlesDataValue,
     #[clvm(rest)]
     pub announcer_inner_puzzle_hash: Bytes32,
 }

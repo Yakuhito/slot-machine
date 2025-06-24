@@ -10,6 +10,7 @@ pub mod tests {
     };
     use chia_wallet_sdk::{driver::SpendContext, test::Simulator, types::TESTNET11_CONSTANTS};
     use prettytable::{row, Table};
+
     pub struct Benchmark {
         pub title: String,
         pub data_keys: Vec<String>,

@@ -1,8 +1,8 @@
 ; extend.clsp by yakuhito
 ;; Used to extend the registration of a handle
 
-;; Remember that the slot format is (value (left_value right_value) expiration owner_launcher_id . resolved_launcher_id)
-;;  but we're only interested in 'expiration' (and handle to get correct price factor based on length)
+;; Remember that the slot format is (c (c handle_hash (c left right)) (c expiration (c owner resolved)))
+;;  but we're only modifying 'expiration' (and using handle to get correct price factor based on length)
 
 (mod (
     OFFER_MOD_HASH
@@ -18,32 +18,19 @@
         )
     )
     (
-        handle_hash
         pricing_puzzle_reveal
-        (@ pricing_solution (expiration handle))
+        (@ pricing_solution (expiration handle . rest))
         cat_maker_puzzle_reveal
         cat_maker_solution
-        neighbors_hash . 
-        rest_hash
+        neighbors . 
+        rest_data
     )
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
+    (include xchandles.clib)
     (include curry.clib)
     (include slots.clib)
-
-    (defun get_slot_value_hash (handle_hash neighbors_hash expiration rest_hash)
-        (sha256 2
-            (sha256 1 handle_hash) ; value = handle_hash; we need (sha256tree value) here
-            (sha256 2
-                neighbors_hash
-                (sha256 2
-                    (sha256 1 expiration)
-                    rest_hash
-                )
-            )
-        )
-    )
 
     (defun-inline main ((total_price . registered_time))
         (c
@@ -51,24 +38,23 @@
             (list
                 ; spend slot
                 (spend_slot_inline SLOT_1ST_CURRY_HASH 
-                    (get_slot_value_hash handle_hash neighbors_hash expiration rest_hash)
+                    (get_xchandles_slot_value_hash (sha256 1 handle) neighbors expiration rest_data)
                 )
 
                 ; announcement
-                (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256 2 (sha256 1 total_price) handle_hash)))
+                (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'e' (sha256tree (c total_price handle))))
                 
                 ; can't extend if expired
                 (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
 
                 ; create new slot
                 (create_slot_inline SLOT_1ST_CURRY_HASH
-                    (get_slot_value_hash
-                        handle_hash
-                        neighbors_hash
+                    (get_xchandles_slot_value_hash
+                        (sha256 1 handle)
+                        neighbors
                         (+ expiration registered_time)
-                        rest_hash
+                        rest_data
                     )
-                    handle_hash
                 ) 
                 
                 ; assert payment
@@ -77,12 +63,12 @@
                     (sha256
                         (a 
                             cat_maker_puzzle_reveal
-                            (list OFFER_MOD_HASH cat_maker_solution)
+                            (c OFFER_MOD_HASH cat_maker_solution)
                         ) ; full CAT puzzle hash
                         (sha256tree 
                             (list
-                                (sha256 2 handle_hash (sha256 1 expiration)) ; nonce = (sha256tree (c handle expiration))
-                                (list PAYOUT_PUZZLE_HASH total_price) ; notarized payment
+                                (sha256tree (c handle expiration))
+                                (list PAYOUT_PUZZLE_HASH total_price (list PAYOUT_PUZZLE_HASH)) ; notarized payment
                             )
                         )
                     )
@@ -94,7 +80,6 @@
     (if (all
         (= Cat_Maker_Puzzle_Hash (sha256tree cat_maker_puzzle_reveal)) ; cat maker puzzle reveal is correct
         (= Pricing_Puzzle_Hash (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
-        (= handle_hash (sha256 1 handle)) ; pricing_solution Handle truth
     )
         (main
             (a pricing_puzzle_reveal pricing_solution)

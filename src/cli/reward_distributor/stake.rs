@@ -7,13 +7,12 @@ use chia_wallet_sdk::{
     utils::Address,
 };
 use clvmr::NodePtr;
-use sage_api::{Amount, Assets, GetDerivations, MakeOffer};
 
 use crate::{
-    get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, hex_string_to_pubkey, new_sk, parse_amount, parse_one_sided_offer,
-    spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
-    IntermediaryCoinProof, NftLauncherProof, RewardDistributorStakeAction,
+    assets_xch_and_nft, get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
+    hex_string_to_bytes32, hex_string_to_pubkey, new_sk, no_assets, parse_amount,
+    parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
+    CliError, Db, IntermediaryCoinProof, NftLauncherProof, RewardDistributorStakeAction,
     RewardDistributorSyncAction, SageClient,
 };
 
@@ -49,15 +48,7 @@ pub async fn reward_distributor_stake(
     }
 
     let sage = SageClient::new()?;
-    let custody_info = sage
-        .get_derivations(GetDerivations {
-            hardened: false,
-            offset: 0,
-            limit: 1,
-        })
-        .await?
-        .derivations[0]
-        .clone();
+    let custody_info = sage.get_derivations(false, 0, 1).await?.derivations[0].clone();
     let custody_puzzle_hash = Address::decode(&custody_info.address)?.puzzle_hash;
     if StandardArgs::curry_tree_hash(hex_string_to_pubkey(&custody_info.public_key)?)
         != custody_puzzle_hash.into()
@@ -140,22 +131,14 @@ pub async fn reward_distributor_stake(
     yes_no_prompt("Proceed?")?;
 
     let offer_resp = sage
-        .make_offer(MakeOffer {
-            requested_assets: Assets {
-                xch: Amount::u64(0),
-                cats: vec![],
-                nfts: vec![],
-            },
-            offered_assets: Assets {
-                xch: Amount::u64(1),
-                cats: vec![],
-                nfts: vec![nft_id_str],
-            },
-            fee: Amount::u64(fee),
-            receive_address: None,
-            expires_at_second: None,
-            auto_import: false,
-        })
+        .make_offer(
+            no_assets(),
+            assets_xch_and_nft(1, nft_id_str),
+            fee,
+            None,
+            None,
+            false,
+        )
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 

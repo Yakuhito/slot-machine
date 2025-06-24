@@ -6,6 +6,7 @@ use chia::{
         EveProof, LineageProof, Proof,
     },
 };
+use chia_puzzles::SINGLETON_LAUNCHER_HASH;
 use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
@@ -32,9 +33,22 @@ impl Verification {
         Self { coin, proof, info }
     }
 
-    pub fn after_mint(launcher_parent: Bytes32, info: VerificationInfo) -> Self {
+    pub fn after_mint(
+        launcher_parent: Bytes32,
+        revocation_singleton_launcher_id: Bytes32,
+        verified_data: VerifiedData,
+    ) -> Self {
+        let launcher_coin = Coin::new(launcher_parent, SINGLETON_LAUNCHER_HASH.into(), 0);
+        let verification_launcher_id = launcher_coin.coin_id();
+
+        let info = VerificationInfo {
+            launcher_id: verification_launcher_id,
+            revocation_singleton_launcher_id,
+            verified_data,
+        };
+
         Self {
-            coin: Coin::new(info.launcher_id, Self::puzzle_hash(&info).into(), 1),
+            coin: Coin::new(verification_launcher_id, Self::puzzle_hash(&info).into(), 1),
             proof: Proof::Eve(EveProof {
                 parent_parent_coin_info: launcher_parent,
                 parent_amount: 0,
@@ -171,12 +185,12 @@ mod tests {
         types::Conditions,
     };
 
-    use crate::VerifiedData;
+    use crate::{VerificationAsserter, VerifiedData};
 
     use super::*;
 
     #[test]
-    fn test_verifications() -> anyhow::Result<()> {
+    fn test_verifications_and_asserter() -> anyhow::Result<()> {
         let mut sim = Simulator::new();
         let ctx = &mut SpendContext::new();
         let bls = sim.bls(1);
@@ -186,6 +200,7 @@ mod tests {
         let (create_did, did) = did_launcher.create_simple_did(ctx, &p2)?;
         p2.spend(ctx, bls.coin, create_did)?;
 
+        let verifier_proof = did.child_lineage_proof();
         let did = did.update(
             ctx,
             &p2,
@@ -194,18 +209,17 @@ mod tests {
         let verification_launcher = Launcher::new(did.coin.parent_coin_info, 0);
         // we don't need an extra mojo for the verification coin since it's melted in the same tx
 
-        let test_info = VerificationInfo::new(
-            verification_launcher.coin().coin_id(),
+        let verified_data = VerifiedData {
+            version: 1,
+            asset_id: Bytes32::new([2; 32]),
+            data_hash: Bytes32::new([3; 32]),
+            comment: "Test verification for test testing purposes only.".to_string(),
+        };
+        let verification = Verification::after_mint(
+            verification_launcher.coin().parent_coin_info,
             did.info.launcher_id,
-            VerifiedData {
-                version: 1,
-                asset_id: Bytes32::new([2; 32]),
-                data_hash: Bytes32::new([3; 32]),
-                comment: "Test verification for test testing purposes only.".to_string(),
-            },
+            verified_data.clone(),
         );
-        let verification =
-            Verification::after_mint(verification_launcher.coin().parent_coin_info, test_info);
 
         let (_conds, new_coin) = verification_launcher.with_singleton_amount(1).spend(
             ctx,
@@ -226,6 +240,17 @@ mod tests {
         let parent_puzzle = Puzzle::parse(ctx, parent_puzzle);
         let verification =
             Verification::from_parent_spend(ctx, verification.coin, parent_puzzle)?.unwrap();
+
+        // create verification payment and spend it
+        let verification_asserter = VerificationAsserter::from(
+            did.info.launcher_id,
+            verified_data.version,
+            verified_data.asset_id.tree_hash(),
+            verified_data.data_hash.tree_hash(),
+        );
+
+        let payment_coin = sim.new_coin(verification_asserter.tree_hash().into(), 1337);
+        verification_asserter.spend(ctx, payment_coin, verifier_proof, 0, verified_data.comment)?;
 
         // melt verification coin
         let revocation_singleton_inner_ph = did.info.inner_puzzle_hash().into();

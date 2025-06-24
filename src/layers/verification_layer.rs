@@ -205,6 +205,7 @@ pub struct VerifiedData {
     pub version: u32,
     pub asset_id: Bytes32,
     pub data_hash: Bytes32,
+    #[clvm(rest)]
     pub comment: String,
 }
 

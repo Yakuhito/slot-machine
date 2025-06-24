@@ -120,11 +120,6 @@ impl RewardDistributorWithdrawIncentivesAction {
             )
             .assert_concurrent_puzzle(commitment_slot.coin.puzzle_hash);
 
-        // spend slots
-        let my_inner_puzzle_hash: Bytes32 = distributor.info.inner_puzzle_hash().into();
-        reward_slot.spend(ctx, my_inner_puzzle_hash)?;
-        commitment_slot.spend(ctx, my_inner_puzzle_hash)?;
-
         // spend self
         let action_solution = ctx.alloc(&RewardDistributorWithdrawIncentivesActionSolution {
             reward_slot_epoch_time: reward_slot.info.value.epoch_start,
@@ -140,11 +135,17 @@ impl RewardDistributorWithdrawIncentivesAction {
             .get_slot_value_from_solution(ctx, &distributor.info.constants, action_solution)?
             .0;
         distributor.insert(Spend::new(action_puzzle, action_solution));
+
+        // spend slots
+        let my_inner_puzzle_hash: Bytes32 = distributor.info.inner_puzzle_hash().into();
+        reward_slot.spend(ctx, my_inner_puzzle_hash)?;
+        commitment_slot.spend(ctx, my_inner_puzzle_hash)?;
+
         Ok((
             withdraw_incentives_conditions,
             distributor
                 .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::REWARD)
-                [0],
+                .remove(0),
             withdrawal_share,
         ))
     }
