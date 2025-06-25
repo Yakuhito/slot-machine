@@ -142,6 +142,7 @@ impl XchandlesExpireAction {
         )?;
 
         // spend self
+        let slot = registry.actual_slot(slot);
         let action_solution = XchandlesExpireActionSolution {
             cat_maker_puzzle_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
@@ -177,18 +178,10 @@ impl XchandlesExpireAction {
         .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        registry.insert(Spend::new(action_puzzle, action_solution));
-        let new_slot_value = Self::get_created_slot_value_from_solution(ctx, action_solution)?;
-        registry
-            .pending_items
-            .created_slots
-            .push(new_slot_value.clone());
+        registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
+        let new_slot_value = Self::created_slot_value(ctx, action_solution)?;
 
         // spend slot
-        registry
-            .pending_items
-            .spent_slots
-            .push(slot.info.value.clone());
         slot.spend(ctx, my_inner_puzzle_hash)?;
 
         let mut expire_ann: Vec<u8> = expire_ann.to_vec();
@@ -196,9 +189,7 @@ impl XchandlesExpireAction {
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, expire_ann)),
-            registry
-                .created_slot_values_to_slots(vec![new_slot_value.clone()])
-                .remove(0),
+            registry.created_slot_value_to_slot(new_slot_value.clone()),
         ))
     }
 }

@@ -148,6 +148,7 @@ impl XchandlesRegisterAction {
     ) -> Result<(Conditions, [Slot<XchandlesSlotValue>; 3]), DriverError> {
         let handle: String = precommit_coin.value.handle.clone();
         let handle_hash: Bytes32 = handle.tree_hash().into();
+        let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
         let secret = precommit_coin.value.secret;
         let start_time = precommit_coin.value.start_time;
@@ -206,45 +207,25 @@ impl XchandlesRegisterAction {
         .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        registry.insert(Spend::new(action_puzzle, action_solution));
+        registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         // spend slots
-        registry
-            .pending_items
-            .spent_slots
-            .push(left_slot.info.value.clone());
-        registry
-            .pending_items
-            .spent_slots
-            .push(right_slot.info.value.clone());
-
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
         right_slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        let new_slots_values = Self::get_created_slot_values_from_solution(ctx, action_solution)?;
-
-        registry
-            .pending_items
-            .created_slots
-            .push(new_slots_values[0].clone());
-        registry
-            .pending_items
-            .created_slots
-            .push(new_slots_values[1].clone());
-        registry
-            .pending_items
-            .created_slots
-            .push(new_slots_values[2].clone());
+        let [new_left_slot, new_slot, new_right_slot] =
+            Self::created_slot_values(ctx, action_solution)?;
 
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 registry.coin.puzzle_hash,
                 register_announcement,
             )),
-            registry
-                .created_slot_values_to_slots(new_slots_values.to_vec())
-                .try_into()
-                .unwrap(),
+            [
+                registry.created_slot_value_to_slot(new_left_slot),
+                registry.created_slot_value_to_slot(new_slot),
+                registry.created_slot_value_to_slot(new_right_slot),
+            ],
         ))
     }
 }

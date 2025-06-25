@@ -123,6 +123,8 @@ impl XchandlesExtendAction {
             base_handle_price,
             registration_period,
         )?;
+
+        let slot = registry.actual_slot(slot);
         let action_solution = ctx.alloc(&XchandlesExtendActionSolution {
             pricing_puzzle_reveal,
             pricing_solution: XchandlesFactorPricingSolution {
@@ -137,7 +139,7 @@ impl XchandlesExtendAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        registry.insert(Spend::new(action_puzzle, action_solution));
+        registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         let renew_amount =
             XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, num_periods);
@@ -154,28 +156,18 @@ impl XchandlesExtendAction {
         };
 
         // spend slot
-        registry
-            .pending_items
-            .spent_slots
-            .push(slot.info.value.clone());
         slot.spend(ctx, spender_inner_puzzle_hash)?;
 
         let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, handle).tree_hash().to_vec();
         extend_ann.insert(0, b'e');
 
-        let new_slot_value = Self::get_created_slot_value_from_solution(ctx, action_solution)?;
-        registry
-            .pending_items
-            .created_slots
-            .push(new_slot_value.clone());
+        let new_slot_value = Self::created_slot_value(ctx, action_solution)?;
 
         Ok((
             notarized_payment,
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, extend_ann)),
-            registry
-                .created_slot_values_to_slots(vec![new_slot_value])
-                .remove(0),
+            registry.created_slot_value_to_slot(new_slot_value.clone()),
         ))
     }
 }

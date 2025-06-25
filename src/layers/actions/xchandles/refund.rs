@@ -96,6 +96,7 @@ impl XchandlesRefundAction {
         )?;
 
         // spend self
+        let slot = slot.map(|s| registry.actual_slot(s));
         let action_solution = XchandlesRefundActionSolution {
             precommited_cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
@@ -123,31 +124,16 @@ impl XchandlesRefundAction {
         .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        registry.insert(Spend::new(action_puzzle, action_solution));
+        registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
-        let new_slot_value = if let Some(slot) = &slot {
-            let slot_value = slot.info.value.clone();
-
-            registry
-                .pending_items
-                .created_slots
-                .push(slot_value.clone());
-
-            Some(
-                registry
-                    .created_slot_values_to_slots(vec![slot_value.clone()])
-                    .remove(0),
-            )
+        let new_slot = if let Some(slot) = &slot {
+            Some(registry.created_slot_value_to_slot(slot.info.value.clone()))
         } else {
             None
         };
 
         // if there's a slot, spend it
         if let Some(slot) = slot {
-            registry
-                .pending_items
-                .spent_slots
-                .push(slot.info.value.clone());
             slot.spend(ctx, my_inner_puzzle_hash)?;
         }
 
@@ -156,7 +142,7 @@ impl XchandlesRefundAction {
                 registry.coin.puzzle_hash,
                 refund_announcement,
             )),
-            new_slot_value,
+            new_slot,
         ))
     }
 }
