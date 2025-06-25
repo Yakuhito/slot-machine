@@ -4,7 +4,7 @@ use chia_wallet_sdk::{
     driver::SpendContext,
 };
 
-use crate::{CliError, Db, XchandlesRegistry};
+use crate::{mempool_registry_maybe, CliError, Db, XchandlesRegistry};
 
 pub async fn quick_sync_xchandles(
     client: &CoinsetClient,
@@ -89,36 +89,5 @@ pub async fn quick_sync_xchandles(
             "Could not parse latest XCHandles registry".to_string(),
         ))?;
 
-    let Some(mut mempool_items) = client
-        .get_mempool_items_by_coin_name(on_chain_registry.coin.coin_id())
-        .await?
-        .mempool_items
-    else {
-        return Ok(on_chain_registry);
-    };
-
-    if mempool_items.is_empty() {
-        return Ok(on_chain_registry);
-    }
-
-    let mempool_item = mempool_items.remove(0);
-    let mut registry = on_chain_registry;
-    loop {
-        let Some(registry_spend) = mempool_item
-            .spend_bundle
-            .coin_spends
-            .iter()
-            .find(|c| c.coin.coin_id() == registry.coin.coin_id())
-        else {
-            break;
-        };
-
-        let Some(new_registry) = XchandlesRegistry::from_spend(ctx, registry_spend, constants)?
-        else {
-            break;
-        };
-        registry = new_registry;
-    }
-
-    Ok(registry)
+    mempool_registry_maybe(ctx, on_chain_registry, client).await
 }
