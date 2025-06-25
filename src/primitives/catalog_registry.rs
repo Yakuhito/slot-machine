@@ -4,8 +4,8 @@ use chia::{
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::{clvm_list, match_tuple, FromClvm};
-use clvmr::{Allocator, NodePtr};
+use clvm_traits::{clvm_list, match_tuple};
+use clvmr::NodePtr;
 
 use crate::{
     Action, ActionLayer, ActionLayerSolution, CatalogRefundAction, CatalogRegisterAction,
@@ -121,22 +121,18 @@ impl CatalogRegistry {
 
     pub fn pending_info_from_spend(
         ctx: &mut SpendContext,
-        solution: NodePtr,
+        inner_solution: NodePtr,
         initial_state: CatalogRegistryState,
         constants: CatalogRegistryConstants,
     ) -> Result<CatalogPendingSpendInfo, DriverError> {
-        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
-
         let mut created_slots = vec![];
         let mut spent_slots = vec![];
 
         let mut state_incl_ephemeral: (NodePtr, CatalogRegistryState) =
             (NodePtr::NIL, initial_state);
 
-        let inner_solution = ActionLayer::<CatalogRegistryState, NodePtr>::parse_solution(
-            ctx,
-            solution.inner_solution,
-        )?;
+        let inner_solution =
+            ActionLayer::<CatalogRegistryState, NodePtr>::parse_solution(ctx, inner_solution)?;
 
         for raw_action in inner_solution.action_spends.iter() {
             let res = Self::pending_info_delta_from_spend(
@@ -173,14 +169,11 @@ impl CatalogRegistry {
             return Ok(None);
         };
 
-        let proof = Proof::Lineage(LineageProof {
-            parent_parent_coin_info: coin.parent_coin_info,
-            parent_inner_puzzle_hash: info.inner_puzzle_hash().into(),
-            parent_amount: coin.amount,
-        });
+        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution_ptr)?;
+        let proof = solution.lineage_proof;
 
         let pending_spend =
-            Self::pending_info_from_spend(ctx, solution_ptr, info.state, constants)?;
+            Self::pending_info_from_spend(ctx, solution.inner_solution, info.state, constants)?;
 
         Ok(Some(CatalogRegistry {
             coin,
@@ -190,44 +183,56 @@ impl CatalogRegistry {
         }))
     }
 
+    pub fn child_lineage_proof(&self) -> LineageProof {
+        LineageProof {
+            parent_parent_coin_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+            parent_amount: self.coin.amount,
+        }
+    }
+
     pub fn from_parent_spend(
-        allocator: &mut Allocator,
-        parent_coin: Coin,
-        parent_puzzle: Puzzle,
-        parent_solution: NodePtr,
+        ctx: &mut SpendContext,
+        parent_spend: CoinSpend,
         constants: CatalogRegistryConstants,
     ) -> Result<Option<Self>, DriverError>
     where
         Self: Sized,
     {
-        let Some(parent_info) = CatalogRegistryInfo::parse(allocator, parent_puzzle, constants)?
+        let Some(parent_registry) = CatalogRegistry::from_spend(ctx, parent_spend, constants)?
         else {
             return Ok(None);
         };
 
-        let proof = Proof::Lineage(LineageProof {
-            parent_parent_coin_info: parent_coin.parent_coin_info,
-            parent_inner_puzzle_hash: parent_info.inner_puzzle_hash().into(),
-            parent_amount: parent_coin.amount,
-        });
+        let proof = Proof::Lineage(parent_registry.child_lineage_proof());
 
-        let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
-        let new_state = ActionLayer::<CatalogRegistryState>::get_new_state(
-            allocator,
-            parent_info.state,
-            parent_solution.inner_solution,
-        )?;
-
-        let new_info = parent_info.with_state(new_state);
-        let new_coin = Coin::new(parent_coin.coin_id(), new_info.puzzle_hash().into(), 1);
+        let new_info = parent_registry
+            .info
+            .with_state(parent_registry.pending_spend.latest_state.1);
+        let new_coin = Coin::new(
+            parent_registry.coin.coin_id(),
+            new_info.puzzle_hash().into(),
+            1,
+        );
 
         Ok(Some(CatalogRegistry {
             coin: new_coin,
             proof,
             info: new_info,
-            pending_actions: vec![],
-            pending_slots: vec![],
+            pending_spend: CatalogPendingSpendInfo::new(new_info.state),
         }))
+    }
+
+    pub fn child(&self, child_state: CatalogRegistryState) -> Self {
+        let new_info = self.info.with_state(child_state);
+        let new_coin = Coin::new(self.coin.coin_id(), new_info.puzzle_hash().into(), 1);
+
+        CatalogRegistry {
+            coin: new_coin,
+            proof: Proof::Lineage(self.child_lineage_proof()),
+            info: new_info,
+            pending_spend: CatalogPendingSpendInfo::new(new_info.state),
+        }
     }
 }
 
@@ -243,11 +248,13 @@ impl CatalogRegistry {
         let puzzle = layers.construct_puzzle(ctx)?;
 
         let action_puzzle_hashes = self
-            .pending_actions
+            .pending_spend
+            .actions
             .iter()
             .map(|a| ctx.tree_hash(a.puzzle).into())
             .collect::<Vec<Bytes32>>();
 
+        let child = self.child(self.pending_spend.latest_state.1);
         let solution = layers.construct_solution(
             ctx,
             SingletonSolution {
@@ -263,7 +270,7 @@ impl CatalogRegistry {
                         .ok_or(DriverError::Custom(
                             "Couldn't build proofs for one or more actions".to_string(),
                         ))?,
-                    action_spends: self.pending_actions,
+                    action_spends: self.pending_spend.actions,
                     finalizer_solution: NodePtr::NIL,
                 },
             },
@@ -272,27 +279,7 @@ impl CatalogRegistry {
         let my_spend = Spend::new(puzzle, solution);
         ctx.spend(self.coin, my_spend)?;
 
-        let my_puzzle = Puzzle::parse(ctx, my_spend.puzzle);
-        let new_self = CatalogRegistry::from_parent_spend(
-            ctx,
-            self.coin,
-            my_puzzle,
-            my_spend.solution,
-            self.info.constants,
-        )?
-        .ok_or(DriverError::Custom(
-            "Couldn't parse child registry".to_string(),
-        ))?;
-
-        Ok(new_self)
-    }
-
-    pub fn insert(&mut self, action_spend: Spend) {
-        self.pending_actions.push(action_spend);
-    }
-
-    pub fn insert_multiple(&mut self, action_spends: Vec<Spend>) {
-        self.pending_actions.extend(action_spends);
+        Ok(child)
     }
 
     pub fn new_action<A>(&self) -> A
