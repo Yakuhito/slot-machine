@@ -163,6 +163,7 @@ impl CatalogRegisterAction {
         nft.spend(ctx, eve_nft_inner_spend)?;
 
         // finally, spend self
+        let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);
         let my_solution = CatalogRegisterActionSolution {
             cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
@@ -182,7 +183,7 @@ impl CatalogRegisterAction {
         let my_puzzle = self.construct_puzzle(ctx)?;
 
         let slot_values = self.get_created_slot_values_from_solution(ctx, my_solution)?;
-        catalog.insert(Spend::new(my_puzzle, my_solution));
+        catalog.insert_action_spend(ctx, Spend::new(my_puzzle, my_solution))?;
 
         // spend slots
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
@@ -193,7 +194,10 @@ impl CatalogRegisterAction {
                 catalog.coin.puzzle_hash,
                 register_announcement,
             )),
-            catalog.created_slot_values_to_slots(slot_values.to_vec()),
+            slot_values
+                .into_iter()
+                .map(|s| catalog.created_slot_value_to_slot(s))
+                .collect(),
         ))
     }
 }

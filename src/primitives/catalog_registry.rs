@@ -289,32 +289,19 @@ impl CatalogRegistry {
         A::from_constants(&self.info.constants)
     }
 
-    pub fn created_slot_values_to_slots(
+    pub fn created_slot_value_to_slot(
         &self,
-        slot_values: Vec<CatalogSlotValue>,
-    ) -> Vec<Slot<CatalogSlotValue>> {
+        slot_value: CatalogSlotValue,
+    ) -> Slot<CatalogSlotValue> {
         let proof = SlotProof {
             parent_parent_info: self.coin.parent_coin_info,
             parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
         };
 
-        slot_values
-            .into_iter()
-            .map(|slot_value| {
-                Slot::new(
-                    proof,
-                    SlotInfo::from_value(self.info.constants.launcher_id, 0, slot_value),
-                )
-            })
-            .collect()
-    }
-
-    pub fn add_pending_slots(&mut self, slots: Vec<Slot<CatalogSlotValue>>) {
-        for slot in slots {
-            self.pending_slots
-                .retain(|s| s.info.value.asset_id != slot.info.value.asset_id);
-            self.pending_slots.push(slot);
-        }
+        Slot::new(
+            proof,
+            SlotInfo::from_value(self.info.constants.launcher_id, 0, slot_value),
+        )
     }
 
     pub fn actual_neigbors(
@@ -326,19 +313,51 @@ impl CatalogRegistry {
         let mut left = on_chain_left_slot;
         let mut right = on_chain_right_slot;
 
-        let new_slot_value =
-            CatalogSlotValue::new(new_tail_hash, Bytes32::default(), Bytes32::default());
-
-        for slot in self.pending_slots.iter() {
-            if slot.info.value < new_slot_value && slot.info.value >= left.info.value {
-                left = slot.clone();
+        for slot_value in self.pending_spend.created_slots.iter() {
+            if slot_value.asset_id < new_tail_hash
+                && slot_value.asset_id >= left.info.value.asset_id
+            {
+                left = self.created_slot_value_to_slot(*slot_value);
             }
 
-            if slot.info.value > new_slot_value && slot.info.value <= right.info.value {
-                right = slot.clone();
+            if slot_value.asset_id > new_tail_hash
+                && slot_value.asset_id <= right.info.value.asset_id
+            {
+                right = self.created_slot_value_to_slot(*slot_value);
             }
         }
 
         (left, right)
+    }
+
+    pub fn actual_slot(&self, slot: Slot<CatalogSlotValue>) -> Slot<CatalogSlotValue> {
+        let mut slot = slot;
+        for slot_value in self.pending_spend.created_slots.iter() {
+            if slot.info.value.asset_id == slot_value.asset_id {
+                slot = self.created_slot_value_to_slot(*slot_value);
+            }
+        }
+
+        slot
+    }
+
+    pub fn insert_action_spend(
+        &mut self,
+        ctx: &mut SpendContext,
+        action_spend: Spend,
+    ) -> Result<(), DriverError> {
+        let res = Self::pending_info_delta_from_spend(
+            ctx,
+            action_spend,
+            self.pending_spend.latest_state,
+            self.info.constants,
+        )?;
+
+        self.pending_spend.latest_state = res.0;
+        self.pending_spend.created_slots.extend(res.1);
+        self.pending_spend.spent_slots.extend(res.2);
+        self.pending_spend.actions.push(action_spend);
+
+        Ok(())
     }
 }

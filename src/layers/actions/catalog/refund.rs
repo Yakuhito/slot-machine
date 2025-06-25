@@ -103,6 +103,7 @@ impl CatalogRefundAction {
 
         // if there's a slot, spend it
         if let Some(slot) = slot {
+            let slot = catalog.actual_slot(slot);
             slot.spend(ctx, spender_inner_puzzle_hash)?;
         }
 
@@ -126,7 +127,7 @@ impl CatalogRefundAction {
         let action_solution = action_solution.to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        catalog.insert(Spend::new(action_puzzle, action_solution));
+        catalog.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
         Ok(secure_conditions)
     }
 }
