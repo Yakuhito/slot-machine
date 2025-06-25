@@ -69,7 +69,28 @@ impl CatalogRegisterAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_slot_values_from_solution(
+    pub fn get_spent_slot_values_from_solution(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<[CatalogSlotValue; 2], DriverError> {
+        let params = CatalogRegisterActionSolution::<NodePtr, ()>::from_clvm(ctx, solution)?;
+
+        Ok([
+            CatalogSlotValue::new(
+                params.left_tail_hash,
+                params.left_left_tail_hash,
+                params.right_tail_hash,
+            ),
+            CatalogSlotValue::new(
+                params.right_tail_hash,
+                params.left_tail_hash,
+                params.right_right_tail_hash,
+            ),
+        ])
+    }
+
+    pub fn get_created_slot_values_from_solution(
         &self,
         ctx: &SpendContext,
         solution: NodePtr,
@@ -160,7 +181,7 @@ impl CatalogRegisterAction {
         let my_solution = my_solution.to_clvm(ctx)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_values = self.get_slot_values_from_solution(ctx, my_solution)?;
+        let slot_values = self.get_created_slot_values_from_solution(ctx, my_solution)?;
         catalog.insert(Spend::new(my_puzzle, my_solution));
 
         // spend slots

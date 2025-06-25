@@ -1,18 +1,41 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin},
+    protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, Spend, SpendContext};
-use clvm_traits::FromClvm;
+use clvm_traits::{clvm_list, match_tuple, FromClvm};
 use clvmr::{Allocator, NodePtr};
 
-use crate::{Action, ActionLayer, ActionLayerSolution, CatalogRegisterAction, Registry};
+use crate::{
+    Action, ActionLayer, ActionLayerSolution, CatalogRefundAction, CatalogRegisterAction,
+    DelegatedStateAction, Registry,
+};
 
 use super::{
     CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue, Slot,
     SlotInfo, SlotProof,
 };
+
+#[derive(Debug, Clone)]
+pub struct CatalogPendingSpendInfo {
+    pub actions: Vec<Spend>,
+    pub created_slots: Vec<CatalogSlotValue>,
+    pub spent_slots: Vec<CatalogSlotValue>,
+
+    pub latest_state: (NodePtr, CatalogRegistryState),
+}
+
+impl CatalogPendingSpendInfo {
+    pub fn new(latest_state: CatalogRegistryState) -> Self {
+        Self {
+            actions: vec![],
+            created_slots: vec![],
+            spent_slots: vec![],
+            latest_state: (NodePtr::NIL, latest_state),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 #[must_use]
@@ -21,8 +44,7 @@ pub struct CatalogRegistry {
     pub proof: Proof,
     pub info: CatalogRegistryInfo,
 
-    pub pending_actions: Vec<Spend>,
-    pub pending_slots: Vec<Slot<CatalogSlotValue>>,
+    pub pending_spend: CatalogPendingSpendInfo,
 }
 
 impl CatalogRegistry {
@@ -31,13 +53,143 @@ impl CatalogRegistry {
             coin,
             proof,
             info,
-            pending_actions: vec![],
-            pending_slots: vec![],
+            pending_spend: CatalogPendingSpendInfo::new(info.state),
         }
     }
 }
 
 impl CatalogRegistry {
+    pub fn pending_info_delta_from_spend(
+        ctx: &mut SpendContext,
+        action_spend: Spend,
+        current_state_and_ephemeral: (NodePtr, CatalogRegistryState),
+        constants: CatalogRegistryConstants,
+    ) -> Result<
+        (
+            (NodePtr, CatalogRegistryState),
+            Vec<CatalogSlotValue>, // created slot values
+            Vec<CatalogSlotValue>, // spent slot values
+        ),
+        DriverError,
+    > {
+        let mut created_slots = vec![];
+        let mut spent_slots = vec![];
+
+        let register_action = CatalogRegisterAction::from_constants(&constants);
+        let register_hash = register_action.tree_hash();
+
+        let refund_action = CatalogRefundAction::from_constants(&constants);
+        let refund_hash = refund_action.tree_hash();
+
+        let delegated_state_action =
+            <DelegatedStateAction as Action<CatalogRegistry>>::from_constants(&constants);
+        let delegated_state_hash = delegated_state_action.tree_hash();
+
+        let actual_solution = ctx.alloc(&clvm_list!(
+            current_state_and_ephemeral,
+            action_spend.solution
+        ))?;
+
+        let output = ctx.run(action_spend.puzzle, actual_solution)?;
+        let (new_state_and_ephemeral, _) =
+            ctx.extract::<match_tuple!((NodePtr, CatalogRegistryState), NodePtr)>(output)?;
+
+        let raw_action_hash = ctx.tree_hash(action_spend.puzzle);
+
+        if raw_action_hash == register_hash {
+            spent_slots.extend(
+                register_action.get_spent_slot_values_from_solution(ctx, action_spend.solution)?,
+            );
+
+            created_slots.extend(
+                register_action
+                    .get_created_slot_values_from_solution(ctx, action_spend.solution)?,
+            );
+        } else if raw_action_hash == refund_hash {
+            if let Some(spent_slot) =
+                refund_action.spent_slot_value_from_solution(ctx, action_spend.solution)?
+            {
+                spent_slots.push(spent_slot);
+            }
+        } else if raw_action_hash != delegated_state_hash {
+            // delegated state action has no effect on slots
+            return Err(DriverError::InvalidMerkleProof);
+        }
+
+        Ok((new_state_and_ephemeral, created_slots, spent_slots))
+    }
+
+    pub fn pending_info_from_spend(
+        ctx: &mut SpendContext,
+        solution: NodePtr,
+        initial_state: CatalogRegistryState,
+        constants: CatalogRegistryConstants,
+    ) -> Result<CatalogPendingSpendInfo, DriverError> {
+        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
+
+        let mut created_slots = vec![];
+        let mut spent_slots = vec![];
+
+        let mut state_incl_ephemeral: (NodePtr, CatalogRegistryState) =
+            (NodePtr::NIL, initial_state);
+
+        let inner_solution = ActionLayer::<CatalogRegistryState, NodePtr>::parse_solution(
+            ctx,
+            solution.inner_solution,
+        )?;
+
+        for raw_action in inner_solution.action_spends.iter() {
+            let res = Self::pending_info_delta_from_spend(
+                ctx,
+                *raw_action,
+                state_incl_ephemeral,
+                constants,
+            )?;
+
+            state_incl_ephemeral = res.0;
+            created_slots.extend(res.1);
+            spent_slots.extend(res.2);
+        }
+
+        Ok(CatalogPendingSpendInfo {
+            actions: inner_solution.action_spends,
+            created_slots,
+            spent_slots,
+            latest_state: state_incl_ephemeral,
+        })
+    }
+
+    pub fn from_spend(
+        ctx: &mut SpendContext,
+        spend: CoinSpend,
+        constants: CatalogRegistryConstants,
+    ) -> Result<Option<Self>, DriverError> {
+        let coin = spend.coin;
+        let puzzle_ptr = ctx.alloc(&spend.puzzle_reveal)?;
+        let puzzle = Puzzle::parse(ctx, puzzle_ptr);
+        let solution_ptr = ctx.alloc(&spend.solution)?;
+
+        let Some(info) = CatalogRegistryInfo::parse(ctx, puzzle, constants)? else {
+            return Ok(None);
+        };
+
+        let proof = Proof::Lineage(LineageProof {
+            parent_parent_coin_info: coin.parent_coin_info,
+            parent_inner_puzzle_hash: info.inner_puzzle_hash().into(),
+            parent_amount: coin.amount,
+        });
+
+        let pending_spend =
+            Self::pending_info_from_spend(ctx, solution_ptr, info.state, constants)?;
+
+        Ok(Some(CatalogRegistry {
+            coin,
+            proof,
+            info,
+            pending_spend,
+        }))
+    }
+
     pub fn from_parent_spend(
         allocator: &mut Allocator,
         parent_coin: Coin,
@@ -168,36 +320,6 @@ impl CatalogRegistry {
                 )
             })
             .collect()
-    }
-
-    pub fn get_new_slots_from_spend(
-        &self,
-        ctx: &mut SpendContext,
-        solution: NodePtr,
-    ) -> Result<Vec<Slot<CatalogSlotValue>>, DriverError> {
-        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
-
-        let mut slot_infos = vec![];
-
-        let register_action = CatalogRegisterAction::from_constants(&self.info.constants);
-        let register_hash = register_action.tree_hash();
-
-        let inner_solution = ActionLayer::<CatalogRegistryState, NodePtr>::parse_solution(
-            ctx,
-            solution.inner_solution,
-        )?;
-
-        for raw_action in inner_solution.action_spends {
-            let raw_action_hash = ctx.tree_hash(raw_action.puzzle);
-
-            if raw_action_hash == register_hash {
-                slot_infos.extend(
-                    register_action.get_slot_values_from_solution(ctx, raw_action.solution)?,
-                );
-            }
-        }
-
-        Ok(self.created_slot_values_to_slots(slot_infos))
     }
 
     pub fn add_pending_slots(&mut self, slots: Vec<Slot<CatalogSlotValue>>) {

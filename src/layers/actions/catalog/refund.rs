@@ -56,6 +56,19 @@ impl CatalogRefundAction {
         .to_clvm(ctx)?)
     }
 
+    pub fn spent_slot_value_from_solution(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<Option<CatalogSlotValue>, DriverError> {
+        let params = CatalogRefundActionSolution::<NodePtr, ()>::from_clvm(ctx, solution)?;
+
+        Ok(params.neighbors.map(|neighbors| CatalogSlotValue {
+            asset_id: params.tail_hash,
+            neighbors,
+        }))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn spend(
         self,
