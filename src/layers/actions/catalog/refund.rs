@@ -56,7 +56,7 @@ impl CatalogRefundAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn spent_slot_value_from_solution(
+    pub fn spent_slot_value(
         &self,
         ctx: &SpendContext,
         solution: NodePtr,
@@ -67,6 +67,14 @@ impl CatalogRefundAction {
             asset_id: params.tail_hash,
             neighbors,
         }))
+    }
+
+    pub fn created_slot_value(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<Option<CatalogSlotValue>, DriverError> {
+        self.spent_slot_value(ctx, solution)
     }
 
     #[allow(clippy::too_many_arguments)]

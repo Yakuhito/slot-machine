@@ -69,7 +69,7 @@ impl CatalogRegisterAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_values_from_solution(
+    pub fn spent_slot_values(
         &self,
         ctx: &SpendContext,
         solution: NodePtr,
@@ -90,7 +90,7 @@ impl CatalogRegisterAction {
         ])
     }
 
-    pub fn get_created_slot_values_from_solution(
+    pub fn created_slot_values(
         &self,
         ctx: &SpendContext,
         solution: NodePtr,
@@ -182,7 +182,7 @@ impl CatalogRegisterAction {
         let my_solution = my_solution.to_clvm(ctx)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_values = self.get_created_slot_values_from_solution(ctx, my_solution)?;
+        let slot_values = self.created_slot_values(ctx, my_solution)?;
         catalog.insert_action_spend(ctx, Spend::new(my_puzzle, my_solution))?;
 
         // spend slots

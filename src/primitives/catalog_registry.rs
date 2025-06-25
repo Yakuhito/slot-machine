@@ -97,19 +97,16 @@ impl CatalogRegistry {
         let raw_action_hash = ctx.tree_hash(action_spend.puzzle);
 
         if raw_action_hash == register_hash {
-            spent_slots.extend(
-                register_action.get_spent_slot_values_from_solution(ctx, action_spend.solution)?,
-            );
+            spent_slots.extend(register_action.spent_slot_values(ctx, action_spend.solution)?);
 
-            created_slots.extend(
-                register_action
-                    .get_created_slot_values_from_solution(ctx, action_spend.solution)?,
-            );
+            created_slots.extend(register_action.created_slot_values(ctx, action_spend.solution)?);
         } else if raw_action_hash == refund_hash {
-            if let Some(spent_slot) =
-                refund_action.spent_slot_value_from_solution(ctx, action_spend.solution)?
-            {
+            if let (Some(spent_slot), Some(created_slot)) = (
+                refund_action.spent_slot_value(ctx, action_spend.solution)?,
+                refund_action.created_slot_value(ctx, action_spend.solution)?,
+            ) {
                 spent_slots.push(spent_slot);
+                created_slots.push(created_slot);
             }
         } else if raw_action_hash != delegated_state_hash {
             // delegated state action has no effect on slots

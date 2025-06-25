@@ -1169,6 +1169,20 @@ mod tests {
             slot.cloned(),
         )?;
 
+        // check refund action created/spent slots function
+        let created_slots = catalog.pending_spend.created_slots.clone();
+        let spent_slots = catalog.pending_spend.spent_slots.clone();
+        if slot.is_some() {
+            assert_eq!(created_slots.len(), 1);
+            assert_eq!(created_slots[0], slot.unwrap().info.value);
+
+            assert_eq!(spent_slots.len(), 1);
+            assert_eq!(spent_slots[0], slot.unwrap().info.value);
+        } else {
+            assert_eq!(created_slots.len(), 0);
+            assert_eq!(spent_slots.len(), 0);
+        }
+
         let new_catalog = catalog.finish_spend(ctx)?;
 
         ensure_conditions_met(ctx, sim, secure_cond, 0)?;
@@ -1419,7 +1433,7 @@ mod tests {
                     delegated_state_action_solution.other_singleton_inner_puzzle_hash,
                 )?;
 
-                catalog.insert(action_spend);
+                catalog.insert_action_spend(ctx, action_spend)?;
                 catalog = catalog.finish_spend(ctx)?;
                 // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
                 benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
@@ -1438,6 +1452,18 @@ mod tests {
                 },
             )?;
 
+            // check register action created/spent slots function
+            let created_slots: Vec<Slot<CatalogSlotValue>> = catalog
+                .pending_spend
+                .created_slots
+                .iter()
+                .map(|s| catalog.created_slot_value_to_slot(*s))
+                .collect();
+            let spent_slots = catalog.pending_spend.spent_slots.clone();
+            assert_eq!(spent_slots.len(), 2);
+            assert_eq!(spent_slots[0], left_slot.info.value);
+            assert_eq!(spent_slots[1], right_slot.info.value);
+
             catalog = catalog.finish_spend(ctx)?;
 
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
@@ -1450,6 +1476,13 @@ mod tests {
                     && s.info.value_hash != right_slot.info.value_hash
             });
             slots.extend(new_slots);
+
+            created_slots.into_iter().for_each(|s| {
+                assert!(sim
+                    .coin_state(s.coin.coin_id())
+                    .map(|c| c.spent_height)
+                    .is_some());
+            });
         }
 
         assert_eq!(
