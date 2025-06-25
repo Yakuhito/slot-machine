@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chia::{
     clvm_utils::{tree_hash, ToTreeHash},
     protocol::{Bytes32, Coin},
@@ -59,15 +61,10 @@ pub async fn sync_catalog(
             return Err(CliError::CoinNotSpent(last_coin_id));
         };
 
-        let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(ctx, puzzle_ptr);
-        let solution_ptr = ctx.alloc(&coin_spend.solution)?;
         if !skip_db_save {
             if let Some(ref prev_catalog) = catalog {
-                let new_slots = prev_catalog.get_new_slots_from_spend(ctx, solution_ptr)?;
-
-                for slot in new_slots.iter() {
-                    let asset_id = slot.info.value.asset_id;
+                for slot_value in prev_catalog.pending_spend.spent_slots.iter() {
+                    let asset_id = slot_value.asset_id;
 
                     if let Some(previous_value_hash) =
                         db.get_catalog_indexed_slot_value(asset_id).await?
@@ -82,27 +79,45 @@ pub async fn sync_catalog(
                     }
                 }
 
-                for slot in new_slots {
-                    db.save_catalog_indexed_slot_value(
-                        slot.info.value.asset_id,
-                        slot.info.value_hash,
-                    )
-                    .await?;
-                    db.save_slot(ctx, slot, 0).await?;
+                let mut processed_values = HashSet::<Bytes32>::new();
+                for slot_value in prev_catalog.pending_spend.spent_slots.iter() {
+                    let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
+                    if processed_values.contains(&slot_value_hash) {
+                        continue;
+                    }
+                    processed_values.insert(slot_value_hash);
+
+                    // same slot can be created and spent mutliple times in the same block
+                    let no_spent = prev_catalog
+                        .pending_spend
+                        .spent_slots
+                        .iter()
+                        .filter(|sv| sv == &slot_value)
+                        .count();
+                    let no_created = prev_catalog
+                        .pending_spend
+                        .created_slots
+                        .iter()
+                        .filter(|sv| sv == &slot_value)
+                        .count();
+                    if no_spent != no_created {
+                        continue;
+                    }
+
+                    db.save_catalog_indexed_slot_value(slot_value.asset_id, slot_value_hash)
+                        .await?;
+                    db.save_slot(ctx, prev_catalog.created_slot_value_to_slot(*slot_value), 0)
+                        .await?;
                 }
             }
         }
 
-        if let Some(some_catalog) = CatalogRegistry::from_parent_spend(
-            ctx,
-            coin_record.coin,
-            parent_puzzle,
-            solution_ptr,
-            constants,
-        )? {
+        if let Some(some_catalog) = CatalogRegistry::from_parent_spend(ctx, &coin_spend, constants)?
+        {
             last_coin_id = some_catalog.coin.coin_id();
             catalog = Some(some_catalog);
         } else if coin_record.coin.coin_id() == constants.launcher_id {
+            let solution_ptr = ctx.alloc(&coin_spend.solution)?;
             let solution = ctx.extract::<LauncherSolution<NodePtr>>(solution_ptr)?;
             let catalog_eve_coin =
                 Coin::new(constants.launcher_id, solution.singleton_puzzle_hash, 1);
