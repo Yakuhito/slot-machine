@@ -57,7 +57,7 @@ impl XchandlesRegisterAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_values_from_solution(
+    pub fn spent_slot_values(
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<[XchandlesSlotValue; 2], DriverError> {
@@ -89,7 +89,7 @@ impl XchandlesRegisterAction {
         ])
     }
 
-    pub fn get_created_slot_values_from_solution(
+    pub fn created_slot_values(
         ctx: &mut SpendContext,
         solution: NodePtr,
     ) -> Result<[XchandlesSlotValue; 3], DriverError> {

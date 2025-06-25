@@ -56,7 +56,7 @@ impl XchandlesRefundAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_from_solution(
+    pub fn spent_slot_value(
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<Option<XchandlesSlotValue>, DriverError> {
@@ -68,7 +68,7 @@ impl XchandlesRefundAction {
         Ok(solution.slot_value)
     }
 
-    pub fn get_created_slot_value(
+    pub fn created_slot_value(
         spent_slot_value: Option<XchandlesSlotValue>,
     ) -> Option<XchandlesSlotValue> {
         spent_slot_value // nothing changed; just oracle

@@ -42,7 +42,7 @@ impl XchandlesOracleAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_from_solution(
+    pub fn spent_slot_value(
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
@@ -51,7 +51,7 @@ impl XchandlesOracleAction {
         Ok(slot_value)
     }
 
-    pub fn get_created_slot_value(spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
+    pub fn created_slot_value(spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
         spent_slot_value
     }
 

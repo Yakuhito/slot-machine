@@ -1,6 +1,6 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes, Bytes32, Coin},
+    protocol::{Bytes, Bytes32, Coin, CoinSpend},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_puzzle_types::singleton::{LauncherSolution, SingletonArgs};
@@ -12,9 +12,9 @@ use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, CliError,
-    DelegatedStateAction, Registry, XchandlesExpireAction, XchandlesExtendAction,
-    XchandlesOracleAction, XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
+    eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, DelegatedStateAction,
+    Registry, XchandlesExpireAction, XchandlesExtendAction, XchandlesOracleAction,
+    XchandlesRefundAction, XchandlesRegisterAction, XchandlesUpdateAction,
 };
 
 use super::{
@@ -22,12 +22,24 @@ use super::{
     XchandlesSlotValue,
 };
 
-#[derive(Debug, Clone, Default)]
-pub struct XchandlesRegistryPendingItems {
+#[derive(Debug, Clone)]
+pub struct XchandlesPendingSpendInfo {
     pub actions: Vec<Spend>,
-
     pub spent_slots: Vec<XchandlesSlotValue>,
     pub created_slots: Vec<XchandlesSlotValue>,
+
+    pub latest_state: (NodePtr, XchandlesRegistryState),
+}
+
+impl XchandlesPendingSpendInfo {
+    pub fn new(latest_state: XchandlesRegistryState) -> Self {
+        Self {
+            actions: vec![],
+            created_slots: vec![],
+            spent_slots: vec![],
+            latest_state: (NodePtr::NIL, latest_state),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -37,7 +49,7 @@ pub struct XchandlesRegistry {
     pub proof: Proof,
     pub info: XchandlesRegistryInfo,
 
-    pub pending_items: XchandlesRegistryPendingItems,
+    pub pending_spend: XchandlesPendingSpendInfo,
 }
 
 impl XchandlesRegistry {
@@ -46,7 +58,7 @@ impl XchandlesRegistry {
             coin,
             proof,
             info,
-            pending_items: XchandlesRegistryPendingItems::default(),
+            pending_spend: XchandlesPendingSpendInfo::new(info.state),
         }
     }
 }
@@ -57,44 +69,225 @@ impl Registry for XchandlesRegistry {
 }
 
 impl XchandlesRegistry {
+    #[allow(clippy::type_complexity)]
+    pub fn pending_info_delta_from_spend(
+        ctx: &mut SpendContext,
+        action_spend: Spend,
+        current_state_and_ephemeral: (NodePtr, XchandlesRegistryState),
+        constants: XchandlesConstants,
+    ) -> Result<
+        (
+            (NodePtr, XchandlesRegistryState), // pending state
+            Vec<XchandlesSlotValue>,           // created slot values
+            Vec<XchandlesSlotValue>,           // spent slot values
+        ),
+        DriverError,
+    > {
+        let mut created_slots = vec![];
+        let mut spent_slots = vec![];
+
+        let expire_action = XchandlesExpireAction::from_constants(&constants);
+        let expire_action_hash = expire_action.tree_hash();
+
+        let extend_action = XchandlesExtendAction::from_constants(&constants);
+        let extend_action_hash = extend_action.tree_hash();
+
+        let oracle_action = XchandlesOracleAction::from_constants(&constants);
+        let oracle_action_hash = oracle_action.tree_hash();
+
+        let register_action = XchandlesRegisterAction::from_constants(&constants);
+        let register_action_hash = register_action.tree_hash();
+
+        let update_action = XchandlesUpdateAction::from_constants(&constants);
+        let update_action_hash = update_action.tree_hash();
+
+        let refund_action = XchandlesRefundAction::from_constants(&constants);
+        let refund_action_hash = refund_action.tree_hash();
+
+        let delegated_state_action =
+            <DelegatedStateAction as Action<XchandlesRegistry>>::from_constants(&constants);
+        let delegated_state_action_hash = delegated_state_action.tree_hash();
+
+        let actual_solution = ctx.alloc(&clvm_list!(
+            current_state_and_ephemeral,
+            action_spend.solution
+        ))?;
+
+        let output = ctx.run(action_spend.puzzle, actual_solution)?;
+        let (new_state_and_ephemeral, _) =
+            ctx.extract::<match_tuple!((NodePtr, XchandlesRegistryState), NodePtr)>(output)?;
+
+        let raw_action_hash = ctx.tree_hash(action_spend.puzzle);
+
+        if raw_action_hash == extend_action_hash {
+            spent_slots.push(XchandlesExtendAction::spent_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+            created_slots.push(XchandlesExtendAction::created_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash == oracle_action_hash {
+            let slot_value = XchandlesOracleAction::spent_slot_value(ctx, action_spend.solution)?;
+
+            spent_slots.push(slot_value.clone());
+            created_slots.push(slot_value);
+        } else if raw_action_hash == update_action_hash {
+            spent_slots.push(XchandlesUpdateAction::spent_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+            created_slots.push(XchandlesUpdateAction::created_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash == refund_action_hash {
+            if let Some(slot_value) =
+                XchandlesRefundAction::spent_slot_value(ctx, action_spend.solution)?
+            {
+                spent_slots.push(slot_value.clone());
+                created_slots.push(slot_value);
+            };
+        } else if raw_action_hash == expire_action_hash {
+            spent_slots.push(XchandlesExpireAction::spent_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+            created_slots.push(XchandlesExpireAction::created_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash == register_action_hash {
+            spent_slots.extend(XchandlesRegisterAction::spent_slot_values(
+                ctx,
+                action_spend.solution,
+            )?);
+            created_slots.extend(XchandlesRegisterAction::created_slot_values(
+                ctx,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash != delegated_state_action_hash {
+            // delegated state action has no effect on slots
+            return Err(DriverError::InvalidMerkleProof);
+        }
+
+        Ok((new_state_and_ephemeral, created_slots, spent_slots))
+    }
+
+    pub fn pending_info_from_spend(
+        ctx: &mut SpendContext,
+        inner_solution: NodePtr,
+        initial_state: XchandlesRegistryState,
+        constants: XchandlesConstants,
+    ) -> Result<XchandlesPendingSpendInfo, DriverError> {
+        let mut created_slots = vec![];
+        let mut spent_slots = vec![];
+
+        let mut state_incl_ephemeral: (NodePtr, XchandlesRegistryState) =
+            (NodePtr::NIL, initial_state);
+
+        let inner_solution =
+            ActionLayer::<XchandlesRegistryState, NodePtr>::parse_solution(ctx, inner_solution)?;
+
+        for raw_action in inner_solution.action_spends.iter() {
+            let res = Self::pending_info_delta_from_spend(
+                ctx,
+                *raw_action,
+                state_incl_ephemeral,
+                constants,
+            )?;
+
+            state_incl_ephemeral = res.0;
+            created_slots.extend(res.1);
+            spent_slots.extend(res.2);
+        }
+
+        Ok(XchandlesPendingSpendInfo {
+            actions: inner_solution.action_spends,
+            created_slots,
+            spent_slots,
+            latest_state: state_incl_ephemeral,
+        })
+    }
+
+    pub fn from_spend(
+        ctx: &mut SpendContext,
+        spend: &CoinSpend,
+        constants: XchandlesConstants,
+    ) -> Result<Option<Self>, DriverError> {
+        let coin = spend.coin;
+        let puzzle_ptr = ctx.alloc(&spend.puzzle_reveal)?;
+        let puzzle = Puzzle::parse(ctx, puzzle_ptr);
+        let solution_ptr = ctx.alloc(&spend.solution)?;
+
+        let Some(info) = XchandlesRegistryInfo::parse(ctx, puzzle, constants)? else {
+            return Ok(None);
+        };
+
+        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution_ptr)?;
+        let proof = solution.lineage_proof;
+
+        let pending_spend =
+            Self::pending_info_from_spend(ctx, solution.inner_solution, info.state, constants)?;
+
+        Ok(Some(XchandlesRegistry {
+            coin,
+            proof,
+            info,
+            pending_spend,
+        }))
+    }
+
+    pub fn child_lineage_proof(&self) -> LineageProof {
+        LineageProof {
+            parent_parent_coin_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+            parent_amount: self.coin.amount,
+        }
+    }
+
     pub fn from_parent_spend(
-        allocator: &mut Allocator,
-        parent_coin: Coin,
-        parent_puzzle: Puzzle,
-        parent_solution: NodePtr,
+        ctx: &mut SpendContext,
+        parent_spend: &CoinSpend,
         constants: XchandlesConstants,
     ) -> Result<Option<Self>, DriverError>
     where
         Self: Sized,
     {
-        let Some(parent_info) = XchandlesRegistryInfo::parse(allocator, parent_puzzle, constants)?
-        else {
+        let Some(parent_registry) = Self::from_spend(ctx, parent_spend, constants)? else {
             return Ok(None);
         };
 
-        let proof = Proof::Lineage(LineageProof {
-            parent_parent_coin_info: parent_coin.parent_coin_info,
-            parent_inner_puzzle_hash: parent_info.inner_puzzle_hash().into(),
-            parent_amount: parent_coin.amount,
-        });
+        let proof = Proof::Lineage(parent_registry.child_lineage_proof());
 
-        let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
-        let new_state = ActionLayer::<XchandlesRegistryState>::get_new_state(
-            allocator,
-            parent_info.state,
-            parent_solution.inner_solution,
-        )?;
-
-        let new_info = parent_info.with_state(new_state);
-
-        let new_coin = Coin::new(parent_coin.coin_id(), new_info.puzzle_hash().into(), 1);
+        let new_info = parent_registry
+            .info
+            .with_state(parent_registry.pending_spend.latest_state.1);
+        let new_coin = Coin::new(
+            parent_registry.coin.coin_id(),
+            new_info.puzzle_hash().into(),
+            1,
+        );
 
         Ok(Some(XchandlesRegistry {
             coin: new_coin,
             proof,
             info: new_info,
-            pending_items: XchandlesRegistryPendingItems::default(),
+            pending_spend: XchandlesPendingSpendInfo::new(new_info.state),
         }))
+    }
+
+    pub fn child(&self, child_state: XchandlesRegistryState) -> Self {
+        let new_info = self.info.with_state(child_state);
+        let new_coin = Coin::new(self.coin.coin_id(), new_info.puzzle_hash().into(), 1);
+
+        XchandlesRegistry {
+            coin: new_coin,
+            proof: Proof::Lineage(self.child_lineage_proof()),
+            info: new_info,
+            pending_spend: XchandlesPendingSpendInfo::new(new_info.state),
+        }
     }
 
     // Also returns initial registration asset id
@@ -190,7 +383,7 @@ impl XchandlesRegistry {
                 coin: registry_coin,
                 proof,
                 info,
-                pending_items: XchandlesRegistryPendingItems::default(),
+                pending_spend: XchandlesPendingSpendInfo::new(info.state),
             },
             slots,
             initial_registration_asset_id,
@@ -302,152 +495,6 @@ impl XchandlesRegistry {
         }
 
         Ok(state.1)
-    }
-
-    pub async fn get_pending_items_from_spend(
-        &self,
-        ctx: &mut SpendContext,
-        solution: NodePtr,
-    ) -> Result<XchandlesRegistryPendingItems, CliError> {
-        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
-        let inner_solution = ActionLayer::<XchandlesRegistryState, NodePtr>::parse_solution(
-            ctx,
-            solution.inner_solution,
-        )?;
-
-        let mut actions: Vec<Spend> = vec![];
-        let mut spent_slots: Vec<XchandlesSlotValue> = vec![];
-        let mut created_slots: Vec<XchandlesSlotValue> = vec![];
-
-        let expire_action = XchandlesExpireAction::from_constants(&self.info.constants);
-        let expire_action_hash = expire_action.tree_hash();
-
-        let extend_action = XchandlesExtendAction::from_constants(&self.info.constants);
-        let extend_action_hash = extend_action.tree_hash();
-
-        let oracle_action = XchandlesOracleAction::from_constants(&self.info.constants);
-        let oracle_action_hash = oracle_action.tree_hash();
-
-        let register_action = XchandlesRegisterAction::from_constants(&self.info.constants);
-        let register_action_hash = register_action.tree_hash();
-
-        let update_action = XchandlesUpdateAction::from_constants(&self.info.constants);
-        let update_action_hash = update_action.tree_hash();
-
-        let refund_action = XchandlesRefundAction::from_constants(&self.info.constants);
-        let refund_action_hash = refund_action.tree_hash();
-
-        let delegated_state_action =
-            <DelegatedStateAction as Action<XchandlesRegistry>>::from_constants(
-                &self.info.constants,
-            );
-        let delegated_state_action_hash = delegated_state_action.tree_hash();
-
-        let mut current_state = (NodePtr::NIL, self.info.state);
-        for raw_action in inner_solution.action_spends {
-            actions.push(Spend::new(raw_action.puzzle, raw_action.solution));
-
-            let actual_solution = ctx.alloc(&clvm_list!(current_state, raw_action.solution))?;
-
-            let action_output =
-                run_puzzle(ctx, raw_action.puzzle, actual_solution).map_err(DriverError::from)?;
-            (current_state, _) = ctx
-                .extract::<match_tuple!((NodePtr, XchandlesRegistryState), NodePtr)>(
-                    action_output,
-                )?;
-
-            let raw_action_hash = ctx.tree_hash(raw_action.puzzle);
-
-            if raw_action_hash == delegated_state_action_hash {
-                // slots were not created or spent
-                continue;
-            }
-
-            if raw_action_hash == extend_action_hash {
-                let spent_slot_value = XchandlesExtendAction::get_spent_slot_value_from_solution(
-                    ctx,
-                    raw_action.solution,
-                )?;
-
-                let new_slot_value = XchandlesExtendAction::get_created_slot_value_from_solution(
-                    ctx,
-                    raw_action.solution,
-                )?;
-
-                spent_slots.push(spent_slot_value);
-                created_slots.push(new_slot_value);
-            } else if raw_action_hash == oracle_action_hash {
-                let spent_slot_value = XchandlesOracleAction::get_spent_slot_value_from_solution(
-                    ctx,
-                    raw_action.solution,
-                )?;
-
-                spent_slots.push(spent_slot_value.clone());
-                created_slots.push(spent_slot_value);
-            } else if raw_action_hash == update_action_hash {
-                let spent_slot_value = XchandlesUpdateAction::get_spent_slot_value_from_solution(
-                    ctx,
-                    raw_action.solution,
-                )?;
-
-                let new_slot_value = XchandlesUpdateAction::get_created_slot_value_from_solution(
-                    ctx,
-                    raw_action.solution,
-                )?;
-
-                spent_slots.push(spent_slot_value);
-                created_slots.push(new_slot_value);
-            } else if raw_action_hash == refund_action_hash {
-                let Some(spent_slot_value) =
-                    XchandlesRefundAction::get_spent_slot_value_from_solution(
-                        ctx,
-                        raw_action.solution,
-                    )?
-                else {
-                    continue;
-                };
-
-                spent_slots.push(spent_slot_value.clone());
-                created_slots.push(spent_slot_value);
-            } else if raw_action_hash == expire_action_hash {
-                let spent_slot_value = XchandlesExpireAction::get_spent_slot_value_from_solution(
-                    ctx,
-                    raw_action.solution,
-                )?;
-
-                let new_slot_value = XchandlesExpireAction::get_created_slot_value_from_solution(
-                    ctx,
-                    raw_action.solution,
-                )?;
-
-                spent_slots.push(spent_slot_value);
-                created_slots.push(new_slot_value);
-            } else if raw_action_hash == register_action_hash {
-                // register
-                let spent_slot_values =
-                    XchandlesRegisterAction::get_spent_slot_values_from_solution(
-                        ctx,
-                        raw_action.solution,
-                    )?;
-
-                let new_slot_values =
-                    XchandlesRegisterAction::get_created_slot_values_from_solution(
-                        ctx,
-                        raw_action.solution,
-                    )?;
-
-                spent_slots.extend(spent_slot_values);
-                created_slots.extend(new_slot_values);
-            } else {
-                return Err(CliError::Custom("Unknown action".to_string()));
-            }
-        }
-
-        Ok(XchandlesRegistryPendingItems {
-            actions,
-            spent_slots,
-            created_slots,
-        })
     }
 
     pub fn actual_neigbors(
