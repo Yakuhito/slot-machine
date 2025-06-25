@@ -2004,7 +2004,7 @@ mod tests {
                     .rev()
                     .take(2)
                     .collect::<Vec<&XchandlesSlotValue>>(),
-                spent_values.iter().collect::<Vec<_>>(),
+                spent_values.iter().rev().collect::<Vec<_>>(),
             );
             registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
