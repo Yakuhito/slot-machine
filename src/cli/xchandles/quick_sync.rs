@@ -1,9 +1,8 @@
 use chia::protocol::{Bytes32, CoinSpend};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{Puzzle, SpendContext},
+    driver::SpendContext,
 };
-use clvmr::serde::node_from_bytes;
 
 use crate::{CliError, Db, XchandlesRegistry};
 
@@ -73,36 +72,53 @@ pub async fn quick_sync_xchandles(
             ))?;
 
         let mut temp_ctx = SpendContext::new();
-        let puzzle_ptr = node_from_bytes(&mut temp_ctx, &next_spend.puzzle_reveal)?;
-        let puzzle = Puzzle::parse(&temp_ctx, puzzle_ptr);
-        let solution_ptr = node_from_bytes(&mut temp_ctx, &next_spend.solution)?;
-
-        let xchandles_maybe = XchandlesRegistry::from_parent_spend(
-            &mut temp_ctx,
-            next_spend.coin,
-            puzzle,
-            solution_ptr,
-            constants,
-        )
-        .unwrap_or_default();
-        if xchandles_maybe.is_some() {
+        if let Ok(Some(_xchandles_maybe)) =
+            XchandlesRegistry::from_parent_spend(&mut temp_ctx, &next_spend, constants)
+        {
             coin_spend = Some(next_spend);
             break;
         }
     }
 
-    if let Some(coin_spend) = coin_spend {
-        let puzzle_ptr = node_from_bytes(ctx, &coin_spend.puzzle_reveal)?;
-        let puzzle = Puzzle::parse(ctx, puzzle_ptr);
-        let solution_ptr = node_from_bytes(ctx, &coin_spend.solution)?;
+    let coin_spend = coin_spend.ok_or(CliError::Custom(
+        "Could not find XCHandles registry".to_string(),
+    ))?;
 
-        XchandlesRegistry::from_parent_spend(ctx, coin_spend.coin, puzzle, solution_ptr, constants)?
-            .ok_or(CliError::Custom(
-                "Tried to unwrap XCHandles but couldn't".to_string(),
-            ))
-    } else {
-        Err(CliError::Custom(
-            "Could not find XCHandles registry".to_string(),
-        ))
+    let on_chain_registry = XchandlesRegistry::from_parent_spend(ctx, &coin_spend, constants)?
+        .ok_or(CliError::Custom(
+            "Could not parse latest XCHandles registry".to_string(),
+        ))?;
+
+    let Some(mut mempool_items) = client
+        .get_mempool_items_by_coin_name(on_chain_registry.coin.coin_id())
+        .await?
+        .mempool_items
+    else {
+        return Ok(on_chain_registry);
+    };
+
+    if mempool_items.is_empty() {
+        return Ok(on_chain_registry);
     }
+
+    let mempool_item = mempool_items.remove(0);
+    let mut registry = on_chain_registry;
+    loop {
+        let Some(registry_spend) = mempool_item
+            .spend_bundle
+            .coin_spends
+            .iter()
+            .find(|c| c.coin.coin_id() == registry.coin.coin_id())
+        else {
+            break;
+        };
+
+        let Some(new_registry) = XchandlesRegistry::from_spend(ctx, registry_spend, constants)?
+        else {
+            break;
+        };
+        registry = new_registry;
+    }
+
+    Ok(registry)
 }
