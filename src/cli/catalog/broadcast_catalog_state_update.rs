@@ -89,7 +89,7 @@ pub async fn catalog_broadcast_state_update(
         new_state,
         medieval_vault_inner_ph.into(),
     )?;
-    catalog.insert(inner_spend);
+    catalog.insert_action_spend(&mut ctx, inner_spend)?;
     let mut _new_catalog = catalog.finish_spend(&mut ctx)?;
 
     multisig_broadcast_thing_finish(

@@ -89,7 +89,7 @@ pub async fn catalog_unroll_state_scheduler(
             new_state,
             state_scheduler.info.inner_puzzle_hash().into(),
         )?;
-    catalog.insert(catalog_action_spend);
+    catalog.insert_action_spend(&mut ctx, catalog_action_spend)?;
 
     let catalog_inner_ph = catalog.info.inner_puzzle_hash();
     let _new_catalog = catalog.finish_spend(&mut ctx)?;

@@ -154,7 +154,7 @@ impl CatalogRegistry {
 
     pub fn from_spend(
         ctx: &mut SpendContext,
-        spend: CoinSpend,
+        spend: &CoinSpend,
         constants: CatalogRegistryConstants,
     ) -> Result<Option<Self>, DriverError> {
         let coin = spend.coin;
@@ -190,7 +190,7 @@ impl CatalogRegistry {
 
     pub fn from_parent_spend(
         ctx: &mut SpendContext,
-        parent_spend: CoinSpend,
+        parent_spend: &CoinSpend,
         constants: CatalogRegistryConstants,
     ) -> Result<Option<Self>, DriverError>
     where
