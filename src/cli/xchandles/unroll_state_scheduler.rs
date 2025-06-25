@@ -124,7 +124,7 @@ pub async fn xchandles_unroll_state_scheduler(
             new_state,
             state_scheduler.info.inner_puzzle_hash().into(),
         )?;
-    registry.insert(registry_action_spend);
+    registry.insert_action_spend(&mut ctx, registry_action_spend)?;
 
     let registry_inner_ph = registry.info.inner_puzzle_hash();
     let _new_registry = registry.finish_spend(&mut ctx)?;

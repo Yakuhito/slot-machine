@@ -4,7 +4,7 @@ use chia_wallet_sdk::{
     driver::SpendContext,
 };
 
-use crate::{CatalogRegistry, CatalogRegistryConstants, CliError};
+use crate::{mempool_catalog_maybe, CatalogRegistry, CatalogRegistryConstants, CliError};
 
 pub async fn quick_sync_catalog(
     client: &CoinsetClient,
@@ -56,35 +56,5 @@ pub async fn quick_sync_catalog(
         CliError::Custom("Could not parse CATalog spend".to_string()),
     )?;
 
-    let Some(mut mempool_items) = client
-        .get_mempool_items_by_coin_name(on_chain_catalog.coin.coin_id())
-        .await?
-        .mempool_items
-    else {
-        return Ok(on_chain_catalog);
-    };
-
-    if mempool_items.is_empty() {
-        return Ok(on_chain_catalog);
-    }
-
-    let mempool_item = mempool_items.remove(0);
-    let mut catalog = on_chain_catalog;
-    loop {
-        let Some(catalog_spend) = mempool_item
-            .spend_bundle
-            .coin_spends
-            .iter()
-            .find(|c| c.coin.coin_id() == catalog.coin.coin_id())
-        else {
-            break;
-        };
-
-        let Some(new_catalog) = CatalogRegistry::from_spend(ctx, catalog_spend, constants)? else {
-            break;
-        };
-        catalog = new_catalog;
-    }
-
-    Ok(catalog)
+    mempool_catalog_maybe(ctx, on_chain_catalog, client).await
 }

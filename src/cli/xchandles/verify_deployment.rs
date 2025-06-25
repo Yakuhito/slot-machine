@@ -2,7 +2,7 @@ use chia::clvm_utils::ToTreeHash;
 use chia_puzzle_types::singleton::SingletonSolution;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Layer, Puzzle, SpendContext},
+    driver::{Layer, SpendContext},
     utils::Address,
 };
 use clvmr::{serde::node_from_bytes, NodePtr};
@@ -137,16 +137,7 @@ pub async fn xchandles_verify_deployment(
             handle_index += 1;
         }
 
-        let puzzle_ptr = node_from_bytes(&mut ctx, &coin_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(&ctx, puzzle_ptr);
-        registry = XchandlesRegistry::from_parent_spend(
-            &mut ctx,
-            registry.coin,
-            parent_puzzle,
-            solution,
-            registry.info.constants,
-        )?
-        .unwrap();
+        registry = registry.child(registry.pending_spend.latest_state.1);
     }
 
     if handle_index < handles_to_launch.len() {
