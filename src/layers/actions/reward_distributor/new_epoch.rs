@@ -60,31 +60,30 @@ impl RewardDistributorNewEpochAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
-        &self,
+    pub fn created_slot_value(
         ctx: &SpendContext,
         solution: NodePtr,
-    ) -> Result<
-        (
-            RewardDistributorRewardSlotValue,
-            (RewardDistributorSlotNonce, Bytes32),
-        ),
-        DriverError,
-    > {
+    ) -> Result<RewardDistributorRewardSlotValue, DriverError> {
         let solution = ctx.extract::<RewardDistributorNewEpochActionSolution>(solution)?;
 
-        let slot_valie = RewardDistributorRewardSlotValue {
+        Ok(RewardDistributorRewardSlotValue {
             epoch_start: solution.slot_epoch_time,
             next_epoch_initialized: solution.slot_next_epoch_initialized,
             rewards: solution.slot_total_rewards,
-        };
-        Ok((
-            slot_valie,
-            (
-                RewardDistributorSlotNonce::REWARD,
-                slot_valie.tree_hash().into(),
-            ),
-        ))
+        })
+    }
+
+    pub fn spent_slot_value(
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<RewardDistributorRewardSlotValue, DriverError> {
+        let solution = ctx.extract::<RewardDistributorNewEpochActionSolution>(solution)?;
+
+        Ok(RewardDistributorRewardSlotValue {
+            epoch_start: solution.slot_epoch_time,
+            next_epoch_initialized: solution.slot_next_epoch_initialized,
+            rewards: solution.slot_total_rewards,
+        })
     }
 
     pub fn spend(

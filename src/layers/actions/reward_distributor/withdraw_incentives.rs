@@ -52,31 +52,41 @@ impl RewardDistributorWithdrawIncentivesAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
-        &self,
+    pub fn created_slot_value(
         ctx: &SpendContext,
-        my_constants: &RewardDistributorConstants,
+        withdrawal_share_bps: u64,
+        solution: NodePtr,
+    ) -> Result<RewardDistributorRewardSlotValue, DriverError> {
+        let solution =
+            ctx.extract::<RewardDistributorWithdrawIncentivesActionSolution>(solution)?;
+        let withdrawal_share = solution.committed_value * withdrawal_share_bps / 10000;
+
+        let new_reward_slot_value = RewardDistributorRewardSlotValue {
+            epoch_start: solution.reward_slot_epoch_time,
+            next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
+            rewards: solution.reward_slot_total_rewards - withdrawal_share,
+        };
+
+        Ok(new_reward_slot_value)
+    }
+
+    pub fn spent_slot_values(
+        ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<
         (
             RewardDistributorRewardSlotValue,
-            [(RewardDistributorSlotNonce, Bytes32); 2],
+            RewardDistributorCommitmentSlotValue,
         ),
         DriverError,
     > {
         let solution =
             ctx.extract::<RewardDistributorWithdrawIncentivesActionSolution>(solution)?;
-        let withdrawal_share = solution.committed_value * my_constants.withdrawal_share_bps / 10000;
 
         let old_reward_slot_value = RewardDistributorRewardSlotValue {
             epoch_start: solution.reward_slot_epoch_time,
             next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
             rewards: solution.reward_slot_total_rewards,
-        };
-        let new_reward_slot_value = RewardDistributorRewardSlotValue {
-            epoch_start: solution.reward_slot_epoch_time,
-            next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
-            rewards: solution.reward_slot_total_rewards - withdrawal_share,
         };
         let commitment_slot_value = RewardDistributorCommitmentSlotValue {
             epoch_start: solution.reward_slot_epoch_time,
@@ -84,19 +94,7 @@ impl RewardDistributorWithdrawIncentivesAction {
             rewards: solution.committed_value,
         };
 
-        Ok((
-            new_reward_slot_value,
-            [
-                (
-                    RewardDistributorSlotNonce::REWARD,
-                    old_reward_slot_value.tree_hash().into(),
-                ),
-                (
-                    RewardDistributorSlotNonce::COMMITMENT,
-                    commitment_slot_value.tree_hash().into(),
-                ),
-            ],
-        ))
+        Ok((old_reward_slot_value, commitment_slot_value))
     }
 
     pub fn spend(

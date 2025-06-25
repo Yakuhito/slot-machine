@@ -18,10 +18,11 @@ use clvmr::{Allocator, NodePtr};
 use crate::{
     Action, ActionLayer, ActionLayerSolution, RawActionLayerSolution, Registry,
     ReserveFinalizerSolution, RewardDistributorAddEntryAction,
-    RewardDistributorCommitIncentivesAction, RewardDistributorInitiatePayoutAction,
-    RewardDistributorNewEpochAction, RewardDistributorRemoveEntryAction,
-    RewardDistributorStakeAction, RewardDistributorUnstakeAction,
-    RewardDistributorWithdrawIncentivesAction, Slot, SlotInfo, SlotProof,
+    RewardDistributorAddIncentivesAction, RewardDistributorCommitIncentivesAction,
+    RewardDistributorInitiatePayoutAction, RewardDistributorNewEpochAction,
+    RewardDistributorRemoveEntryAction, RewardDistributorStakeAction, RewardDistributorSyncAction,
+    RewardDistributorUnstakeAction, RewardDistributorWithdrawIncentivesAction, Slot, SlotInfo,
+    SlotProof,
 };
 
 use super::{
@@ -30,15 +31,50 @@ use super::{
     RewardDistributorSlotNonce, RewardDistributorState,
 };
 
-#[derive(Debug, Clone, Default)]
-pub struct RewardDistributorPendingItems {
-    pub pending_actions: Vec<Spend>,
+#[derive(Debug, Clone)]
+pub struct RewardDistributorPendingSpendInfo {
+    pub actions: Vec<Spend>,
 
-    pub pending_spent_slots: Vec<(RewardDistributorSlotNonce, Bytes32)>, // (nonce, value hash)
+    pub spent_reward_slots: Vec<RewardDistributorRewardSlotValue>,
+    pub spent_commitment_slots: Vec<RewardDistributorCommitmentSlotValue>,
+    pub spent_entry_slots: Vec<RewardDistributorEntrySlotValue>,
 
-    pub pending_reward_slot_values: Vec<RewardDistributorRewardSlotValue>,
-    pub pending_commitment_slot_values: Vec<RewardDistributorCommitmentSlotValue>,
-    pub pending_entry_slot_values: Vec<RewardDistributorEntrySlotValue>,
+    pub created_reward_slots: Vec<RewardDistributorRewardSlotValue>,
+    pub created_commitment_slots: Vec<RewardDistributorCommitmentSlotValue>,
+    pub created_entry_slots: Vec<RewardDistributorEntrySlotValue>,
+
+    pub latest_state: (NodePtr, RewardDistributorState),
+}
+
+impl RewardDistributorPendingSpendInfo {
+    pub fn new(latest_state: RewardDistributorState) -> Self {
+        Self {
+            actions: vec![],
+            created_reward_slots: vec![],
+            created_commitment_slots: vec![],
+            created_entry_slots: vec![],
+            spent_reward_slots: vec![],
+            spent_commitment_slots: vec![],
+            spent_entry_slots: vec![],
+            latest_state: (NodePtr::NIL, latest_state),
+        }
+    }
+
+    pub fn add_delta(&mut self, delta: RewardDistributorPendingSpendInfo) {
+        self.actions.extend(delta.actions);
+
+        self.spent_reward_slots.extend(delta.spent_reward_slots);
+        self.spent_commitment_slots
+            .extend(delta.spent_commitment_slots);
+        self.spent_entry_slots.extend(delta.spent_entry_slots);
+
+        self.created_reward_slots.extend(delta.created_reward_slots);
+        self.created_commitment_slots
+            .extend(delta.created_commitment_slots);
+        self.created_entry_slots.extend(delta.created_entry_slots);
+
+        self.latest_state = delta.latest_state;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -49,7 +85,7 @@ pub struct RewardDistributor {
     pub info: RewardDistributorInfo,
     pub reserve: Reserve,
 
-    pub pending_items: RewardDistributorPendingItems,
+    pub pending_items: RewardDistributorPendingSpendInfo,
 }
 
 impl RewardDistributor {
@@ -59,12 +95,158 @@ impl RewardDistributor {
             proof,
             info,
             reserve,
-            pending_items: RewardDistributorPendingItems::default(),
+            pending_items: RewardDistributorPendingSpendInfo::new(info.state),
         }
     }
 }
 
 impl RewardDistributor {
+    #[allow(clippy::type_complexity)]
+    pub fn pending_info_delta_from_spend(
+        ctx: &mut SpendContext,
+        action_spend: Spend,
+        current_state_and_ephemeral: (NodePtr, RewardDistributorState),
+        constants: RewardDistributorConstants,
+    ) -> Result<RewardDistributorPendingSpendInfo, DriverError> {
+        let mut spent_reward_slots: Vec<RewardDistributorRewardSlotValue> = vec![];
+        let mut spent_commitment_slots: Vec<RewardDistributorCommitmentSlotValue> = vec![];
+        let mut spent_entry_slots: Vec<RewardDistributorEntrySlotValue> = vec![];
+
+        let mut created_reward_slots: Vec<RewardDistributorRewardSlotValue> = vec![];
+        let mut created_commitment_slots: Vec<RewardDistributorCommitmentSlotValue> = vec![];
+        let mut created_entry_slots: Vec<RewardDistributorEntrySlotValue> = vec![];
+
+        let new_epoch_action = RewardDistributorNewEpochAction::from_constants(&constants);
+        let new_epoch_hash = new_epoch_action.tree_hash();
+
+        let commit_incentives_action =
+            RewardDistributorCommitIncentivesAction::from_constants(&constants);
+        let commit_incentives_hash = commit_incentives_action.tree_hash();
+
+        let add_entry_action = RewardDistributorAddEntryAction::from_constants(&constants);
+        let add_entry_hash = add_entry_action.tree_hash();
+
+        let remove_entry_action = RewardDistributorRemoveEntryAction::from_constants(&constants);
+        let remove_entry_hash = remove_entry_action.tree_hash();
+
+        let stake_action = RewardDistributorStakeAction::from_constants(&constants);
+        let stake_hash = stake_action.tree_hash();
+
+        let unstake_action = RewardDistributorUnstakeAction::from_constants(&constants);
+        let unstake_hash = unstake_action.tree_hash();
+
+        let withdraw_incentives_action =
+            RewardDistributorWithdrawIncentivesAction::from_constants(&constants);
+        let withdraw_incentives_hash = withdraw_incentives_action.tree_hash();
+
+        let initiate_payout_action =
+            RewardDistributorInitiatePayoutAction::from_constants(&constants);
+        let initiate_payout_hash = initiate_payout_action.tree_hash();
+
+        let add_incentives_action =
+            RewardDistributorAddIncentivesAction::from_constants(&constants);
+        let add_incentives_hash = add_incentives_action.tree_hash();
+
+        let sync_action = RewardDistributorSyncAction::from_constants(&constants);
+        let sync_hash = sync_action.tree_hash();
+
+        let actual_solution = ctx.alloc(&clvm_list!(
+            current_state_and_ephemeral,
+            action_spend.solution
+        ))?;
+
+        let output = ctx.run(action_spend.puzzle, actual_solution)?;
+        let (new_state_and_ephemeral, _) =
+            ctx.extract::<match_tuple!((NodePtr, RewardDistributorState), NodePtr)>(output)?;
+
+        let raw_action_hash = ctx.tree_hash(action_spend.puzzle);
+
+        if raw_action_hash == new_epoch_hash {
+            created_reward_slots.push(RewardDistributorNewEpochAction::created_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+            spent_reward_slots.push(RewardDistributorNewEpochAction::spent_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash == commit_incentives_hash {
+            let (comm, rews) = RewardDistributorCommitIncentivesAction::created_slot_values(
+                ctx,
+                constants.epoch_seconds,
+                action_spend.solution,
+            )?;
+
+            created_commitment_slots.push(comm);
+            created_reward_slots.extend(rews);
+            spent_reward_slots.push(RewardDistributorCommitIncentivesAction::spent_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash == add_entry_hash {
+            created_entry_slots.push(RewardDistributorAddEntryAction::created_slot_value(
+                ctx,
+                &current_state_and_ephemeral.1,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash == stake_hash {
+            created_entry_slots.push(RewardDistributorStakeAction::created_slot_value(
+                ctx,
+                &current_state_and_ephemeral.1,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash == remove_entry_hash {
+            spent_entry_slots.push(RewardDistributorRemoveEntryAction::spent_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash == unstake_hash {
+            spent_entry_slots.push(RewardDistributorUnstakeAction::spent_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash == withdraw_incentives_hash {
+            let (rew, cmt) = RewardDistributorWithdrawIncentivesAction::spent_slot_values(
+                ctx,
+                action_spend.solution,
+            )?;
+
+            spent_reward_slots.push(rew);
+            spent_commitment_slots.push(cmt);
+            created_reward_slots.push(
+                RewardDistributorWithdrawIncentivesAction::created_slot_value(
+                    ctx,
+                    constants.withdrawal_share_bps,
+                    action_spend.solution,
+                )?,
+            );
+        } else if raw_action_hash == initiate_payout_hash {
+            created_entry_slots.push(RewardDistributorInitiatePayoutAction::created_slot_value(
+                ctx,
+                &current_state_and_ephemeral.1,
+                action_spend.solution,
+            )?);
+            spent_entry_slots.push(RewardDistributorInitiatePayoutAction::spent_slot_value(
+                ctx,
+                action_spend.solution,
+            )?);
+        } else if raw_action_hash != add_incentives_hash && raw_action_hash != sync_hash {
+            // delegated state action has no effect on slots
+            return Err(DriverError::InvalidMerkleProof);
+        }
+
+        Ok(RewardDistributorPendingSpendInfo {
+            actions: vec![action_spend],
+            spent_reward_slots,
+            spent_commitment_slots,
+            spent_entry_slots,
+            created_reward_slots,
+            created_commitment_slots,
+            created_entry_slots,
+            latest_state: new_state_and_ephemeral,
+        })
+    }
+
     pub fn from_parent_spend(
         allocator: &mut Allocator,
         parent_coin: Coin,

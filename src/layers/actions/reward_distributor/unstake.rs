@@ -58,23 +58,17 @@ impl RewardDistributorUnstakeAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_spent_slot_value_from_solution(
-        &self,
+    pub fn spent_slot_value(
         ctx: &SpendContext,
         solution: NodePtr,
-    ) -> Result<(RewardDistributorSlotNonce, Bytes32), DriverError> {
+    ) -> Result<RewardDistributorEntrySlotValue, DriverError> {
         let solution = ctx.extract::<RewardDistributorUnstakeActionSolution>(solution)?;
 
-        Ok((
-            RewardDistributorSlotNonce::ENTRY,
-            RewardDistributorEntrySlotValue {
-                payout_puzzle_hash: solution.entry_custody_puzzle_hash,
-                initial_cumulative_payout: solution.entry_initial_cumulative_payout,
-                shares: 1,
-            }
-            .tree_hash()
-            .into(),
-        ))
+        Ok(RewardDistributorEntrySlotValue {
+            payout_puzzle_hash: solution.entry_custody_puzzle_hash,
+            initial_cumulative_payout: solution.entry_initial_cumulative_payout,
+            shares: 1,
+        })
     }
 
     pub fn spend(

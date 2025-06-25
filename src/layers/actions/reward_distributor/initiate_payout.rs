@@ -52,37 +52,31 @@ impl RewardDistributorInitiatePayoutAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
-        &self,
+    pub fn created_slot_value(
         ctx: &SpendContext,
-        my_state: &RewardDistributorState,
+        current_state: &RewardDistributorState,
         solution: NodePtr,
-    ) -> Result<
-        (
-            RewardDistributorEntrySlotValue,
-            (RewardDistributorSlotNonce, Bytes32),
-        ),
-        DriverError,
-    > {
+    ) -> Result<RewardDistributorEntrySlotValue, DriverError> {
         let solution = ctx.extract::<RewardDistributorInitiatePayoutActionSolution>(solution)?;
 
-        let new_slot = RewardDistributorEntrySlotValue {
+        Ok(RewardDistributorEntrySlotValue {
             payout_puzzle_hash: solution.entry_payout_puzzle_hash,
-            initial_cumulative_payout: my_state.round_reward_info.cumulative_payout,
+            initial_cumulative_payout: current_state.round_reward_info.cumulative_payout,
             shares: solution.entry_shares,
-        };
-        let old_slot = RewardDistributorEntrySlotValue {
+        })
+    }
+
+    pub fn spent_slot_value(
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<RewardDistributorEntrySlotValue, DriverError> {
+        let solution = ctx.extract::<RewardDistributorInitiatePayoutActionSolution>(solution)?;
+
+        Ok(RewardDistributorEntrySlotValue {
             payout_puzzle_hash: solution.entry_payout_puzzle_hash,
             initial_cumulative_payout: solution.entry_initial_cumulative_payout,
             shares: solution.entry_shares,
-        };
-        Ok((
-            new_slot,
-            (
-                RewardDistributorSlotNonce::ENTRY,
-                old_slot.tree_hash().into(),
-            ),
-        ))
+        })
     }
 
     pub fn spend(

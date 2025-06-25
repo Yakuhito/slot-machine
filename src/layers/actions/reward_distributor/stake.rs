@@ -64,8 +64,7 @@ impl RewardDistributorStakeAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
-        &self,
+    pub fn created_slot_value(
         ctx: &SpendContext,
         state: &RewardDistributorState,
         solution: NodePtr,
