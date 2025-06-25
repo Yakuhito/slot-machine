@@ -204,14 +204,15 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             break;
         };
 
-        let solution = node_from_bytes(&mut ctx, &coin_spend.solution)?;
-        let new_slots = catalog.get_new_slots_from_spend(&mut ctx, solution)?;
+        catalog =
+            CatalogRegistry::from_spend(&mut ctx, &coin_spend, catalog.info.constants)?.unwrap();
+        let new_slot_values = &catalog.pending_spend.created_slots;
 
         while cat_index < cats_to_launch.len() {
             let top_cat = &cats_to_launch[cat_index];
-            let found = new_slots
+            let found = new_slot_values
                 .iter()
-                .find(|slot| slot.info.value.asset_id == top_cat.asset_id);
+                .find(|slot_value| slot_value.asset_id == top_cat.asset_id);
             if found.is_some() {
                 cat_index += 1;
 
@@ -269,16 +270,8 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             }
         }
 
-        let puzzle_ptr = node_from_bytes(&mut ctx, &coin_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(&ctx, puzzle_ptr);
-        catalog = CatalogRegistry::from_parent_spend(
-            &mut ctx,
-            catalog.coin,
-            parent_puzzle,
-            solution,
-            catalog.info.constants,
-        )?
-        .unwrap();
+        // this coin's confirmed, move to the child
+        catalog = catalog.child(catalog.pending_spend.latest_state.1);
     }
 
     if cat_index < cats_to_launch.len() {

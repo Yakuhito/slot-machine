@@ -64,7 +64,7 @@ pub async fn quick_sync_catalog(
         return Ok(on_chain_catalog);
     };
 
-    if mempool_items.len() == 0 {
+    if mempool_items.is_empty() {
         return Ok(on_chain_catalog);
     }
 

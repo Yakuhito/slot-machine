@@ -59,6 +59,7 @@ impl CatalogRegistry {
 }
 
 impl CatalogRegistry {
+    #[allow(clippy::type_complexity)]
     pub fn pending_info_delta_from_spend(
         ctx: &mut SpendContext,
         action_spend: Spend,
