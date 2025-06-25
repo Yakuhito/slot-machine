@@ -1666,14 +1666,14 @@ mod tests {
             pricing_solution,
             slot,
         )?;
-        assert_eq!(
-            used_slot_value_hash,
-            XchandlesRefundAction::get_spent_slot_value_from_solution(
-                ctx,
-                registry.pending_items.actions[registry.pending_items.actions.len() - 1].solution
-            )?
-            .map(|s| s.tree_hash().into())
-        );
+        if let Some(used_slot_value_hash) = used_slot_value_hash {
+            assert_eq!(
+                used_slot_value_hash,
+                registry.pending_spend.spent_slots[registry.pending_spend.spent_slots.len() - 1]
+                    .tree_hash()
+                    .into()
+            );
+        }
 
         let new_registry = registry.finish_spend(ctx)?;
 
@@ -1977,7 +1977,7 @@ mod tests {
                     delegated_state_action_solution.other_singleton_inner_puzzle_hash,
                 )?;
 
-                registry.insert(action_spend);
+                registry.insert_action_spend(ctx, action_spend)?;
                 registry = registry.finish_spend(ctx)?;
                 // sim.spend_coins(ctx.take(), &[user_bls.sk.clone()])?;
                 benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
@@ -1997,12 +1997,14 @@ mod tests {
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
 
             assert_eq!(
-                spent_values,
-                XchandlesRegisterAction::get_spent_slot_values_from_solution(
-                    ctx,
-                    registry.pending_items.actions[registry.pending_items.actions.len() - 1]
-                        .solution
-                )?
+                registry
+                    .pending_spend
+                    .spent_slots
+                    .iter()
+                    .rev()
+                    .take(2)
+                    .collect::<Vec<&XchandlesSlotValue>>(),
+                spent_values.iter().collect::<Vec<_>>(),
             );
             registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
@@ -2030,13 +2032,14 @@ mod tests {
 
             assert_eq!(
                 spent_slot_value_hash,
-                XchandlesOracleAction::get_spent_slot_value_from_solution(
-                    ctx,
-                    registry.pending_items.actions[registry.pending_items.actions.len() - 1]
-                        .solution
-                )?
-                .tree_hash()
-                .into()
+                registry
+                    .pending_spend
+                    .spent_slots
+                    .iter()
+                    .next_back()
+                    .unwrap()
+                    .tree_hash()
+                    .into()
             );
             registry = registry.finish_spend(ctx)?;
 
@@ -2067,13 +2070,14 @@ mod tests {
 
             assert_eq!(
                 spent_slot_value_hash,
-                XchandlesExtendAction::get_spent_slot_value_from_solution(
-                    ctx,
-                    registry.pending_items.actions[registry.pending_items.actions.len() - 1]
-                        .solution
-                )?
-                .tree_hash()
-                .into()
+                registry
+                    .pending_spend
+                    .spent_slots
+                    .iter()
+                    .next_back()
+                    .unwrap()
+                    .tree_hash()
+                    .into()
             );
 
             let payment_cat_inner_spend = minter_p2.spend_with_conditions(
@@ -2144,13 +2148,14 @@ mod tests {
 
             assert_eq!(
                 update_slot_value_hash,
-                XchandlesUpdateAction::get_spent_slot_value_from_solution(
-                    ctx,
-                    registry.pending_items.actions[registry.pending_items.actions.len() - 1]
-                        .solution
-                )?
-                .tree_hash()
-                .into()
+                registry
+                    .pending_spend
+                    .spent_slots
+                    .iter()
+                    .next_back()
+                    .unwrap()
+                    .tree_hash()
+                    .into()
             );
             registry = registry.finish_spend(ctx)?;
 
@@ -2271,12 +2276,14 @@ mod tests {
 
         assert_eq!(
             spent_slot_value_hash,
-            XchandlesExpireAction::get_spent_slot_value_from_solution(
-                ctx,
-                registry.pending_items.actions[registry.pending_items.actions.len() - 1].solution
-            )?
-            .tree_hash()
-            .into()
+            registry
+                .pending_spend
+                .spent_slots
+                .iter()
+                .next_back()
+                .unwrap()
+                .tree_hash()
+                .into()
         );
         registry = registry.finish_spend(ctx)?;
 

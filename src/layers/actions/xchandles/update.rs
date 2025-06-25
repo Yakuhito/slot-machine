@@ -86,7 +86,7 @@ impl XchandlesUpdateAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution));
+        registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         let new_slot_value = slot
             .info

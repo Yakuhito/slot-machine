@@ -126,11 +126,9 @@ impl XchandlesRefundAction {
 
         registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
-        let new_slot = if let Some(slot) = &slot {
-            Some(registry.created_slot_value_to_slot(slot.info.value.clone()))
-        } else {
-            None
-        };
+        let new_slot = slot
+            .as_ref()
+            .map(|slot| registry.created_slot_value_to_slot(slot.info.value.clone()));
 
         // if there's a slot, spend it
         if let Some(slot) = slot {
