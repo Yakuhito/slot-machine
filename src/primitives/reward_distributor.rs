@@ -10,10 +10,10 @@ use chia_puzzle_types::singleton::{LauncherSolution, SingletonArgs};
 use chia_wallet_sdk::{
     driver::{DriverError, Layer, Puzzle, SingletonLayer, Spend, SpendContext},
     prelude::{Cat, CatSpend},
-    types::{run_puzzle, Condition, Conditions},
+    types::{Condition, Conditions},
 };
-use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use clvm_traits::{clvm_list, match_tuple, FromClvm};
+use clvmr::NodePtr;
 
 use crate::{
     Action, ActionLayer, ActionLayerSolution, RawActionLayerSolution, Registry,
@@ -522,8 +522,8 @@ impl RewardDistributor {
         let puzzle = layers.construct_puzzle(ctx)?;
 
         let action_puzzle_hashes = self
-            .pending_items
-            .pending_actions
+            .pending_spend
+            .actions
             .iter()
             .map(|a| ctx.tree_hash(a.puzzle).into())
             .collect::<Vec<Bytes32>>();
@@ -532,6 +532,7 @@ impl RewardDistributor {
             reserve_parent_id: self.reserve.coin.parent_coin_info,
         })?;
 
+        let child = self.child(self.pending_spend.latest_state.1);
         let solution = layers.construct_solution(
             ctx,
             SingletonSolution {
@@ -547,7 +548,7 @@ impl RewardDistributor {
                         .ok_or(DriverError::Custom(
                             "Couldn't build proofs for one or more actions".to_string(),
                         ))?,
-                    action_spends: self.pending_items.pending_actions,
+                    action_spends: self.pending_spend.actions,
                     finalizer_solution,
                 },
             },
@@ -567,25 +568,7 @@ impl RewardDistributor {
         cat_spends.push(cat_spend);
         Cat::spend_all(ctx, &cat_spends)?;
 
-        let my_puzzle = Puzzle::parse(ctx, my_spend.puzzle);
-        let new_reward_distributor = RewardDistributor::from_parent_spend(
-            ctx,
-            self.coin,
-            my_puzzle,
-            solution,
-            self.info.constants,
-        )?
-        .unwrap();
-
-        Ok(new_reward_distributor)
-    }
-
-    pub fn insert(&mut self, action_spend: Spend) {
-        self.pending_items.pending_actions.push(action_spend);
-    }
-
-    pub fn insert_multiple(&mut self, action_spends: Vec<Spend>) {
-        self.pending_items.pending_actions.extend(action_spends);
+        Ok(child)
     }
 
     pub fn new_action<A>(&self) -> A
@@ -595,11 +578,11 @@ impl RewardDistributor {
         A::from_constants(&self.info.constants)
     }
 
-    pub fn created_slot_values_to_slots<SlotValue>(
+    pub fn created_slot_value_to_slot<SlotValue>(
         &self,
-        slot_values: Vec<SlotValue>,
+        slot_value: SlotValue,
         nonce: RewardDistributorSlotNonce,
-    ) -> Vec<Slot<SlotValue>>
+    ) -> Slot<SlotValue>
     where
         SlotValue: Copy + ToTreeHash,
     {
@@ -608,183 +591,26 @@ impl RewardDistributor {
             parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
         };
 
-        slot_values
-            .into_iter()
-            .map(|slot_value| {
-                Slot::new(
-                    proof,
-                    SlotInfo::from_value(
-                        self.info.constants.launcher_id,
-                        nonce.to_u64(),
-                        slot_value,
-                    ),
-                )
-            })
-            .collect()
+        Slot::new(
+            proof,
+            SlotInfo::from_value(self.info.constants.launcher_id, nonce.to_u64(), slot_value),
+        )
     }
 
-    pub fn get_latest_pending_state(
-        &self,
-        allocator: &mut Allocator,
-    ) -> Result<RewardDistributorState, DriverError> {
-        let mut state = (NodePtr::NIL, self.info.state);
-
-        for action in self.pending_items.pending_actions.iter() {
-            let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
-
-            let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
-            (state, _) = <match_tuple!((NodePtr, RewardDistributorState), NodePtr)>::from_clvm(
-                allocator, output,
-            )?;
-        }
-
-        Ok(state.1)
-    }
-
-    pub fn get_latest_pending_ephemeral_state(
-        &self,
-        allocator: &mut Allocator,
-    ) -> Result<u64, DriverError> {
-        let mut state = (0, self.info.state);
-
-        for action in self.pending_items.pending_actions.iter() {
-            let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
-
-            let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
-            (state, _) = <match_tuple!((u64, RewardDistributorState), NodePtr)>::from_clvm(
-                allocator, output,
-            )?;
-        }
-
-        Ok(state.0)
-    }
-
-    pub fn get_pending_items_from_spend(
-        &self,
+    pub fn insert_action_spend(
+        &mut self,
         ctx: &mut SpendContext,
-        solution: NodePtr,
-    ) -> Result<RewardDistributorPendingItems, DriverError> {
-        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
-        let inner_solution = ActionLayer::<RewardDistributorState, NodePtr>::parse_solution(
+        action_spend: Spend,
+    ) -> Result<(), DriverError> {
+        let delta = Self::pending_info_delta_from_spend(
             ctx,
-            solution.inner_solution,
+            action_spend,
+            self.pending_spend.latest_state,
+            self.info.constants,
         )?;
 
-        let mut actions: Vec<Spend> = vec![];
-        let mut reward_slot_values: Vec<RewardDistributorRewardSlotValue> = vec![];
-        let mut commitment_slot_values: Vec<RewardDistributorCommitmentSlotValue> = vec![];
-        let mut entry_slot_values: Vec<RewardDistributorEntrySlotValue> = vec![];
-        let mut spent_slots: Vec<(RewardDistributorSlotNonce, Bytes32)> = vec![];
+        self.pending_spend.add_delta(delta);
 
-        let new_epoch_action =
-            RewardDistributorNewEpochAction::from_constants(&self.info.constants);
-        let new_epoch_hash = new_epoch_action.tree_hash();
-
-        let commit_incentives_action =
-            RewardDistributorCommitIncentivesAction::from_constants(&self.info.constants);
-        let commit_incentives_hash = commit_incentives_action.tree_hash();
-
-        let add_entry_action =
-            RewardDistributorAddEntryAction::from_constants(&self.info.constants);
-        let add_entry_hash = add_entry_action.tree_hash();
-
-        let remove_entry_action =
-            RewardDistributorRemoveEntryAction::from_constants(&self.info.constants);
-        let remove_entry_hash = remove_entry_action.tree_hash();
-
-        let stake_action = RewardDistributorStakeAction::from_constants(&self.info.constants);
-        let stake_hash = stake_action.tree_hash();
-
-        let unstake_action = RewardDistributorUnstakeAction::from_constants(&self.info.constants);
-        let unstake_hash = unstake_action.tree_hash();
-
-        let withdraw_incentives_action =
-            RewardDistributorWithdrawIncentivesAction::from_constants(&self.info.constants);
-        let withdraw_incentives_hash = withdraw_incentives_action.tree_hash();
-
-        let initiate_payout_action =
-            RewardDistributorInitiatePayoutAction::from_constants(&self.info.constants);
-        let initiate_payout_hash = initiate_payout_action.tree_hash();
-
-        let mut current_state = (NodePtr::NIL, self.info.state);
-        for raw_action in inner_solution.action_spends {
-            actions.push(Spend::new(raw_action.puzzle, raw_action.solution));
-
-            let actual_solution = ctx.alloc(&clvm_list!(current_state, raw_action.solution))?;
-
-            let action_output = run_puzzle(ctx, raw_action.puzzle, actual_solution)?;
-            (current_state, _) = ctx
-                .extract::<match_tuple!((NodePtr, RewardDistributorState), NodePtr)>(
-                    action_output,
-                )?;
-
-            let raw_action_hash = ctx.tree_hash(raw_action.puzzle);
-
-            if raw_action_hash == new_epoch_hash {
-                let (rew, spent) =
-                    new_epoch_action.get_slot_value_from_solution(ctx, raw_action.solution)?;
-
-                reward_slot_values.push(rew);
-                spent_slots.push(spent);
-            } else if raw_action_hash == commit_incentives_hash {
-                let (comm, rews, spent_slot) = commit_incentives_action
-                    .get_slot_values_from_solution(
-                        ctx,
-                        self.info.constants.epoch_seconds,
-                        raw_action.solution,
-                    )?;
-
-                commitment_slot_values.push(comm);
-                reward_slot_values.extend(rews);
-                spent_slots.push(spent_slot);
-            } else if raw_action_hash == add_entry_hash {
-                entry_slot_values.push(add_entry_action.get_slot_value_from_solution(
-                    ctx,
-                    &current_state.1,
-                    raw_action.solution,
-                )?);
-            } else if raw_action_hash == stake_hash {
-                entry_slot_values.push(stake_action.get_slot_value_from_solution(
-                    ctx,
-                    &current_state.1,
-                    raw_action.solution,
-                )?);
-            } else if raw_action_hash == remove_entry_hash {
-                spent_slots.push(
-                    remove_entry_action
-                        .get_spent_slot_value_from_solution(ctx, raw_action.solution)?,
-                );
-            } else if raw_action_hash == unstake_hash {
-                spent_slots.push(
-                    unstake_action.get_spent_slot_value_from_solution(ctx, raw_action.solution)?,
-                );
-            } else if raw_action_hash == withdraw_incentives_hash {
-                let (rew, spnt) = withdraw_incentives_action.get_slot_value_from_solution(
-                    ctx,
-                    &self.info.constants,
-                    raw_action.solution,
-                )?;
-
-                reward_slot_values.push(rew);
-                spent_slots.extend(spnt);
-            } else if raw_action_hash == initiate_payout_hash {
-                let (mirr, spent) = initiate_payout_action.get_slot_value_from_solution(
-                    ctx,
-                    &current_state.1,
-                    raw_action.solution,
-                )?;
-
-                entry_slot_values.push(mirr);
-                spent_slots.push(spent);
-            }
-        }
-
-        Ok(RewardDistributorPendingItems {
-            pending_actions: actions,
-            pending_spent_slots: spent_slots,
-            pending_reward_slot_values: reward_slot_values,
-            pending_commitment_slot_values: commitment_slot_values,
-            pending_entry_slot_values: entry_slot_values,
-        })
+        Ok(())
     }
 }
