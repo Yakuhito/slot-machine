@@ -180,4 +180,19 @@ impl Reserve {
             )?,
         ))
     }
+
+    pub fn child(&self, child_amount: u64) -> Self {
+        Self::new(
+            self.coin.coin_id(),
+            LineageProof {
+                parent_parent_coin_info: self.coin.parent_coin_info,
+                parent_inner_puzzle_hash: self.inner_puzzle_hash,
+                parent_amount: self.coin.amount,
+            },
+            self.asset_id,
+            self.controller_singleton_struct_hash,
+            self.nonce,
+            child_amount,
+        )
+    }
 }

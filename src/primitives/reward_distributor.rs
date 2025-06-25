@@ -85,7 +85,7 @@ pub struct RewardDistributor {
     pub info: RewardDistributorInfo,
     pub reserve: Reserve,
 
-    pub pending_items: RewardDistributorPendingSpendInfo,
+    pub pending_spend: RewardDistributorPendingSpendInfo,
 }
 
 impl RewardDistributor {
@@ -95,7 +95,7 @@ impl RewardDistributor {
             proof,
             info,
             reserve,
-            pending_items: RewardDistributorPendingSpendInfo::new(info.state),
+            pending_spend: RewardDistributorPendingSpendInfo::new(info.state),
         }
     }
 }
@@ -247,70 +247,133 @@ impl RewardDistributor {
         })
     }
 
+    pub fn pending_info_from_spend(
+        ctx: &mut SpendContext,
+        inner_solution: NodePtr,
+        initial_state: RewardDistributorState,
+        constants: RewardDistributorConstants,
+    ) -> Result<RewardDistributorPendingSpendInfo, DriverError> {
+        let mut pending_spend_info = RewardDistributorPendingSpendInfo::new(initial_state);
+
+        let inner_solution =
+            ActionLayer::<RewardDistributorState, NodePtr>::parse_solution(ctx, inner_solution)?;
+
+        for raw_action in inner_solution.action_spends.iter() {
+            let delta = Self::pending_info_delta_from_spend(
+                ctx,
+                *raw_action,
+                pending_spend_info.latest_state,
+                constants,
+            )?;
+
+            pending_spend_info.add_delta(delta);
+        }
+
+        Ok(pending_spend_info)
+    }
+
+    pub fn from_spend(
+        ctx: &mut SpendContext,
+        spend: &CoinSpend,
+        reserve_lineage_proof: LineageProof,
+        constants: RewardDistributorConstants,
+    ) -> Result<Option<Self>, DriverError> {
+        let coin = spend.coin;
+        let puzzle_ptr = ctx.alloc(&spend.puzzle_reveal)?;
+        let puzzle = Puzzle::parse(ctx, puzzle_ptr);
+        let solution_ptr = ctx.alloc(&spend.solution)?;
+
+        let Some(info) = RewardDistributorInfo::parse(ctx, puzzle, constants)? else {
+            return Ok(None);
+        };
+
+        let solution = ctx.extract::<SingletonSolution<NodePtr>>(solution_ptr)?;
+        let proof = solution.lineage_proof;
+
+        let pending_spend =
+            Self::pending_info_from_spend(ctx, solution.inner_solution, info.state, constants)?;
+
+        let inner_solution =
+            RawActionLayerSolution::<NodePtr, NodePtr, ReserveFinalizerSolution>::from_clvm(
+                ctx,
+                solution.inner_solution,
+            )?;
+
+        let reserve = Reserve::new(
+            inner_solution.finalizer_solution.reserve_parent_id,
+            reserve_lineage_proof,
+            constants.reserve_asset_id,
+            SingletonStruct::new(info.constants.launcher_id)
+                .tree_hash()
+                .into(),
+            0,
+            info.state.total_reserves,
+        );
+
+        Ok(Some(RewardDistributor {
+            coin,
+            proof,
+            info,
+            reserve,
+            pending_spend,
+        }))
+    }
+
+    pub fn child_lineage_proof(&self) -> LineageProof {
+        LineageProof {
+            parent_parent_coin_info: self.coin.parent_coin_info,
+            parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
+            parent_amount: self.coin.amount,
+        }
+    }
+
     pub fn from_parent_spend(
-        allocator: &mut Allocator,
-        parent_coin: Coin,
-        parent_puzzle: Puzzle,
-        parent_solution: NodePtr,
+        ctx: &mut SpendContext,
+        parent_spend: &CoinSpend,
         constants: RewardDistributorConstants,
     ) -> Result<Option<Self>, DriverError>
     where
         Self: Sized,
     {
-        let Some(parent_info) = RewardDistributorInfo::parse(allocator, parent_puzzle, constants)?
+        let dummy_lp = LineageProof {
+            parent_parent_coin_info: Bytes32::default(),
+            parent_inner_puzzle_hash: Bytes32::default(),
+            parent_amount: 0,
+        };
+        let Some(parent_registry) = Self::from_spend(ctx, parent_spend, dummy_lp, constants)?
         else {
             return Ok(None);
         };
 
-        let proof = Proof::Lineage(LineageProof {
-            parent_parent_coin_info: parent_coin.parent_coin_info,
-            parent_inner_puzzle_hash: parent_info.inner_puzzle_hash().into(),
-            parent_amount: parent_coin.amount,
-        });
-
-        let parent_solution = SingletonSolution::<NodePtr>::from_clvm(allocator, parent_solution)?;
-        let new_state = ActionLayer::<RewardDistributorState>::get_new_state(
-            allocator,
-            parent_info.state,
-            parent_solution.inner_solution,
-        )?;
-
-        let new_info = parent_info.with_state(new_state);
-
-        let new_coin = Coin::new(parent_coin.coin_id(), new_info.puzzle_hash().into(), 1);
-
-        let parent_inner_solution = RawActionLayerSolution::<
-            NodePtr,
-            NodePtr,
-            ReserveFinalizerSolution,
-        >::from_clvm(allocator, parent_solution.inner_solution)?;
-        let parent_reserve = Coin::new(
-            parent_inner_solution.finalizer_solution.reserve_parent_id,
-            constants.reserve_full_puzzle_hash,
-            parent_info.state.total_reserves,
-        );
-        let reserve = Reserve::new(
-            parent_reserve.coin_id(),
-            LineageProof {
-                parent_parent_coin_info: parent_reserve.parent_coin_info,
-                parent_inner_puzzle_hash: constants.reserve_inner_puzzle_hash,
-                parent_amount: parent_reserve.amount,
-            },
-            constants.reserve_asset_id,
-            SingletonStruct::new(parent_info.constants.launcher_id)
-                .tree_hash()
-                .into(),
-            0,
-            new_state.total_reserves,
-        );
+        let new_info = parent_registry
+            .info
+            .with_state(parent_registry.pending_spend.latest_state.1);
 
         Ok(Some(RewardDistributor {
-            coin: new_coin,
-            proof,
+            coin: Coin::new(
+                parent_registry.coin.coin_id(),
+                new_info.puzzle_hash().into(),
+                1,
+            ),
+            proof: Proof::Lineage(parent_registry.child_lineage_proof()),
             info: new_info,
-            reserve,
-            pending_items: RewardDistributorPendingItems::default(),
+            reserve: parent_registry.reserve.child(new_info.state.total_reserves),
+            pending_spend: RewardDistributorPendingSpendInfo::new(new_info.state),
         }))
+    }
+
+    pub fn child(&self, child_state: RewardDistributorState) -> Self {
+        let new_info = self.info.with_state(child_state);
+        let new_coin = Coin::new(self.coin.coin_id(), new_info.puzzle_hash().into(), 1);
+        let new_reserve = self.reserve.child(child_state.total_reserves);
+
+        RewardDistributor {
+            coin: new_coin,
+            proof: Proof::Lineage(self.child_lineage_proof()),
+            info: new_info,
+            reserve: new_reserve,
+            pending_spend: RewardDistributorPendingSpendInfo::new(new_info.state),
+        }
     }
 
     #[allow(clippy::type_complexity)]
