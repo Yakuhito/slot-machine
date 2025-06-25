@@ -1,15 +1,12 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes, Bytes32, Coin, CoinSpend},
+    protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
 };
 use chia_puzzle_types::singleton::{LauncherSolution, SingletonArgs};
-use chia_wallet_sdk::{
-    driver::{DriverError, Layer, Puzzle, Spend, SpendContext},
-    types::run_puzzle,
-};
-use clvm_traits::{clvm_list, match_tuple, FromClvm, ToClvm};
-use clvmr::{Allocator, NodePtr};
+use chia_wallet_sdk::driver::{DriverError, Layer, Puzzle, Spend, SpendContext};
+use clvm_traits::{clvm_list, match_tuple};
+use clvmr::NodePtr;
 
 use crate::{
     eve_singleton_inner_puzzle, Action, ActionLayer, ActionLayerSolution, DelegatedStateAction,
@@ -399,12 +396,13 @@ impl XchandlesRegistry {
         let puzzle = layers.construct_puzzle(ctx)?;
 
         let action_puzzle_hashes = self
-            .pending_items
+            .pending_spend
             .actions
             .iter()
             .map(|a| ctx.tree_hash(a.puzzle).into())
             .collect::<Vec<Bytes32>>();
 
+        let child = self.child(self.pending_spend.latest_state.1);
         let solution = layers.construct_solution(
             ctx,
             SingletonSolution {
@@ -420,7 +418,7 @@ impl XchandlesRegistry {
                         .ok_or(DriverError::Custom(
                             "Couldn't build proofs for one or more actions".to_string(),
                         ))?,
-                    action_spends: self.pending_items.actions,
+                    action_spends: self.pending_spend.actions,
                     finalizer_solution: NodePtr::NIL,
                 },
             },
@@ -429,27 +427,7 @@ impl XchandlesRegistry {
         let my_spend = Spend::new(puzzle, solution);
         ctx.spend(self.coin, my_spend)?;
 
-        let my_puzzle = Puzzle::parse(ctx, my_spend.puzzle);
-        let new_self = XchandlesRegistry::from_parent_spend(
-            ctx,
-            self.coin,
-            my_puzzle,
-            my_spend.solution,
-            self.info.constants,
-        )?
-        .ok_or(DriverError::Custom(
-            "Couldn't parse child registry".to_string(),
-        ))?;
-
-        Ok(new_self)
-    }
-
-    pub fn insert(&mut self, action_spend: Spend) {
-        self.pending_items.actions.push(action_spend);
-    }
-
-    pub fn insert_multiple(&mut self, action_spends: Vec<Spend>) {
-        self.pending_items.actions.extend(action_spends);
+        Ok(child)
     }
 
     pub fn new_action<A>(&self) -> A
@@ -459,42 +437,19 @@ impl XchandlesRegistry {
         A::from_constants(&self.info.constants)
     }
 
-    pub fn created_slot_values_to_slots(
+    pub fn created_slot_value_to_slot(
         &self,
-        slot_values: Vec<XchandlesSlotValue>,
-    ) -> Vec<Slot<XchandlesSlotValue>> {
+        slot_value: XchandlesSlotValue,
+    ) -> Slot<XchandlesSlotValue> {
         let proof = SlotProof {
             parent_parent_info: self.coin.parent_coin_info,
             parent_inner_puzzle_hash: self.info.inner_puzzle_hash().into(),
         };
 
-        slot_values
-            .into_iter()
-            .map(|slot_value| {
-                Slot::new(
-                    proof,
-                    SlotInfo::from_value(self.info.constants.launcher_id, 0, slot_value),
-                )
-            })
-            .collect()
-    }
-
-    pub fn get_latest_pending_state(
-        &self,
-        allocator: &mut Allocator,
-    ) -> Result<XchandlesRegistryState, DriverError> {
-        let mut state = (NodePtr::NIL, self.info.state);
-
-        for action in self.pending_items.actions.iter() {
-            let actual_solution = clvm_list!(state, action.solution).to_clvm(allocator)?;
-
-            let output = run_puzzle(allocator, action.puzzle, actual_solution)?;
-            (state, _) = <match_tuple!((NodePtr, XchandlesRegistryState), NodePtr)>::from_clvm(
-                allocator, output,
-            )?;
-        }
-
-        Ok(state.1)
+        Slot::new(
+            proof,
+            SlotInfo::from_value(self.info.constants.launcher_id, 0, slot_value),
+        )
     }
 
     pub fn actual_neigbors(
@@ -506,33 +461,51 @@ impl XchandlesRegistry {
         let mut left = on_chain_left_slot;
         let mut right = on_chain_right_slot;
 
-        let new_slot_value = XchandlesSlotValue::new(
-            new_handle_hash,
-            Bytes32::default(),
-            Bytes32::default(),
-            0,
-            Bytes32::default(),
-            Bytes::default(),
-        );
-
-        for slot_value in self.pending_items.created_slots.iter() {
-            if slot_value.handle_hash < new_slot_value.handle_hash
+        for slot_value in self.pending_spend.created_slots.iter() {
+            if slot_value.handle_hash < new_handle_hash
                 && slot_value.handle_hash >= left.info.value.handle_hash
             {
-                left = self
-                    .created_slot_values_to_slots(vec![slot_value.clone()])
-                    .remove(0);
+                left = self.created_slot_value_to_slot(slot_value.clone());
             }
 
-            if slot_value.handle_hash > new_slot_value.handle_hash
+            if slot_value.handle_hash > new_handle_hash
                 && slot_value.handle_hash <= right.info.value.handle_hash
             {
-                right = self
-                    .created_slot_values_to_slots(vec![slot_value.clone()])
-                    .remove(0);
+                right = self.created_slot_value_to_slot(slot_value.clone());
             }
         }
 
         (left, right)
+    }
+
+    pub fn actual_slot(&self, slot: Slot<XchandlesSlotValue>) -> Slot<XchandlesSlotValue> {
+        let mut slot = slot;
+        for slot_value in self.pending_spend.created_slots.iter() {
+            if slot.info.value.handle_hash == slot_value.handle_hash {
+                slot = self.created_slot_value_to_slot(slot_value.clone());
+            }
+        }
+
+        slot
+    }
+
+    pub fn insert_action_spend(
+        &mut self,
+        ctx: &mut SpendContext,
+        action_spend: Spend,
+    ) -> Result<(), DriverError> {
+        let res = Self::pending_info_delta_from_spend(
+            ctx,
+            action_spend,
+            self.pending_spend.latest_state,
+            self.info.constants,
+        )?;
+
+        self.pending_spend.latest_state = res.0;
+        self.pending_spend.created_slots.extend(res.1);
+        self.pending_spend.spent_slots.extend(res.2);
+        self.pending_spend.actions.push(action_spend);
+
+        Ok(())
     }
 }
