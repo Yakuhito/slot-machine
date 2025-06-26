@@ -275,7 +275,7 @@ impl RewardDistributor {
     pub fn from_spend(
         ctx: &mut SpendContext,
         spend: &CoinSpend,
-        reserve_lineage_proof: LineageProof,
+        reserve_lineage_proof: Option<LineageProof>,
         constants: RewardDistributorConstants,
     ) -> Result<Option<Self>, DriverError> {
         let coin = spend.coin;
@@ -301,7 +301,11 @@ impl RewardDistributor {
 
         let reserve = Reserve::new(
             inner_solution.finalizer_solution.reserve_parent_id,
-            reserve_lineage_proof,
+            reserve_lineage_proof.unwrap_or(LineageProof {
+                parent_parent_coin_info: Bytes32::default(),
+                parent_inner_puzzle_hash: Bytes32::default(),
+                parent_amount: 0,
+            }), // dummy default value
             constants.reserve_asset_id,
             SingletonStruct::new(info.constants.launcher_id)
                 .tree_hash()
@@ -335,13 +339,7 @@ impl RewardDistributor {
     where
         Self: Sized,
     {
-        let dummy_lp = LineageProof {
-            parent_parent_coin_info: Bytes32::default(),
-            parent_inner_puzzle_hash: Bytes32::default(),
-            parent_amount: 0,
-        };
-        let Some(parent_registry) = Self::from_spend(ctx, parent_spend, dummy_lp, constants)?
-        else {
+        let Some(parent_registry) = Self::from_spend(ctx, parent_spend, None, constants)? else {
             return Ok(None);
         };
 
