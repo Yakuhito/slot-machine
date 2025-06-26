@@ -17,6 +17,8 @@
     REGISTRATION_PERIOD ; number of seconds to register a handle for, in seconds
                         ; most likely 31622400 = 366 days * 24 hours/day * 60 minutes/hour * 60 seconds/minute
     Current_Expiration ; 0 if the handle is being registered, != 0 if extension
+                       ; this Truth is unused in this puzzle, but can be used to price renewals differently
+                       ;   in custom ones
     Handle .
     num_periods ; number of periods to register the handle for (e.g., 1 year, 2 years, and so on)
 )
@@ -26,7 +28,7 @@
                 (if (> length 4)
                     (if (= length 5)
                         16
-                        ; else length > 6
+                        ; else length >= 6
                         (if (> length 31) (x) 2)
                     )
                     ; else 2 < length < 5
@@ -55,7 +57,7 @@
         )
     )
 
-    ;; this function will return 1 if the handle contains numbers and 0 otherwise
+    ;; this function will return the number of numbers in a handle
     ;; PLUS it will (x) if the handle contains invalid characters
     (defun count_numbers_plus_validate (handle)
         (if handle

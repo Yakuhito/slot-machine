@@ -12,7 +12,10 @@
     BASE_PROGRAM ; compute base price using this program
     HALVING_PERIOD ; one day = 86400 = 60 * 60 * 24 seconds
     START_PREMIUM
-    END_VALUE ; premium at the very end of the expiry auction
+    END_VALUE ; value returned by the premium function at the end of the reverse auction
+              ; to make premium = 0 at the end, we subtract this small value from all
+              ;   values returned by the function, effectively moving the graph a bit 
+              ;   down on the y-axis so f(auction_end_time) = 0
     PRECISION ; 10 ** 18
     BITS_LIST ; (list bit1 bit2 bit3 ...)
     Buy_Time  ; 'time now' - assumes user is interested in passing in a value as late as possible
