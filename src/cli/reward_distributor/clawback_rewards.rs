@@ -8,7 +8,7 @@ use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_only, find_commitment_slots, find_reward_slots, get_coin_public_key,
+    assets_xch_only, find_commitment_slots, find_reward_slot, get_coin_public_key,
     get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, new_sk,
     no_assets, parse_amount, parse_one_sided_offer, spend_security_coin, spend_to_coin_spend,
     sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
@@ -50,16 +50,13 @@ pub async fn reward_distributor_clawback_rewards(
     .into_iter()
     .next()
     .ok_or(CliError::SlotNotFound("Commitment"))?;
-    let reward_slot = find_reward_slots(
+    let reward_slot = find_reward_slot(
         &mut ctx,
         &client,
         distributor.info.constants,
         commitment_slot.info.value.epoch_start,
     )
-    .await?
-    .into_iter()
-    .next()
-    .ok_or(CliError::SlotNotFound("Reward"))?;
+    .await?;
 
     println!(
         "Will use commitment slot with rewards={} for epoch_start={}",

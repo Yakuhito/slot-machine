@@ -1,5 +1,5 @@
 use crate::{
-    assets_xch_only, find_reward_slots, get_coinset_client, get_constants, hex_string_to_bytes32,
+    assets_xch_only, find_reward_slot, get_coinset_client, get_constants, hex_string_to_bytes32,
     new_sk, no_assets, parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor,
     wait_for_coin, yes_no_prompt, CliError, Db, RewardDistributorNewEpochAction,
     RewardDistributorSyncAction, SageClient,
@@ -40,16 +40,13 @@ pub async fn reward_distributor_new_epoch(
     }
 
     println!("Finding appropriate reward slot...");
-    let reward_slot = find_reward_slots(
+    let reward_slot = find_reward_slot(
         &mut ctx,
         &client,
         distributor.info.constants,
         next_epoch_start,
     )
-    .await?
-    .into_iter()
-    .next()
-    .ok_or(CliError::SlotNotFound("Reward"))?;
+    .await?;
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  1 mojo",);

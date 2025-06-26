@@ -8,10 +8,10 @@ use chia_wallet_sdk::{
 use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_and_cat, find_reward_slots, get_coinset_client, get_constants,
-    hex_string_to_bytes32, new_sk, no_assets, parse_amount, parse_one_sided_offer,
-    spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
-    RewardDistributorCommitIncentivesAction, SageClient,
+    assets_xch_and_cat, find_reward_slot, get_coinset_client, get_constants, hex_string_to_bytes32,
+    new_sk, no_assets, parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor,
+    wait_for_coin, yes_no_prompt, CliError, Db, RewardDistributorCommitIncentivesAction,
+    SageClient,
 };
 
 pub async fn reward_distributor_commit_rewards(
@@ -82,11 +82,8 @@ pub async fn reward_distributor_commit_rewards(
     )?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let reward_slot = find_reward_slots(&mut ctx, &client, distributor.info.constants, epoch_start)
-        .await?
-        .into_iter()
-        .next()
-        .ok_or(CliError::SlotNotFound("Reward"))?;
+    let reward_slot =
+        find_reward_slot(&mut ctx, &client, distributor.info.constants, epoch_start).await?;
 
     let (sec_conds, _slot1, _slot2) = distributor
         .new_action::<RewardDistributorCommitIncentivesAction>()

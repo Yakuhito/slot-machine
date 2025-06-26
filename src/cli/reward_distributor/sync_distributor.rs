@@ -253,60 +253,61 @@ pub async fn mempool_distributor_maybe(
     Ok(distributor)
 }
 
-pub async fn find_reward_slots(
+pub async fn find_reward_slot(
     ctx: &mut SpendContext,
     client: &CoinsetClient,
     constants: RewardDistributorConstants,
     epoch_start: u64,
-) -> Result<Vec<Slot<RewardDistributorRewardSlotValue>>, CliError> {
-    let mut possible_records = client
-        .get_coin_records_by_hint(epoch_start.tree_hash().into(), None, None, Some(false))
-        .await?
-        .coin_records
-        .ok_or(DriverError::MissingHint)?;
+) -> Result<Slot<RewardDistributorRewardSlotValue>, CliError> {
+    let mut epoch_start = epoch_start;
 
-    let mut slots = Vec::new();
-
-    while !possible_records.is_empty() {
-        let coin_record = possible_records.remove(0);
-        let distributor_spent = client
-            .get_puzzle_and_solution(
-                coin_record.coin.parent_coin_info,
-                Some(coin_record.confirmed_block_index),
-            )
+    loop {
+        let mut possible_records = client
+            .get_coin_records_by_hint(epoch_start.tree_hash().into(), None, None, Some(false))
             .await?
-            .coin_solution
-            .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
+            .coin_records
+            .ok_or(DriverError::MissingHint)?;
 
-        let Some(distributor) =
-            RewardDistributor::from_spend(ctx, &distributor_spent, None, constants)?
-        else {
-            continue;
-        };
+        while !possible_records.is_empty() {
+            let coin_record = possible_records.remove(0);
+            let distributor_spent = client
+                .get_puzzle_and_solution(
+                    coin_record.coin.parent_coin_info,
+                    Some(coin_record.confirmed_block_index),
+                )
+                .await?
+                .coin_solution
+                .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
-        if let Some(slot) = distributor
-            .pending_spend
-            .created_reward_slots
-            .iter()
-            .find_map(|slot| {
-                if slot.epoch_start == epoch_start {
-                    let slot = distributor
-                        .created_slot_value_to_slot(*slot, RewardDistributorSlotNonce::REWARD);
-                    if slot.coin == coin_record.coin {
-                        Some(slot)
+            let Some(distributor) =
+                RewardDistributor::from_spend(ctx, &distributor_spent, None, constants)?
+            else {
+                continue;
+            };
+
+            if let Some(slot) = distributor
+                .pending_spend
+                .created_reward_slots
+                .iter()
+                .find_map(|slot| {
+                    if slot.epoch_start == epoch_start {
+                        let slot = distributor
+                            .created_slot_value_to_slot(*slot, RewardDistributorSlotNonce::REWARD);
+                        if slot.coin == coin_record.coin {
+                            Some(slot)
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
-                } else {
-                    None
-                }
-            })
-        {
-            slots.push(slot);
-        };
+                })
+            {
+                return Ok(slot);
+            };
+        }
+        epoch_start -= constants.epoch_seconds;
     }
-
-    Ok(slots)
 }
 
 pub async fn find_commitment_slots(
