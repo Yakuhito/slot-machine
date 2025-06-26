@@ -84,7 +84,7 @@ pub async fn reward_distributor_initiate_payout(
         Conditions::new()
     };
 
-    let (new_conds, _new_slot, payout_amount) = distributor
+    let (new_conds, payout_amount) = distributor
         .new_action::<RewardDistributorInitiatePayoutAction>()
         .spend(&mut ctx, &mut distributor, slot)?;
     sec_conds = sec_conds.extend(new_conds);

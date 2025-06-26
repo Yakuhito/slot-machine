@@ -147,7 +147,7 @@ pub async fn xchandles_update(
 
     let nft = offer.created_nft.unwrap();
 
-    let (nft_inner_conds, _new_slot) = registry.new_action::<XchandlesUpdateAction>().spend(
+    let nft_inner_conds = registry.new_action::<XchandlesUpdateAction>().spend(
         &mut ctx,
         &mut registry,
         slot,

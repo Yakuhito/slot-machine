@@ -326,7 +326,6 @@ pub async fn xchandles_register(
                     precommitted_pricing_solution,
                     slot,
                 )?
-                .0
                 .reserve_fee(1)
         } else {
             let (left_slot, right_slot) = if local {
@@ -339,18 +338,15 @@ pub async fn xchandles_register(
                     .await?
             };
 
-            registry
-                .new_action::<XchandlesRegisterAction>()
-                .spend(
-                    &mut ctx,
-                    &mut registry,
-                    left_slot,
-                    right_slot,
-                    precommit_coin,
-                    payment_cat_base_price,
-                    registration_period,
-                )?
-                .0
+            registry.new_action::<XchandlesRegisterAction>().spend(
+                &mut ctx,
+                &mut registry,
+                left_slot,
+                right_slot,
+                precommit_coin,
+                payment_cat_base_price,
+                registration_period,
+            )?
         };
 
         let _new_registry = registry.finish_spend(&mut ctx)?;

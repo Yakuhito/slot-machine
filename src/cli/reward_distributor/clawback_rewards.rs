@@ -82,7 +82,7 @@ pub async fn reward_distributor_clawback_rewards(
     let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let (send_message_conds, _slot1, returned_amount) = distributor
+    let (send_message_conds, returned_amount) = distributor
         .new_action::<RewardDistributorWithdrawIncentivesAction>()
         .spend(&mut ctx, &mut distributor, commitment_slot, reward_slot)?;
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;

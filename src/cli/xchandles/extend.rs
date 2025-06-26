@@ -81,17 +81,16 @@ pub async fn xchandles_extend(
             .await?
     };
 
-    let (notarized_payment, sec_conds, _new_slot) =
-        registry.new_action::<XchandlesExtendAction>().spend(
-            &mut ctx,
-            &mut registry,
-            handle,
-            slot,
-            payment_asset_id,
-            payment_cat_base_price,
-            registration_period,
-            num_periods,
-        )?;
+    let (sec_conds, notarized_payment) = registry.new_action::<XchandlesExtendAction>().spend(
+        &mut ctx,
+        &mut registry,
+        handle,
+        slot,
+        payment_asset_id,
+        payment_cat_base_price,
+        registration_period,
+        num_periods,
+    )?;
 
     yes_no_prompt("Continue with extension?")?;
 

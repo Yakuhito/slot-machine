@@ -1439,7 +1439,7 @@ mod tests {
                 benchmark.add_spends(ctx, &mut sim, "update_price", &[user_bls.sk.clone()])?;
             };
 
-            let (secure_cond, new_slots) = catalog.new_action::<CatalogRegisterAction>().spend(
+            let secure_cond = catalog.new_action::<CatalogRegisterAction>().spend(
                 ctx,
                 &mut catalog,
                 tail_hash.into(),
@@ -1475,7 +1475,7 @@ mod tests {
                 s.info.value_hash != left_slot.info.value_hash
                     && s.info.value_hash != right_slot.info.value_hash
             });
-            slots.extend(new_slots);
+            slots.extend(created_slots.clone());
 
             created_slots.into_iter().for_each(|s| {
                 assert!(sim
@@ -1658,7 +1658,7 @@ mod tests {
 
         let mut registry = registry;
         let used_slot_value_hash = slot.clone().map(|s| s.info.value_hash);
-        let (secure_cond, _new_slot_maybe) = registry.new_action::<XchandlesRefundAction>().spend(
+        let secure_cond = registry.new_action::<XchandlesRefundAction>().spend(
             ctx,
             &mut registry,
             precommit_coin,
@@ -1984,7 +1984,7 @@ mod tests {
             };
 
             let spent_values = [left_slot.info.value.clone(), right_slot.info.value.clone()];
-            let (secure_cond, new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
+            let secure_cond = registry.new_action::<XchandlesRegisterAction>().spend(
                 ctx,
                 &mut registry,
                 left_slot.clone(),
@@ -2006,6 +2006,12 @@ mod tests {
                     .collect::<Vec<&XchandlesSlotValue>>(),
                 spent_values.iter().rev().collect::<Vec<_>>(),
             );
+            let new_slots = registry
+                .pending_spend
+                .created_slots
+                .iter()
+                .map(|s| registry.created_slot_value_to_slot(s.clone()))
+                .collect::<Vec<_>>();
             registry = registry.finish_spend(ctx)?;
             sim.pass_time(100); // registration start was at timestamp 100
 
@@ -2022,11 +2028,13 @@ mod tests {
 
             // test on-chain oracle for current handle
             let spent_slot_value_hash = oracle_slot.info.value_hash;
-            let (oracle_conds, new_slot) = registry.new_action::<XchandlesOracleAction>().spend(
+            let oracle_conds = registry.new_action::<XchandlesOracleAction>().spend(
                 ctx,
                 &mut registry,
                 oracle_slot.clone(),
             )?;
+            let new_slot = registry
+                .created_slot_value_to_slot(registry.pending_spend.created_slots[0].clone());
 
             ensure_conditions_met(ctx, &mut sim, oracle_conds, 0)?;
 
@@ -2056,7 +2064,7 @@ mod tests {
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &handle, extension_years);
 
             let spent_slot_value_hash = extension_slot.info.value_hash;
-            let (notarized_payment, extend_conds, new_slot) =
+            let (extend_conds, notarized_payment) =
                 registry.new_action::<XchandlesExtendAction>().spend(
                     ctx,
                     &mut registry,
@@ -2067,6 +2075,8 @@ mod tests {
                     reg_period,
                     extension_years,
                 )?;
+            let new_slot = registry
+                .created_slot_value_to_slot(registry.pending_spend.created_slots[0].clone());
 
             assert_eq!(
                 spent_slot_value_hash,
@@ -2135,7 +2145,7 @@ mod tests {
             let update_slot = new_slot;
             let update_slot_value_hash = update_slot.info.value_hash;
 
-            let (update_conds, new_slot) = registry.new_action::<XchandlesUpdateAction>().spend(
+            let update_conds = registry.new_action::<XchandlesUpdateAction>().spend(
                 ctx,
                 &mut registry,
                 update_slot.clone(),
@@ -2143,6 +2153,8 @@ mod tests {
                 new_resolved_data,
                 did.info.inner_puzzle_hash().into(),
             )?;
+            let new_slot = registry
+                .created_slot_value_to_slot(registry.pending_spend.created_slots[0].clone());
 
             let _new_did = did.update(ctx, &user_p2, update_conds)?;
 
@@ -2261,7 +2273,7 @@ mod tests {
         )?;
 
         let spent_slot_value_hash = initial_slot.info.value_hash;
-        let (expire_conds, _new_slot) = registry.new_action::<XchandlesExpireAction>().spend(
+        let expire_conds = registry.new_action::<XchandlesExpireAction>().spend(
             ctx,
             &mut registry,
             initial_slot.clone(),
@@ -2732,7 +2744,7 @@ mod tests {
 
         // add the 1st entry/NFT before reward epoch ('first epoch') begins
         let (entry1_slot, _nft1) = if manager_type == RewardDistributorType::Manager {
-            let (manager_conditions, entry1_slot) = registry
+            let manager_conditions = registry
                 .new_action::<RewardDistributorAddEntryAction>()
                 .spend(
                     ctx,
@@ -2741,6 +2753,10 @@ mod tests {
                     1,
                     manager_or_did_singleton_inner_puzzle_hash,
                 )?;
+            let entry1_slot = registry.created_slot_value_to_slot(
+                registry.pending_spend.created_entry_slots[0].clone(),
+                RewardDistributorSlotNonce::ENTRY,
+            );
             registry = registry.finish_spend(ctx, vec![])?;
 
             (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
@@ -2797,9 +2813,13 @@ mod tests {
                 }],
             };
 
-            let (sec_conds, notarized_payment, entry1_slot, locked_nft) = registry
+            let (sec_conds, notarized_payment, locked_nft) = registry
                 .new_action::<RewardDistributorStakeAction>()
                 .spend(ctx, &mut registry, nft, nft_proof, nft_bls.puzzle_hash)?;
+            let entry1_slot = registry.created_slot_value_to_slot(
+                registry.pending_spend.created_entry_slots[0].clone(),
+                RewardDistributorSlotNonce::ENTRY,
+            );
             registry = registry.finish_spend(ctx, vec![])?;
 
             ensure_conditions_met(ctx, &mut sim, sec_conds, 0)?;
@@ -2835,7 +2855,7 @@ mod tests {
 
         // commit incentives for first epoch
         let rewards_to_add = constants.epoch_seconds;
-        let (secure_conditions, first_epoch_commitment_slot, mut incentive_slots) = registry
+        let secure_conditions = registry
             .new_action::<RewardDistributorCommitIncentivesAction>()
             .spend(
                 ctx,
@@ -2845,6 +2865,18 @@ mod tests {
                 cat_minter.puzzle_hash,
                 rewards_to_add,
             )?;
+        let first_epoch_commitment_slot = registry.created_slot_value_to_slot(
+            registry.pending_spend.created_commitment_slots[0].clone(),
+            RewardDistributorSlotNonce::COMMITMENT,
+        );
+        let mut incentive_slots = registry
+            .pending_spend
+            .created_reward_slots
+            .iter()
+            .map(|s| {
+                registry.created_slot_value_to_slot(s.clone(), RewardDistributorSlotNonce::REWARD)
+            })
+            .collect::<Vec<_>>();
 
         // spend reserve and source cat together so deltas add up
         let source_cat_spend = CatSpend::new(
@@ -2876,7 +2908,7 @@ mod tests {
         // commit incentives for fifth epoch
         let fifth_epoch_start = first_epoch_start + constants.epoch_seconds * 4;
         let rewards_to_add = constants.epoch_seconds * 10;
-        let (secure_conditions, fifth_epoch_commitment_slot, new_incentive_slots) = registry
+        let secure_conditions = registry
             .new_action::<RewardDistributorCommitIncentivesAction>()
             .spend(
                 ctx,
@@ -2886,6 +2918,18 @@ mod tests {
                 cat_minter.puzzle_hash,
                 rewards_to_add,
             )?;
+        let fifth_epoch_commitment_slot = registry.created_slot_value_to_slot(
+            registry.pending_spend.created_commitment_slots[0].clone(),
+            RewardDistributorSlotNonce::COMMITMENT,
+        );
+        let new_incentive_slots = registry
+            .pending_spend
+            .created_reward_slots
+            .iter()
+            .map(|s| {
+                registry.created_slot_value_to_slot(s.clone(), RewardDistributorSlotNonce::REWARD)
+            })
+            .collect::<Vec<_>>();
 
         let new_value_keys = new_incentive_slots
             .iter()
@@ -2924,7 +2968,7 @@ mod tests {
 
         // 2nd commit incentives for fifth epoch
         let rewards_to_add = constants.epoch_seconds * 2;
-        let (secure_conditions, fifth_epoch_commitment_slot2, new_incentive_slots) = registry
+        let secure_conditions = registry
             .new_action::<RewardDistributorCommitIncentivesAction>()
             .spend(
                 ctx,
@@ -2938,6 +2982,18 @@ mod tests {
                 cat_minter.puzzle_hash,
                 rewards_to_add,
             )?;
+        let fifth_epoch_commitment_slot2 = registry.created_slot_value_to_slot(
+            registry.pending_spend.created_commitment_slots[0].clone(),
+            RewardDistributorSlotNonce::COMMITMENT,
+        );
+        let new_incentive_slots = registry
+            .pending_spend
+            .created_reward_slots
+            .iter()
+            .map(|s| {
+                registry.created_slot_value_to_slot(s.clone(), RewardDistributorSlotNonce::REWARD)
+            })
+            .collect::<Vec<_>>();
 
         let new_value_keys = new_incentive_slots
             .iter()
@@ -2980,7 +3036,7 @@ mod tests {
             .is_none());
 
         // withdraw the 1st incentives for epoch 5
-        let (withdraw_incentives_conditions, new_reward_slot, withdrawn_amount) = registry
+        let (withdraw_incentives_conditions, withdrawn_amount) = registry
             .new_action::<RewardDistributorWithdrawIncentivesAction>()
             .spend(
                 ctx,
@@ -2992,6 +3048,10 @@ mod tests {
                     .unwrap()
                     .clone(),
             )?;
+        let new_reward_slot = registry.created_slot_value_to_slot(
+            registry.pending_spend.created_reward_slots[0].clone(),
+            RewardDistributorSlotNonce::REWARD,
+        );
 
         let payout_coin_id = registry
             .reserve
@@ -3038,7 +3098,7 @@ mod tests {
             .find(|s| s.info.value.epoch_start == first_epoch_start)
             .unwrap()
             .clone();
-        let (new_epoch_conditions, new_reward_slot, fee) = registry
+        let (new_epoch_conditions, fee) = registry
             .new_action::<RewardDistributorNewEpochAction>()
             .spend(
                 ctx,
@@ -3046,6 +3106,10 @@ mod tests {
                 first_epoch_incentives_slot.clone(),
                 // first_epoch_incentives_slot.info.value.rewards,
             )?;
+        let new_reward_slot = registry.created_slot_value_to_slot(
+            registry.pending_spend.created_reward_slots[0].clone(),
+            RewardDistributorSlotNonce::REWARD,
+        );
         let payout_coin_id = reserve_cat
             .wrapped_child(constants.fee_payout_puzzle_hash, fee)
             .coin
@@ -3186,7 +3250,7 @@ mod tests {
         let nft2_bls = sim.bls(0);
         let nft3_bls = sim.bls(0);
         let (entry2_slot, other_nft2_info) = if manager_type == RewardDistributorType::Manager {
-            let (manager_conditions, entry2_slot) = registry
+            let manager_conditions = registry
                 .new_action::<RewardDistributorAddEntryAction>()
                 .spend(
                     ctx,
@@ -3195,6 +3259,11 @@ mod tests {
                     2,
                     manager_or_did_singleton_inner_puzzle_hash,
                 )?;
+            let entry2_slot = registry.created_slot_value_to_slot(
+                registry.pending_spend.created_entry_slots[0].clone(),
+                RewardDistributorSlotNonce::ENTRY,
+            );
+
             (manager_or_did_coin, manager_or_did_singleton_proof) = spend_manager_singleton(
                 ctx,
                 manager_or_did_coin,
@@ -3272,12 +3341,20 @@ mod tests {
                 }],
             };
 
-            let (sec_conds2, notarized_payment2, entry2_slot, locked_nft2) = registry
+            let (sec_conds2, notarized_payment2, locked_nft2) = registry
                 .new_action::<RewardDistributorStakeAction>()
                 .spend(ctx, &mut registry, nft2, nft2_proof, nft2_bls.puzzle_hash)?;
-            let (sec_conds3, notarized_payment3, entry3_slot, locked_nft3) = registry
+            let entry2_slot = registry.created_slot_value_to_slot(
+                registry.pending_spend.created_entry_slots[0].clone(),
+                RewardDistributorSlotNonce::ENTRY,
+            );
+            let (sec_conds3, notarized_payment3, locked_nft3) = registry
                 .new_action::<RewardDistributorStakeAction>()
                 .spend(ctx, &mut registry, nft3, nft3_proof, nft3_bls.puzzle_hash)?;
+            let entry3_slot = registry.created_slot_value_to_slot(
+                registry.pending_spend.created_entry_slots[1].clone(),
+                RewardDistributorSlotNonce::ENTRY,
+            );
             registry = registry.finish_spend(ctx, vec![])?;
 
             ensure_conditions_met(ctx, &mut sim, sec_conds2.extend(sec_conds3), 0)?;
@@ -3466,9 +3543,13 @@ mod tests {
                 .unwrap()
                 .clone();
 
-            let (new_epoch_conditions, new_reward_slot, _manager_fee) = registry
+            let (new_epoch_conditions, _manager_fee) = registry
                 .new_action::<RewardDistributorNewEpochAction>()
                 .spend(ctx, &mut registry, reward_slot)?;
+            let new_reward_slot = registry.created_slot_value_to_slot(
+                registry.pending_spend.created_reward_slots[0].clone(),
+                RewardDistributorSlotNonce::REWARD,
+            );
             incentive_slots
                 .retain(|s| s.info.value.epoch_start != new_reward_slot.info.value.epoch_start);
             incentive_slots.push(new_reward_slot);
@@ -3491,7 +3572,7 @@ mod tests {
         // commit incentives for 10th epoch
         let tenth_epoch_start = first_epoch_start + constants.epoch_seconds * 9;
         let rewards_to_add = constants.epoch_seconds * 10;
-        let (secure_conditions, tenth_epoch_commitment_slot, new_incentive_slots) = registry
+        let secure_conditions = registry
             .new_action::<RewardDistributorCommitIncentivesAction>()
             .spend(
                 ctx,
@@ -3501,6 +3582,18 @@ mod tests {
                 cat_minter.puzzle_hash,
                 rewards_to_add,
             )?;
+        let tenth_epoch_commitment_slot = registry.created_slot_value_to_slot(
+            registry.pending_spend.created_commitment_slots[0].clone(),
+            RewardDistributorSlotNonce::COMMITMENT,
+        );
+        let new_incentive_slots = registry
+            .pending_spend
+            .created_reward_slots
+            .iter()
+            .map(|s| {
+                registry.created_slot_value_to_slot(s.clone(), RewardDistributorSlotNonce::REWARD)
+            })
+            .collect::<Vec<_>>();
 
         let new_value_keys = new_incentive_slots
             .iter()
@@ -3551,7 +3644,7 @@ mod tests {
                 })
                 .unwrap()
                 .clone();
-            let (new_epoch_conditions, new_reward_slot, _manager_fee) = registry
+            let (new_epoch_conditions, _manager_fee) = registry
                 .new_action::<RewardDistributorNewEpochAction>()
                 .spend(
                     ctx,
@@ -3559,6 +3652,10 @@ mod tests {
                     reward_slot.clone(),
                     // reward_slot.info.value.rewards,
                 )?;
+            let new_reward_slot = registry.created_slot_value_to_slot(
+                registry.pending_spend.created_reward_slots[0].clone(),
+                RewardDistributorSlotNonce::REWARD,
+            );
             incentive_slots
                 .retain(|s| s.info.value.epoch_start != new_reward_slot.info.value.epoch_start);
             incentive_slots.push(new_reward_slot);
@@ -3585,7 +3682,7 @@ mod tests {
 
         // payout entry
         let reserve_cat = registry.reserve.to_cat();
-        let (payout_conditions, _entry1_slot, withdrawal_amount) = registry
+        let (payout_conditions, withdrawal_amount) = registry
             .new_action::<RewardDistributorInitiatePayoutAction>()
             .spend(ctx, &mut registry, entry1_slot)?;
 

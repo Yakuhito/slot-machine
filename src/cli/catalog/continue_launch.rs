@@ -510,7 +510,7 @@ pub async fn catalog_continue_launch(
 
         let eve_nft_inner_puzzle = initial_cat_inner_puzzle_ptr(&mut ctx, &cats[i])?;
 
-        let (sec_conds, _new_slots) = catalog.new_action::<CatalogRegisterAction>().spend(
+        let sec_conds = catalog.new_action::<CatalogRegisterAction>().spend(
             &mut ctx,
             &mut catalog,
             tail_hash,

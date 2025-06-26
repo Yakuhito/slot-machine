@@ -337,21 +337,17 @@ pub async fn xchandles_expire(
                     precommitted_pricing_solution,
                     slot,
                 )?
-                .0
                 .reserve_fee(1)
         } else {
-            registry
-                .new_action::<XchandlesExpireAction>()
-                .spend(
-                    &mut ctx,
-                    &mut registry,
-                    slot,
-                    num_periods,
-                    payment_cat_base_price,
-                    registration_period,
-                    precommit_coin,
-                )?
-                .0
+            registry.new_action::<XchandlesExpireAction>().spend(
+                &mut ctx,
+                &mut registry,
+                slot,
+                num_periods,
+                payment_cat_base_price,
+                registration_period,
+                precommit_coin,
+            )?
         };
 
         let _new_registry = registry.finish_spend(&mut ctx)?;

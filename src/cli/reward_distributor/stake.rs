@@ -191,7 +191,7 @@ pub async fn reward_distributor_stake(
     }
 
     // accept offer
-    let (conds, notarized_payment, _slot, _locked_nft) = distributor
+    let (conds, notarized_payment, _locked_nft) = distributor
         .new_action::<RewardDistributorStakeAction>()
         .spend(
             &mut ctx,

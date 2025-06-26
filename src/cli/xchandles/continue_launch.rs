@@ -515,7 +515,7 @@ pub async fn xchandles_continue_launch(
 
         let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
-        let (sec_conds, _new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
+        let sec_conds = registry.new_action::<XchandlesRegisterAction>().spend(
             &mut ctx,
             &mut registry,
             left_slot,

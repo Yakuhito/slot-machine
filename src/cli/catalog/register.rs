@@ -369,21 +369,18 @@ pub async fn catalog_register(
                     .await?
             };
 
-            catalog
-                .new_action::<CatalogRegisterAction>()
-                .spend(
-                    &mut ctx,
-                    &mut catalog,
-                    registered_asset_id,
-                    left_slot,
-                    right_slot,
-                    precommit_coin,
-                    Spend {
-                        puzzle: initial_nft_puzzle_ptr,
-                        solution: NodePtr::NIL,
-                    },
-                )?
-                .0
+            catalog.new_action::<CatalogRegisterAction>().spend(
+                &mut ctx,
+                &mut catalog,
+                registered_asset_id,
+                left_slot,
+                right_slot,
+                precommit_coin,
+                Spend {
+                    puzzle: initial_nft_puzzle_ptr,
+                    solution: NodePtr::NIL,
+                },
+            )?
         };
 
         let _new_catalog = catalog.finish_spend(&mut ctx)?;

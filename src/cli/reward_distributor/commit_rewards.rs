@@ -85,7 +85,7 @@ pub async fn reward_distributor_commit_rewards(
     let reward_slot =
         find_reward_slot(&mut ctx, &client, distributor.info.constants, epoch_start).await?;
 
-    let (sec_conds, _slot1, _slot2) = distributor
+    let sec_conds = distributor
         .new_action::<RewardDistributorCommitIncentivesAction>()
         .spend(
             &mut ctx,

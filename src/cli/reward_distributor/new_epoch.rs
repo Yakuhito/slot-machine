@@ -66,7 +66,7 @@ pub async fn reward_distributor_new_epoch(
     let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
     offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
-    let (sec_conds, _new_slot, fee) = distributor
+    let (sec_conds, fee) = distributor
         .new_action::<RewardDistributorNewEpochAction>()
         .spend(&mut ctx, &mut distributor, reward_slot)?;
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;

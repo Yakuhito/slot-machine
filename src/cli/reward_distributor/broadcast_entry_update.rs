@@ -130,7 +130,7 @@ pub async fn reward_distributor_broadcast_entry_update(
             last_payment_amount
         );
     } else {
-        let (_conds, _new_slot) = reward_distributor
+        let _conds = reward_distributor
             .new_action::<RewardDistributorAddEntryAction>()
             .spend(
                 &mut ctx,
