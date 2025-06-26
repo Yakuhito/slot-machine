@@ -128,7 +128,7 @@ impl XchandlesExpireAction {
         base_handle_price: u64,
         registration_period: u64,
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
-    ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
         // announcement is simply premcommitment coin ph
@@ -179,18 +179,14 @@ impl XchandlesExpireAction {
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
-        let new_slot_value = Self::created_slot_value(ctx, action_solution)?;
 
         // spend slot
         slot.spend(ctx, my_inner_puzzle_hash)?;
 
         let mut expire_ann: Vec<u8> = expire_ann.to_vec();
         expire_ann.insert(0, b'x');
-        Ok((
-            Conditions::new()
-                .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, expire_ann)),
-            registry.created_slot_value_to_slot(new_slot_value.clone()),
-        ))
+        Ok(Conditions::new()
+            .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, expire_ann)))
     }
 }
 

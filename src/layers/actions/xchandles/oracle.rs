@@ -60,7 +60,7 @@ impl XchandlesOracleAction {
         ctx: &mut SpendContext,
         registry: &mut XchandlesRegistry,
         slot: Slot<XchandlesSlotValue>,
-    ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // spend self
         let slot = registry.actual_slot(slot);
         let action_solution = ctx.alloc(&slot.info.value)?;
@@ -75,11 +75,8 @@ impl XchandlesOracleAction {
 
         let mut oracle_ann = new_slot.tree_hash().to_vec();
         oracle_ann.insert(0, b'o');
-        Ok((
-            Conditions::new()
-                .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, oracle_ann)),
-            registry.created_slot_value_to_slot(new_slot.clone()),
-        ))
+        Ok(Conditions::new()
+            .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, oracle_ann)))
     }
 }
 

@@ -73,7 +73,7 @@ impl XchandlesUpdateAction {
         new_owner_launcher_id: Bytes32,
         new_resolved_data: Bytes,
         announcer_inner_puzzle_hash: Bytes32,
-    ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // spend self
         let slot = registry.actual_slot(slot);
         let action_solution = ctx.alloc(&XchandlesUpdateActionSolution {
@@ -88,12 +88,6 @@ impl XchandlesUpdateAction {
 
         registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
-        let new_slot_value = slot
-            .info
-            .value
-            .clone()
-            .with_data(new_owner_launcher_id, new_resolved_data.clone());
-
         // spend slot
         let my_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
@@ -106,13 +100,10 @@ impl XchandlesUpdateAction {
 
         slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        Ok((
-            Conditions::new().send_message(
-                18,
-                msg.into(),
-                vec![ctx.alloc(&registry.coin.puzzle_hash)?],
-            ),
-            registry.created_slot_value_to_slot(new_slot_value),
+        Ok(Conditions::new().send_message(
+            18,
+            msg.into(),
+            vec![ctx.alloc(&registry.coin.puzzle_hash)?],
         ))
     }
 }

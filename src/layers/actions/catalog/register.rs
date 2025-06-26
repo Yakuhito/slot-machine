@@ -126,7 +126,7 @@ impl CatalogRegisterAction {
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         eve_nft_inner_spend: Spend,
-    ) -> Result<(Conditions, Vec<Slot<CatalogSlotValue>>), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // calculate announcement
         let register_announcement: Bytes32 =
             clvm_tuple!(tail_hash, precommit_coin.value.initial_inner_puzzle_hash)
@@ -182,23 +182,18 @@ impl CatalogRegisterAction {
         let my_solution = my_solution.to_clvm(ctx)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_values = self.created_slot_values(ctx, my_solution)?;
         catalog.insert_action_spend(ctx, Spend::new(my_puzzle, my_solution))?;
 
         // spend slots
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
         right_slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        Ok((
+        Ok(
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 catalog.coin.puzzle_hash,
                 register_announcement,
             )),
-            slot_values
-                .into_iter()
-                .map(|s| catalog.created_slot_value_to_slot(s))
-                .collect(),
-        ))
+        )
     }
 }
 

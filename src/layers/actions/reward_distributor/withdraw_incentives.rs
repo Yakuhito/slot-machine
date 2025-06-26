@@ -103,7 +103,7 @@ impl RewardDistributorWithdrawIncentivesAction {
         distributor: &mut RewardDistributor,
         commitment_slot: Slot<RewardDistributorCommitmentSlotValue>,
         reward_slot: Slot<RewardDistributorRewardSlotValue>,
-    ) -> Result<(Conditions, Slot<RewardDistributorRewardSlotValue>, u64), DriverError> {
+    ) -> Result<(Conditions, u64), DriverError> {
         // last u64 = withdrawn amount
         let commitment_slot = distributor.actual_commitment_slot_value(commitment_slot);
         let reward_slot = distributor.actual_reward_slot_value(reward_slot);
@@ -131,11 +131,6 @@ impl RewardDistributorWithdrawIncentivesAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_value = Self::created_slot_value(
-            ctx,
-            distributor.info.constants.withdrawal_share_bps,
-            action_solution,
-        )?;
         distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         // spend slots
@@ -143,11 +138,7 @@ impl RewardDistributorWithdrawIncentivesAction {
         reward_slot.spend(ctx, my_inner_puzzle_hash)?;
         commitment_slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        Ok((
-            withdraw_incentives_conditions,
-            distributor.created_slot_value_to_slot(slot_value, RewardDistributorSlotNonce::REWARD),
-            withdrawal_share,
-        ))
+        Ok((withdraw_incentives_conditions, withdrawal_share))
     }
 }
 

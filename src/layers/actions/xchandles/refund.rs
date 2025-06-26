@@ -82,7 +82,7 @@ impl XchandlesRefundAction {
         precommited_pricing_puzzle_reveal: NodePtr,
         precommited_pricing_puzzle_solution: NodePtr,
         slot: Option<Slot<XchandlesSlotValue>>,
-    ) -> Result<(Conditions, Option<Slot<XchandlesSlotValue>>), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // calculate announcement
         let mut refund_announcement: Vec<u8> = precommit_coin.coin.puzzle_hash.to_vec();
         refund_announcement.insert(0, b'$');
@@ -126,22 +126,17 @@ impl XchandlesRefundAction {
 
         registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
-        let new_slot = slot
-            .as_ref()
-            .map(|slot| registry.created_slot_value_to_slot(slot.info.value.clone()));
-
         // if there's a slot, spend it
         if let Some(slot) = slot {
             slot.spend(ctx, my_inner_puzzle_hash)?;
         }
 
-        Ok((
+        Ok(
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 registry.coin.puzzle_hash,
                 refund_announcement,
             )),
-            new_slot,
-        ))
+        )
     }
 }
 

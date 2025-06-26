@@ -79,7 +79,7 @@ impl RewardDistributorAddEntryAction {
         payout_puzzle_hash: Bytes32,
         shares: u64,
         manager_singleton_inner_puzzle_hash: Bytes32,
-    ) -> Result<(Conditions, Slot<RewardDistributorEntrySlotValue>), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // calculate message that the manager needs to send
         let add_entry_message: Bytes32 = clvm_tuple!(payout_puzzle_hash, shares).tree_hash().into();
         let mut add_entry_message: Vec<u8> = add_entry_message.to_vec();
@@ -98,13 +98,8 @@ impl RewardDistributorAddEntryAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let my_state = distributor.pending_spend.latest_state.1;
-        let slot_value = Self::created_slot_value(ctx, &my_state, action_solution)?;
         distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
-        Ok((
-            add_entry_message,
-            distributor.created_slot_value_to_slot(slot_value, RewardDistributorSlotNonce::ENTRY),
-        ))
+        Ok(add_entry_message)
     }
 }
 

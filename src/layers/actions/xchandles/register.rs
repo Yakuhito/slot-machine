@@ -145,7 +145,7 @@ impl XchandlesRegisterAction {
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
         base_handle_price: u64,
         registration_period: u64,
-    ) -> Result<(Conditions, [Slot<XchandlesSlotValue>; 3]), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         let handle: String = precommit_coin.value.handle.clone();
         let handle_hash: Bytes32 = handle.tree_hash().into();
         let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
@@ -213,20 +213,12 @@ impl XchandlesRegisterAction {
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
         right_slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        let [new_left_slot, new_slot, new_right_slot] =
-            Self::created_slot_values(ctx, action_solution)?;
-
-        Ok((
+        Ok(
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 registry.coin.puzzle_hash,
                 register_announcement,
             )),
-            [
-                registry.created_slot_value_to_slot(new_left_slot),
-                registry.created_slot_value_to_slot(new_slot),
-                registry.created_slot_value_to_slot(new_right_slot),
-            ],
-        ))
+        )
     }
 }
 

@@ -91,7 +91,7 @@ impl RewardDistributorNewEpochAction {
         ctx: &mut SpendContext,
         distributor: &mut RewardDistributor,
         reward_slot: Slot<RewardDistributorRewardSlotValue>,
-    ) -> Result<(Conditions, Slot<RewardDistributorRewardSlotValue>, u64), DriverError> {
+    ) -> Result<(Conditions, u64), DriverError> {
         // also returns fee
         let my_state = distributor.pending_spend.latest_state.1;
         let reward_slot = distributor.actual_reward_slot_value(reward_slot);
@@ -128,13 +128,8 @@ impl RewardDistributorNewEpochAction {
         // spend slot
         reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
-        let slot_value = Self::created_slot_value(ctx, action_solution)?;
         distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
-        Ok((
-            new_epoch_conditions,
-            distributor.created_slot_value_to_slot(slot_value, RewardDistributorSlotNonce::REWARD),
-            fee,
-        ))
+        Ok((new_epoch_conditions, fee))
     }
 }
 

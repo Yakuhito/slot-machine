@@ -129,14 +129,7 @@ impl RewardDistributorCommitIncentivesAction {
         epoch_start: u64,
         clawback_ph: Bytes32,
         rewards_to_add: u64,
-    ) -> Result<
-        (
-            Conditions,
-            Slot<RewardDistributorCommitmentSlotValue>,
-            Vec<Slot<RewardDistributorRewardSlotValue>>,
-        ),
-        DriverError,
-    > {
+    ) -> Result<Conditions, DriverError> {
         let reward_slot = distributor.actual_reward_slot_value(reward_slot);
 
         let new_commitment_slot_value = RewardDistributorCommitmentSlotValue {
@@ -164,29 +157,13 @@ impl RewardDistributorCommitIncentivesAction {
         // spend reward slot
         reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
-        let (_commitment_slot_value, reward_slot_values) = Self::created_slot_values(
-            ctx,
-            distributor.info.constants.epoch_seconds,
-            action_solution,
-        )?;
         distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
-        Ok((
+        Ok(
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 distributor.coin.puzzle_hash,
                 commit_reward_announcement,
             )),
-            distributor.created_slot_value_to_slot(
-                new_commitment_slot_value,
-                RewardDistributorSlotNonce::COMMITMENT,
-            ),
-            reward_slot_values
-                .into_iter()
-                .map(|slot_value| {
-                    distributor
-                        .created_slot_value_to_slot(slot_value, RewardDistributorSlotNonce::REWARD)
-                })
-                .collect(),
-        ))
+        )
     }
 }
 

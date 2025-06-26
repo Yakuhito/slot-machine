@@ -112,7 +112,7 @@ impl XchandlesExtendAction {
         base_handle_price: u64,
         registration_period: u64,
         num_periods: u64,
-    ) -> Result<(NotarizedPayment, Conditions, Slot<XchandlesSlotValue>), DriverError> {
+    ) -> Result<(Conditions, NotarizedPayment), DriverError> {
         let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
         // spend self
@@ -161,13 +161,10 @@ impl XchandlesExtendAction {
         let mut extend_ann: Vec<u8> = clvm_tuple!(renew_amount, handle).tree_hash().to_vec();
         extend_ann.insert(0, b'e');
 
-        let new_slot_value = Self::created_slot_value(ctx, action_solution)?;
-
         Ok((
-            notarized_payment,
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, extend_ann)),
-            registry.created_slot_value_to_slot(new_slot_value.clone()),
+            notarized_payment,
         ))
     }
 }

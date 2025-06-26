@@ -85,16 +85,7 @@ impl RewardDistributorStakeAction {
         current_nft: Nft<HashedPtr>,
         nft_launcher_proof: NftLauncherProof,
         entry_custody_puzzle_hash: Bytes32,
-    ) -> Result<
-        (
-            Conditions,
-            NotarizedPayment,
-            Slot<RewardDistributorEntrySlotValue>,
-            Nft<HashedPtr>,
-        ),
-        DriverError,
-    > {
-        let my_state = distributor.pending_spend.latest_state.1;
+    ) -> Result<(Conditions, NotarizedPayment, Nft<HashedPtr>), DriverError> {
         let ephemeral_counter =
             ctx.extract::<HashedPtr>(distributor.pending_spend.latest_state.0)?;
         let my_id = distributor.coin.coin_id();
@@ -147,8 +138,6 @@ impl RewardDistributorStakeAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_value = Self::created_slot_value(ctx, &my_state, action_solution)?;
-
         let msg: Bytes32 = notarized_payment.tree_hash().into();
         distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
@@ -156,7 +145,6 @@ impl RewardDistributorStakeAction {
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(nft.coin.puzzle_hash, msg)),
             notarized_payment,
-            distributor.created_slot_value_to_slot(slot_value, RewardDistributorSlotNonce::ENTRY),
             nft.wrapped_child(payment_puzzle_hash, None, nft.info.metadata),
         ))
     }
