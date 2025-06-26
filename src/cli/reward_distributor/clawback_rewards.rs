@@ -8,11 +8,11 @@ use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_only, find_commitment_slot_for_puzzle_hash, find_reward_slot_for_epoch,
-    get_coin_public_key, get_coinset_client, get_constants, hex_string_to_bytes32,
-    hex_string_to_signature, new_sk, no_assets, parse_amount, parse_one_sided_offer,
-    spend_security_coin, spend_to_coin_spend, sync_distributor, wait_for_coin, yes_no_prompt,
-    CliError, Db, RewardDistributorWithdrawIncentivesAction, SageClient,
+    assets_xch_only, find_commitment_slots, find_reward_slots, get_coin_public_key,
+    get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, new_sk,
+    no_assets, parse_amount, parse_one_sided_offer, spend_security_coin, spend_to_coin_spend,
+    sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
+    RewardDistributorWithdrawIncentivesAction, SageClient,
 };
 
 pub async fn reward_distributor_clawback_rewards(
@@ -37,24 +37,28 @@ pub async fn reward_distributor_clawback_rewards(
 
     println!("Fetching slots...");
     let clawback_ph = Address::decode(&clawback_address)?.puzzle_hash;
-    let commitment_slot = find_commitment_slot_for_puzzle_hash(
+
+    let commitment_slot = find_commitment_slots(
         &mut ctx,
-        &db,
-        launcher_id,
+        &client,
+        distributor.info.constants,
         clawback_ph,
         epoch_start,
         reward_amount,
     )
     .await?
+    .into_iter()
+    .next()
     .ok_or(CliError::SlotNotFound("Commitment"))?;
-    let reward_slot = find_reward_slot_for_epoch(
+    let reward_slot = find_reward_slots(
         &mut ctx,
-        &db,
-        launcher_id,
+        &client,
+        distributor.info.constants,
         commitment_slot.info.value.epoch_start,
-        distributor.info.constants.epoch_seconds,
     )
     .await?
+    .into_iter()
+    .next()
     .ok_or(CliError::SlotNotFound("Reward"))?;
 
     println!(

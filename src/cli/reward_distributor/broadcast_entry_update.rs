@@ -3,10 +3,10 @@ use chia::{clvm_utils::ToTreeHash, protocol::Bytes};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    find_entry_slot_for_puzzle_hash, get_constants, get_last_onchain_timestamp,
-    hex_string_to_bytes32, multisig_broadcast_thing_finish, multisig_broadcast_thing_start,
-    sync_distributor, CliError, Db, MedievalVault, RewardDistributorAddEntryAction,
-    RewardDistributorRemoveEntryAction, RewardDistributorSyncAction, StateSchedulerLayerSolution,
+    find_entry_slots, get_constants, get_last_onchain_timestamp, hex_string_to_bytes32,
+    multisig_broadcast_thing_finish, multisig_broadcast_thing_start, sync_distributor, CliError,
+    Db, MedievalVault, RewardDistributorAddEntryAction, RewardDistributorRemoveEntryAction,
+    RewardDistributorSyncAction, StateSchedulerLayerSolution,
 };
 
 pub async fn reward_distributor_broadcast_entry_update(
@@ -104,14 +104,17 @@ pub async fn reward_distributor_broadcast_entry_update(
 
     if remove_entry {
         println!("Finding entry slot...");
-        let entry_slot = find_entry_slot_for_puzzle_hash(
+        let entry_slot = find_entry_slots(
             &mut ctx,
-            &db,
-            launcher_id,
+            &client,
+            reward_distributor.info.constants,
             entry_payout_puzzle_hash,
+            None,
             Some(entry_shares),
         )
         .await?
+        .into_iter()
+        .next()
         .ok_or(CliError::SlotNotFound("Mirror"))?;
 
         let (_conds, last_payment_amount) = reward_distributor

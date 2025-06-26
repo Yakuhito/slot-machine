@@ -314,6 +314,8 @@ pub async fn find_commitment_slots(
     client: &CoinsetClient,
     constants: RewardDistributorConstants,
     clawback_ph: Bytes32,
+    epoch_start: Option<u64>,
+    rewards: Option<u64>,
 ) -> Result<Vec<Slot<RewardDistributorCommitmentSlotValue>>, CliError> {
     let mut possible_records = client
         .get_coin_records_by_hint(clawback_ph, None, None, Some(false))
@@ -346,6 +348,16 @@ pub async fn find_commitment_slots(
             .iter()
             .find_map(|slot| {
                 if slot.clawback_ph == clawback_ph {
+                    if let Some(epoch_start) = epoch_start {
+                        if slot.epoch_start != epoch_start {
+                            return None;
+                        }
+                    }
+                    if let Some(rewards) = rewards {
+                        if slot.rewards != rewards {
+                            return None;
+                        }
+                    }
                     let slot = distributor
                         .created_slot_value_to_slot(*slot, RewardDistributorSlotNonce::COMMITMENT);
                     if slot.coin == coin_record.coin {
@@ -370,6 +382,8 @@ pub async fn find_entry_slots(
     client: &CoinsetClient,
     constants: RewardDistributorConstants,
     payout_puzzle_hash: Bytes32,
+    initial_cumulative_payout: Option<u64>,
+    shares: Option<u64>,
 ) -> Result<Vec<Slot<RewardDistributorEntrySlotValue>>, CliError> {
     let mut possible_records = client
         .get_coin_records_by_hint(payout_puzzle_hash, None, None, Some(false))
@@ -401,6 +415,16 @@ pub async fn find_entry_slots(
             .created_entry_slots
             .iter()
             .find_map(|slot| {
+                if let Some(initial_cumulative_payout) = initial_cumulative_payout {
+                    if initial_cumulative_payout != slot.initial_cumulative_payout {
+                        return None;
+                    }
+                }
+                if let Some(shares) = shares {
+                    if shares != slot.shares {
+                        return None;
+                    }
+                }
                 if slot.payout_puzzle_hash == payout_puzzle_hash {
                     let slot = distributor
                         .created_slot_value_to_slot(*slot, RewardDistributorSlotNonce::ENTRY);
