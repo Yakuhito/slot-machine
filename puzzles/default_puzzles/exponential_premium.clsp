@@ -19,10 +19,14 @@
               ;   values returned by the function, effectively moving the graph a bit 
               ;   down on the y-axis so f(auction_end_time) = 0
     PRECISION ; 10 ** 18
-    BITS_LIST ; (list bit1 bit2 bit3 ...)
-    Buy_Time  ; 'time now' - assumes user is interested in passing in a value as late as possible
-    Expiration . 
-    rest_of_pricing_program_solution ; pricing_program_solution passed to BASE_PROGRAM (r expiration handle . num_years) = (handle . num_years)
+    BITS_LIST . ; (list bit1 bit2 bit3 ...)
+    (@ solution
+        (
+            Buy_Time ; 'time now' - assumes user is interested in passing in a value as late as possible
+            Current_Expiration
+            rest_of_pricing_program_solution ; pricing_program_solution passed to BASE_PROGRAM (e.g., (Handle . num_periods))
+        )
+    )
 )
     (defun add_fractional_part (PRECISION bits_list acc fraction_part premium)
         (if bits_list
@@ -55,8 +59,8 @@
                    PRECISION
                    BITS_LIST
                    1
-                   (/ (* 65536 (% (- Buy_Time Expiration) HALVING_PERIOD)) HALVING_PERIOD) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
-                   (/ START_PREMIUM (lsh 1 (/ (- Buy_Time Expiration) HALVING_PERIOD))) ; premium from whole periods = START_PREMIUM / 2^p
+                   (/ (* 65536 (% (- Buy_Time Current_Expiration) HALVING_PERIOD)) HALVING_PERIOD) ; fractional part of n with 16 bits of precision (2 ** 16 = 65536)
+                   (/ START_PREMIUM (lsh 1 (/ (- Buy_Time Current_Expiration) HALVING_PERIOD))) ; premium from whole periods = START_PREMIUM / 2^p
                 ) END_VALUE) ; premium
             )
             registered_time
@@ -64,6 +68,6 @@
     )
 
     (main
-        (a BASE_PROGRAM (c Expiration rest_of_pricing_program_solution))
+        (a BASE_PROGRAM solution)
     )
 )

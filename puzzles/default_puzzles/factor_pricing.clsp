@@ -12,12 +12,16 @@
 ;; - 3 characters with no numbers: 128
 ;; If the handle contains a number, the price is halved.
 
-;; Note: Truths (Handle) are trusted and should be verified by the outer puzzle.
+;; Note: Truths (Buy_Time, Current_Expiration, Handle) are trusted and should be verified by the outer puzzle.
 
 (mod (
     BASE_PRICE ; base price = price per month of a 6+ character handle with at least one number
     REGISTRATION_PERIOD ; number of seconds to register a handle for, in seconds
                         ; most likely 31622400 = 366 days * 24 hours/day * 60 minutes/hour * 60 seconds/minute
+    Buy_Time ; 'time now' - assumes user is interested in passing in a value as late as possible
+             ; This Truth is unused in this puzzle, but can be used to price handles differently
+             ; Generally, the outer puzzle will just verify it with an ASSERT_SECONDS_ABSOLUTE
+             ;   but with no matching ASSERT_BEFORE_SECONDS_ABSOLUTE & delay
     Current_Expiration ; 0 if the handle is being registered, != 0 if extension
                        ; this Truth is unused in this puzzle, but can be used to price renewals differently
                        ;   in custom ones
