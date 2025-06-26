@@ -9,10 +9,7 @@ use chia_wallet_sdk::{
 };
 use clvmr::NodePtr;
 
-use crate::{
-    CliError, Db, P2DelegatedBySingletonLayerArgs, Reserve, RewardDistributor,
-    RewardDistributorSlotNonce,
-};
+use crate::{CliError, Db, P2DelegatedBySingletonLayerArgs, Reserve, RewardDistributor};
 
 pub async fn sync_distributor(
     client: &CoinsetClient,
@@ -20,248 +17,128 @@ pub async fn sync_distributor(
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
 ) -> Result<RewardDistributor, CliError> {
-    let last_unspent_coin_info = db.get_last_unspent_singleton_coin(launcher_id).await?;
-
-    let (last_spent_coin_id, constants, mut skip_db_save, prev_distributor) =
-        if let Some((_coin_id, parent_coin_id)) = last_unspent_coin_info {
-            let constants_from_db = db
-                .get_reward_distributor_configuration(ctx, launcher_id)
-                .await?
-                .ok_or(CliError::Custom(
-                    "Reward distributor configuration not found in database".to_string(),
-                ))?;
-
-            (parent_coin_id, constants_from_db, true, None)
-        } else {
-            let Some(launcher_coin_record) = client
-                .get_coin_record_by_name(launcher_id)
-                .await?
-                .coin_record
-            else {
-                return Err(CliError::CoinNotFound(launcher_id));
-            };
-            if !launcher_coin_record.spent {
-                return Err(CliError::CoinNotSpent(launcher_id));
-            }
-
-            let Some(launcher_coin_spend) = client
-                .get_puzzle_and_solution(
-                    launcher_coin_record.coin.coin_id(),
-                    Some(launcher_coin_record.spent_block_index),
-                )
-                .await?
-                .coin_solution
-            else {
-                return Err(CliError::CoinNotSpent(launcher_id));
-            };
-
-            let launcher_solution_ptr = ctx.alloc(&launcher_coin_spend.solution)?;
-            let Some((constants, initial_state, distributor_eve_coin)) =
-                RewardDistributor::from_launcher_solution(
-                    ctx,
-                    launcher_coin_spend.coin,
-                    launcher_solution_ptr,
-                )?
-            else {
-                return Err(CliError::Custom(
-                    "Could not parse launcher spend".to_string(),
-                ));
-            };
-
-            let Some(distributor_eve_coin_spend) = client
-                .get_puzzle_and_solution(
-                    distributor_eve_coin.coin_id(),
-                    Some(launcher_coin_record.spent_block_index),
-                )
-                .await?
-                .coin_solution
-            else {
-                return Err(CliError::CoinNotSpent(distributor_eve_coin.coin_id()));
-            };
-
-            let reserve = find_reserve(
-                ctx,
-                client,
-                launcher_id,
-                constants.reserve_asset_id,
-                0,
-                0,
-                true,
-            )
-            .await?;
-
-            let Some((new_distributor, slot)) = RewardDistributor::from_eve_coin_spend(
-                ctx,
-                constants,
-                initial_state,
-                distributor_eve_coin_spend,
-                reserve.coin.parent_coin_info,
-                reserve.proof,
-            )?
-            else {
-                return Err(CliError::Custom(
-                    "Could not parse eve coin spend".to_string(),
-                ));
-            };
-
-            let slot_value = slot.info.value;
-            db.save_slot(ctx, slot, 0).await?;
-            db.save_dig_indexed_slot_value_by_epoch_start(
-                slot_value.epoch_start,
-                RewardDistributorSlotNonce::REWARD.to_u64(),
-                slot_value.tree_hash().into(),
-            )
-            .await?;
-            db.save_reward_distributor_configuration(ctx, constants.launcher_id, constants)
-                .await?;
-
-            let Some(distributor_record) = client
-                .get_coin_record_by_name(new_distributor.coin.coin_id())
-                .await?
-                .coin_record
-            else {
-                return Err(CliError::CoinNotFound(new_distributor.coin.coin_id()));
-            };
-            if !distributor_record.spent {
-                return Ok(new_distributor);
-            }
-
-            (
-                new_distributor.coin.coin_id(),
-                new_distributor.info.constants,
-                false,
-                Some(new_distributor),
-            )
-        };
-
-    let mut last_coin_id = last_spent_coin_id;
-    let mut distributor: Option<RewardDistributor> = prev_distributor;
-    loop {
-        let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
-        let Some(coin_record) = coin_record_response.coin_record else {
-            return Err(CliError::CoinNotFound(last_coin_id));
-        };
-        if !coin_record.spent {
-            break;
-        }
-
-        if !skip_db_save {
-            db.save_singleton_coin(constants.launcher_id, coin_record)
-                .await?;
-        }
-
-        let puzzle_and_solution_resp = client
-            .get_puzzle_and_solution(
-                coin_record.coin.coin_id(),
-                Some(coin_record.spent_block_index),
-            )
-            .await?;
-        let Some(coin_spend) = puzzle_and_solution_resp.coin_solution else {
-            return Err(CliError::CoinNotSpent(last_coin_id));
-        };
-
-        let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(ctx, puzzle_ptr);
-        let solution_ptr = ctx.alloc(&coin_spend.solution)?;
-        if !skip_db_save {
-            if let Some(ref prev_distributor) = distributor {
-                let pending_items =
-                    prev_distributor.get_pending_items_from_spend(ctx, solution_ptr)?;
-
-                for (nonce, value_hash) in pending_items.pending_spent_slots.iter() {
-                    db.mark_slot_as_spent(
-                        constants.launcher_id,
-                        nonce.to_u64(),
-                        *value_hash,
-                        coin_record.spent_block_index,
-                    )
-                    .await?;
-
-                    db.delete_dig_indexed_slot_values_by_epoch_start_using_value_hash(*value_hash)
-                        .await?;
-                    db.delete_dig_indexed_slot_values_by_puzzle_hash_using_value_hash(*value_hash)
-                        .await?;
-                }
-
-                for slot in prev_distributor.created_slot_values_to_slots(
-                    pending_items.pending_commitment_slot_values,
-                    RewardDistributorSlotNonce::COMMITMENT,
-                ) {
-                    let spent_block_index = if pending_items.pending_spent_slots.contains(&(
-                        RewardDistributorSlotNonce::from_u64(slot.info.nonce).unwrap(),
-                        slot.info.value_hash,
-                    )) {
-                        coin_record.spent_block_index
-                    } else {
-                        0
-                    };
-
-                    if spent_block_index == 0 {
-                        // ephemeral slot for this spend
-                        db.save_dig_indexed_slot_value_by_puzzle_hash(
-                            slot.info.value.clawback_ph,
-                            RewardDistributorSlotNonce::COMMITMENT.to_u64(),
-                            slot.info.value_hash,
-                        )
-                        .await?;
-                        db.save_dig_indexed_slot_value_by_epoch_start(
-                            slot.info.value.epoch_start,
-                            RewardDistributorSlotNonce::COMMITMENT.to_u64(),
-                            slot.info.value_hash,
-                        )
-                        .await?;
-                    }
-                    db.save_slot(ctx, slot, spent_block_index).await?;
-                }
-
-                for slot in prev_distributor.created_slot_values_to_slots(
-                    pending_items.pending_entry_slot_values,
-                    RewardDistributorSlotNonce::ENTRY,
-                ) {
-                    db.save_dig_indexed_slot_value_by_puzzle_hash(
-                        slot.info.value.payout_puzzle_hash,
-                        RewardDistributorSlotNonce::ENTRY.to_u64(),
-                        slot.info.value_hash,
-                    )
-                    .await?;
-                    db.save_slot(ctx, slot, 0).await?;
-                }
-
-                for slot in prev_distributor.created_slot_values_to_slots(
-                    pending_items.pending_reward_slot_values,
-                    RewardDistributorSlotNonce::REWARD,
-                ) {
-                    db.save_dig_indexed_slot_value_by_epoch_start(
-                        slot.info.value.epoch_start,
-                        RewardDistributorSlotNonce::REWARD.to_u64(),
-                        slot.info.value_hash,
-                    )
-                    .await?;
-                    db.save_slot(ctx, slot, 0).await?;
-                }
-            }
-        }
-
-        if let Some(some_distributor) = RewardDistributor::from_parent_spend(
-            ctx,
-            coin_record.coin,
-            parent_puzzle,
-            solution_ptr,
-            constants,
-        )? {
-            last_coin_id = some_distributor.coin.coin_id();
-            distributor = Some(some_distributor);
-            skip_db_save = false;
-        } else {
-            break;
-        };
-    }
-
-    if let Some(distributor) = distributor {
-        Ok(distributor)
+    let constants = if let Some(cached_constants) = db
+        .get_reward_distributor_configuration(ctx, launcher_id)
+        .await?
+    {
+        cached_constants
     } else {
-        Err(CliError::CoinNotFound(last_coin_id))
+        // configuration not in database, so we need to fetch the launcher
+        let launcher_coin_record = client
+            .get_coin_record_by_name(launcher_id)
+            .await?
+            .coin_record
+            .ok_or(CliError::CoinNotFound(launcher_id))?;
+        let launcher_coin_spend = client
+            .get_puzzle_and_solution(launcher_id, Some(launcher_coin_record.spent_block_index))
+            .await?
+            .coin_solution
+            .ok_or(CliError::CoinNotSpent(launcher_id))?;
+
+        let launcher_solution_ptr = ctx.alloc(&launcher_coin_spend.solution)?;
+        let Some((constants, _initial_state, _distributor_eve_coin)) =
+            RewardDistributor::from_launcher_solution(
+                ctx,
+                launcher_coin_spend.coin,
+                launcher_solution_ptr,
+            )?
+        else {
+            return Err(CliError::Custom(
+                "Could not parse launcher spend".to_string(),
+            ));
+        };
+
+        constants
+    };
+
+    let mut records = client
+        .get_coin_records_by_hint(constants.launcher_id, None, None, Some(false))
+        .await?
+        .coin_records
+        .ok_or(CliError::Custom(
+            "No unspent coin records found".to_string(),
+        ))?;
+
+    while !records.is_empty() {
+        let coin_record = records.remove(0);
+        if coin_record.spent {
+            continue;
+        }
+
+        let next_spend = client
+            .get_puzzle_and_solution(
+                coin_record.coin.parent_coin_info,
+                Some(coin_record.confirmed_block_index),
+            )
+            .await?
+            .coin_solution
+            .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
+
+        if let Ok(Some(distributor)) =
+            RewardDistributor::from_parent_spend(ctx, &next_spend, constants)
+        {
+            return mempool_distributor_maybe(ctx, distributor, client).await;
+        }
     }
+
+    // Could not find distributor, so we're just after the eve spend and need to do special parsing
+    let launcher_coin_record = client
+        .get_coin_record_by_name(launcher_id)
+        .await?
+        .coin_record
+        .ok_or(CliError::CoinNotFound(launcher_id))?;
+    let launcher_coin_spend = client
+        .get_puzzle_and_solution(launcher_id, Some(launcher_coin_record.spent_block_index))
+        .await?
+        .coin_solution
+        .ok_or(CliError::CoinNotSpent(launcher_id))?;
+
+    let launcher_solution_ptr = ctx.alloc(&launcher_coin_spend.solution)?;
+    let Some((constants, initial_state, distributor_eve_coin)) =
+        RewardDistributor::from_launcher_solution(
+            ctx,
+            launcher_coin_spend.coin,
+            launcher_solution_ptr,
+        )?
+    else {
+        return Err(CliError::Custom(
+            "Could not parse launcher spend".to_string(),
+        ));
+    };
+
+    let distributor_eve_coin_spend = client
+        .get_puzzle_and_solution(
+            distributor_eve_coin.coin_id(),
+            Some(launcher_coin_record.spent_block_index),
+        )
+        .await?
+        .coin_solution
+        .ok_or(CliError::CoinNotSpent(distributor_eve_coin.coin_id()))?;
+
+    let reserve = find_reserve(
+        ctx,
+        client,
+        launcher_id,
+        constants.reserve_asset_id,
+        0,
+        0,
+        false,
+    )
+    .await?;
+
+    let (new_distributor, _slot) = RewardDistributor::from_eve_coin_spend(
+        ctx,
+        constants,
+        initial_state,
+        distributor_eve_coin_spend,
+        reserve.coin.parent_coin_info,
+        reserve.proof,
+    )?
+    .ok_or(CliError::Custom(
+        "Could not parse eve coin spend".to_string(),
+    ))?;
+
+    Ok(new_distributor)
 }
 
 pub async fn find_reserve(
@@ -325,4 +202,48 @@ pub async fn find_reserve(
         controller_singleton_struct_hash,
         nonce,
     })
+}
+
+pub async fn mempool_distributor_maybe(
+    ctx: &mut SpendContext,
+    on_chain_distributor: RewardDistributor,
+    client: &CoinsetClient,
+) -> Result<RewardDistributor, CliError> {
+    let Some(mut mempool_items) = client
+        .get_mempool_items_by_coin_name(on_chain_distributor.coin.coin_id())
+        .await?
+        .mempool_items
+    else {
+        return Ok(on_chain_distributor);
+    };
+
+    if mempool_items.is_empty() {
+        return Ok(on_chain_distributor);
+    }
+
+    let mempool_item = mempool_items.remove(0);
+    let mut distributor = on_chain_distributor;
+    loop {
+        let Some(distributor_spend) = mempool_item
+            .spend_bundle
+            .coin_spends
+            .iter()
+            .find(|c| c.coin.coin_id() == distributor.coin.coin_id())
+        else {
+            break;
+        };
+
+        let Some(new_distributor) = RewardDistributor::from_spend(
+            ctx,
+            distributor_spend,
+            distributor.reserve.child(1).proof,
+            distributor.info.constants,
+        )?
+        else {
+            break;
+        };
+        distributor = new_distributor;
+    }
+
+    Ok(distributor)
 }
