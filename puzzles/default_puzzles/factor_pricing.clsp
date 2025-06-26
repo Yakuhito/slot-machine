@@ -12,6 +12,8 @@
 ;; - 3 characters with no numbers: 128
 ;; If the handle contains a number, the price is halved.
 
+;; Note: Truths (Handle) are trusted and should be verified by the outer puzzle.
+
 (mod (
     BASE_PRICE ; base price = price per month of a 6+ character handle with at least one number
     REGISTRATION_PERIOD ; number of seconds to register a handle for, in seconds

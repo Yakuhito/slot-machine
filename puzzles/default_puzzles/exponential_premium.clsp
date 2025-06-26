@@ -8,6 +8,8 @@
 
 ;; Inspired by ExponentialPremiumPirceOracle: https://github.com/ensdomains/ens-contracts/blob/master/contracts/ethregistrar/ExponentialPremiumPriceOracle.sol
 
+;; Note: Truths (Buy_Time & Expiration) are trusted and should be verified by the outer puzzle.
+
 (mod (
     BASE_PROGRAM ; compute base price using this program
     HALVING_PERIOD ; one day = 86400 = 60 * 60 * 24 seconds

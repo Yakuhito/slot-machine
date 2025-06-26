@@ -5,6 +5,8 @@
 
 ;; The default CAT maker assumes no intermediary layers between the CAT outer puzzle and the inner puzzle.
 
+;; Note: Truths (Inner_Puzzle_Hash) are trusted and should be verified by the outer puzzle.
+
 (mod (
     CAT_MOD_HASH
     TAIL_HASH_HASH ; (sha256 1 TAIL_HASH)
