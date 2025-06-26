@@ -17,7 +17,7 @@ use crate::{
     XchandlesDataValue, XchandlesRegistry, XchandlesSlotValue,
 };
 
-use super::{XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution};
+use super::{XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesExtendAction {
@@ -55,16 +55,16 @@ impl XchandlesExtendAction {
     ) -> Result<XchandlesSlotValue, DriverError> {
         let solution = ctx.extract::<XchandlesExtendActionSolution<
             NodePtr,
-            (u64, (String, NodePtr)),
+            (u64, (u64, (String, NodePtr))),
             NodePtr,
             NodePtr,
         >>(solution)?;
 
-        // current expiration is the first truth given to a pricing puzzle
-        let current_expiration = solution.pricing_solution.0;
+        // current expiration is the second truth given to a pricing puzzle
+        let current_expiration = solution.pricing_solution.1 .0;
 
         Ok(XchandlesSlotValue::new(
-            solution.pricing_solution.1 .0.tree_hash().into(),
+            solution.pricing_solution.1 .1 .0.tree_hash().into(),
             solution.neighbors.left_value,
             solution.neighbors.right_value,
             current_expiration,
@@ -85,8 +85,8 @@ impl XchandlesExtendAction {
         let pricing_output = ctx.run(solution.pricing_puzzle_reveal, solution.pricing_solution)?;
         let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
 
-        let (_, (handle, _)) =
-            ctx.extract::<(NodePtr, (String, NodePtr))>(solution.pricing_solution)?;
+        let (_, (_, (handle, _))) =
+            ctx.extract::<(NodePtr, (NodePtr, (String, NodePtr)))>(solution.pricing_solution)?;
 
         // current expiration is the first truth given to a pricing puzzle
         let current_expiration = ctx.extract::<(u64, NodePtr)>(solution.pricing_solution)?.0;
@@ -112,6 +112,7 @@ impl XchandlesExtendAction {
         base_handle_price: u64,
         registration_period: u64,
         num_periods: u64,
+        buy_time: u64,
     ) -> Result<(Conditions, NotarizedPayment), DriverError> {
         let spender_inner_puzzle_hash: Bytes32 = registry.info.inner_puzzle_hash().into();
 
@@ -127,7 +128,8 @@ impl XchandlesExtendAction {
         let slot = registry.actual_slot(slot);
         let action_solution = ctx.alloc(&XchandlesExtendActionSolution {
             pricing_puzzle_reveal,
-            pricing_solution: XchandlesFactorPricingSolution {
+            pricing_solution: XchandlesPricingSolution {
+                buy_time,
                 current_expiration: slot.info.value.expiration,
                 handle: handle.clone(),
                 num_periods,

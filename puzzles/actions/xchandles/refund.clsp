@@ -28,7 +28,6 @@
         precommited_pricing_puzzle_solution
         handle
         secret
-        precommited_start_time
         precommited_owner_launcher_id
         precommited_resolved_data
         refund_puzzle_hash_hash
@@ -114,7 +113,6 @@
                                 precommited_pricing_puzzle_solution
                                 handle
                                 secret
-                                precommited_start_time
                                 precommited_owner_launcher_id
                                 precommited_resolved_data
                             )) ; hash of precommit value, which is itself a hash :)

@@ -16,7 +16,7 @@ use crate::{
     print_spend_bundle_to_file, quick_sync_xchandles, spend_security_coin, sync_xchandles,
     wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer,
     SageClient, Slot, XchandlesApiClient, XchandlesExponentialPremiumRenewPuzzleArgs,
-    XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesPrecommitValue,
+    XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesPricingSolution,
     XchandlesRefundAction, XchandlesRegisterAction, XchandlesSlotValue,
 };
 
@@ -114,7 +114,8 @@ pub async fn xchandles_register(
         payment_cat_base_price,
         registration_period,
     )?;
-    let pricing_solution = XchandlesFactorPricingSolution {
+    let pricing_solution = XchandlesPricingSolution {
+        buy_time: start_time,
         current_expiration: 0,
         handle: handle.clone(),
         num_periods,
@@ -139,7 +140,6 @@ pub async fn xchandles_register(
         pricing_solution.tree_hash(),
         handle.clone(),
         secret,
-        start_time,
         nft_launcher_id,
         nft_launcher_id.into(),
     );
@@ -346,6 +346,7 @@ pub async fn xchandles_register(
                 precommit_coin,
                 payment_cat_base_price,
                 registration_period,
+                start_time,
             )?
         };
 

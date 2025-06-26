@@ -16,9 +16,8 @@ use crate::{
     quick_sync_xchandles, spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt,
     CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
     XchandlesApiClient, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
-    XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesFactorPricingPuzzleArgs,
-    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesRefundAction,
-    XchandlesSlotValue,
+    XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesPricingSolution,
+    XchandlesRefundAction, XchandlesSlotValue,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -146,13 +145,11 @@ pub async fn xchandles_expire(
         slot.info.value.expiration
     };
     println!("Using committed expiration: {}", commited_expiration);
-    let pricing_solution = XchandlesExponentialPremiumRenewPuzzleSolution {
+    let pricing_solution = XchandlesPricingSolution {
         buy_time: expire_time,
-        pricing_program_solution: XchandlesFactorPricingSolution {
-            current_expiration: commited_expiration,
-            handle: handle.clone(),
-            num_periods,
-        },
+        current_expiration: commited_expiration,
+        handle: handle.clone(),
+        num_periods,
     };
     let precommit_coin_value = XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
@@ -164,7 +161,6 @@ pub async fn xchandles_expire(
         pricing_solution.tree_hash(),
         handle.clone(),
         secret,
-        expire_time,
         nft_launcher_id,
         nft_launcher_id.into(),
     );
@@ -348,6 +344,7 @@ pub async fn xchandles_expire(
                 payment_cat_base_price,
                 registration_period,
                 precommit_coin,
+                expire_time,
             )?
         };
 

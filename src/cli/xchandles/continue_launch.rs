@@ -20,7 +20,7 @@ use crate::{
     load_xchandles_premine_csv, new_sk, no_assets, parse_amount, parse_one_sided_offer,
     spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CatalogPrecommitValue,
     CliError, Db, PrecommitCoin, PrecommitLayer, SageClient, XchandlesFactorPricingPuzzleArgs,
-    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesPremineRecord,
+    XchandlesPrecommitValue, XchandlesPremineRecord, XchandlesPricingSolution,
     XchandlesRegisterAction,
 };
 
@@ -35,7 +35,8 @@ fn precommit_value_for_handle(
     Ok(XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
         XchandlesFactorPricingPuzzleArgs::curry_tree_hash(1, registration_period),
-        XchandlesFactorPricingSolution {
+        XchandlesPricingSolution {
+            buy_time: start_time,
             current_expiration: 0,
             handle: handle.handle.clone(),
             num_periods: 1,
@@ -43,7 +44,6 @@ fn precommit_value_for_handle(
         .tree_hash(),
         handle.handle.clone(),
         Bytes32::default(),
-        start_time,
         owner_nft_launcher_id,
         owner_nft_launcher_id.into(),
     ))
@@ -523,6 +523,7 @@ pub async fn xchandles_continue_launch(
             precommit_coin,
             1,
             registration_period,
+            start_time,
         )?;
 
         security_coin_conditions = security_coin_conditions.extend(sec_conds);

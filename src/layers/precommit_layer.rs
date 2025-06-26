@@ -269,7 +269,7 @@ where
 // value is:
 // (c
 //   (c (c cat_maker_reveal cat_maker_solution) (c pricing_puzzle_reveal pricing_solution))
-//   (c (c secret handle) (c start_time (c owner_launcher_id resolved_data))))
+//   (c (c secret handle) (c owner_launcher_id resolved_data)))
 // )
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XchandlesPrecommitValue<CS = (), PS = TreeHash, S = Bytes32>
@@ -284,7 +284,6 @@ where
     pub pricing_solution: PS,
     pub handle: String,
     pub secret: S,
-    pub start_time: u64,
     pub owner_launcher_id: Bytes32,
     pub resolved_data: Bytes,
 }
@@ -303,7 +302,6 @@ where
         pricing_solution: PS,
         handle: String,
         secret: S,
-        start_time: u64,
         owner_launcher_id: Bytes32,
         resolved_data: Bytes,
     ) -> Self {
@@ -314,7 +312,6 @@ where
             pricing_solution,
             handle,
             secret,
-            start_time,
             owner_launcher_id,
             resolved_data,
         }
@@ -329,7 +326,6 @@ impl XchandlesPrecommitValue<(), TreeHash, Bytes32> {
         pricing_puzzle_solution: PS,
         handle: String,
         secret: Bytes32,
-        start_time: u64,
         owner_launcher_id: Bytes32,
         resolved_data: Bytes,
     ) -> Self
@@ -343,7 +339,6 @@ impl XchandlesPrecommitValue<(), TreeHash, Bytes32> {
             pricing_puzzle_solution.tree_hash(),
             handle,
             secret,
-            start_time,
             owner_launcher_id,
             resolved_data,
         )
@@ -365,10 +360,7 @@ where
             ),
             clvm_tuple!(
                 clvm_tuple!(self.handle.tree_hash(), self.secret.tree_hash()),
-                clvm_tuple!(
-                    self.start_time,
-                    clvm_tuple!(self.owner_launcher_id, self.resolved_data.tree_hash())
-                )
+                clvm_tuple!(self.owner_launcher_id, self.resolved_data.tree_hash())
             )
         )
         .tree_hash()

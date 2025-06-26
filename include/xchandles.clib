@@ -13,7 +13,6 @@
         pricing_puzzle_solution
         handle
         secret
-        start_time
         owner_launcher_id
         resolved_data
     )
@@ -25,7 +24,7 @@
                 )
                 (c
                     (c handle secret)
-                    (c start_time (c owner_launcher_id resolved_data))
+                    (c owner_launcher_id resolved_data)
                 )
             )
         )

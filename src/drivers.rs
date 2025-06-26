@@ -950,10 +950,9 @@ mod tests {
         RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
         RewardDistributorUnstakeAction, RewardDistributorWithdrawIncentivesAction, Slot,
         SpendContextExt, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
-        XchandlesExponentialPremiumRenewPuzzleSolution, XchandlesExtendAction,
-        XchandlesFactorPricingPuzzleArgs, XchandlesFactorPricingSolution, XchandlesOracleAction,
-        XchandlesPrecommitValue, XchandlesRefundAction, XchandlesRegisterAction,
-        XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
+        XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs, XchandlesOracleAction,
+        XchandlesPrecommitValue, XchandlesPricingSolution, XchandlesRefundAction,
+        XchandlesRegisterAction, XchandlesUpdateAction, ANY_METADATA_UPDATER_HASH,
     };
 
     use super::*;
@@ -1598,11 +1597,6 @@ mod tests {
             pricing_solution_hash,
             handle_to_refund.clone(),
             Bytes32::default(),
-            if let Some(existing_slot) = &slot {
-                existing_slot.info.value.expiration + 28 * 24 * 60 * 60 + 1
-            } else {
-                0
-            },
             Bytes32::default(),
             Bytes::default(),
         );
@@ -1840,7 +1834,8 @@ mod tests {
             let value = XchandlesPrecommitValue::for_normal_registration(
                 payment_cat.asset_id.tree_hash(),
                 XchandlesFactorPricingPuzzleArgs::curry_tree_hash(base_price, reg_period),
-                XchandlesFactorPricingSolution {
+                XchandlesPricingSolution {
+                    buy_time: 100,
                     current_expiration: 0,
                     handle: handle.clone(),
                     num_periods: 1,
@@ -1848,7 +1843,6 @@ mod tests {
                 .tree_hash(),
                 handle.clone(),
                 secret,
-                100,
                 handle_owner_launcher_id,
                 handle_resolved_data,
             );
@@ -1992,6 +1986,7 @@ mod tests {
                 precommit_coin,
                 base_price,
                 reg_period,
+                100,
             )?;
 
             ensure_conditions_met(ctx, &mut sim, secure_cond.clone(), 1)?;
@@ -2074,6 +2069,7 @@ mod tests {
                     base_price,
                     reg_period,
                     extension_years,
+                    0,
                 )?;
             let new_slot = registry
                 .created_slot_value_to_slot(registry.pending_spend.created_slots[0].clone());
@@ -2203,18 +2199,15 @@ mod tests {
             XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
                 base_price, reg_period, 1000,
             ),
-            XchandlesExponentialPremiumRenewPuzzleSolution {
+            XchandlesPricingSolution {
                 buy_time,
-                pricing_program_solution: XchandlesFactorPricingSolution {
-                    current_expiration: expiration,
-                    handle: handle_to_expire.clone(),
-                    num_periods: 1,
-                },
+                current_expiration: expiration,
+                handle: handle_to_expire.clone(),
+                num_periods: 1,
             }
             .tree_hash(),
             handle_to_expire.clone(),
             Bytes32::default(),
-            buy_time,
             Bytes32::from([42; 32]),
             Bytes32::from([69; 32]).into(),
         );
@@ -2281,6 +2274,7 @@ mod tests {
             base_price,
             reg_period,
             precommit_coin,
+            buy_time,
         )?;
 
         // assert expire conds
@@ -2314,22 +2308,12 @@ mod tests {
                 )?
                 .get_puzzle(ctx)?
             };
-            let pricing_solution = if use_factor_pricing {
-                ctx.alloc(&XchandlesFactorPricingSolution {
-                    current_expiration: 0,
-                    handle: unregistered_handle.clone(),
-                    num_periods: 1,
-                })?
-            } else {
-                ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution {
-                    buy_time: 28 * 24 * 60 * 60 + 1, // premium should be 0
-                    pricing_program_solution: XchandlesFactorPricingSolution {
-                        current_expiration: 0,
-                        handle: unregistered_handle.clone(),
-                        num_periods: 1,
-                    },
-                })?
-            };
+            let pricing_solution = ctx.alloc(&XchandlesPricingSolution {
+                buy_time: 28 * 24 * 60 * 60 + 1, // premium should be 0
+                current_expiration: 0,
+                handle: unregistered_handle.clone(),
+                num_periods: 1,
+            })?;
 
             let expected_price =
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &unregistered_handle, 1);
@@ -2361,22 +2345,12 @@ mod tests {
                 .find(|s| s.info.value.handle_hash == existing_handle.tree_hash().into())
                 .unwrap()
                 .clone();
-            let existing_handle_pricing_solution = if use_factor_pricing {
-                ctx.alloc(&XchandlesFactorPricingSolution {
-                    current_expiration: existing_slot.info.value.expiration,
-                    handle: existing_handle.clone(),
-                    num_periods: 1,
-                })?
-            } else {
-                ctx.alloc(&XchandlesExponentialPremiumRenewPuzzleSolution {
-                    buy_time: existing_slot.info.value.expiration + 28 * 24 * 60 * 60 + 1, // premium should be 0
-                    pricing_program_solution: XchandlesFactorPricingSolution {
-                        current_expiration: existing_slot.info.value.expiration,
-                        handle: existing_handle.clone(),
-                        num_periods: 1,
-                    },
-                })?
-            };
+            let existing_handle_pricing_solution = ctx.alloc(&XchandlesPricingSolution {
+                buy_time: existing_slot.info.value.expiration + 28 * 24 * 60 * 60 + 1, // premium should be 0
+                current_expiration: existing_slot.info.value.expiration,
+                handle: existing_handle.clone(),
+                num_periods: 1,
+            })?;
             let existing_handle_expected_price =
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &existing_handle, 1);
 

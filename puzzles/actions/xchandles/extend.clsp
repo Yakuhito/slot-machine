@@ -19,7 +19,7 @@
     )
     (
         pricing_puzzle_reveal
-        (@ pricing_solution (expiration handle . rest))
+        (@ pricing_solution (buy_time expiration handle . rest))
         cat_maker_puzzle_reveal
         cat_maker_solution
         neighbors . 
@@ -46,6 +46,9 @@
                 
                 ; can't extend if expired
                 (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
+
+                ; assert buy time
+                (list ASSERT_SECONDS_ABSOLUTE buy_time)
 
                 ; create new slot
                 (create_slot_inline SLOT_1ST_CURRY_HASH

@@ -5,10 +5,11 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_and_cat, get_coinset_client, get_constants, hex_string_to_bytes32, new_sk,
-    no_assets, parse_amount, parse_one_sided_offer, quick_sync_xchandles, spend_security_coin,
-    sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs, SageClient,
-    XchandlesApiClient, XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs,
+    assets_xch_and_cat, get_coinset_client, get_constants, get_last_onchain_timestamp,
+    hex_string_to_bytes32, new_sk, no_assets, parse_amount, parse_one_sided_offer,
+    quick_sync_xchandles, spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt,
+    CliError, Db, DefaultCatMakerArgs, SageClient, XchandlesApiClient, XchandlesExtendAction,
+    XchandlesFactorPricingPuzzleArgs,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -82,6 +83,9 @@ pub async fn xchandles_extend(
     };
     println!("Current expiration: {}", slot.info.value.expiration);
 
+    let start_time = get_last_onchain_timestamp(&cli).await? - 1;
+    println!("Extension time: {}", start_time);
+
     let (sec_conds, notarized_payment) = registry.new_action::<XchandlesExtendAction>().spend(
         &mut ctx,
         &mut registry,
@@ -91,6 +95,7 @@ pub async fn xchandles_extend(
         payment_cat_base_price,
         registration_period,
         num_periods,
+        start_time,
     )?;
 
     yes_no_prompt("Continue with extension?")?;

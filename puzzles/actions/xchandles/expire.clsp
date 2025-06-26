@@ -73,7 +73,6 @@
                                 expired_handle_pricing_puzzle_solution
                                 handle
                                 secret
-                                buy_time
                                 new_owner_launcher_id
                                 new_resolved_data
                             ))
