@@ -33,7 +33,6 @@ pub mod tests {
             key: &str,
             keys: &[SecretKey],
         ) -> anyhow::Result<()> {
-            println!("Adding spend for {}", key); // todo: debug
             let sb = SpendBundle::new(ctx.take(), Signature::default());
             let sb_conds = get_conditions_from_spendbundle(
                 ctx,

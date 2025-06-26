@@ -2124,7 +2124,7 @@ mod tests {
 
             registry = registry.finish_spend(ctx)?;
 
-            // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
+            // sim.spend_coins(spends, &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
             benchmark.add_spends(
                 ctx,
                 &mut sim,
