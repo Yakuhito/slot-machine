@@ -20,7 +20,7 @@
         cat_maker_puzzle_reveal
         cat_maker_puzzle_solution
         expired_handle_pricing_puzzle_reveal
-        (@ expired_handle_pricing_puzzle_solution (buy_time current_expiration handle . rest_maybe))
+        (@ expired_handle_pricing_puzzle_solution (buy_time current_expiration handle . expired_handle_pricing_puzzle_solution_rest))
         refund_puzzle_hash_hash
         secret
         neighbors ; (c left right)
