@@ -145,6 +145,7 @@ pub async fn xchandles_expire(
     } else {
         slot.info.value.expiration
     };
+    println!("Using committed expiration: {}", commited_expiration);
     let pricing_solution = XchandlesExponentialPremiumRenewPuzzleSolution {
         buy_time: expire_time,
         pricing_program_solution: XchandlesFactorPricingSolution {
