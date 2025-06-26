@@ -251,7 +251,7 @@ pub async fn sync_catalog(
                 .iter()
                 .filter(|sv| sv == &slot_value)
                 .count();
-            if no_spent != no_created {
+            if no_spent >= no_created {
                 continue;
             }
 
@@ -286,12 +286,13 @@ pub async fn mempool_catalog_maybe(
 
     let mempool_item = mempool_items.remove(0);
     let mut catalog = on_chain_catalog;
+    let mut parent_id_to_look_for = catalog.coin.parent_coin_info;
     loop {
         let Some(catalog_spend) = mempool_item
             .spend_bundle
             .coin_spends
             .iter()
-            .find(|c| c.coin.coin_id() == catalog.coin.coin_id())
+            .find(|c| c.coin.parent_coin_info == parent_id_to_look_for)
         else {
             break;
         };
@@ -302,6 +303,7 @@ pub async fn mempool_catalog_maybe(
             break;
         };
         catalog = new_catalog;
+        parent_id_to_look_for = catalog.coin.coin_id();
     }
 
     Ok(catalog)

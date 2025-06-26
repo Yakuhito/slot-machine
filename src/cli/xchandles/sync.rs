@@ -156,7 +156,7 @@ pub async fn sync_xchandles(
                 .iter()
                 .filter(|sv| sv.tree_hash() == slot_value_hash.into())
                 .count();
-            if no_spent != no_created {
+            if no_spent >= no_created {
                 continue;
             }
 
@@ -199,12 +199,13 @@ pub async fn mempool_registry_maybe(
 
     let mempool_item = mempool_items.remove(0);
     let mut registry = on_chain_registry;
+    let mut parent_id_to_look_for = registry.coin.parent_coin_info;
     loop {
         let Some(registry_spend) = mempool_item
             .spend_bundle
             .coin_spends
             .iter()
-            .find(|c| c.coin.coin_id() == registry.coin.coin_id())
+            .find(|c| c.coin.parent_coin_info == parent_id_to_look_for)
         else {
             break;
         };
@@ -215,6 +216,7 @@ pub async fn mempool_registry_maybe(
             break;
         };
         registry = new_registry;
+        parent_id_to_look_for = registry.coin.coin_id();
     }
 
     Ok(registry)

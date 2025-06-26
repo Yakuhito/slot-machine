@@ -228,12 +228,13 @@ pub async fn mempool_distributor_maybe(
 
     let mempool_item = mempool_items.remove(0);
     let mut distributor = on_chain_distributor;
+    let mut parent_id_to_look_for = distributor.coin.parent_coin_info;
     loop {
         let Some(distributor_spend) = mempool_item
             .spend_bundle
             .coin_spends
             .iter()
-            .find(|c| c.coin.coin_id() == distributor.coin.coin_id())
+            .find(|c| c.coin.parent_coin_info == parent_id_to_look_for)
         else {
             break;
         };
@@ -248,6 +249,7 @@ pub async fn mempool_distributor_maybe(
             break;
         };
         distributor = new_distributor;
+        parent_id_to_look_for = distributor.coin.coin_id();
     }
 
     Ok(distributor)
