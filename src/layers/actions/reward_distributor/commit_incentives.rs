@@ -137,6 +137,8 @@ impl RewardDistributorCommitIncentivesAction {
         ),
         DriverError,
     > {
+        let reward_slot = distributor.actual_reward_slot_value(reward_slot);
+
         let new_commitment_slot_value = RewardDistributorCommitmentSlotValue {
             epoch_start,
             clawback_ph,
@@ -162,28 +164,28 @@ impl RewardDistributorCommitIncentivesAction {
         // spend reward slot
         reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
-        let (_commitment_slot_value, reward_slot_values, _spent) = self
-            .get_slot_values_from_solution(
-                ctx,
-                distributor.info.constants.epoch_seconds,
-                action_solution,
-            )?;
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        let (_commitment_slot_value, reward_slot_values) = Self::created_slot_values(
+            ctx,
+            distributor.info.constants.epoch_seconds,
+            action_solution,
+        )?;
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 distributor.coin.puzzle_hash,
                 commit_reward_announcement,
             )),
-            distributor
-                .created_slot_values_to_slots(
-                    vec![new_commitment_slot_value],
-                    RewardDistributorSlotNonce::COMMITMENT,
-                )
-                .remove(0),
-            distributor.created_slot_values_to_slots(
-                reward_slot_values,
-                RewardDistributorSlotNonce::REWARD,
+            distributor.created_slot_value_to_slot(
+                new_commitment_slot_value,
+                RewardDistributorSlotNonce::COMMITMENT,
             ),
+            reward_slot_values
+                .into_iter()
+                .map(|slot_value| {
+                    distributor
+                        .created_slot_value_to_slot(slot_value, RewardDistributorSlotNonce::REWARD)
+                })
+                .collect(),
         ))
     }
 }

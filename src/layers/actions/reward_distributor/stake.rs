@@ -94,7 +94,9 @@ impl RewardDistributorStakeAction {
         ),
         DriverError,
     > {
-        let ephemeral_counter = distributor.get_latest_pending_ephemeral_state(ctx)?;
+        let my_state = distributor.pending_spend.latest_state.1;
+        let ephemeral_counter =
+            ctx.extract::<HashedPtr>(distributor.pending_spend.latest_state.0)?;
         let my_id = distributor.coin.coin_id();
 
         // calculate notarized payment
@@ -110,7 +112,9 @@ impl RewardDistributorStakeAction {
         .tree_hash()
         .into();
         let notarized_payment = NotarizedPayment {
-            nonce: clvm_tuple!(ephemeral_counter, my_id).tree_hash().into(),
+            nonce: clvm_tuple!(ephemeral_counter.tree_hash(), my_id)
+                .tree_hash()
+                .into(),
             payments: vec![Payment::with_memos(
                 payment_puzzle_hash,
                 1,
@@ -143,19 +147,16 @@ impl RewardDistributorStakeAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let my_state = distributor.get_latest_pending_state(ctx)?;
-        let slot_value = self.get_slot_value_from_solution(ctx, &my_state, action_solution)?;
+        let slot_value = Self::created_slot_value(ctx, &my_state, action_solution)?;
 
         let msg: Bytes32 = notarized_payment.tree_hash().into();
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(nft.coin.puzzle_hash, msg)),
             notarized_payment,
-            distributor
-                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
-                .remove(0),
+            distributor.created_slot_value_to_slot(slot_value, RewardDistributorSlotNonce::ENTRY),
             nft.wrapped_child(payment_puzzle_hash, None, nft.info.metadata),
         ))
     }

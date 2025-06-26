@@ -55,7 +55,7 @@ impl RewardDistributorAddIncentivesAction {
         distributor: &mut RewardDistributor,
         amount: u64,
     ) -> Result<Conditions, DriverError> {
-        let my_state = distributor.get_latest_pending_state(ctx)?;
+        let my_state = distributor.pending_spend.latest_state.1;
 
         // calculate announcement needed to ensure everything's happening as expected
         let mut add_incentives_announcement: Vec<u8> =
@@ -74,7 +74,7 @@ impl RewardDistributorAddIncentivesAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
         Ok(add_incentives_announcement)
     }
 }

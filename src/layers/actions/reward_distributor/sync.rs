@@ -36,7 +36,7 @@ impl RewardDistributorSyncAction {
         update_time: u64,
     ) -> Result<Conditions, DriverError> {
         // calculate announcement needed to ensure everything's happening as expected
-        let my_state = distributor.get_latest_pending_state(ctx)?;
+        let my_state = distributor.pending_spend.latest_state.1;
         let mut new_epoch_announcement: Vec<u8> =
             clvm_tuple!(update_time, my_state.round_time_info.epoch_end)
                 .tree_hash()
@@ -51,7 +51,7 @@ impl RewardDistributorSyncAction {
         let action_solution = ctx.alloc(&RewardDistributorSyncActionSolution { update_time })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
         Ok(new_epoch_conditions)
     }
 }

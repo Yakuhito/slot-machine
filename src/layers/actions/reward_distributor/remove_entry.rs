@@ -66,6 +66,8 @@ impl RewardDistributorRemoveEntryAction {
         manager_singleton_inner_puzzle_hash: Bytes32,
     ) -> Result<(Conditions, u64), DriverError> {
         // u64 = last payment amount
+        let my_state = distributor.pending_spend.latest_state.1;
+        let entry_slot = distributor.actual_entry_slot_value(entry_slot);
 
         // compute message that the manager needs to send
         let remove_entry_message: Bytes32 = clvm_tuple!(
@@ -86,7 +88,6 @@ impl RewardDistributorRemoveEntryAction {
             .assert_concurrent_puzzle(entry_slot.coin.puzzle_hash);
 
         // spend self
-        let my_state = distributor.get_latest_pending_state(ctx)?;
         let entry_payout_amount = entry_slot.info.value.shares
             * (my_state.round_reward_info.cumulative_payout
                 - entry_slot.info.value.initial_cumulative_payout);
@@ -102,7 +103,7 @@ impl RewardDistributorRemoveEntryAction {
         // spend entry slot
         entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
         Ok((remove_entry_conditions, entry_payout_amount))
     }
 

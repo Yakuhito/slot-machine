@@ -613,4 +613,54 @@ impl RewardDistributor {
 
         Ok(())
     }
+
+    pub fn actual_reward_slot_value(
+        &self,
+        slot: Slot<RewardDistributorRewardSlotValue>,
+    ) -> Slot<RewardDistributorRewardSlotValue> {
+        let mut slot = slot;
+
+        for slot_value in self.pending_spend.created_reward_slots.iter() {
+            if slot_value.epoch_start == slot.info.value.epoch_start {
+                slot = self
+                    .created_slot_value_to_slot(*slot_value, RewardDistributorSlotNonce::REWARD);
+            }
+        }
+
+        slot
+    }
+
+    pub fn actual_entry_slot_value(
+        &self,
+        slot: Slot<RewardDistributorEntrySlotValue>,
+    ) -> Slot<RewardDistributorEntrySlotValue> {
+        let mut slot = slot;
+
+        for slot_value in self.pending_spend.created_entry_slots.iter() {
+            if slot_value.payout_puzzle_hash == slot.info.value.payout_puzzle_hash {
+                slot =
+                    self.created_slot_value_to_slot(*slot_value, RewardDistributorSlotNonce::ENTRY);
+            }
+        }
+
+        slot
+    }
+
+    pub fn actual_commitment_slot_value(
+        &self,
+        slot: Slot<RewardDistributorCommitmentSlotValue>,
+    ) -> Slot<RewardDistributorCommitmentSlotValue> {
+        let mut slot = slot;
+
+        for slot_value in self.pending_spend.created_commitment_slots.iter() {
+            if slot_value.epoch_start == slot.info.value.epoch_start {
+                slot = self.created_slot_value_to_slot(
+                    *slot_value,
+                    RewardDistributorSlotNonce::COMMITMENT,
+                );
+            }
+        }
+
+        slot
+    }
 }

@@ -98,14 +98,12 @@ impl RewardDistributorAddEntryAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let my_state = distributor.get_latest_pending_state(ctx)?;
-        let slot_value = self.get_slot_value_from_solution(ctx, &my_state, action_solution)?;
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        let my_state = distributor.pending_spend.latest_state.1;
+        let slot_value = Self::created_slot_value(ctx, &my_state, action_solution)?;
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
         Ok((
             add_entry_message,
-            distributor
-                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
-                .remove(0),
+            distributor.created_slot_value_to_slot(slot_value, RewardDistributorSlotNonce::ENTRY),
         ))
     }
 }

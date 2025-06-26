@@ -79,6 +79,8 @@ impl RewardDistributorUnstakeAction {
         locked_nft: Nft<HashedPtr>,
     ) -> Result<(Conditions, u64), DriverError> {
         // u64 = last payment amount
+        let my_state = distributor.pending_spend.latest_state.1;
+        let entry_slot = distributor.actual_entry_slot_value(entry_slot);
 
         // compute message that the custody puzzle needs to send
         let unstake_message: Bytes32 = locked_nft.info.launcher_id;
@@ -93,7 +95,6 @@ impl RewardDistributorUnstakeAction {
             .assert_concurrent_puzzle(entry_slot.coin.puzzle_hash);
 
         // spend self
-        let my_state = distributor.get_latest_pending_state(ctx)?;
         let entry_payout_amount = entry_slot.info.value.shares
             * (my_state.round_reward_info.cumulative_payout
                 - entry_slot.info.value.initial_cumulative_payout);
@@ -118,7 +119,7 @@ impl RewardDistributorUnstakeAction {
         let action_puzzle = self.construct_puzzle(ctx)?;
 
         let registry_inner_puzzle_hash = distributor.info.inner_puzzle_hash();
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         // spend NFT
         let my_p2 = P2DelegatedBySingletonLayer::new(
