@@ -511,9 +511,9 @@ enum XchandlesCliAction {
         #[arg(long)]
         handle: String,
 
-        /// Number of years to extend the handle for
+        /// Number of periods (e.g., years) to extend the handle for
         #[arg(long, default_value = "1")]
-        years: u64,
+        num_periods: u64,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1331,7 +1331,7 @@ pub async fn run_cli() {
             XchandlesCliAction::Extend {
                 launcher_id,
                 handle,
-                years,
+                num_periods,
                 testnet11,
                 payment_asset_id,
                 payment_cat_base_price,
@@ -1342,7 +1342,7 @@ pub async fn run_cli() {
                 xchandles_extend(
                     launcher_id,
                     handle,
-                    years,
+                    num_periods,
                     testnet11,
                     payment_asset_id,
                     payment_cat_base_price,

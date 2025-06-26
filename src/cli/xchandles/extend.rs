@@ -80,6 +80,7 @@ pub async fn xchandles_extend(
             .get_slot_value(launcher_id, handle.tree_hash().into())
             .await?
     };
+    println!("Current expiration: {}", slot.info.value.expiration);
 
     let (sec_conds, notarized_payment) = registry.new_action::<XchandlesExtendAction>().spend(
         &mut ctx,
