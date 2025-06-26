@@ -11,12 +11,12 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_only, get_coinset_client, get_last_onchain_timestamp, get_prefix,
+    assets_xch_only, find_entry_slots, get_coinset_client, get_last_onchain_timestamp, get_prefix,
     hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature, no_assets, parse_amount,
     parse_one_sided_offer, prompt_for_value, spend_to_coin_spend, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, NonceWrapperArgs, RewardDistributorEntrySlotValue,
-    RewardDistributorSlotNonce, RewardDistributorStakeActionArgs, RewardDistributorSyncAction,
-    RewardDistributorUnstakeAction, SageClient, Slot, NONCE_WRAPPER_PUZZLE_HASH,
+    yes_no_prompt, CliError, Db, NonceWrapperArgs, RewardDistributorStakeActionArgs,
+    RewardDistributorSyncAction, RewardDistributorUnstakeAction, SageClient,
+    NONCE_WRAPPER_PUZZLE_HASH,
 };
 
 pub async fn reward_distributor_unstake(
@@ -64,29 +64,18 @@ pub async fn reward_distributor_unstake(
     );
 
     println!("Getting entry slot...");
-    let entry_slot_value_hashes = db
-        .get_dig_indexed_slot_values_by_puzzle_hash(
-            custody_puzzle_hash,
-            RewardDistributorSlotNonce::ENTRY.to_u64(),
-        )
-        .await?;
-    if entry_slot_value_hashes.is_empty() {
-        return Err(CliError::Custom(
-            "No entry slot found - you may be using the wrong custody address/puzzle hash"
-                .to_string(),
-        ));
-    }
-
-    let entry_slot: Slot<RewardDistributorEntrySlotValue> = db
-        .get_slot(
-            &mut ctx,
-            launcher_id,
-            RewardDistributorSlotNonce::ENTRY.to_u64(),
-            entry_slot_value_hashes[0],
-            0,
-        )
-        .await?
-        .unwrap();
+    let entry_slot = find_entry_slots(
+        &mut ctx,
+        &client,
+        distributor.info.constants,
+        custody_puzzle_hash,
+        None,
+        None,
+    )
+    .await?
+    .into_iter()
+    .next()
+    .ok_or(CliError::SlotNotFound("Entry"))?;
 
     println!("Fetching locked NFT...");
     let locked_nft_hint: Bytes32 = CurriedProgram {

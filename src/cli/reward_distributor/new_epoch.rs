@@ -1,8 +1,8 @@
 use crate::{
-    assets_xch_only, find_reward_slot_for_epoch, get_coinset_client, get_constants,
-    hex_string_to_bytes32, new_sk, no_assets, parse_amount, parse_one_sided_offer,
-    spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
-    RewardDistributorNewEpochAction, RewardDistributorSyncAction, SageClient,
+    assets_xch_only, find_reward_slots, get_coinset_client, get_constants, hex_string_to_bytes32,
+    new_sk, no_assets, parse_amount, parse_one_sided_offer, spend_security_coin, sync_distributor,
+    wait_for_coin, yes_no_prompt, CliError, Db, RewardDistributorNewEpochAction,
+    RewardDistributorSyncAction, SageClient,
 };
 use chia::protocol::SpendBundle;
 use chia_wallet_sdk::{
@@ -40,14 +40,15 @@ pub async fn reward_distributor_new_epoch(
     }
 
     println!("Finding appropriate reward slot...");
-    let reward_slot = find_reward_slot_for_epoch(
+    let reward_slot = find_reward_slots(
         &mut ctx,
-        &db,
-        launcher_id,
+        &client,
+        distributor.info.constants,
         next_epoch_start,
-        distributor.info.constants.epoch_seconds,
     )
     .await?
+    .into_iter()
+    .next()
     .ok_or(CliError::SlotNotFound("Reward"))?;
 
     println!("A one-sided offer will be created. It will contain:");

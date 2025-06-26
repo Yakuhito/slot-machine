@@ -6,7 +6,7 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_only, find_entry_slot_for_puzzle_hash, get_coinset_client, get_constants,
+    assets_xch_only, find_entry_slots, get_coinset_client, get_constants,
     get_last_onchain_timestamp, hex_string_to_bytes32, new_sk, no_assets, parse_amount,
     parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
     CliError, Db, RewardDistributorInitiatePayoutAction, RewardDistributorSyncAction, SageClient,
@@ -45,10 +45,18 @@ pub async fn reward_distributor_initiate_payout(
     }
 
     println!("Finding reward slot...");
-    let slot =
-        find_entry_slot_for_puzzle_hash(&mut ctx, &db, launcher_id, payout_puzzle_hash, None)
-            .await?
-            .ok_or(CliError::SlotNotFound("Mirror reward"))?;
+    let slot = find_entry_slots(
+        &mut ctx,
+        &client,
+        distributor.info.constants,
+        payout_puzzle_hash,
+        None,
+        None,
+    )
+    .await?
+    .into_iter()
+    .next()
+    .ok_or(CliError::SlotNotFound("Entry"))?;
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  1 mojo",);
