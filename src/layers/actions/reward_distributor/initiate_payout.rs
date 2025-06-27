@@ -173,7 +173,7 @@ impl RewardDistributorInitiatePayoutActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorInitiatePayoutActionSolution {
     pub entry_payout_amount: u64,
     pub entry_payout_puzzle_hash: Bytes32,

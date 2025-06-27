@@ -195,7 +195,7 @@ pub struct PrecommitLayer2ndCurryArgs<V> {
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct PrecommitLayerSolution {
     pub mode: u8,
     pub my_amount: u64,
@@ -238,7 +238,7 @@ impl<T> CatalogPrecommitValue<T> {
         let mut conds = Conditions::new().create_coin(
             owner_inner_puzzle_hash,
             1,
-            Some(ctx.hint(owner_inner_puzzle_hash)?),
+            ctx.hint(owner_inner_puzzle_hash)?,
         );
         let updater_solution = ctx.alloc(&initial_metadata)?;
         conds = conds.update_nft_metadata(ctx.any_metadata_updater()?, updater_solution);

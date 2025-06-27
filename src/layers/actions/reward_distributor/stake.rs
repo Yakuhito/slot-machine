@@ -106,15 +106,15 @@ impl RewardDistributorStakeAction {
             nonce: clvm_tuple!(ephemeral_counter.tree_hash(), my_id)
                 .tree_hash()
                 .into(),
-            payments: vec![Payment::with_memos(
+            payments: vec![Payment::new(
                 payment_puzzle_hash,
                 1,
-                vec![payment_puzzle_hash.into()],
+                ctx.hint(payment_puzzle_hash)?,
             )],
         };
 
         // spend self
-        let nft = current_nft.wrapped_child(
+        let nft = current_nft.child(
             SETTLEMENT_PAYMENT_HASH.into(),
             None,
             current_nft.info.metadata,
@@ -130,7 +130,7 @@ impl RewardDistributorStakeAction {
             nft_transfer_porgram_hash: NftRoyaltyTransferPuzzleArgs::curry_tree_hash(
                 nft.info.launcher_id,
                 nft.info.royalty_puzzle_hash,
-                nft.info.royalty_ten_thousandths,
+                nft.info.royalty_basis_points,
             )
             .into(),
             nft_launcher_proof,
@@ -138,14 +138,15 @@ impl RewardDistributorStakeAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let msg: Bytes32 = notarized_payment.tree_hash().into();
+        let notarized_payment_ptr = ctx.alloc(&notarized_payment)?;
+        let msg: Bytes32 = ctx.tree_hash(notarized_payment_ptr).into();
         distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(nft.coin.puzzle_hash, msg)),
             notarized_payment,
-            nft.wrapped_child(payment_puzzle_hash, None, nft.info.metadata),
+            nft.child(payment_puzzle_hash, None, nft.info.metadata),
         ))
     }
 }
@@ -246,7 +247,7 @@ pub struct NftLauncherProof {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorStakeActionSolution {
     pub my_id: Bytes32,
     pub nft_metadata_hash: Bytes32,

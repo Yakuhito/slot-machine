@@ -192,7 +192,7 @@ impl XchandlesRefundActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct XchandlesRefundActionSolution<CMP, CMS, PP, PS, S> {
     pub precommited_cat_maker_reveal: CMP,
     pub precommited_cat_maker_hash: Bytes32,

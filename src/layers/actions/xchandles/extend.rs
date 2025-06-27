@@ -153,10 +153,10 @@ impl XchandlesExtendAction {
             nonce: clvm_tuple!(handle.clone(), slot.info.value.expiration)
                 .tree_hash()
                 .into(),
-            payments: vec![Payment::with_memos(
+            payments: vec![Payment::new(
                 registry.info.constants.precommit_payout_puzzle_hash,
                 renew_amount,
-                vec![registry.info.constants.precommit_payout_puzzle_hash.into()],
+                ctx.hint(registry.info.constants.precommit_payout_puzzle_hash)?,
             )],
         };
 
@@ -211,7 +211,7 @@ impl XchandlesExtendActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct XchandlesExtendActionSolution<PP, PS, CMP, CMS> {
     pub pricing_puzzle_reveal: PP,
     pub pricing_solution: PS,

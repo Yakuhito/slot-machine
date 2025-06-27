@@ -212,7 +212,7 @@ impl RewardDistributorCommitIncentivesActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorCommitIncentivesActionSolution {
     pub slot_epoch_time: u64,
     pub slot_next_epoch_initialized: bool,

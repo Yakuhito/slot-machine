@@ -145,7 +145,7 @@ impl XchandlesUpdateActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct XchandlesUpdateActionSolution {
     pub current_slot_value: XchandlesSlotValue,
     pub new_data: XchandlesDataValue,

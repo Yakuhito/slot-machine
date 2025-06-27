@@ -276,7 +276,7 @@ impl XchandlesRegisterActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct XchandlesRegisterActionSolution<PP, PS, CMP, CMS, S> {
     pub handle_hash: Bytes32,
     pub pricing_puzzle_reveal: PP,
@@ -359,7 +359,7 @@ impl XchandlesFactorPricingPuzzleArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct XchandlesPricingSolution {
     pub buy_time: u64,
     pub current_expiration: u64,

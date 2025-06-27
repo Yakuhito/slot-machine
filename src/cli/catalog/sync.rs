@@ -5,6 +5,7 @@ use chia::{
     protocol::{Bytes32, Coin},
     puzzles::{singleton::LauncherSolution, LineageProof, Proof},
 };
+use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext},
@@ -106,10 +107,11 @@ pub async fn sync_catalog(
                 ));
             };
 
+            let Memos::Some(memos) = odd_create_coin.memos else {
+                return Err(CliError::Driver(DriverError::MissingHint));
+            };
             let (decoded_launcher_id, (_decoded_asset_id, (initial_state, ()))) =
-                ctx.extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(
-                    odd_create_coin.memos.unwrap().value,
-                )?;
+                ctx.extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(memos)?;
             if decoded_launcher_id != constants.launcher_id {
                 return Err(CliError::Custom("CATalog launcher ID mismatch".to_string()));
             }

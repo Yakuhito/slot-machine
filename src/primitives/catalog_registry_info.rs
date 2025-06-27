@@ -34,7 +34,7 @@ pub struct CatalogRegistryState {
 pub struct CatalogRegistryConstants {
     pub launcher_id: Bytes32,
     pub royalty_address: Bytes32,
-    pub royalty_ten_thousandths: u16,
+    pub royalty_basis_points: u16,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
     pub price_singleton_launcher_id: Bytes32,
@@ -50,7 +50,7 @@ impl CatalogRegistryConstants {
                 royalty_address: Bytes32::from(hex!(
                     "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
                 )),
-                royalty_ten_thousandths: 100,
+                royalty_basis_points: 100,
                 precommit_payout_puzzle_hash: Bytes32::from(hex!(
                     "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
                 )),

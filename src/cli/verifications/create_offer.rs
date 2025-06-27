@@ -4,7 +4,10 @@ use chia::{
     protocol::{Bytes32, SpendBundle},
     traits::Streamable,
 };
-use chia_puzzle_types::offer::{NotarizedPayment, Payment};
+use chia_puzzle_types::{
+    offer::{NotarizedPayment, Payment},
+    Memos,
+};
 use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
 use chia_wallet_sdk::{
     driver::{compress_offer_bytes, Offer, SpendContext},
@@ -77,16 +80,17 @@ pub async fn verifications_create_offer(
 
     let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
     let security_coin_sk = new_sk()?;
+    let hint = ctx.hint(SETTLEMENT_PAYMENT_HASH.into())?;
     let offer = parse_one_sided_offer(
         &mut ctx,
         offer,
         security_coin_sk.public_key(),
         Some(NotarizedPayment {
             nonce: Bytes32::default(),
-            payments: vec![Payment::with_memos(
+            payments: vec![Payment::new(
                 SETTLEMENT_PAYMENT_HASH.into(),
                 payment_amount,
-                vec![SETTLEMENT_PAYMENT_HASH.to_vec().into()],
+                hint,
             )],
         }),
         None,
@@ -97,7 +101,7 @@ pub async fn verifications_create_offer(
         .security_base_conditions
         .reserve_fee(1)
         .assert_concurrent_spend(offer.created_cat.unwrap().coin.coin_id())
-        .create_coin(verification_asserter_puzzle_hash, 0, None)
+        .create_coin(verification_asserter_puzzle_hash, 0, Memos::None)
         .assert_concurrent_puzzle(verification_asserter_puzzle_hash);
 
     let security_coin_sig = spend_security_coin(

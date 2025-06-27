@@ -241,7 +241,7 @@ impl XchandlesExpireActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct XchandlesExpireActionSolution<CMP, CMS, EP, ES, S> {
     pub cat_maker_puzzle_reveal: CMP,
     pub cat_maker_puzzle_solution: CMS,

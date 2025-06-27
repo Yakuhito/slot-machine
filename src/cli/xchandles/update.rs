@@ -8,8 +8,7 @@ use chia_puzzle_types::{
 };
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{DriverError, Offer, Spend, SpendContext, StandardLayer},
-    prelude::Memos,
+    driver::{Offer, Spend, SpendContext, StandardLayer},
     utils::Address,
 };
 use clvm_traits::clvm_quote;
@@ -128,6 +127,7 @@ pub async fn xchandles_update(
     let security_coin_sk = new_sk()?;
     let pk = security_coin_sk.public_key();
     let nft_inner_ph: Bytes32 = StandardArgs::curry_tree_hash(pk).into();
+    let hint = ctx.hint(nft_inner_ph)?;
     let offer = parse_one_sided_offer(
         &mut ctx,
         offer,
@@ -135,11 +135,7 @@ pub async fn xchandles_update(
         None,
         Some(NotarizedPayment {
             nonce: registry.coin.coin_id(),
-            payments: vec![Payment::with_memos(
-                nft_inner_ph,
-                1,
-                vec![nft_inner_ph.into()],
-            )],
+            payments: vec![Payment::new(nft_inner_ph, 1, hint)],
         }),
     )?;
 
@@ -157,11 +153,7 @@ pub async fn xchandles_update(
     )?;
 
     let nft_return_ph: Bytes32 = Address::decode(&return_address)?.puzzle_hash;
-    let nft_inner_spend = nft_inner_conds.create_coin(
-        nft_return_ph,
-        1,
-        Some(Memos::hint(&mut ctx, nft_return_ph).map_err(DriverError::from)?),
-    );
+    let nft_inner_spend = nft_inner_conds.create_coin(nft_return_ph, 1, ctx.hint(nft_return_ph)?);
     let nft_inner_spend = ctx.alloc(&clvm_quote!(nft_inner_spend))?;
     let nft_inner_spend = StandardLayer::new(pk)
         .delegated_inner_spend(&mut ctx, Spend::new(nft_inner_spend, NodePtr::NIL))?;

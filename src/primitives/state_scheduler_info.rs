@@ -3,6 +3,7 @@ use chia::{
     protocol::Bytes32,
     puzzles::singleton::{LauncherSolution, SingletonArgs, SingletonStruct},
 };
+use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
     driver::{DriverError, SingletonLayer},
     types::Condition,
@@ -63,7 +64,7 @@ where
                 .into(),
             message,
             clvm_quote!(vec![
-                Condition::<()>::create_coin(next_puzzle_hash, 1, None),
+                Condition::<()>::create_coin(next_puzzle_hash, 1, Memos::None),
                 Condition::assert_height_absolute(required_block_height),
             ]),
         )

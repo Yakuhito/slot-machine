@@ -566,7 +566,7 @@ impl ReserveFinalizer2ndCurryArgs {
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct ReserveFinalizerSolution {
     pub reserve_parent_id: Bytes32,
 }
@@ -611,7 +611,7 @@ impl ActionLayerArgs<TreeHash, TreeHash> {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RawActionLayerSolution<P, S, F> {
     pub puzzles: Vec<P>,
     pub selectors_and_proofs: Vec<(u32, Option<MerkleProof>)>,

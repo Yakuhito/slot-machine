@@ -192,7 +192,7 @@ impl CatalogRefundActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct CatalogRefundActionSolution<P, S> {
     pub precommited_cat_maker_hash: Bytes32,
     pub precommited_cat_maker_reveal: P,

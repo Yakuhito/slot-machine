@@ -108,7 +108,7 @@ impl RewardDistributorAddIncentivesActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorAddIncentivesActionSolution {
     pub amount: u64,
     #[clvm(rest)]

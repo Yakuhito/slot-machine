@@ -123,6 +123,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use chia_puzzle_types::Memos;
     use chia_wallet_sdk::{
         driver::{Launcher, SingletonLayer},
         test::Simulator,
@@ -239,7 +240,7 @@ mod tests {
                         new_state.tree_hash().to_vec().into(),
                         vec![state_scheduler_puzzle_hash_ptr],
                     )
-                    .create_coin(other_singleton_inner_puzzle_hash.into(), 1, None),
+                    .create_coin(other_singleton_inner_puzzle_hash.into(), 1, Memos::None),
             )?;
             let other_singleton_spend = other_singleton.construct_spend(
                 ctx,

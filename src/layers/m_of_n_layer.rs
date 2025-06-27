@@ -173,7 +173,7 @@ impl P2MOfNDelegateDirectArgs {
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct P2MOfNDelegateDirectSolution<P, S> {
     pub selectors: Vec<bool>,
     pub delegated_puzzle: P,

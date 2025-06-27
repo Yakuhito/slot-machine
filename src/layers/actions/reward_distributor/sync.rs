@@ -72,7 +72,7 @@ impl RewardDistributorSyncActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorSyncActionSolution {
     pub update_time: u64,
 }

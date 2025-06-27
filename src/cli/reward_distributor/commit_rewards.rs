@@ -66,16 +66,17 @@ pub async fn reward_distributor_commit_rewards(
     let cat_destination_inner_puzzle = ctx.alloc(&(1, ()))?;
     let cat_destination_inner_puzzle_hash: Bytes32 =
         ctx.tree_hash(cat_destination_inner_puzzle).into();
+    let hint = ctx.hint(cat_destination_inner_puzzle_hash)?;
     let offer = parse_one_sided_offer(
         &mut ctx,
         offer,
         security_coin_sk.public_key(),
         Some(NotarizedPayment {
             nonce: launcher_id,
-            payments: vec![Payment::with_memos(
+            payments: vec![Payment::new(
                 cat_destination_inner_puzzle_hash,
                 reward_amount,
-                vec![cat_destination_inner_puzzle_hash.into()],
+                hint,
             )],
         }),
         None,
@@ -101,6 +102,7 @@ pub async fn reward_distributor_commit_rewards(
             cat: offer.created_cat.unwrap(),
             inner_spend: Spend::new(cat_destination_inner_puzzle, NodePtr::NIL),
             extra_delta: 0,
+            revoke: false,
         }],
     )?;
 

@@ -3,7 +3,9 @@ use chia::protocol::{Bytes32, Coin};
 use chia::puzzles::nft::{NftOwnershipLayerArgs, NftRoyaltyTransferPuzzleArgs, NftStateLayerArgs};
 use chia::puzzles::singleton::SingletonArgs;
 use chia::puzzles::{LineageProof, Proof};
+use chia_puzzle_types::Memos;
 use chia_puzzles::{NFT_STATE_LAYER_HASH, SINGLETON_LAUNCHER_HASH};
+use chia_wallet_sdk::driver::DriverError;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{Layer, Puzzle, SingletonLayer, SpendContext},
@@ -143,10 +145,11 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         ));
     }
 
-    let (hinted_launcher_id, (initial_registration_asset_id, (initial_state, ()))) = ctx
-        .extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(
-            catalog_cc.memos.unwrap().value,
-        )?;
+    let Memos::Some(memos) = catalog_cc.memos else {
+        return Err(CliError::Driver(DriverError::MissingHint));
+    };
+    let (hinted_launcher_id, (initial_registration_asset_id, (initial_state, ()))) =
+        ctx.extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(memos)?;
 
     let catalog_info = CatalogRegistryInfo::new(initial_state, catalog_constants);
     let catalog_full_ph = SingletonArgs::curry_tree_hash(
@@ -244,7 +247,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
                                 NftRoyaltyTransferPuzzleArgs::curry_tree_hash(
                                     cat_nft_launcher_id,
                                     catalog_constants.royalty_address,
-                                    catalog_constants.royalty_ten_thousandths,
+                                    catalog_constants.royalty_basis_points,
                                 ),
                                 eve_nft_inner_puzzle_hash,
                             ),

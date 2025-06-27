@@ -18,7 +18,6 @@ use chia::{
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{Cat, DriverError, Launcher, Offer, SpendContext},
-    prelude::Memos,
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
     utils::Address,
 };
@@ -71,8 +70,8 @@ fn get_additional_info_for_launch(
     )?;
     conditions = conditions.extend(price_singleton_launch_conds);
 
-    let cat_memos = Memos::some(ctx.alloc(&vec![cat_destination_puzzle_hash])?);
-    let (cat_creation_conds, eve_cat) = Cat::single_issuance_eve(
+    let cat_memos = ctx.hint(cat_destination_puzzle_hash)?;
+    let (cat_creation_conds, eve_cat) = Cat::issue_with_coin(
         ctx,
         security_coin.coin_id(),
         cat_amount,
@@ -82,7 +81,7 @@ fn get_additional_info_for_launch(
 
     println!(
         "Premine payment asset id: {}",
-        hex::encode(eve_cat.asset_id)
+        hex::encode(eve_cat[0].info.asset_id)
     );
     println!(
         "Price singleton id (SAVE THIS): {}",
@@ -94,7 +93,7 @@ fn get_additional_info_for_launch(
         xchandles_constants
             .with_price_singleton(price_singleton_launcher_id)
             .with_launcher_id(xchandles_launcher_id),
-        eve_cat.asset_id,
+        eve_cat[0].info.asset_id,
     ))
 }
 

@@ -226,7 +226,7 @@ pub async fn xchandles_continue_launch(
                 cat_creator_conds = cat_creator_conds.create_coin(
                     inner_ph.into(),
                     amount,
-                    Some(ctx.hint(inner_ph.into())?),
+                    ctx.hint(inner_ph.into())?,
                 );
             }
             let cat_destination_puzzle_ptr = ctx.alloc(&clvm_quote!(cat_creator_conds))?;
@@ -237,16 +237,17 @@ pub async fn xchandles_continue_launch(
             let security_coin_sk = new_sk()?;
 
             // Parse one-sided offer
+            let hint = ctx.hint(cat_destination_puzzle_hash)?;
             let one_sided_offer = parse_one_sided_offer(
                 &mut ctx,
                 offer,
                 security_coin_sk.public_key(),
                 Some(NotarizedPayment {
                     nonce: launcher_id,
-                    payments: vec![Payment::with_memos(
+                    payments: vec![Payment::new(
                         cat_destination_puzzle_hash,
                         handles_payment_total,
-                        vec![cat_destination_puzzle_hash.into()],
+                        hint,
                     )],
                 }),
                 None,
@@ -285,13 +286,14 @@ pub async fn xchandles_continue_launch(
                 SingleCatSpend {
                     next_coin_proof: CoinProof {
                         parent_coin_info: created_cat.coin.parent_coin_info,
-                        inner_puzzle_hash: created_cat.p2_puzzle_hash,
+                        inner_puzzle_hash: created_cat.info.p2_puzzle_hash,
                         amount: created_cat.coin.amount,
                     },
                     prev_coin_id: created_cat.coin.coin_id(),
                     prev_subtotal: 0,
                     extra_delta: 0,
                     inner_spend: Spend::new(cat_destination_puzzle_ptr, NodePtr::NIL),
+                    revoke: false,
                 },
             )?;
 

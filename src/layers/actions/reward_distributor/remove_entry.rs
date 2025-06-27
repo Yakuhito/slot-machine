@@ -178,7 +178,7 @@ impl RewardDistributorRemoveEntryActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorRemoveEntryActionSolution {
     pub manager_singleton_inner_puzzle_hash: Bytes32,
     pub entry_payout_amount: u64,

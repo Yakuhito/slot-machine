@@ -190,7 +190,7 @@ impl RewardDistributorWithdrawIncentivesActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorWithdrawIncentivesActionSolution {
     pub reward_slot_epoch_time: u64,
     pub reward_slot_next_epoch_initialized: bool,

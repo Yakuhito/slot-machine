@@ -1,4 +1,5 @@
 use chia::protocol::{Coin, SpendBundle};
+use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{Offer, Spend, SpendContext, StandardLayer},
@@ -94,7 +95,7 @@ pub async fn reward_distributor_clawback_rewards(
         offer.security_coin,
         offer
             .security_base_conditions
-            .create_coin(clawback_ph, 0, None),
+            .create_coin(clawback_ph, 0, Memos::None),
         &security_coin_sk,
         get_constants(testnet11),
     )?;

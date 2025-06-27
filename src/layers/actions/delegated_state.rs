@@ -119,7 +119,7 @@ impl DelegatedStateActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct DelegatedStateActionSolution<S> {
     pub new_state: S,
     #[clvm(rest)]

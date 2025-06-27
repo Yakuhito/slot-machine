@@ -11,7 +11,7 @@ use chia_puzzle_types::{
 };
 use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH};
 use chia_wallet_sdk::{
-    driver::{decompress_offer_bytes, Cat, CatSpend, HashedPtr, Launcher, Puzzle, Spend},
+    driver::{decompress_offer_bytes, Cat, CatInfo, CatSpend, HashedPtr, Launcher, Puzzle, Spend},
     types::{announcement_id, puzzles::SettlementPayment, Condition, Conditions},
     utils::Address,
 };
@@ -80,7 +80,7 @@ pub async fn verifications_broadcast_launch(
     let launch_conds_with_recreate = launch_conds.create_coin(
         medieval_vault.info.inner_puzzle_hash().into(),
         medieval_vault.coin.amount,
-        Some(ctx.hint(medieval_vault.info.launcher_id)?),
+        ctx.hint(medieval_vault.info.launcher_id)?,
     );
     let delegated_puzzle = ctx.alloc(&clvm_quote!(MedievalVault::delegated_conditions(
         launch_conds_with_recreate,
@@ -168,12 +168,13 @@ pub async fn verifications_broadcast_launch(
                             _ => None,
                         }) {
                             yes_no_prompt(format!("{} CAT mojos (asset id: {}) will be transferred to the specified recipient. Continue?", cc.amount, hex::encode(payment_cat_asset_id)).as_str())?;
+                            let hint = ctx.hint(recipient_puzzle_hash)?;
                             let notarized_payment = NotarizedPayment {
                                 nonce: coin_spend.coin.coin_id(),
-                                payments: vec![Payment::with_memos(
+                                payments: vec![Payment::new(
                                     recipient_puzzle_hash,
                                     cc.amount,
-                                    vec![recipient_puzzle_hash.into()],
+                                    hint,
                                 )],
                             };
 
@@ -187,8 +188,11 @@ pub async fn verifications_broadcast_launch(
                                         .into(),
                                     parent_amount: coin_spend.coin.amount,
                                 }),
-                                payment_cat_asset_id,
-                                SETTLEMENT_PAYMENT_HASH.into(),
+                                CatInfo::new(
+                                    payment_cat_asset_id,
+                                    None,
+                                    SETTLEMENT_PAYMENT_HASH.into(),
+                                ),
                             );
 
                             let offer_cat_inner_solution =
@@ -207,7 +211,8 @@ pub async fn verifications_broadcast_launch(
                             Cat::spend_all(&mut ctx, &[offer_cat_spend])?;
 
                             payment_sent = true;
-                            let msg: Bytes32 = notarized_payment.tree_hash().into();
+                            let notarized_payment_ptr = ctx.alloc(&notarized_payment)?;
+                            let msg: Bytes32 = ctx.tree_hash(notarized_payment_ptr).into();
                             conds = conds.assert_puzzle_announcement(announcement_id(
                                 offer_puzzle_hash,
                                 msg,

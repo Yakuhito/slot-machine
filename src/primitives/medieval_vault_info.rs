@@ -52,7 +52,7 @@ impl MedievalVaultInfo {
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct MedievalVaultHint {
     pub my_launcher_id: Bytes32,
     pub m: usize,

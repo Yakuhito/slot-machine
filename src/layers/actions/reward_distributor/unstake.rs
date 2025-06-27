@@ -10,7 +10,6 @@ use chia_puzzles::{
 };
 use chia_wallet_sdk::{
     driver::{DriverError, HashedPtr, Layer, Nft, Spend, SpendContext},
-    prelude::Memos,
     types::Conditions,
 };
 use clvm_traits::{clvm_quote, FromClvm, ToClvm};
@@ -110,7 +109,7 @@ impl RewardDistributorUnstakeAction {
             nft_transfer_porgram_hash: NftRoyaltyTransferPuzzleArgs::curry_tree_hash(
                 locked_nft.info.launcher_id,
                 locked_nft.info.royalty_puzzle_hash,
-                locked_nft.info.royalty_ten_thousandths,
+                locked_nft.info.royalty_basis_points,
             )
             .into(),
             entry_initial_cumulative_payout: entry_slot.info.value.initial_cumulative_payout,
@@ -138,11 +137,11 @@ impl RewardDistributorUnstakeAction {
         .to_clvm(ctx)
         .map_err(DriverError::ToClvm)?;
 
-        let hint = Memos::hint(ctx, entry_slot.info.value.payout_puzzle_hash)?;
+        let hint = ctx.hint(entry_slot.info.value.payout_puzzle_hash)?;
         let delegated_puzzle = ctx.alloc(&clvm_quote!(Conditions::new().create_coin(
             entry_slot.info.value.payout_puzzle_hash,
             1,
-            Some(hint),
+            hint,
         )))?;
         let nft_inner_solution = my_p2.construct_solution(
             ctx,
@@ -221,7 +220,7 @@ impl RewardDistributorUnstakeActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorUnstakeActionSolution {
     pub nft_launcher_id: Bytes32,
     pub nft_parent_id: Bytes32,

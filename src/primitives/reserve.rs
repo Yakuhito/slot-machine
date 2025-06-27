@@ -4,8 +4,8 @@ use chia::{
     puzzles::{cat::CatArgs, singleton::SingletonSolution, LineageProof},
 };
 use chia_wallet_sdk::{
-    driver::{Cat, CatSpend, DriverError, Layer, Spend, SpendContext},
-    prelude::{CreateCoin, Memos},
+    driver::{Cat, CatInfo, CatSpend, DriverError, Layer, Spend, SpendContext},
+    prelude::CreateCoin,
     types::run_puzzle,
 };
 use clvm_traits::{clvm_list, clvm_quote, match_tuple, FromClvm, ToClvm};
@@ -85,8 +85,7 @@ impl Reserve {
         Cat::new(
             self.coin,
             Some(self.proof),
-            self.asset_id,
-            self.inner_puzzle_hash,
+            CatInfo::new(self.asset_id, None, self.inner_puzzle_hash),
         )
     }
 
@@ -145,7 +144,7 @@ impl Reserve {
         let cc = CreateCoin::new(
             self.inner_puzzle_hash,
             new_reserve_amount,
-            Some(Memos::new(vec![self.inner_puzzle_hash])),
+            ctx.hint(self.inner_puzzle_hash)?,
         );
         reserve_conditions.insert(0, ctx.alloc(&cc)?);
 

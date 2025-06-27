@@ -178,6 +178,7 @@ pub struct VerificationLauncherKVList {
 mod tests {
     use anyhow::Ok;
     use chia::protocol::Bytes;
+    use chia_puzzle_types::Memos;
     use chia_puzzles::SINGLETON_LAUNCHER_HASH;
     use chia_wallet_sdk::{
         driver::{Launcher, StandardLayer},
@@ -204,7 +205,7 @@ mod tests {
         let did = did.update(
             ctx,
             &p2,
-            Conditions::new().create_coin(SINGLETON_LAUNCHER_HASH.into(), 0, None),
+            Conditions::new().create_coin(SINGLETON_LAUNCHER_HASH.into(), 0, Memos::None),
         )?;
         let verification_launcher = Launcher::new(did.coin.parent_coin_info, 0);
         // we don't need an extra mojo for the verification coin since it's melted in the same tx

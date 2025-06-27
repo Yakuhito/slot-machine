@@ -2,6 +2,7 @@ use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
     protocol::Bytes32,
 };
+use chia_puzzle_types::Memos;
 use chia_puzzles::SINGLETON_TOP_LAYER_V1_1_HASH;
 use chia_wallet_sdk::{
     driver::{DriverError, Layer, Puzzle, SpendContext},
@@ -94,7 +95,7 @@ impl Layer for StateSchedulerLayer {
 
     fn construct_puzzle(&self, ctx: &mut SpendContext) -> Result<NodePtr, DriverError> {
         let base_conditions = Conditions::new()
-            .create_coin(self.new_puzzle_hash, 1, None)
+            .create_coin(self.new_puzzle_hash, 1, Memos::None)
             .assert_height_absolute(self.required_block_height);
 
         let inner_puzzle = ctx.alloc(&clvm_quote!(base_conditions))?;
@@ -162,7 +163,7 @@ where
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct StateSchedulerLayerSolution<I> {
     pub other_singleton_inner_puzzle_hash: Bytes32,
     #[clvm(rest)]

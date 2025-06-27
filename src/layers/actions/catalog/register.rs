@@ -47,7 +47,7 @@ impl Action<CatalogRegistry> for CatalogRegisterAction {
         Self {
             launcher_id: constants.launcher_id,
             royalty_puzzle_hash_hash: constants.royalty_address.tree_hash().into(),
-            trade_price_percentage: constants.royalty_ten_thousandths,
+            trade_price_percentage: constants.royalty_basis_points,
             relative_block_height: constants.relative_block_height,
             payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
         }
@@ -156,7 +156,7 @@ impl CatalogRegisterAction {
             (),
             ANY_METADATA_UPDATER_HASH.into(),
             catalog.info.constants.royalty_address,
-            catalog.info.constants.royalty_ten_thousandths,
+            catalog.info.constants.royalty_basis_points,
         )?;
 
         // spend nft launcher
@@ -299,7 +299,7 @@ impl CatalogRegisterActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct CatalogRegisterActionSolution<P, S> {
     pub cat_maker_reveal: P,
     pub cat_maker_solution: S,
