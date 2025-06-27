@@ -233,7 +233,7 @@ pub async fn sync_catalog(
         }
 
         let mut processed_values = HashSet::<Bytes32>::new();
-        for slot_value in catalog.pending_spend.spent_slots.iter() {
+        for slot_value in catalog.pending_spend.created_slots.iter() {
             let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
             if processed_values.contains(&slot_value_hash) {
                 continue;
@@ -253,7 +253,7 @@ pub async fn sync_catalog(
                 .iter()
                 .filter(|sv| sv == &slot_value)
                 .count();
-            if no_spent > no_created {
+            if no_spent >= no_created {
                 continue;
             }
 
