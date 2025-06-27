@@ -26,7 +26,7 @@
             )
         )
     )
-    ; pricing_solution's first element MUST be handle_reveal
+    ; pricing_solution has 3 Truths: Start_Time, Current_Expiration, and Handle_Reveal
     (
         handle_hash
         pricing_puzzle_reveal
