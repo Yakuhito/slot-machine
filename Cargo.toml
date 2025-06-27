@@ -8,11 +8,11 @@ homepage = "https://github.com/Yakuhito/slot-machine"
 repository = "https://github.com/Yakuhito/slot-machine"
 
 [dependencies]
-clvmr = "0.12.1"
-chia = "0.20.0"
-clvm-traits = "0.20.0"
-hex-literal = "1.0.0"
-bip39 = "2.1.0"
+clvmr = "0.14.0"
+chia = "0.25.0"
+clvm-traits = "0.25.0"
+hex-literal = "0.4.1"
+bip39 = "2.2.0"
 getrandom = "0.3.2"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
@@ -23,7 +23,7 @@ thiserror = "2.0.12"
 tokio = { version = "1.44.1", features = ["full"] }
 sqlx = { version = "0.8.3", features = ["sqlite", "runtime-async-std-native-tls"] }
 bech32 = "0.9.1"
-reqwest = { version = "0.12.15", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12.20", features = ["json", "rustls-tls"] }
 dirs = "6.0.0"
 rustls = { version = "0.23", features = ["ring","logging","tls12"], default-features = false }
 tokio-tungstenite ={ version = "0.26.2", features = ["rustls-tls-native-roots"] }
@@ -31,13 +31,13 @@ futures-util = "0.3.31"
 axum = { version = "0.8.3", features = ["macros"]}
 tower-http = { version = "0.6.2", features = ["cors"] }
 futures = "0.3.31"
-chia-wallet-sdk = { version="0.23.0", features=["offers"] }
+chia-wallet-sdk = { version="0.25.0", features=["offers"] }
 sage-api = { version = "0.10.3", git = "https://github.com/xch-dev/sage.git" }
 chia-puzzles = "0.20.1"
-chia-puzzle-types = "0.20.0"
+chia-puzzle-types = "0.25.0"
 
 [dev-dependencies]
-anyhow = "1.0.86"
+anyhow = "1.0.98"
 rstest = "0.22.0"
 prettytable-rs = "0.10.0"
 
