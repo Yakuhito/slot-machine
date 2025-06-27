@@ -1261,7 +1261,6 @@ mod tests {
         let mut payment_cat = payment_cat[0];
         minter_p2.spend(ctx, minter_bls.coin, issue_cat)?;
 
-        payment_cat = payment_cat.child(minter_bls.puzzle_hash, payment_cat_amount);
         sim.spend_coins(ctx.take(), &[minter_bls.sk.clone()])?;
 
         // Launch catalog
@@ -1343,7 +1342,7 @@ mod tests {
                         Memos::None,
                     ),
             )?;
-            Cat::spend_all(
+            let new_cats = Cat::spend_all(
                 ctx,
                 &[CatSpend {
                     cat: payment_cat,
@@ -1354,7 +1353,7 @@ mod tests {
             )?;
 
             payment_cat_amount -= reg_amount;
-            payment_cat = payment_cat.child(minter_bls.puzzle_hash, payment_cat_amount);
+            payment_cat = new_cats[1];
 
             // sim.spend_coins(ctx.take(), &[user_bls.sk.clone(), minter_bls.sk.clone()])?;
             benchmark.add_spends(
@@ -1527,10 +1526,8 @@ mod tests {
             ),
         )?;
         minter_p2_2.spend(ctx, minter2_bls.coin, issue_cat)?;
-        let mut alternative_payment_cat = alternative_payment_cat[0];
+        let alternative_payment_cat = alternative_payment_cat[0];
 
-        alternative_payment_cat =
-            alternative_payment_cat.child(minter2_bls.puzzle_hash, alternative_payment_cat_amount);
         sim.spend_coins(ctx.take(), &[minter2_bls.sk.clone()])?;
 
         let (catalog, _alternative_payment_cat) = test_refund_for_catalog(
@@ -1745,8 +1742,6 @@ mod tests {
         )?;
         let mut payment_cat = payment_cat[0];
         minter_p2.spend(ctx, minter_bls.coin, issue_cat)?;
-
-        payment_cat = payment_cat.child(minter_bls.puzzle_hash, payment_cat_amount);
 
         sim.spend_coins(ctx.take(), &[minter_bls.sk.clone()])?;
 
@@ -2390,9 +2385,7 @@ mod tests {
             )?;
             minter_p2_2.spend(ctx, minter2.coin, issue_cat)?;
 
-            let mut alternative_payment_cat = alternative_payment_cat[0];
-            alternative_payment_cat =
-                alternative_payment_cat.child(minter2.puzzle_hash, alternative_payment_cat_amount);
+            let alternative_payment_cat = alternative_payment_cat[0];
             sim.spend_coins(ctx.take(), &[minter2.sk.clone()])?;
 
             registry = test_refund_for_xchandles(
@@ -2606,7 +2599,6 @@ mod tests {
         cat_minter_p2.spend(ctx, cat_minter.coin, issue_cat)?;
 
         let mut source_cat = source_cat[0];
-        source_cat = source_cat.child(cat_minter.puzzle_hash, cat_amount);
         sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
 
         // Launch manager singleton
