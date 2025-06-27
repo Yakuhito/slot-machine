@@ -253,7 +253,7 @@ pub async fn sync_catalog(
                 .iter()
                 .filter(|sv| sv == &slot_value)
                 .count();
-            if no_spent >= no_created {
+            if no_spent > no_created {
                 continue;
             }
 

@@ -156,7 +156,7 @@ pub async fn sync_xchandles(
                 .iter()
                 .filter(|sv| sv.tree_hash() == slot_value_hash.into())
                 .count();
-            if no_spent >= no_created {
+            if no_spent > no_created {
                 continue;
             }
 
