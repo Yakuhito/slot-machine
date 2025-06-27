@@ -824,9 +824,7 @@ pub fn launch_dig_reward_distributor(
     );
     let slot_puzzle_hash = Slot::<RewardDistributorRewardSlotValue>::puzzle_hash(&slot_info);
 
-    let slot_hint: Bytes32 =
-        Slot::<()>::first_curry_hash(launcher_id, RewardDistributorSlotNonce::REWARD.to_u64())
-            .into();
+    let slot_hint: Bytes32 = first_epoch_start.tree_hash().into();
     let slot_memos = ctx.hint(slot_hint)?;
     let launcher_memos = ctx.hint(launcher_id)?;
     let eve_singleton_inner_puzzle = clvm_quote!(Conditions::new()
