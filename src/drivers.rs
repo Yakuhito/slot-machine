@@ -587,7 +587,7 @@ pub fn spend_settlement_nft(
 #[allow(clippy::type_complexity)]
 pub fn launch_dig_reward_distributor(
     ctx: &mut SpendContext,
-    offer: Offer,
+    offer: &Offer,
     first_epoch_start: u64,
     cat_refund_puzzle_hash: Bytes32,
     constants: RewardDistributorConstants,
@@ -2525,7 +2525,7 @@ mod tests {
         let first_epoch_start = 1234;
         let (_, security_sk, mut registry, first_epoch_slot) = launch_dig_reward_distributor(
             ctx,
-            offer,
+            &offer,
             first_epoch_start,
             Bytes32::default(),
             constants,

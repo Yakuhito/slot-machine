@@ -1,15 +1,15 @@
 use chia::protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Offer, SpendContext},
+    driver::{decode_offer, Offer, SpendContext},
     types::Conditions,
 };
 
 use crate::{
-    assets_xch_only, find_entry_slots, get_coinset_client, get_constants,
-    get_last_onchain_timestamp, hex_string_to_bytes32, new_sk, no_assets, parse_amount,
-    parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
-    CliError, Db, RewardDistributorInitiatePayoutAction, RewardDistributorSyncAction, SageClient,
+    assets_xch_only, create_security_coin, find_entry_slots, get_coinset_client, get_constants,
+    get_last_onchain_timestamp, hex_string_to_bytes32, no_assets, parse_amount,
+    spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
+    RewardDistributorInitiatePayoutAction, RewardDistributorSyncAction, SageClient,
 };
 
 pub async fn reward_distributor_initiate_payout(
@@ -71,10 +71,9 @@ pub async fn reward_distributor_initiate_payout(
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
     let mut sec_conds = if also_sync {
         distributor
@@ -94,14 +93,13 @@ pub async fn reward_distributor_initiate_payout(
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
-        offer.security_base_conditions.extend(sec_conds),
+        security_coin,
+        sec_conds,
         &security_coin_sk,
         get_constants(testnet11),
     )?;
 
-    let spend_bundle =
-        SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+    let spend_bundle = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);
@@ -109,7 +107,7 @@ pub async fn reward_distributor_initiate_payout(
 
     println!("Transaction submitted; status='{}'", resp.status);
 
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())

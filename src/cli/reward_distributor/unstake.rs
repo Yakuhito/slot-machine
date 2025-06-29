@@ -1,22 +1,28 @@
 use chia::{
     clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
-    protocol::{Bytes32, SpendBundle},
+    protocol::{Bytes32, Coin, SpendBundle},
 };
-use chia_puzzle_types::standard::StandardArgs;
+use chia_puzzle_types::{
+    offer::{NotarizedPayment, Payment, SettlementPaymentsSolution},
+    standard::StandardArgs,
+    Memos,
+};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{HashedPtr, Nft, Offer, Puzzle, SpendContext, SpendWithConditions, StandardLayer},
-    types::Conditions,
+    driver::{
+        decode_offer, HashedPtr, Nft, Offer, Puzzle, Spend, SpendContext, SpendWithConditions,
+        StandardLayer,
+    },
+    types::{puzzles::SettlementPayment, Conditions},
     utils::Address,
 };
 
 use crate::{
     assets_xch_only, find_entry_slots, get_coinset_client, get_last_onchain_timestamp, get_prefix,
     hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature, no_assets, parse_amount,
-    parse_one_sided_offer, prompt_for_value, spend_to_coin_spend, sync_distributor, wait_for_coin,
-    yes_no_prompt, CliError, Db, NonceWrapperArgs, RewardDistributorStakeActionArgs,
-    RewardDistributorSyncAction, RewardDistributorUnstakeAction, SageClient,
-    NONCE_WRAPPER_PUZZLE_HASH,
+    prompt_for_value, spend_to_coin_spend, sync_distributor, wait_for_coin, yes_no_prompt,
+    CliError, Db, NonceWrapperArgs, RewardDistributorStakeActionArgs, RewardDistributorSyncAction,
+    RewardDistributorUnstakeAction, SageClient, NONCE_WRAPPER_PUZZLE_HASH,
 };
 
 pub async fn reward_distributor_unstake(
@@ -164,7 +170,32 @@ pub async fn reward_distributor_unstake(
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let xch_settlement_coin = offer.offered_coins().xch[0];
+    let security_coin_puzzle_hash: Bytes32 =
+        StandardArgs::curry_tree_hash(custody_public_key).into();
+    let notarized_payment = NotarizedPayment {
+        nonce: xch_settlement_coin.coin_id(),
+        payments: vec![Payment::new(
+            security_coin_puzzle_hash,
+            xch_settlement_coin.amount,
+            Memos::None,
+        )],
+    };
+    let settlement_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
+    let settlement_solution = ctx.alloc(&SettlementPaymentsSolution {
+        notarized_payments: vec![notarized_payment],
+    })?;
+    ctx.spend(
+        xch_settlement_coin,
+        Spend::new(settlement_puzzle, settlement_solution),
+    )?;
+
+    let security_coin = Coin::new(
+        xch_settlement_coin.coin_id(),
+        security_coin_puzzle_hash,
+        xch_settlement_coin.amount,
+    );
 
     let sec_conds = if also_sync {
         distributor
@@ -178,8 +209,6 @@ pub async fn reward_distributor_unstake(
     let (conds, last_payment_amount) = distributor
         .new_action::<RewardDistributorUnstakeAction>()
         .spend(&mut ctx, &mut distributor, entry_slot, locked_nft)?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, custody_public_key, None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
 
     println!(
         "Last reward payment amount: {:.3} CATs",
@@ -192,16 +221,16 @@ pub async fn reward_distributor_unstake(
 
     // security coin has custody puzzle!
     println!("Signing custody coin...");
-    let security_coin_spend = StandardLayer::new(custody_public_key)
-        .spend_with_conditions(&mut ctx, offer.security_base_conditions.extend(sec_conds))?;
-    ctx.spend(offer.security_coin, security_coin_spend)?;
+    let security_coin_spend =
+        StandardLayer::new(custody_public_key).spend_with_conditions(&mut ctx, sec_conds)?;
+    ctx.spend(security_coin, security_coin_spend)?;
 
     let security_coin_sig = hex_string_to_signature(
         &sage
             .sign_coin_spends(
                 vec![spend_to_coin_spend(
                     &mut ctx,
-                    offer.security_coin,
+                    security_coin,
                     security_coin_spend,
                 )?],
                 false,
@@ -213,8 +242,7 @@ pub async fn reward_distributor_unstake(
             .replace("0x", ""),
     )?;
 
-    let spend_bundle =
-        SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+    let spend_bundle = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);
@@ -222,7 +250,7 @@ pub async fn reward_distributor_unstake(
 
     println!("Transaction submitted; status='{}'", resp.status);
 
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())

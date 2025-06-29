@@ -2,18 +2,17 @@ use chia::protocol::SpendBundle;
 use chia_puzzle_types::{standard::StandardArgs, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{HashedPtr, Layer, Nft, Offer, Puzzle, SingletonLayer, SpendContext},
+    driver::{decode_offer, HashedPtr, Layer, Offer, Puzzle, SingletonLayer, SpendContext},
     types::Conditions,
     utils::Address,
 };
-use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_and_nft, get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, hex_string_to_pubkey, new_sk, no_assets, parse_amount,
-    parse_one_sided_offer, spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt,
-    CliError, Db, IntermediaryCoinProof, NftLauncherProof, RewardDistributorStakeAction,
-    RewardDistributorSyncAction, SageClient,
+    assets_xch_and_nft, create_security_coin, get_coinset_client, get_constants,
+    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, hex_string_to_pubkey, no_assets,
+    parse_amount, spend_security_coin, spend_settlement_nft, sync_distributor, wait_for_coin,
+    yes_no_prompt, CliError, Db, IntermediaryCoinProof, NftLauncherProof,
+    RewardDistributorStakeAction, RewardDistributorSyncAction, SageClient,
 };
 
 pub async fn reward_distributor_stake(
@@ -142,8 +141,9 @@ pub async fn reward_distributor_stake(
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
     let sec_conds = if also_sync {
         distributor
@@ -154,41 +154,11 @@ pub async fn reward_distributor_stake(
     };
 
     // find NFT
-    let mut current_nft = None;
-    for coin_spend in offer.clone().parse(&mut ctx)?.coin_spends {
-        let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
-        let puzzle = Puzzle::parse(&ctx, puzzle_ptr);
-        if let Ok(Some(layer)) = SingletonLayer::<NodePtr>::parse_puzzle(&ctx, puzzle) {
-            if layer.launcher_id != nft_launcher_id {
-                continue;
-            }
-
-            let parent_record = client
-                .get_coin_record_by_name(coin_spend.coin.parent_coin_info)
-                .await?
-                .coin_record
-                .ok_or(CliError::CoinNotFound(coin_spend.coin.parent_coin_info))?;
-            let parent_coin_spend = client
-                .get_puzzle_and_solution(
-                    coin_spend.coin.parent_coin_info,
-                    Some(parent_record.spent_block_index),
-                )
-                .await?
-                .coin_solution
-                .ok_or(CliError::CoinNotSpent(coin_spend.coin.parent_coin_info))?;
-
-            let parent_puzzle = ctx.alloc(&parent_coin_spend.puzzle_reveal)?;
-            let parent_puzzle = Puzzle::parse(&ctx, parent_puzzle);
-            let parent_solution = ctx.alloc(&parent_coin_spend.solution)?;
-            current_nft = Nft::parse_child(
-                &mut ctx,
-                parent_coin_spend.coin,
-                parent_puzzle,
-                parent_solution,
-            )?;
-            break;
-        }
-    }
+    let current_nft = offer
+        .offered_coins()
+        .nfts
+        .get(&nft_launcher_id)
+        .ok_or(CliError::Custom("NFT not found in offer".to_string()))?;
 
     // accept offer
     let (conds, notarized_payment, _locked_nft) = distributor
@@ -196,33 +166,28 @@ pub async fn reward_distributor_stake(
         .spend(
             &mut ctx,
             &mut distributor,
-            current_nft.unwrap(),
+            current_nft.clone(),
             nft_launcher_proof,
             custody_puzzle_hash,
         )?;
-    let offer = parse_one_sided_offer(
+    let (_new_nft, nft_assert) = spend_settlement_nft(
         &mut ctx,
-        offer,
-        security_coin_sk.public_key(),
-        None,
-        Some(notarized_payment),
+        &offer,
+        nft_launcher_id,
+        notarized_payment.nonce,
+        notarized_payment.payments[0].puzzle_hash,
     )?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
-
-    let sec_conds = sec_conds.extend(conds).reserve_fee(1);
 
     let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
-
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
-        offer.security_base_conditions.extend(sec_conds),
+        security_coin,
+        sec_conds.extend(conds).extend(nft_assert).reserve_fee(1),
         &security_coin_sk,
         get_constants(testnet11),
     )?;
 
-    let spend_bundle =
-        SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+    let spend_bundle = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);
@@ -230,7 +195,7 @@ pub async fn reward_distributor_stake(
 
     println!("Transaction submitted; status='{}'", resp.status);
 
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())
