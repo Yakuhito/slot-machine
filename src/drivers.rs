@@ -1,27 +1,25 @@
 use bip39::Mnemonic;
 use chia::{
-    bls::{sign, PublicKey, SecretKey, Signature},
+    bls::{sign, SecretKey, Signature},
     clvm_utils::ToTreeHash,
     consensus::consensus_constants::ConsensusConstants,
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
-        cat::{CatArgs, CatSolution},
-        offer::{NotarizedPayment, Payment, SettlementPaymentsSolution},
+        offer::{NotarizedPayment, Payment},
         singleton::{SingletonArgs, SingletonSolution, SingletonStruct},
-        standard::{StandardArgs, StandardSolution},
-        CoinProof, EveProof, LineageProof, Proof,
+        standard::StandardSolution,
+        EveProof, LineageProof, Proof,
     },
 };
-use chia_puzzle_types::Memos;
-use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH, SINGLETON_TOP_LAYER_V1_1_HASH};
+use chia_puzzle_types::{offer::SettlementPaymentsSolution, standard::StandardArgs, Memos};
 use chia_wallet_sdk::{
     driver::{
-        Cat, CatInfo, CatSpend, CurriedPuzzle, DriverError, HashedPtr, Launcher, Layer, Nft, Offer,
-        Puzzle, SingleCatSpend, Spend, SpendContext, StandardLayer,
+        Cat, DriverError, HashedPtr, Launcher, Layer, Nft, Offer, Spend, SpendContext,
+        StandardLayer,
     },
     prelude::{AggSig, AggSigKind},
     signer::{AggSigConstants, RequiredBlsSignature},
-    types::{announcement_id, puzzles::SettlementPayment, Condition, Conditions},
+    types::{puzzles::SettlementPayment, Condition, Conditions},
 };
 use clvm_traits::{clvm_list, clvm_quote, clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
@@ -59,299 +57,6 @@ pub fn new_sk() -> Result<SecretKey, DriverError> {
     let seed = mnemonic.to_seed("");
     let sk = SecretKey::from_seed(&seed);
     Ok(sk)
-}
-
-pub fn parse_one_sided_offer(
-    ctx: &mut SpendContext,
-    offer: Offer,
-    security_public_key: PublicKey,
-    cat_notarized_payment: Option<NotarizedPayment>,
-    nft_notatized_payment: Option<NotarizedPayment>,
-) -> Result<SecuredOneSidedOffer, DriverError> {
-    let offer = offer.parse(ctx).map_err(custom_err)?;
-
-    if !offer.requested_payments.is_empty() {
-        return Err(DriverError::Custom(
-            "Launch offer should not have any requested payments".to_string(),
-        ));
-    }
-
-    let security_coin_puzzle_hash: Bytes32 =
-        StandardArgs::curry_tree_hash(security_public_key).into();
-
-    // returned spends will also spend the offer coin (creating the security coin)
-    let mut coin_spends = Vec::with_capacity(offer.coin_spends.len() + 1);
-    let mut security_coin_parent_id: Option<Bytes32> = None;
-    let mut security_coin_amount = 0;
-
-    let mut base_conditions = Conditions::new();
-    let mut created_cat: Option<Cat> = None;
-    let mut created_nft: Option<Nft<HashedPtr>> = None;
-
-    for coin_spend in offer.coin_spends {
-        let puzzle_ptr = coin_spend.puzzle_reveal.to_clvm(ctx)?;
-        let solution_ptr = coin_spend.solution.to_clvm(ctx)?;
-
-        let curried_puzzle = CurriedPuzzle::parse(ctx, puzzle_ptr);
-
-        if let Some(curried_puzzle) = curried_puzzle {
-            if curried_puzzle.mod_hash == CAT_PUZZLE_HASH.into() {
-                let cat_args = CatArgs::<NodePtr>::from_clvm(ctx, curried_puzzle.args)?;
-                let cat_solution = CatSolution::<NodePtr>::from_clvm(ctx, solution_ptr)?;
-
-                let inner_output =
-                    ctx.run(cat_args.inner_puzzle, cat_solution.inner_puzzle_solution)?;
-                let inner_output = Vec::<Condition<NodePtr>>::from_clvm(ctx, inner_output)?;
-
-                if let Some(cc) = inner_output
-                    .into_iter()
-                    .filter_map(|cond| {
-                        let Condition::CreateCoin(cc) = cond else {
-                            return None;
-                        };
-
-                        Some(cc)
-                    })
-                    .find(|cc| cc.puzzle_hash == SETTLEMENT_PAYMENT_HASH.into())
-                {
-                    let Some(cat_notarized_payment) = cat_notarized_payment.clone() else {
-                        return Err(DriverError::Custom(
-                            "CAT payment not requested but offered CAT found".to_string(),
-                        ));
-                    };
-
-                    // we found a CAT creating an offered CAT - spend it to create
-                    // the offer CAT, which then creates a 0-amount coin with
-                    // puzzle hash = cat_destination_puzzle_hash; also return the cat
-                    // by returning it to its original puzzle hash
-
-                    // and assert the announcement to make sure it's not going
-                    // somewhere else
-                    let offer_cat_full_puzzle_hash =
-                        CatArgs::curry_tree_hash(cat_args.asset_id, SETTLEMENT_PAYMENT_HASH.into());
-                    let offer_coin_cat = Coin::new(
-                        coin_spend.coin.coin_id(),
-                        offer_cat_full_puzzle_hash.into(),
-                        cc.amount,
-                    );
-                    let refund_puzzle_hash = ctx.tree_hash(cat_args.inner_puzzle).into(); // funds will be returned to refund_puzzle_hash (inner puzzle hash)
-                    let offer_cat = Cat::new(
-                        offer_coin_cat,
-                        Some(LineageProof {
-                            parent_parent_coin_info: coin_spend.coin.parent_coin_info,
-                            parent_inner_puzzle_hash: refund_puzzle_hash,
-                            parent_amount: coin_spend.coin.amount,
-                        }),
-                        CatInfo::new(cat_args.asset_id, None, SETTLEMENT_PAYMENT_HASH.into()),
-                    );
-
-                    // offers don't allow amount 0 coins, so we create an 1-amount coin,
-                    //   which creates a 0-amount coin and spend all the CATs together
-                    if cat_notarized_payment.payments[0].amount == 0 {
-                        let interim_inner_puzzle = ctx.alloc(&clvm_quote!(Conditions::new()
-                            .create_coin(
-                                cat_notarized_payment.payments[0].puzzle_hash,
-                                0,
-                                cat_notarized_payment.payments[0].memos,
-                            )))?;
-                        let interim_inner_ph: Bytes32 = ctx.tree_hash(interim_inner_puzzle).into();
-
-                        let notarized_payment = NotarizedPayment {
-                            nonce: offer_coin_cat.coin_id(),
-                            payments: vec![
-                                Payment::new(
-                                    refund_puzzle_hash,
-                                    cc.amount,
-                                    ctx.hint(refund_puzzle_hash)?,
-                                ),
-                                Payment::new(interim_inner_ph, 1, Memos::None),
-                            ],
-                        };
-                        let offer_cat_inner_solution = ctx.alloc(&SettlementPaymentsSolution {
-                            notarized_payments: vec![notarized_payment.clone()],
-                        })?;
-
-                        let offer_cat_spend = CatSpend::new(
-                            offer_cat,
-                            Spend::new(
-                                ctx.alloc_mod::<SettlementPayment>()?,
-                                offer_cat_inner_solution,
-                            ),
-                        );
-
-                        let interim_cat = offer_cat.child(interim_inner_ph, 1);
-                        let interim_cat_spend = CatSpend::new(
-                            interim_cat,
-                            Spend::new(interim_inner_puzzle, NodePtr::NIL),
-                        );
-
-                        let orig_spends = ctx.take();
-
-                        Cat::spend_all(ctx, &[offer_cat_spend, interim_cat_spend])?;
-                        coin_spends.extend(ctx.take());
-
-                        for og_spend in orig_spends {
-                            ctx.insert(og_spend);
-                        }
-
-                        created_cat = Some(
-                            interim_cat.child(cat_notarized_payment.payments[0].puzzle_hash, 0),
-                        );
-                        let notarized_payment_ptr = ctx.alloc(&notarized_payment)?;
-                        let announcement_msg: Bytes32 = ctx.tree_hash(notarized_payment_ptr).into();
-                        base_conditions = base_conditions.assert_puzzle_announcement(
-                            announcement_id(offer_cat.coin.puzzle_hash, announcement_msg),
-                        );
-                    } else {
-                        let offer_cat_inner_solution = ctx.alloc(&SettlementPaymentsSolution {
-                            notarized_payments: vec![cat_notarized_payment.clone()],
-                        })?;
-
-                        let offer_cat_inner_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
-                        offer_cat.spend(
-                            ctx,
-                            SingleCatSpend {
-                                prev_coin_id: offer_cat.coin.coin_id(),
-                                next_coin_proof: CoinProof {
-                                    parent_coin_info: offer_cat.coin.parent_coin_info,
-                                    inner_puzzle_hash: offer_cat.info.p2_puzzle_hash,
-                                    amount: cc.amount,
-                                },
-                                prev_subtotal: 0,
-                                extra_delta: 0,
-                                inner_spend: Spend::new(
-                                    offer_cat_inner_puzzle,
-                                    offer_cat_inner_solution,
-                                ),
-                                revoke: false,
-                            },
-                        )?;
-
-                        created_cat = Some(
-                            offer_cat
-                                .child(cat_notarized_payment.payments[0].puzzle_hash, cc.amount),
-                        );
-                        let notarized_payment_ptr = ctx.alloc(&cat_notarized_payment)?;
-                        let announcement_msg: Bytes32 = ctx.tree_hash(notarized_payment_ptr).into();
-                        base_conditions = base_conditions.assert_puzzle_announcement(
-                            announcement_id(offer_cat.coin.puzzle_hash, announcement_msg),
-                        );
-                    }
-                }
-            } else if curried_puzzle.mod_hash == SINGLETON_TOP_LAYER_V1_1_HASH.into() {
-                let Some(nft_notatized_payment) = nft_notatized_payment.clone() else {
-                    return Err(DriverError::Custom(
-                        "NFT payment not requested but offered NFT found".to_string(),
-                    ));
-                };
-
-                let parent_puzzle = Puzzle::from_clvm(ctx, puzzle_ptr)?;
-                let Some(nft) = Nft::<HashedPtr>::parse_child(
-                    ctx,
-                    coin_spend.coin,
-                    parent_puzzle,
-                    solution_ptr,
-                )?
-                else {
-                    return Err(DriverError::Custom("Could not parse child NFT".to_string()));
-                };
-
-                let inner_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
-                let inner_solution = ctx.alloc(&SettlementPaymentsSolution {
-                    notarized_payments: vec![nft_notatized_payment.clone()],
-                })?;
-
-                nft.spend(ctx, Spend::new(inner_puzzle, inner_solution))?;
-
-                created_nft = Some(nft.child::<HashedPtr>(
-                    nft_notatized_payment.payments[0].puzzle_hash,
-                    nft.info.current_owner,
-                    nft.info.metadata,
-                ));
-                let notarized_payment_ptr = ctx.alloc(&nft_notatized_payment)?;
-                let announcement_msg: Bytes32 = ctx.tree_hash(notarized_payment_ptr).into();
-                base_conditions = base_conditions.assert_puzzle_announcement(announcement_id(
-                    nft.coin.puzzle_hash,
-                    announcement_msg,
-                ));
-            }
-        }
-
-        if security_coin_parent_id.is_none() {
-            let res = ctx.run(puzzle_ptr, solution_ptr)?;
-            let res = Vec::<Condition<NodePtr>>::from_clvm(ctx, res)?;
-
-            if let Some(cc) = res
-                .into_iter()
-                .filter_map(|cond| {
-                    let Condition::CreateCoin(cc) = cond else {
-                        return None;
-                    };
-
-                    Some(cc)
-                })
-                .find(|cc| cc.puzzle_hash == SETTLEMENT_PAYMENT_HASH.into())
-            {
-                let offer_coin = Coin::new(
-                    coin_spend.coin.coin_id(),
-                    SETTLEMENT_PAYMENT_HASH.into(),
-                    cc.amount,
-                );
-                let offer_coin_id = offer_coin.coin_id();
-
-                security_coin_parent_id = Some(offer_coin_id);
-                security_coin_amount = cc.amount;
-
-                let settlement_payments_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
-                let offer_coin_puzzle = ctx.serialize(&settlement_payments_puzzle)?;
-
-                let offer_coin_solution = SettlementPaymentsSolution {
-                    notarized_payments: vec![NotarizedPayment {
-                        nonce: offer_coin_id,
-                        payments: vec![Payment::new(
-                            security_coin_puzzle_hash,
-                            security_coin_amount,
-                            Memos::None,
-                        )],
-                    }],
-                };
-                let offer_coin_solution = ctx.serialize(&offer_coin_solution)?;
-
-                let offer_coin_spend =
-                    CoinSpend::new(offer_coin, offer_coin_puzzle, offer_coin_solution);
-                coin_spends.push(offer_coin_spend);
-            }
-        }
-
-        coin_spends.push(coin_spend);
-    }
-
-    let Some(security_coin_parent_id) = security_coin_parent_id else {
-        return Err(DriverError::Custom(
-            "Launch offer should offer XCH".to_string(),
-        ));
-    };
-
-    let security_coin = Coin::new(
-        security_coin_parent_id,
-        security_coin_puzzle_hash,
-        security_coin_amount,
-    );
-
-    if cat_notarized_payment.is_some() && created_cat.is_none() {
-        return Err(DriverError::Custom(
-            "Could not find CAT offered in one-sided offer".to_string(),
-        ));
-    }
-
-    Ok(SecuredOneSidedOffer {
-        coin_spends,
-        aggregated_signature: offer.aggregated_signature,
-        security_coin,
-        security_base_conditions: base_conditions,
-        created_cat,
-        created_nft,
-    })
 }
 
 pub fn spend_security_coin(
@@ -533,6 +238,40 @@ where
     ))
 }
 
+pub fn create_security_coin(
+    ctx: &mut SpendContext,
+    xch_settlement_coin: Coin,
+) -> Result<(SecretKey, Coin), DriverError> {
+    let security_coin_sk = new_sk()?;
+    let security_coin_puzzle_hash: Bytes32 =
+        StandardArgs::curry_tree_hash(security_coin_sk.public_key()).into();
+
+    let notarized_payment = NotarizedPayment {
+        nonce: xch_settlement_coin.coin_id(),
+        payments: vec![Payment::new(
+            security_coin_puzzle_hash,
+            xch_settlement_coin.amount,
+            Memos::None,
+        )],
+    };
+    let settlement_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
+    let settlement_solution = ctx.alloc(&SettlementPaymentsSolution {
+        notarized_payments: vec![notarized_payment],
+    })?;
+    ctx.spend(
+        xch_settlement_coin,
+        Spend::new(settlement_puzzle, settlement_solution),
+    )?;
+
+    let security_coin = Coin::new(
+        xch_settlement_coin.coin_id(),
+        security_coin_puzzle_hash,
+        xch_settlement_coin.amount,
+    );
+
+    Ok((security_coin_sk, security_coin))
+}
+
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
 pub fn launch_catalog_registry<V>(
@@ -561,13 +300,16 @@ pub fn launch_catalog_registry<V>(
     ),
     DriverError,
 > {
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let (security_coin_sk, security_coin) =
+        create_security_coin(ctx, offer.offered_coins().xch[0])?;
+    offer.spend_bundle().coin_spends.iter().for_each(|cs| {
+        if cs.coin.parent_coin_info != Bytes32::default() {
+            ctx.insert(cs.clone());
+        }
+    });
 
-    let security_coin_id = offer.security_coin.coin_id();
-
-    let mut security_coin_conditions = offer.security_base_conditions;
+    let security_coin_id = security_coin.coin_id();
+    let mut security_coin_conditions = Conditions::new();
 
     // Create CATalog registry launcher
     let registry_launcher = Launcher::new(security_coin_id, 1);
@@ -575,12 +317,7 @@ pub fn launch_catalog_registry<V>(
     let registry_launcher_id = registry_launcher_coin.coin_id();
 
     let (additional_security_coin_conditions, catalog_constants, initial_registration_asset_id) =
-        get_additional_info(
-            ctx,
-            registry_launcher_id,
-            offer.security_coin,
-            additional_args,
-        )?;
+        get_additional_info(ctx, registry_launcher_id, security_coin, additional_args)?;
 
     let initial_state = CatalogRegistryState {
         registration_price: initial_registration_price,
@@ -623,7 +360,7 @@ pub fn launch_catalog_registry<V>(
     // Spend security coin
     let security_coin_sig = spend_security_coin(
         ctx,
-        offer.security_coin,
+        security_coin,
         security_coin_conditions,
         &security_coin_sk,
         consensus_constants,
@@ -631,11 +368,11 @@ pub fn launch_catalog_registry<V>(
 
     // Finally, return the data
     Ok((
-        offer.aggregated_signature + &security_coin_sig,
+        security_coin_sig + &offer.spend_bundle().aggregated_signature,
         security_coin_sk,
         catalog_registry,
         slots,
-        offer.security_coin,
+        security_coin,
     ))
 }
 
