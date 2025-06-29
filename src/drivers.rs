@@ -14,12 +14,12 @@ use chia::{
 use chia_puzzle_types::{offer::SettlementPaymentsSolution, standard::StandardArgs, Memos};
 use chia_wallet_sdk::{
     driver::{
-        Cat, DriverError, HashedPtr, Launcher, Layer, Nft, Offer, Spend, SpendContext,
+        Cat, CatSpend, DriverError, HashedPtr, Launcher, Layer, Nft, Offer, Spend, SpendContext,
         StandardLayer,
     },
     prelude::{AggSig, AggSigKind},
     signer::{AggSigConstants, RequiredBlsSignature},
-    types::{puzzles::SettlementPayment, Condition, Conditions},
+    types::{announcement_id, puzzles::SettlementPayment, Condition, Conditions},
 };
 use clvm_traits::{clvm_list, clvm_quote, clvm_tuple, FromClvm, ToClvm};
 use clvmr::{Allocator, NodePtr};
@@ -302,11 +302,11 @@ pub fn launch_catalog_registry<V>(
 > {
     let (security_coin_sk, security_coin) =
         create_security_coin(ctx, offer.offered_coins().xch[0])?;
-    offer.spend_bundle().coin_spends.iter().for_each(|cs| {
-        if cs.coin.parent_coin_info != Bytes32::default() {
-            ctx.insert(cs.clone());
-        }
-    });
+    offer
+        .spend_bundle()
+        .coin_spends
+        .iter()
+        .for_each(|cs| ctx.insert(cs.clone()));
 
     let security_coin_id = security_coin.coin_id();
     let mut security_coin_conditions = Conditions::new();
@@ -405,13 +405,17 @@ pub fn launch_xchandles_registry<V>(
     ),
     DriverError,
 > {
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let (security_coin_sk, security_coin) =
+        create_security_coin(ctx, offer.offered_coins().xch[0])?;
+    offer
+        .spend_bundle()
+        .coin_spends
+        .iter()
+        .for_each(|cs| ctx.insert(cs.clone()));
 
-    let security_coin_id = offer.security_coin.coin_id();
+    let security_coin_id = security_coin.coin_id();
 
-    let mut security_coin_conditions = offer.security_base_conditions;
+    let mut security_coin_conditions = Conditions::new();
 
     // Create registry coin launcher
     let registry_launcher = Launcher::new(security_coin_id, 1);
@@ -419,12 +423,7 @@ pub fn launch_xchandles_registry<V>(
     let registry_launcher_id = registry_launcher_coin.coin_id();
 
     let (additional_security_coin_conditions, xchandles_constants, initial_registration_asset_id) =
-        get_additional_info(
-            ctx,
-            registry_launcher_id,
-            offer.security_coin,
-            additional_args,
-        )?;
+        get_additional_info(ctx, registry_launcher_id, security_coin, additional_args)?;
 
     // Spend intermediary coin and create registry
     let initial_state = XchandlesRegistryState::from(
@@ -466,7 +465,7 @@ pub fn launch_xchandles_registry<V>(
     // Spend security coin
     let security_coin_sig = spend_security_coin(
         ctx,
-        offer.security_coin,
+        security_coin,
         security_coin_conditions,
         &security_coin_sk,
         consensus_constants,
@@ -474,12 +473,74 @@ pub fn launch_xchandles_registry<V>(
 
     // Finally, return the data
     Ok((
-        offer.aggregated_signature + &security_coin_sig,
+        security_coin_sig + &offer.spend_bundle().aggregated_signature,
         security_coin_sk,
         xchandles_registry,
         slots,
-        offer.security_coin,
+        security_coin,
     ))
+}
+
+pub fn spend_settlement_cats(
+    ctx: &mut SpendContext,
+    offer: &Offer,
+    asset_id: Bytes32,
+    nonce: Bytes32,
+    payments: Vec<(Bytes32, u64)>,
+) -> Result<(Vec<Cat>, Conditions), DriverError> {
+    let settlement_cats = offer
+        .offered_coins()
+        .cats
+        .get(&asset_id)
+        .ok_or(DriverError::Custom(
+            "Could not find required CAT in offer".to_string(),
+        ))?;
+
+    let mut pmnts = Vec::with_capacity(payments.len());
+    for (puzzle_hash, amount) in payments.iter() {
+        pmnts.push(Payment::new(*puzzle_hash, *amount, ctx.hint(*puzzle_hash)?));
+    }
+    let notarized_payment = NotarizedPayment {
+        nonce,
+        payments: pmnts,
+    };
+
+    let offer_ann_message = ctx.alloc(&notarized_payment)?;
+    let offer_ann_message: Bytes32 = ctx.tree_hash(offer_ann_message).into();
+
+    let first_settlement_inner_solution = ctx.alloc(&SettlementPaymentsSolution {
+        notarized_payments: vec![notarized_payment],
+    })?;
+    let settlement_inner_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
+
+    let security_coin_conditions = Conditions::new().assert_puzzle_announcement(announcement_id(
+        settlement_cats[0].coin.puzzle_hash,
+        offer_ann_message,
+    ));
+
+    let created_cats = payments
+        .iter()
+        .map(|(puzzle_hash, amount)| settlement_cats[0].child(*puzzle_hash, *amount))
+        .collect();
+
+    let mut cat_spends = Vec::with_capacity(settlement_cats.len());
+    for (i, cat) in settlement_cats.into_iter().enumerate() {
+        cat_spends.push(CatSpend {
+            cat: cat.clone(),
+            spend: Spend::new(
+                settlement_inner_puzzle,
+                if i == 0 {
+                    first_settlement_inner_solution
+                } else {
+                    NodePtr::NIL
+                },
+            ),
+            hidden: false,
+        });
+    }
+    Cat::spend_all(ctx, &cat_spends)?;
+
+    Ok((created_cats, security_coin_conditions))
 }
 
 #[allow(clippy::type_complexity)]
@@ -500,23 +561,17 @@ pub fn launch_dig_reward_distributor(
     ),
     DriverError,
 > {
-    // use a 'trick' to find the launcher id so we can determine reserve id, then call the function again
-    //  with the right CAT destination ph
-    let security_coin_sk = new_sk()?;
-    let hint = ctx.hint(cat_refund_puzzle_hash)?;
-    let mock_offer = parse_one_sided_offer(
-        ctx,
-        offer.clone(),
-        security_coin_sk.public_key(),
-        Some(NotarizedPayment {
-            nonce: constants.launcher_id,
-            payments: vec![Payment::new(cat_refund_puzzle_hash, 0, hint)],
-        }),
-        None,
-    )?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(ctx, offer.offered_coins().xch[0])?;
+    offer
+        .spend_bundle()
+        .coin_spends
+        .iter()
+        .for_each(|cs| ctx.insert(cs.clone()));
+
     let reward_distributor_hint: Bytes32 = "Reward Distributor v1".tree_hash().into();
     let launcher_memos = ctx.memos(&(reward_distributor_hint, (comment, ())))?;
-    let launcher = Launcher::with_memos(mock_offer.security_coin.coin_id(), 1, launcher_memos);
+    let launcher = Launcher::with_memos(security_coin.coin_id(), 1, launcher_memos);
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
 
@@ -526,20 +581,13 @@ pub fn launch_dig_reward_distributor(
         P2DelegatedBySingletonLayerArgs::curry_tree_hash(controller_singleton_struct_hash, 0)
             .into();
 
-    let hint = ctx.hint(reserve_inner_ph)?;
-    let offer = parse_one_sided_offer(
+    let (created_cats, mut security_coin_conditions) = spend_settlement_cats(
         ctx,
-        offer,
-        security_coin_sk.public_key(),
-        Some(NotarizedPayment {
-            nonce: constants.launcher_id,
-            payments: vec![Payment::new(reserve_inner_ph, 0, hint)],
-        }),
-        None,
+        &offer,
+        constants.reserve_asset_id,
+        constants.launcher_id,
+        vec![(reserve_inner_ph, 0), (cat_refund_puzzle_hash, 1)],
     )?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
-
-    let mut security_coin_conditions = offer.security_base_conditions;
 
     // Spend intermediary coin and create registry
     let target_info = RewardDistributorInfo::new(
@@ -616,11 +664,7 @@ pub fn launch_dig_reward_distributor(
         security_coin_conditions.assert_concurrent_spend(eve_coin.coin_id());
 
     // create reserve and registry
-    let Some(reserve_cat) = offer.created_cat else {
-        return Err(DriverError::Custom(
-            "Offer does not contain reserve".to_string(),
-        ));
-    };
+    let reserve_cat = created_cats[0];
     let reserve = Reserve::new(
         reserve_cat.coin.parent_coin_info,
         reserve_cat.lineage_proof.unwrap(),
@@ -634,7 +678,7 @@ pub fn launch_dig_reward_distributor(
     // Spend security coin
     let security_coin_sig = spend_security_coin(
         ctx,
-        offer.security_coin,
+        security_coin,
         security_coin_conditions,
         &security_coin_sk,
         consensus_constants,
@@ -642,7 +686,7 @@ pub fn launch_dig_reward_distributor(
 
     // Finally, return the data
     Ok((
-        offer.aggregated_signature + &security_coin_sig,
+        security_coin_sig + &offer.spend_bundle().aggregated_signature,
         security_coin_sk,
         registry,
         slot,
@@ -659,9 +703,9 @@ mod tests {
             CoinProof,
         },
     };
-    use chia_puzzles::SINGLETON_LAUNCHER_HASH;
+    use chia_puzzles::{SETTLEMENT_PAYMENT_HASH, SINGLETON_LAUNCHER_HASH};
     use chia_wallet_sdk::{
-        driver::{Nft, NftMint, SpendWithConditions},
+        driver::{Nft, NftMint, SingleCatSpend, SpendWithConditions},
         test::Simulator,
         types::TESTNET11_CONSTANTS,
     };
@@ -872,9 +916,8 @@ mod tests {
             ctx,
             &[CatSpend {
                 cat: payment_cat,
-                inner_spend: payment_cat_inner_spend,
-                extra_delta: 0,
-                revoke: false,
+                spend: payment_cat_inner_spend,
+                hidden: false,
             }],
         )?;
 
@@ -962,16 +1005,19 @@ mod tests {
 
         let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
         let solution = ctx.serialize(&offer_spend.solution)?;
-        let offer = Offer::new(SpendBundle {
-            coin_spends: vec![CoinSpend::new(offer_src_coin, puzzle_reveal, solution)],
-            aggregated_signature: sign_standard_transaction(
-                ctx,
-                offer_src_coin,
-                offer_spend,
-                &launcher_bls.sk,
-                &TESTNET11_CONSTANTS,
-            )?,
-        });
+        let offer = Offer::from_spend_bundle(
+            ctx,
+            &SpendBundle {
+                coin_spends: vec![CoinSpend::new(offer_src_coin, puzzle_reveal, solution)],
+                aggregated_signature: sign_standard_transaction(
+                    ctx,
+                    offer_src_coin,
+                    offer_spend,
+                    &launcher_bls.sk,
+                    &TESTNET11_CONSTANTS,
+                )?,
+            },
+        )?;
 
         let (
             price_singleton_launcher_id,
@@ -1081,9 +1127,8 @@ mod tests {
                 ctx,
                 &[CatSpend {
                     cat: payment_cat,
-                    inner_spend: payment_cat_inner_spend,
-                    extra_delta: 0,
-                    revoke: false,
+                    spend: payment_cat_inner_spend,
+                    hidden: false,
                 }],
             )?;
 
@@ -1370,9 +1415,8 @@ mod tests {
             ctx,
             &[CatSpend {
                 cat: payment_cat,
-                inner_spend: payment_cat_inner_spend,
-                extra_delta: 0,
-                revoke: false,
+                spend: payment_cat_inner_spend,
+                hidden: false,
             }],
         )?;
 
@@ -1453,16 +1497,19 @@ mod tests {
 
         let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
         let solution = ctx.serialize(&offer_spend.solution)?;
-        let offer = Offer::new(SpendBundle {
-            coin_spends: vec![CoinSpend::new(launcher_bls.coin, puzzle_reveal, solution)],
-            aggregated_signature: sign_standard_transaction(
-                ctx,
-                launcher_bls.coin,
-                offer_spend,
-                &launcher_bls.sk,
-                &TESTNET11_CONSTANTS,
-            )?,
-        });
+        let offer = Offer::from_spend_bundle(
+            ctx,
+            &SpendBundle {
+                coin_spends: vec![CoinSpend::new(launcher_bls.coin, puzzle_reveal, solution)],
+                aggregated_signature: sign_standard_transaction(
+                    ctx,
+                    launcher_bls.coin,
+                    offer_spend,
+                    &launcher_bls.sk,
+                    &TESTNET11_CONSTANTS,
+                )?,
+            },
+        )?;
 
         // Launch CAT
         let mut payment_cat_amount = 10_000_000;
@@ -1620,9 +1667,8 @@ mod tests {
                 ctx,
                 &[CatSpend {
                     cat: payment_cat,
-                    inner_spend: payment_cat_inner_spend,
-                    extra_delta: 0,
-                    revoke: false,
+                    spend: payment_cat_inner_spend,
+                    hidden: false,
                 }],
             )?;
 
@@ -1854,15 +1900,13 @@ mod tests {
                 &[
                     CatSpend {
                         cat: payment_cat,
-                        inner_spend: payment_cat_inner_spend,
-                        extra_delta: 0,
-                        revoke: false,
+                        spend: payment_cat_inner_spend,
+                        hidden: false,
                     },
                     CatSpend {
                         cat: payment_cat.child(SETTLEMENT_PAYMENT_HASH.into(), pay_for_extension),
-                        inner_spend: cat_offer_inner_spend,
-                        extra_delta: 0,
-                        revoke: false,
+                        spend: cat_offer_inner_spend,
+                        hidden: false,
                     },
                 ],
             )?;
@@ -1996,9 +2040,8 @@ mod tests {
             ctx,
             &[CatSpend {
                 cat: payment_cat,
-                inner_spend: payment_cat_inner_spend,
-                extra_delta: 0,
-                revoke: false,
+                spend: payment_cat_inner_spend,
+                hidden: false,
             }],
         )?;
 
@@ -2224,7 +2267,7 @@ mod tests {
                 royalty_puzzle_hash,
                 royalty_basis_points: 100,
                 p2_puzzle_hash: bls.puzzle_hash,
-                owner: None,
+                transfer_condition: None,
             },
         )?;
         p2.spend(ctx, bls.coin, create_nft)?;
@@ -2401,7 +2444,7 @@ mod tests {
                 },
                 prev_subtotal: 0,
                 extra_delta: 0,
-                inner_spend: source_cat_inner_spend,
+                p2_spend: source_cat_inner_spend,
                 revoke: false,
             },
         )?;
@@ -2417,19 +2460,22 @@ mod tests {
             }
         }
 
-        let offer = Offer::new(SpendBundle {
-            coin_spends: vec![
-                CoinSpend::new(launcher_bls.coin, puzzle_reveal, solution),
-                cat_offer_spend,
-            ],
-            aggregated_signature: sign_standard_transaction(
-                ctx,
-                launcher_bls.coin,
-                offer_spend,
-                &launcher_bls.sk,
-                &TESTNET11_CONSTANTS,
-            )?,
-        });
+        let offer = Offer::from_spend_bundle(
+            ctx,
+            &SpendBundle {
+                coin_spends: vec![
+                    CoinSpend::new(launcher_bls.coin, puzzle_reveal, solution),
+                    cat_offer_spend,
+                ],
+                aggregated_signature: sign_standard_transaction(
+                    ctx,
+                    launcher_bls.coin,
+                    offer_spend,
+                    &launcher_bls.sk,
+                    &TESTNET11_CONSTANTS,
+                )?,
+            },
+        )?;
 
         // Launch the reward distributor
         let first_epoch_start = 1234;
@@ -2551,7 +2597,7 @@ mod tests {
 
             ensure_conditions_met(ctx, &mut sim, sec_conds, 0)?;
 
-            let offer_nft = nft.child(SETTLEMENT_PAYMENT_HASH.into(), None, nft.info.metadata);
+            let offer_nft = nft.child(SETTLEMENT_PAYMENT_HASH.into(), None, nft.info.metadata, 1);
 
             let nft_inner_spend = Spend::new(
                 ctx.alloc(&clvm_quote!(Conditions::new().create_coin(
@@ -3079,8 +3125,10 @@ mod tests {
 
             ensure_conditions_met(ctx, &mut sim, sec_conds2.extend(sec_conds3), 0)?;
 
-            let offer2_nft = nft2.child(SETTLEMENT_PAYMENT_HASH.into(), None, nft2.info.metadata);
-            let offer3_nft = nft3.child(SETTLEMENT_PAYMENT_HASH.into(), None, nft3.info.metadata);
+            let offer2_nft =
+                nft2.child(SETTLEMENT_PAYMENT_HASH.into(), None, nft2.info.metadata, 1);
+            let offer3_nft =
+                nft3.child(SETTLEMENT_PAYMENT_HASH.into(), None, nft3.info.metadata, 1);
 
             let nfts_inner_spend = Spend::new(
                 ctx.alloc(&clvm_quote!(Conditions::new().create_coin(
@@ -3154,11 +3202,11 @@ mod tests {
         let reserve_cat = registry.reserve.to_cat();
         if let Some((entry3_slot, locked_nft2, locked_nft3)) = other_nft2_info {
             let nft2_return_coin_id = locked_nft2
-                .child(nft2_bls.puzzle_hash, None, locked_nft2.info.metadata)
+                .child(nft2_bls.puzzle_hash, None, locked_nft2.info.metadata, 1)
                 .coin
                 .coin_id();
             let nft3_return_coin_id = locked_nft3
-                .child(nft3_bls.puzzle_hash, None, locked_nft3.info.metadata)
+                .child(nft3_bls.puzzle_hash, None, locked_nft3.info.metadata, 1)
                 .coin
                 .coin_id();
 
