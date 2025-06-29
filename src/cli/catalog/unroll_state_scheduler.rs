@@ -1,12 +1,12 @@
 use chia::protocol::{Bytes32, SpendBundle};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Offer, SpendContext},
-    types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
+    driver::{decode_offer, Offer, SpendContext},
+    types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
 
 use crate::{
-    assets_xch_only, get_coinset_client, new_sk, no_assets, parse_amount, parse_one_sided_offer,
+    assets_xch_only, create_security_coin, get_coinset_client, no_assets, parse_amount,
     spend_security_coin, sync_multisig_singleton, wait_for_coin, yes_no_prompt,
     CatalogRegistryConstants, CatalogRegistryState, CliError, Db, DelegatedStateAction,
     MultisigSingleton, SageClient,
@@ -99,20 +99,17 @@ pub async fn catalog_unroll_state_scheduler(
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
-
-    let security_coin_conditions = offer
-        .security_base_conditions
+    let security_coin_conditions = Conditions::new()
         .assert_concurrent_spend(state_scheduler.coin.coin_id())
         .reserve_fee(1);
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
+        security_coin,
         security_coin_conditions,
         &security_coin_sk,
         if testnet11 {
@@ -124,14 +121,14 @@ pub async fn catalog_unroll_state_scheduler(
 
     state_scheduler.spend(&mut ctx, catalog_inner_ph.into())?;
 
-    let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+    let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
 
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);
 
-    wait_for_coin(&cli, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&cli, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())

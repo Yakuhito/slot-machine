@@ -276,7 +276,7 @@ pub fn create_security_coin(
 #[allow(clippy::type_complexity)]
 pub fn launch_catalog_registry<V>(
     ctx: &mut SpendContext,
-    offer: Offer,
+    offer: &Offer,
     initial_registration_price: u64,
     // (registry launcher id, security coin, additional_args) -> (additional conditions, registry constants, initial_registration_asset_id)
     get_additional_info: fn(
@@ -1089,7 +1089,7 @@ mod tests {
         // Launch catalog
         let (_, security_sk, mut catalog, slots, _security_coin) = launch_catalog_registry(
             ctx,
-            offer,
+            &offer,
             initial_registration_price,
             |_ctx, _launcher_id, _coin, (catalog_constants, initial_registration_asset_id)| {
                 Ok((
