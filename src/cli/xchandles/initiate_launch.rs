@@ -17,7 +17,7 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Cat, DriverError, Launcher, Offer, SpendContext},
+    driver::{decode_offer, Cat, DriverError, Launcher, Offer, SpendContext},
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
     utils::Address,
 };
@@ -242,9 +242,10 @@ pub async fn xchandles_initiate_launch(
 
     let mut ctx = SpendContext::new();
 
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
     let (sig, _, registry, slots, security_coin) = launch_xchandles_registry(
         &mut ctx,
-        Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
+        &offer,
         1,
         registration_period,
         get_additional_info_for_launch,

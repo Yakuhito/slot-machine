@@ -5,14 +5,14 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{CatLayer, DriverError, Layer, Offer, Puzzle, SpendContext},
+    driver::{decode_offer, CatLayer, DriverError, Layer, Offer, Puzzle, SpendContext},
     utils::Address,
 };
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_only, get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, new_sk, no_assets, parse_amount, parse_one_sided_offer,
+    assets_xch_only, create_security_coin, get_coinset_client, get_constants,
+    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, no_assets, parse_amount,
     print_spend_bundle_to_file, quick_sync_xchandles, spend_security_coin, sync_xchandles,
     wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer,
     SageClient, Slot, XchandlesApiClient, XchandlesExponentialPremiumRenewPuzzleArgs,
@@ -254,11 +254,9 @@ pub async fn xchandles_register(
 
         println!("Offer with id {} generated.", offer_resp.offer_id);
 
-        let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-        let security_coin_sk = new_sk()?;
-        let offer =
-            parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
-        offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+        let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+        let (security_coin_sk, security_coin) =
+            create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
         let sec_conds = if refund {
             let slot: Option<Slot<XchandlesSlotValue>> = if DefaultCatMakerArgs::curry_tree_hash(
@@ -354,13 +352,13 @@ pub async fn xchandles_register(
 
         let security_coin_sig = spend_security_coin(
             &mut ctx,
-            offer.security_coin,
-            offer.security_base_conditions.extend(sec_conds),
+            security_coin,
+            sec_conds,
             &security_coin_sk,
             get_constants(testnet11),
         )?;
 
-        let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+        let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
 
         println!("Submitting transaction...");
         if log {
@@ -373,7 +371,7 @@ pub async fn xchandles_register(
         let resp = cli.push_tx(sb).await?;
 
         println!("Transaction submitted; status='{}'", resp.status);
-        wait_for_coin(&cli, offer.security_coin.coin_id(), true).await?;
+        wait_for_coin(&cli, security_coin.coin_id(), true).await?;
         println!("Confirmed!");
 
         return Ok(());

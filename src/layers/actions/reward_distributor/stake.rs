@@ -10,7 +10,7 @@ use chia_puzzle_types::{
 };
 use chia_puzzles::{NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_HASH, SETTLEMENT_PAYMENT_HASH};
 use chia_wallet_sdk::{
-    driver::{DriverError, HashedPtr, Nft, Spend, SpendContext},
+    driver::{Asset, DriverError, HashedPtr, Nft, Spend, SpendContext},
     types::{announcement_id, Conditions},
 };
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
@@ -118,6 +118,7 @@ impl RewardDistributorStakeAction {
             SETTLEMENT_PAYMENT_HASH.into(),
             None,
             current_nft.info.metadata,
+            current_nft.amount(),
         );
         let action_solution = ctx.alloc(&RewardDistributorStakeActionSolution {
             my_id,
@@ -146,7 +147,7 @@ impl RewardDistributorStakeAction {
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(nft.coin.puzzle_hash, msg)),
             notarized_payment,
-            nft.child(payment_puzzle_hash, None, nft.info.metadata),
+            nft.child(payment_puzzle_hash, None, nft.info.metadata, nft.amount()),
         ))
     }
 }

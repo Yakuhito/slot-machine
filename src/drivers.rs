@@ -380,7 +380,7 @@ pub fn launch_catalog_registry<V>(
 #[allow(clippy::type_complexity)]
 pub fn launch_xchandles_registry<V>(
     ctx: &mut SpendContext,
-    offer: Offer,
+    offer: &Offer,
     initial_base_registration_price: u64,
     initial_registration_period: u64,
     // (registry launcher id, security coin, additional_args) -> (additional conditions, registry constants, initial_registration_asset_id)
@@ -518,11 +518,6 @@ pub fn spend_settlement_cats(
         offer_ann_message,
     ));
 
-    let created_cats = payments
-        .iter()
-        .map(|(puzzle_hash, amount)| settlement_cats[0].child(*puzzle_hash, *amount))
-        .collect();
-
     let mut cat_spends = Vec::with_capacity(settlement_cats.len());
     for (i, cat) in settlement_cats.into_iter().enumerate() {
         cat_spends.push(CatSpend {
@@ -538,9 +533,55 @@ pub fn spend_settlement_cats(
             hidden: false,
         });
     }
-    Cat::spend_all(ctx, &cat_spends)?;
+    let created_cats = Cat::spend_all(ctx, &cat_spends)?;
 
     Ok((created_cats, security_coin_conditions))
+}
+
+pub fn spend_settlement_nft(
+    ctx: &mut SpendContext,
+    offer: &Offer,
+    nft_launcher_id: Bytes32,
+    nonce: Bytes32,
+    destination_puzzle_hash: Bytes32,
+) -> Result<(Nft<HashedPtr>, Conditions), DriverError> {
+    let settlement_nft =
+        offer
+            .offered_coins()
+            .nfts
+            .get(&nft_launcher_id)
+            .ok_or(DriverError::Custom(
+                "Could not find required NFT in offer".to_string(),
+            ))?;
+
+    let notarized_payment = NotarizedPayment {
+        nonce,
+        payments: vec![Payment::new(
+            destination_puzzle_hash,
+            1,
+            ctx.hint(destination_puzzle_hash)?,
+        )],
+    };
+
+    let offer_ann_message = ctx.alloc(&notarized_payment)?;
+    let offer_ann_message: Bytes32 = ctx.tree_hash(offer_ann_message).into();
+
+    let settlement_inner_solution = ctx.alloc(&SettlementPaymentsSolution {
+        notarized_payments: vec![notarized_payment],
+    })?;
+    let settlement_inner_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
+
+    let security_coin_conditions = Conditions::new().assert_puzzle_announcement(announcement_id(
+        settlement_nft.coin.puzzle_hash,
+        offer_ann_message,
+    ));
+
+    let created_nft = settlement_nft.spend(
+        ctx,
+        Spend::new(settlement_inner_puzzle, settlement_inner_solution),
+    )?;
+
+    Ok((created_nft, security_coin_conditions))
 }
 
 #[allow(clippy::type_complexity)]
@@ -1005,17 +1046,18 @@ mod tests {
 
         let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
         let solution = ctx.serialize(&offer_spend.solution)?;
+        let agg_sig = sign_standard_transaction(
+            ctx,
+            offer_src_coin,
+            offer_spend,
+            &launcher_bls.sk,
+            &TESTNET11_CONSTANTS,
+        )?;
         let offer = Offer::from_spend_bundle(
             ctx,
             &SpendBundle {
                 coin_spends: vec![CoinSpend::new(offer_src_coin, puzzle_reveal, solution)],
-                aggregated_signature: sign_standard_transaction(
-                    ctx,
-                    offer_src_coin,
-                    offer_spend,
-                    &launcher_bls.sk,
-                    &TESTNET11_CONSTANTS,
-                )?,
+                aggregated_signature: agg_sig,
             },
         )?;
 
@@ -1497,17 +1539,18 @@ mod tests {
 
         let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
         let solution = ctx.serialize(&offer_spend.solution)?;
+        let agg_sig = sign_standard_transaction(
+            ctx,
+            launcher_bls.coin,
+            offer_spend,
+            &launcher_bls.sk,
+            &TESTNET11_CONSTANTS,
+        )?;
         let offer = Offer::from_spend_bundle(
             ctx,
             &SpendBundle {
                 coin_spends: vec![CoinSpend::new(launcher_bls.coin, puzzle_reveal, solution)],
-                aggregated_signature: sign_standard_transaction(
-                    ctx,
-                    launcher_bls.coin,
-                    offer_spend,
-                    &launcher_bls.sk,
-                    &TESTNET11_CONSTANTS,
-                )?,
+                aggregated_signature: agg_sig,
             },
         )?;
 
@@ -1542,7 +1585,7 @@ mod tests {
         let (_, security_sk, mut registry, slots_returned_by_launch, _security_coin) =
             launch_xchandles_registry(
                 ctx,
-                offer,
+                &offer,
                 initial_registration_price,
                 reg_period,
                 |_ctx, _launcher_id, _coin, (xchandles_constants, payment_cat_asset_id)| {
@@ -2460,6 +2503,13 @@ mod tests {
             }
         }
 
+        let agg_sig = sign_standard_transaction(
+            ctx,
+            launcher_bls.coin,
+            offer_spend,
+            &launcher_bls.sk,
+            &TESTNET11_CONSTANTS,
+        )?;
         let offer = Offer::from_spend_bundle(
             ctx,
             &SpendBundle {
@@ -2467,13 +2517,7 @@ mod tests {
                     CoinSpend::new(launcher_bls.coin, puzzle_reveal, solution),
                     cat_offer_spend,
                 ],
-                aggregated_signature: sign_standard_transaction(
-                    ctx,
-                    launcher_bls.coin,
-                    offer_spend,
-                    &launcher_bls.sk,
-                    &TESTNET11_CONSTANTS,
-                )?,
+                aggregated_signature: agg_sig,
             },
         )?;
 

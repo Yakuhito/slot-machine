@@ -2,23 +2,21 @@ use chia::{
     clvm_utils::ToTreeHash,
     protocol::{Bytes32, SpendBundle},
 };
-use chia_puzzle_types::{
-    offer::{NotarizedPayment, Payment},
-    standard::StandardArgs,
-};
+use chia_puzzle_types::standard::StandardArgs;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Offer, Spend, SpendContext, StandardLayer},
+    driver::{decode_offer, Offer, Spend, SpendContext, StandardLayer},
     utils::Address,
 };
 use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_and_nft, get_coinset_client, get_constants, hex_string_to_bytes32, new_sk,
-    no_assets, parse_amount, parse_one_sided_offer, quick_sync_xchandles,
-    sign_standard_transaction, spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt,
-    CliError, Db, SageClient, XchandlesApiClient, XchandlesSlotValue, XchandlesUpdateAction,
+    assets_xch_and_nft, create_security_coin, get_coinset_client, get_constants,
+    hex_string_to_bytes32, no_assets, parse_amount, quick_sync_xchandles,
+    sign_standard_transaction, spend_security_coin, spend_settlement_nft, sync_xchandles,
+    wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient, XchandlesSlotValue,
+    XchandlesUpdateAction,
 };
 
 fn encode_nft(nft_launcher_id: Bytes32) -> Result<String, CliError> {
@@ -123,25 +121,18 @@ pub async fn xchandles_update(
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
     let pk = security_coin_sk.public_key();
     let nft_inner_ph: Bytes32 = StandardArgs::curry_tree_hash(pk).into();
-    let hint = ctx.hint(nft_inner_ph)?;
-    let offer = parse_one_sided_offer(
+    let (nft, security_conds) = spend_settlement_nft(
         &mut ctx,
-        offer,
-        security_coin_sk.public_key(),
-        None,
-        Some(NotarizedPayment {
-            nonce: registry.coin.coin_id(),
-            payments: vec![Payment::new(nft_inner_ph, 1, hint)],
-        }),
+        &offer,
+        slot.info.value.owner_launcher_id,
+        registry.coin.coin_id(),
+        nft_inner_ph,
     )?;
-
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
-
-    let nft = offer.created_nft.unwrap();
 
     let nft_inner_conds = registry.new_action::<XchandlesUpdateAction>().spend(
         &mut ctx,
@@ -171,22 +162,19 @@ pub async fn xchandles_update(
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
-        offer.security_base_conditions,
+        security_coin,
+        security_conds,
         &security_coin_sk,
         get_constants(testnet11),
     )?;
 
-    let sb = SpendBundle::new(
-        ctx.take(),
-        offer.aggregated_signature + &security_coin_sig + &nft_sig,
-    );
+    let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig + &nft_sig));
 
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);
-    wait_for_coin(&cli, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&cli, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())
