@@ -1,15 +1,14 @@
-use chia::protocol::{Bytes32, SpendBundle};
-use chia_puzzle_types::offer::{NotarizedPayment, Payment};
+use chia::protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{CatSpend, Offer, Spend, SpendContext},
-    types::Conditions,
+    driver::{decode_offer, CatSpend, Offer, Spend, SpendContext},
+    types::{puzzles::SettlementPayment, Conditions},
 };
 use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_and_cat, get_coinset_client, get_constants, get_last_onchain_timestamp,
-    hex_string_to_bytes32, new_sk, no_assets, parse_amount, parse_one_sided_offer,
+    assets_xch_and_cat, create_security_coin, get_coinset_client, get_constants,
+    get_last_onchain_timestamp, hex_string_to_bytes32, no_assets, parse_amount,
     spend_security_coin, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
     RewardDistributorAddIncentivesAction, RewardDistributorSyncAction, SageClient,
 };
@@ -72,27 +71,9 @@ pub async fn reward_distributor_add_rewards(
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let cat_destination_inner_puzzle = ctx.alloc(&(1, ()))?;
-    let cat_destination_inner_puzzle_hash: Bytes32 =
-        ctx.tree_hash(cat_destination_inner_puzzle).into();
-    let hint = ctx.hint(cat_destination_inner_puzzle_hash)?;
-    let offer = parse_one_sided_offer(
-        &mut ctx,
-        offer,
-        security_coin_sk.public_key(),
-        Some(NotarizedPayment {
-            nonce: launcher_id,
-            payments: vec![Payment::new(
-                cat_destination_inner_puzzle_hash,
-                reward_amount,
-                hint,
-            )],
-        }),
-        None,
-    )?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
     let mut sec_conds = if also_sync {
         distributor
@@ -107,26 +88,34 @@ pub async fn reward_distributor_add_rewards(
             .new_action::<RewardDistributorAddIncentivesAction>()
             .spend(&mut ctx, &mut distributor, reward_amount)?,
     );
+
+    let settlement_cat = offer
+        .offered_coins()
+        .cats
+        .get(&distributor.info.constants.reserve_asset_id)
+        .ok_or(CliError::Custom(
+            "Reward CAT not found in offer".to_string(),
+        ))?[0];
+    let offer_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
+
     let _new_distributor = distributor.finish_spend(
         &mut ctx,
         vec![CatSpend {
-            cat: offer.created_cat.unwrap(),
-            inner_spend: Spend::new(cat_destination_inner_puzzle, NodePtr::NIL),
-            extra_delta: 0,
-            revoke: false,
+            cat: settlement_cat,
+            spend: Spend::new(offer_puzzle, NodePtr::NIL),
+            hidden: false,
         }],
     )?;
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
-        offer.security_base_conditions.extend(sec_conds),
+        security_coin,
+        sec_conds,
         &security_coin_sk,
         get_constants(testnet11),
     )?;
 
-    let spend_bundle =
-        SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+    let spend_bundle = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);
@@ -134,7 +123,7 @@ pub async fn reward_distributor_add_rewards(
 
     println!("Transaction submitted; status='{}'", resp.status);
 
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())

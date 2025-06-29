@@ -4,13 +4,13 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{Offer, SpendContext},
+    driver::{decode_offer, Offer, SpendContext},
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
 
 use crate::{
-    assets_xch_only, get_coinset_client, hex_string_to_bytes32, hex_string_to_signature, new_sk,
-    no_assets, parse_amount, parse_one_sided_offer, print_medieval_vault_configuration,
+    assets_xch_only, create_security_coin, get_coinset_client, hex_string_to_bytes32,
+    hex_string_to_signature, no_assets, parse_amount, print_medieval_vault_configuration,
     spend_security_coin, sync_multisig_singleton, wait_for_coin, yes_no_prompt, CliError,
     MedievalVault, MultisigSingleton, SageClient, StateSchedulerHintedState,
 };
@@ -101,21 +101,18 @@ pub async fn multisig_broadcast_thing_finish(
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(ctx, offer, security_coin_sk.public_key(), None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let offer = Offer::from_spend_bundle(ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(ctx, offer.offered_coins().xch[0])?;
 
-    let mut conditions = offer
-        .security_base_conditions
-        .assert_concurrent_spend(medieval_vault_coin_id);
+    let mut conditions = Conditions::new().assert_concurrent_spend(medieval_vault_coin_id);
     if let Some(additional_security_conditions) = additional_security_conditions {
         conditions = conditions.extend(additional_security_conditions);
     }
 
     let security_coin_sig = spend_security_coin(
         ctx,
-        offer.security_coin,
+        security_coin,
         conditions,
         &security_coin_sk,
         if testnet11 {
@@ -125,16 +122,16 @@ pub async fn multisig_broadcast_thing_finish(
         },
     )?;
 
-    let sb = SpendBundle::new(
+    let sb = offer.take(SpendBundle::new(
         ctx.take(),
-        offer.aggregated_signature + &security_coin_sig + &signature_from_signers,
-    );
+        security_coin_sig + &signature_from_signers,
+    ));
 
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())

@@ -2,16 +2,17 @@ use chia::protocol::{Coin, SpendBundle};
 use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Offer, Spend, SpendContext, StandardLayer},
+    driver::{decode_offer, Offer, Spend, SpendContext, StandardLayer},
+    types::Conditions,
     utils::Address,
 };
 use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_only, find_commitment_slots, find_reward_slot, get_coin_public_key,
-    get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, new_sk,
-    no_assets, parse_amount, parse_one_sided_offer, spend_security_coin, spend_to_coin_spend,
+    assets_xch_only, create_security_coin, find_commitment_slots, find_reward_slot,
+    get_coin_public_key, get_coinset_client, get_constants, hex_string_to_bytes32,
+    hex_string_to_signature, no_assets, parse_amount, spend_security_coin, spend_to_coin_spend,
     sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
     RewardDistributorWithdrawIncentivesAction, SageClient,
 };
@@ -78,10 +79,9 @@ pub async fn reward_distributor_clawback_rewards(
         .await?;
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
     let (send_message_conds, returned_amount) = distributor
         .new_action::<RewardDistributorWithdrawIncentivesAction>()
@@ -92,17 +92,15 @@ pub async fn reward_distributor_clawback_rewards(
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
-        offer
-            .security_base_conditions
-            .create_coin(clawback_ph, 0, Memos::None),
+        security_coin,
+        Conditions::new().create_coin(clawback_ph, 0, Memos::None),
         &security_coin_sk,
         get_constants(testnet11),
     )?;
 
     println!("Fetching clawback public key...");
     let wallet_pk = get_coin_public_key(&sage, &clawback_address, 10000).await?;
-    let message_coin = Coin::new(offer.security_coin.coin_id(), clawback_ph, 0);
+    let message_coin = Coin::new(security_coin.coin_id(), clawback_ph, 0);
     let p2 = StandardLayer::new(wallet_pk);
     let inner_spend = Spend::new(ctx.alloc(&clvm_quote!(send_message_conds))?, NodePtr::NIL);
     let spend = p2.delegated_inner_spend(&mut ctx, inner_spend)?;
@@ -125,10 +123,10 @@ pub async fn reward_distributor_clawback_rewards(
 
     let message_sig = hex_string_to_signature(&resp.spend_bundle.aggregated_signature)?;
 
-    let spend_bundle = SpendBundle::new(
+    let spend_bundle = offer.take(SpendBundle::new(
         ctx.take(),
-        offer.aggregated_signature + &security_coin_sig + &message_sig,
-    );
+        security_coin_sig + &message_sig,
+    ));
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);
@@ -136,7 +134,7 @@ pub async fn reward_distributor_clawback_rewards(
 
     println!("Transaction submitted; status='{}'", resp.status);
 
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())

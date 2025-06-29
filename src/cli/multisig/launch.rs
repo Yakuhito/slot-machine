@@ -1,12 +1,12 @@
 use chia::{bls::PublicKey, protocol::SpendBundle};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Launcher, Offer, SpendContext},
+    driver::{decode_offer, Launcher, Offer, SpendContext},
 };
 
 use crate::{
-    assets_xch_only, get_coinset_client, get_constants, new_sk, no_assets, parse_amount,
-    parse_one_sided_offer, print_medieval_vault_configuration, spend_security_coin, wait_for_coin,
+    assets_xch_only, create_security_coin, get_coinset_client, get_constants, no_assets,
+    parse_amount, print_medieval_vault_configuration, spend_security_coin, wait_for_coin,
     yes_no_prompt, CliError, MedievalVaultHint, P2MOfNDelegateDirectArgs, SageClient,
 };
 
@@ -46,12 +46,11 @@ pub async fn multisig_launch(
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
-    let launcher = Launcher::new(offer.security_coin.coin_id(), 1);
+    let launcher = Launcher::new(security_coin.coin_id(), 1);
     let launcher_coin = launcher.coin();
     let launch_hints = MedievalVaultHint {
         my_launcher_id: launcher_coin.coin_id(),
@@ -71,13 +70,13 @@ pub async fn multisig_launch(
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
-        offer.security_base_conditions.extend(create_conditions),
+        security_coin,
+        create_conditions,
         &security_coin_sk,
         get_constants(testnet11),
     )?;
 
-    let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+    let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);
@@ -85,7 +84,7 @@ pub async fn multisig_launch(
 
     println!("Transaction submitted; status='{}'", resp.status);
 
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())
