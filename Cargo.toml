@@ -9,8 +9,9 @@ repository = "https://github.com/Yakuhito/slot-machine"
 
 [dependencies]
 clvmr = "0.14.0"
-chia = "0.25.0"
-clvm-traits = "0.25.0"
+chia = "0.26.0"
+clvm-traits = "0.26.0"
+chia-puzzle-types = "0.26.0"
 hex-literal = "0.4.1"
 bip39 = "2.2.0"
 getrandom = "0.3.2"
@@ -31,10 +32,9 @@ futures-util = "0.3.31"
 axum = { version = "0.8.3", features = ["macros"]}
 tower-http = { version = "0.6.2", features = ["cors"] }
 futures = "0.3.31"
-chia-wallet-sdk = { version="0.25.0", features=["offers"] }
+chia-wallet-sdk = { version="0.27.0", features=["offer-compression"] }
 sage-api = { version = "0.10.3", git = "https://github.com/xch-dev/sage.git" }
 chia-puzzles = "0.20.1"
-chia-puzzle-types = "0.25.0"
 
 [dev-dependencies]
 anyhow = "1.0.98"
