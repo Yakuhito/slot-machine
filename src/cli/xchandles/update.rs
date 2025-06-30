@@ -156,7 +156,7 @@ pub async fn xchandles_update(
         &security_coin_sk,
         get_constants(testnet11),
     )?;
-    nft.spend(&mut ctx, nft_inner_spend)?;
+    let _new_nft = nft.spend(&mut ctx, nft_inner_spend)?;
 
     let _new_registry = registry.finish_spend(&mut ctx)?;
 

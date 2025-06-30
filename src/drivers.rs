@@ -519,9 +519,9 @@ pub fn spend_settlement_cats(
     ));
 
     let mut cat_spends = Vec::with_capacity(settlement_cats.len());
-    for (i, cat) in settlement_cats.into_iter().enumerate() {
+    for (i, cat) in settlement_cats.iter().enumerate() {
         cat_spends.push(CatSpend {
-            cat: cat.clone(),
+            cat: *cat,
             spend: Spend::new(
                 settlement_inner_puzzle,
                 if i == 0 {
@@ -2653,7 +2653,7 @@ mod tests {
             );
             let nft_inner_spend =
                 StandardLayer::new(nft_bls.pk).delegated_inner_spend(ctx, nft_inner_spend)?;
-            nft.spend(ctx, nft_inner_spend)?;
+            let _new_nft = nft.spend(ctx, nft_inner_spend)?;
 
             let nft_inner_spend = Spend::new(
                 ctx.alloc_mod::<SettlementPayment>()?,
@@ -2661,7 +2661,7 @@ mod tests {
                     notarized_payments: vec![notarized_payment],
                 })?,
             );
-            offer_nft.spend(ctx, nft_inner_spend)?;
+            let _new_offer_nft = offer_nft.spend(ctx, nft_inner_spend)?;
 
             // sim.spend_coins(spends, &[nft_bls.sk.clone()])?;
             benchmark.add_spends(ctx, &mut sim, "stake_nft", &[nft_bls.sk.clone()])?;
@@ -3186,8 +3186,8 @@ mod tests {
                 StandardLayer::new(nft2_bls.pk).delegated_inner_spend(ctx, nfts_inner_spend)?;
             let nft3_inner_spend =
                 StandardLayer::new(nft3_bls.pk).delegated_inner_spend(ctx, nfts_inner_spend)?;
-            nft2.spend(ctx, nft2_inner_spend)?;
-            nft3.spend(ctx, nft3_inner_spend)?;
+            let _new_nft2 = nft2.spend(ctx, nft2_inner_spend)?;
+            let _new_nft3 = nft3.spend(ctx, nft3_inner_spend)?;
 
             let nft2_inner_spend = Spend::new(
                 ctx.alloc_mod::<SettlementPayment>()?,
@@ -3195,7 +3195,7 @@ mod tests {
                     notarized_payments: vec![notarized_payment2],
                 })?,
             );
-            offer2_nft.spend(ctx, nft2_inner_spend)?;
+            let _new_offer2_nft = offer2_nft.spend(ctx, nft2_inner_spend)?;
 
             let nft3_inner_spend = Spend::new(
                 ctx.alloc_mod::<SettlementPayment>()?,
@@ -3203,7 +3203,7 @@ mod tests {
                     notarized_payments: vec![notarized_payment3],
                 })?,
             );
-            offer3_nft.spend(ctx, nft3_inner_spend)?;
+            let _new_offer3_nft = offer3_nft.spend(ctx, nft3_inner_spend)?;
 
             sim.pass_time(250);
             // sim.spend_coins(spends, &[nft2_bls.sk.clone(), nft3_bls.sk.clone()])?;

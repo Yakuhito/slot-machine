@@ -11,7 +11,7 @@ use chia_puzzle_types::{
 };
 use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH};
 use chia_wallet_sdk::{
-    driver::{decompress_offer, Cat, CatInfo, CatSpend, HashedPtr, Launcher, Puzzle, Spend},
+    driver::{decompress_offer_bytes, Cat, CatInfo, CatSpend, HashedPtr, Launcher, Puzzle, Spend},
     types::{announcement_id, puzzles::SettlementPayment, Condition, Conditions},
     utils::Address,
 };

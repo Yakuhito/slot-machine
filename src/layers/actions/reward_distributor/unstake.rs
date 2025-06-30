@@ -152,7 +152,7 @@ impl RewardDistributorUnstakeAction {
             },
         )?;
 
-        locked_nft.spend(ctx, Spend::new(nft_inner_puzzle, nft_inner_solution))?;
+        let _new_nft = locked_nft.spend(ctx, Spend::new(nft_inner_puzzle, nft_inner_solution))?;
 
         // spend entry slot
         entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;

@@ -166,7 +166,7 @@ pub async fn reward_distributor_stake(
         .spend(
             &mut ctx,
             &mut distributor,
-            current_nft.clone(),
+            *current_nft,
             nft_launcher_proof,
             custody_puzzle_hash,
         )?;

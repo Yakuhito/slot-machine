@@ -160,7 +160,7 @@ impl CatalogRegisterAction {
         )?;
 
         // spend nft launcher
-        nft.spend(ctx, eve_nft_inner_spend)?;
+        let _new_nft = nft.spend(ctx, eve_nft_inner_spend)?;
 
         // finally, spend self
         let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);
