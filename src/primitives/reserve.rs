@@ -4,8 +4,8 @@ use chia::{
     puzzles::{cat::CatArgs, singleton::SingletonSolution, LineageProof},
 };
 use chia_wallet_sdk::{
-    driver::{Cat, CatSpend, DriverError, Layer, Spend, SpendContext},
-    prelude::{CreateCoin, Memos},
+    driver::{Cat, CatInfo, CatSpend, DriverError, Layer, Spend, SpendContext},
+    prelude::CreateCoin,
     types::run_puzzle,
 };
 use clvm_traits::{clvm_list, clvm_quote, match_tuple, FromClvm, ToClvm};
@@ -85,8 +85,7 @@ impl Reserve {
         Cat::new(
             self.coin,
             Some(self.proof),
-            self.asset_id,
-            self.inner_puzzle_hash,
+            CatInfo::new(self.asset_id, None, self.inner_puzzle_hash),
         )
     }
 
@@ -145,7 +144,7 @@ impl Reserve {
         let cc = CreateCoin::new(
             self.inner_puzzle_hash,
             new_reserve_amount,
-            Some(Memos::new(vec![self.inner_puzzle_hash])),
+            ctx.hint(self.inner_puzzle_hash)?,
         );
         reserve_conditions.insert(0, ctx.alloc(&cc)?);
 
@@ -179,5 +178,20 @@ impl Reserve {
                 NodePtr::NIL,
             )?,
         ))
+    }
+
+    pub fn child(&self, child_amount: u64) -> Self {
+        Self::new(
+            self.coin.coin_id(),
+            LineageProof {
+                parent_parent_coin_info: self.coin.parent_coin_info,
+                parent_inner_puzzle_hash: self.inner_puzzle_hash,
+                parent_amount: self.coin.amount,
+            },
+            self.asset_id,
+            self.controller_singleton_struct_hash,
+            self.nonce,
+            child_amount,
+        )
     }
 }

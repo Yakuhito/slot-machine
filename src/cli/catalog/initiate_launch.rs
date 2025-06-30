@@ -18,8 +18,7 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Cat, DriverError, Launcher, Offer, SpendContext},
-    prelude::Memos,
+    driver::{decode_offer, Cat, DriverError, Launcher, Offer, SpendContext},
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
     utils::Address,
 };
@@ -72,18 +71,18 @@ fn get_additional_info_for_launch(
     )?;
     conditions = conditions.extend(price_singleton_launch_conds);
 
-    let cat_memos = Memos::some(ctx.alloc(&vec![cat_destination_puzzle_hash])?);
-    let (cat_creation_conds, eve_cat) = Cat::single_issuance_eve(
+    let hint = ctx.hint(cat_destination_puzzle_hash)?;
+    let (cat_creation_conds, eve_cat) = Cat::issue_with_coin(
         ctx,
         security_coin.coin_id(),
         cat_amount,
-        Conditions::new().create_coin(cat_destination_puzzle_hash, cat_amount, cat_memos),
+        Conditions::new().create_coin(cat_destination_puzzle_hash, cat_amount, hint),
     )?;
     conditions = conditions.extend(cat_creation_conds);
 
     println!(
         "Premine payment asset id: {}",
-        hex::encode(eve_cat.asset_id)
+        hex::encode(eve_cat[0].info.asset_id)
     );
     println!(
         "Price singleton id (SAVE THIS): {}",
@@ -95,7 +94,7 @@ fn get_additional_info_for_launch(
         catalog_constants
             .with_price_singleton(price_singleton_launcher_id)
             .with_launcher_id(catalog_launcher_id),
-        eve_cat.asset_id,
+        eve_cat[0].info.asset_id,
     ))
 }
 
@@ -188,10 +187,7 @@ pub async fn catalog_initiate_launch(
 
     println!("Default constants will be used:");
     println!("  royalty address: {}", royalty_address);
-    println!(
-        "  royalty ten thousandths: {}",
-        constants.royalty_ten_thousandths
-    );
+    println!("  royalty basis points: {}", constants.royalty_basis_points);
     println!("  precommit payout address: {}", precommit_payout_address);
     println!(
         "  relative block height: {}",
@@ -236,9 +232,10 @@ pub async fn catalog_initiate_launch(
 
     let mut ctx = SpendContext::new();
 
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
     let (sig, _, _registry, slots, security_coin) = launch_catalog_registry(
         &mut ctx,
-        Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
+        &offer,
         1,
         get_additional_info_for_launch,
         if testnet11 {

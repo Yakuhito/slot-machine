@@ -5,21 +5,23 @@ use chia::{
     protocol::{Bytes32, SpendBundle},
     puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
 };
-use chia_puzzle_types::offer::{NotarizedPayment, Payment};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{CatLayer, DriverError, Layer, Offer, Puzzle, SingleCatSpend, Spend, SpendContext},
+    driver::{
+        decode_offer, CatLayer, DriverError, Layer, Offer, Puzzle, SingleCatSpend, Spend,
+        SpendContext,
+    },
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
 use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, hex_string_to_bytes32, load_catalog_premine_csv, new_sk,
-    no_assets, parse_amount, parse_one_sided_offer, spend_security_coin, sync_catalog,
-    wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue, CatalogPremineRecord,
-    CatalogRegisterAction, CatalogRegistryConstants, CliError, Db, PrecommitCoin, PrecommitLayer,
-    SageClient,
+    assets_xch_and_cat, assets_xch_only, create_security_coin, hex_string_to_bytes32,
+    load_catalog_premine_csv, no_assets, parse_amount, spend_security_coin, spend_settlement_cats,
+    sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
+    CatalogPremineRecord, CatalogRegisterAction, CatalogRegistryConstants, CliError, Db,
+    PrecommitCoin, PrecommitLayer, SageClient,
 };
 
 pub fn initial_cat_inner_puzzle_ptr(
@@ -219,53 +221,34 @@ pub async fn catalog_continue_launch(
 
             let mut cat_creator_conds = Conditions::new();
             for inner_ph in precommitment_inner_puzzle_hashes_to_launch {
-                cat_creator_conds = cat_creator_conds.create_coin(
-                    inner_ph.into(),
-                    1,
-                    Some(ctx.hint(inner_ph.into())?),
-                );
+                cat_creator_conds =
+                    cat_creator_conds.create_coin(inner_ph.into(), 1, ctx.hint(inner_ph.into())?);
             }
             let cat_destination_puzzle_ptr = ctx.alloc(&clvm_quote!(cat_creator_conds))?;
             let cat_destination_puzzle_hash: Bytes32 =
                 ctx.tree_hash(cat_destination_puzzle_ptr).into();
 
-            let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-            let security_coin_sk = new_sk()?;
-
             // Parse one-sided offer
-            let one_sided_offer = parse_one_sided_offer(
+            let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+            let (security_coin_sk, security_coin) =
+                create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
+            let (created_cats, cat_assert) = spend_settlement_cats(
                 &mut ctx,
-                offer,
-                security_coin_sk.public_key(),
-                Some(NotarizedPayment {
-                    nonce: constants.launcher_id,
-                    payments: vec![Payment::with_memos(
-                        cat_destination_puzzle_hash,
-                        cat_amount,
-                        vec![cat_destination_puzzle_hash.into()],
-                    )],
-                }),
-                None,
+                &offer,
+                payment_asset_id,
+                constants.launcher_id,
+                vec![(cat_destination_puzzle_hash, cat_amount)],
             )?;
 
-            let Some(created_cat) = one_sided_offer.created_cat else {
-                eprintln!("No CAT was created in one-sided offer - aborting...");
-                return Ok(());
-            };
-            one_sided_offer
-                .coin_spends
-                .into_iter()
-                .for_each(|cs| ctx.insert(cs));
-
-            let security_coin_conditions = one_sided_offer
-                .security_base_conditions
+            let created_cat = created_cats[0];
+            let security_coin_conditions = cat_assert
                 .assert_concurrent_spend(created_cat.coin.coin_id())
                 .reserve_fee(1);
 
             // Spend security coin
             let security_coin_sig = spend_security_coin(
                 &mut ctx,
-                one_sided_offer.security_coin,
+                security_coin,
                 security_coin_conditions,
                 &security_coin_sk,
                 if testnet11 {
@@ -281,28 +264,26 @@ pub async fn catalog_continue_launch(
                 SingleCatSpend {
                     next_coin_proof: CoinProof {
                         parent_coin_info: created_cat.coin.parent_coin_info,
-                        inner_puzzle_hash: created_cat.p2_puzzle_hash,
+                        inner_puzzle_hash: created_cat.info.p2_puzzle_hash,
                         amount: created_cat.coin.amount,
                     },
                     prev_coin_id: created_cat.coin.coin_id(),
                     prev_subtotal: 0,
                     extra_delta: 0,
-                    inner_spend: Spend::new(cat_destination_puzzle_ptr, NodePtr::NIL),
+                    p2_spend: Spend::new(cat_destination_puzzle_ptr, NodePtr::NIL),
+                    revoke: false,
                 },
             )?;
 
             // Build spend bundle
-            let sb = SpendBundle::new(
-                ctx.take(),
-                one_sided_offer.aggregated_signature + &security_coin_sig,
-            );
+            let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
 
             println!("Submitting transaction...");
             let resp = client.push_tx(sb).await?;
 
             println!("Transaction submitted; status='{}'", resp.status);
 
-            wait_for_coin(&client, one_sided_offer.security_coin.coin_id(), true).await?;
+            wait_for_coin(&client, security_coin.coin_id(), true).await?;
             println!("Confirmed!");
 
             return Ok(());
@@ -467,12 +448,11 @@ pub async fn catalog_continue_launch(
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
-    let mut security_coin_conditions = offer.security_base_conditions;
+    let mut security_coin_conditions = Conditions::new();
 
     for (i, precommit_value) in precommit_values.iter().enumerate() {
         let precommit_ph = precommit_puzzle_hashes[i];
@@ -510,7 +490,7 @@ pub async fn catalog_continue_launch(
 
         let eve_nft_inner_puzzle = initial_cat_inner_puzzle_ptr(&mut ctx, &cats[i])?;
 
-        let (sec_conds, new_slots) = catalog.new_action::<CatalogRegisterAction>().spend(
+        let sec_conds = catalog.new_action::<CatalogRegisterAction>().spend(
             &mut ctx,
             &mut catalog,
             tail_hash,
@@ -524,14 +504,13 @@ pub async fn catalog_continue_launch(
         )?;
 
         security_coin_conditions = security_coin_conditions.extend(sec_conds);
-        catalog.add_pending_slots(new_slots);
     }
 
-    let _new_catalog = catalog.finish_spend(&mut ctx)?;
+    let (_new_catalog, pending_sig) = catalog.finish_spend(&mut ctx)?;
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
+        security_coin,
         security_coin_conditions,
         &security_coin_sk,
         if testnet11 {
@@ -541,13 +520,16 @@ pub async fn catalog_continue_launch(
         },
     )?;
 
-    let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+    let sb = offer.take(SpendBundle::new(
+        ctx.take(),
+        security_coin_sig + &pending_sig,
+    ));
 
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())

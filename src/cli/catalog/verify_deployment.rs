@@ -3,7 +3,9 @@ use chia::protocol::{Bytes32, Coin};
 use chia::puzzles::nft::{NftOwnershipLayerArgs, NftRoyaltyTransferPuzzleArgs, NftStateLayerArgs};
 use chia::puzzles::singleton::SingletonArgs;
 use chia::puzzles::{LineageProof, Proof};
+use chia_puzzle_types::Memos;
 use chia_puzzles::{NFT_STATE_LAYER_HASH, SINGLETON_LAUNCHER_HASH};
+use chia_wallet_sdk::driver::DriverError;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{Layer, Puzzle, SingletonLayer, SpendContext},
@@ -143,10 +145,11 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         ));
     }
 
-    let (hinted_launcher_id, (initial_registration_asset_id, (initial_state, ()))) = ctx
-        .extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(
-            catalog_cc.memos.unwrap().value,
-        )?;
+    let Memos::Some(memos) = catalog_cc.memos else {
+        return Err(CliError::Driver(DriverError::MissingHint));
+    };
+    let (hinted_launcher_id, (initial_registration_asset_id, (initial_state, ()))) =
+        ctx.extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(memos)?;
 
     let catalog_info = CatalogRegistryInfo::new(initial_state, catalog_constants);
     let catalog_full_ph = SingletonArgs::curry_tree_hash(
@@ -204,14 +207,15 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             break;
         };
 
-        let solution = node_from_bytes(&mut ctx, &coin_spend.solution)?;
-        let new_slots = catalog.get_new_slots_from_spend(&mut ctx, solution)?;
+        catalog =
+            CatalogRegistry::from_spend(&mut ctx, &coin_spend, catalog.info.constants)?.unwrap();
+        let new_slot_values = &catalog.pending_spend.created_slots;
 
         while cat_index < cats_to_launch.len() {
             let top_cat = &cats_to_launch[cat_index];
-            let found = new_slots
+            let found = new_slot_values
                 .iter()
-                .find(|slot| slot.info.value.asset_id == top_cat.asset_id);
+                .find(|slot_value| slot_value.asset_id == top_cat.asset_id);
             if found.is_some() {
                 cat_index += 1;
 
@@ -243,7 +247,7 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
                                 NftRoyaltyTransferPuzzleArgs::curry_tree_hash(
                                     cat_nft_launcher_id,
                                     catalog_constants.royalty_address,
-                                    catalog_constants.royalty_ten_thousandths,
+                                    catalog_constants.royalty_basis_points,
                                 ),
                                 eve_nft_inner_puzzle_hash,
                             ),
@@ -269,16 +273,8 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             }
         }
 
-        let puzzle_ptr = node_from_bytes(&mut ctx, &coin_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(&ctx, puzzle_ptr);
-        catalog = CatalogRegistry::from_parent_spend(
-            &mut ctx,
-            catalog.coin,
-            parent_puzzle,
-            solution,
-            catalog.info.constants,
-        )?
-        .unwrap();
+        // this coin's confirmed, move to the child
+        catalog = catalog.child(catalog.pending_spend.latest_state.1);
     }
 
     if cat_index < cats_to_launch.len() {

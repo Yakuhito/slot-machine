@@ -52,37 +52,31 @@ impl RewardDistributorInitiatePayoutAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
-        &self,
+    pub fn created_slot_value(
         ctx: &SpendContext,
-        my_state: &RewardDistributorState,
+        current_state: &RewardDistributorState,
         solution: NodePtr,
-    ) -> Result<
-        (
-            RewardDistributorEntrySlotValue,
-            (RewardDistributorSlotNonce, Bytes32),
-        ),
-        DriverError,
-    > {
+    ) -> Result<RewardDistributorEntrySlotValue, DriverError> {
         let solution = ctx.extract::<RewardDistributorInitiatePayoutActionSolution>(solution)?;
 
-        let new_slot = RewardDistributorEntrySlotValue {
+        Ok(RewardDistributorEntrySlotValue {
             payout_puzzle_hash: solution.entry_payout_puzzle_hash,
-            initial_cumulative_payout: my_state.round_reward_info.cumulative_payout,
+            initial_cumulative_payout: current_state.round_reward_info.cumulative_payout,
             shares: solution.entry_shares,
-        };
-        let old_slot = RewardDistributorEntrySlotValue {
+        })
+    }
+
+    pub fn spent_slot_value(
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<RewardDistributorEntrySlotValue, DriverError> {
+        let solution = ctx.extract::<RewardDistributorInitiatePayoutActionSolution>(solution)?;
+
+        Ok(RewardDistributorEntrySlotValue {
             payout_puzzle_hash: solution.entry_payout_puzzle_hash,
             initial_cumulative_payout: solution.entry_initial_cumulative_payout,
             shares: solution.entry_shares,
-        };
-        Ok((
-            new_slot,
-            (
-                RewardDistributorSlotNonce::ENTRY,
-                old_slot.tree_hash().into(),
-            ),
-        ))
+        })
     }
 
     pub fn spend(
@@ -90,8 +84,9 @@ impl RewardDistributorInitiatePayoutAction {
         ctx: &mut SpendContext,
         distributor: &mut RewardDistributor,
         entry_slot: Slot<RewardDistributorEntrySlotValue>,
-    ) -> Result<(Conditions, Slot<RewardDistributorEntrySlotValue>, u64), DriverError> {
-        let my_state = distributor.get_latest_pending_state(ctx)?;
+    ) -> Result<(Conditions, u64), DriverError> {
+        let my_state = distributor.pending_spend.latest_state.1;
+        let entry_slot = distributor.actual_entry_slot_value(entry_slot);
 
         let withdrawal_amount = entry_slot.info.value.shares
             * (my_state.round_reward_info.cumulative_payout
@@ -117,18 +112,13 @@ impl RewardDistributorInitiatePayoutAction {
         // spend entry slot
         entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
-        let slot_value = self
-            .get_slot_value_from_solution(ctx, &my_state, action_solution)?
-            .0;
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
+
         Ok((
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 distributor.coin.puzzle_hash,
                 initiate_payout_announcement,
             )),
-            distributor
-                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
-                .remove(0),
             withdrawal_amount,
         ))
     }
@@ -183,7 +173,7 @@ impl RewardDistributorInitiatePayoutActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorInitiatePayoutActionSolution {
     pub entry_payout_amount: u64,
     pub entry_payout_puzzle_hash: Bytes32,

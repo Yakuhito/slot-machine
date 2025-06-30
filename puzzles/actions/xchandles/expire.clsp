@@ -20,7 +20,7 @@
         cat_maker_puzzle_reveal
         cat_maker_puzzle_solution
         expired_handle_pricing_puzzle_reveal
-        (@ expired_handle_pricing_puzzle_solution (buy_time current_expiration handle . rest_maybe))
+        (@ expired_handle_pricing_puzzle_solution (buy_time current_expiration handle . expired_handle_pricing_puzzle_solution_rest))
         refund_puzzle_hash_hash
         secret
         neighbors ; (c left right)
@@ -73,7 +73,6 @@
                                 expired_handle_pricing_puzzle_solution
                                 handle
                                 secret
-                                buy_time
                                 new_owner_launcher_id
                                 new_resolved_data
                             ))
@@ -105,7 +104,7 @@
     (if (all
         (= (sha256tree cat_maker_puzzle_reveal) Cat_Maker_Puzzle_Hash)
         (= (sha256tree expired_handle_pricing_puzzle_reveal) Expired_Handle_Pricing_Puzzle_Hash)
-        (= (strlen new_resolved_data) 32)
+        (= (strlen new_owner_launcher_id) 32)
         (> 65 (strlen new_resolved_data))
     )
         (main

@@ -26,11 +26,11 @@
             )
         )
     )
-    ; pricing_solution's first element MUST be handle_reveal
+    ; pricing_solution has 3 Truths: Start_Time, Current_Expiration, and Handle_Reveal
     (
         handle_hash
         pricing_puzzle_reveal
-        (@ pricing_solution (this_is_zero handle . solution_rest))
+        (@ pricing_solution (start_time this_is_zero handle . solution_rest))
         cat_maker_puzzle_reveal
         cat_maker_solution
         ; start neighbor slots info
@@ -42,7 +42,6 @@
         right_expiration
         right_data
         ; end neighbor slots info
-        start_time
         (@ data (owner_launcher_id . resolved_data))
         ; info needed to compute precommit coin puzzle hash
         refund_puzzle_hash_hash
@@ -94,7 +93,6 @@
                             pricing_solution
                             handle
                             secret
-                            start_time
                             owner_launcher_id
                             resolved_data
                         ))

@@ -180,7 +180,7 @@ where
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct VerificationLayerSolution {
     pub revocation_singleton_inner_puzzle_hash: Option<Bytes32>,
 }

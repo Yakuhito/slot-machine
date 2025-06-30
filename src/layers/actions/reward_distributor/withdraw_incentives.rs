@@ -52,31 +52,41 @@ impl RewardDistributorWithdrawIncentivesAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
-        &self,
+    pub fn created_slot_value(
         ctx: &SpendContext,
-        my_constants: &RewardDistributorConstants,
+        withdrawal_share_bps: u64,
+        solution: NodePtr,
+    ) -> Result<RewardDistributorRewardSlotValue, DriverError> {
+        let solution =
+            ctx.extract::<RewardDistributorWithdrawIncentivesActionSolution>(solution)?;
+        let withdrawal_share = solution.committed_value * withdrawal_share_bps / 10000;
+
+        let new_reward_slot_value = RewardDistributorRewardSlotValue {
+            epoch_start: solution.reward_slot_epoch_time,
+            next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
+            rewards: solution.reward_slot_total_rewards - withdrawal_share,
+        };
+
+        Ok(new_reward_slot_value)
+    }
+
+    pub fn spent_slot_values(
+        ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<
         (
             RewardDistributorRewardSlotValue,
-            [(RewardDistributorSlotNonce, Bytes32); 2],
+            RewardDistributorCommitmentSlotValue,
         ),
         DriverError,
     > {
         let solution =
             ctx.extract::<RewardDistributorWithdrawIncentivesActionSolution>(solution)?;
-        let withdrawal_share = solution.committed_value * my_constants.withdrawal_share_bps / 10000;
 
         let old_reward_slot_value = RewardDistributorRewardSlotValue {
             epoch_start: solution.reward_slot_epoch_time,
             next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
             rewards: solution.reward_slot_total_rewards,
-        };
-        let new_reward_slot_value = RewardDistributorRewardSlotValue {
-            epoch_start: solution.reward_slot_epoch_time,
-            next_epoch_initialized: solution.reward_slot_next_epoch_initialized,
-            rewards: solution.reward_slot_total_rewards - withdrawal_share,
         };
         let commitment_slot_value = RewardDistributorCommitmentSlotValue {
             epoch_start: solution.reward_slot_epoch_time,
@@ -84,19 +94,7 @@ impl RewardDistributorWithdrawIncentivesAction {
             rewards: solution.committed_value,
         };
 
-        Ok((
-            new_reward_slot_value,
-            [
-                (
-                    RewardDistributorSlotNonce::REWARD,
-                    old_reward_slot_value.tree_hash().into(),
-                ),
-                (
-                    RewardDistributorSlotNonce::COMMITMENT,
-                    commitment_slot_value.tree_hash().into(),
-                ),
-            ],
-        ))
+        Ok((old_reward_slot_value, commitment_slot_value))
     }
 
     pub fn spend(
@@ -105,8 +103,10 @@ impl RewardDistributorWithdrawIncentivesAction {
         distributor: &mut RewardDistributor,
         commitment_slot: Slot<RewardDistributorCommitmentSlotValue>,
         reward_slot: Slot<RewardDistributorRewardSlotValue>,
-    ) -> Result<(Conditions, Slot<RewardDistributorRewardSlotValue>, u64), DriverError> {
+    ) -> Result<(Conditions, u64), DriverError> {
         // last u64 = withdrawn amount
+        let commitment_slot = distributor.actual_commitment_slot_value(commitment_slot);
+        let reward_slot = distributor.actual_reward_slot_value(reward_slot);
         let withdrawal_share = commitment_slot.info.value.rewards
             * distributor.info.constants.withdrawal_share_bps
             / 10000;
@@ -131,23 +131,14 @@ impl RewardDistributorWithdrawIncentivesAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_value = self
-            .get_slot_value_from_solution(ctx, &distributor.info.constants, action_solution)?
-            .0;
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         // spend slots
         let my_inner_puzzle_hash: Bytes32 = distributor.info.inner_puzzle_hash().into();
         reward_slot.spend(ctx, my_inner_puzzle_hash)?;
         commitment_slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        Ok((
-            withdraw_incentives_conditions,
-            distributor
-                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::REWARD)
-                .remove(0),
-            withdrawal_share,
-        ))
+        Ok((withdraw_incentives_conditions, withdrawal_share))
     }
 }
 
@@ -199,7 +190,7 @@ impl RewardDistributorWithdrawIncentivesActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorWithdrawIncentivesActionSolution {
     pub reward_slot_epoch_time: u64,
     pub reward_slot_next_epoch_initialized: bool,

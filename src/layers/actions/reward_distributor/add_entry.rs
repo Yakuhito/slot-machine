@@ -58,8 +58,7 @@ impl RewardDistributorAddEntryAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
-        &self,
+    pub fn created_slot_value(
         ctx: &SpendContext,
         state: &RewardDistributorState,
         solution: NodePtr,
@@ -80,7 +79,7 @@ impl RewardDistributorAddEntryAction {
         payout_puzzle_hash: Bytes32,
         shares: u64,
         manager_singleton_inner_puzzle_hash: Bytes32,
-    ) -> Result<(Conditions, Slot<RewardDistributorEntrySlotValue>), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // calculate message that the manager needs to send
         let add_entry_message: Bytes32 = clvm_tuple!(payout_puzzle_hash, shares).tree_hash().into();
         let mut add_entry_message: Vec<u8> = add_entry_message.to_vec();
@@ -99,15 +98,8 @@ impl RewardDistributorAddEntryAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let my_state = distributor.get_latest_pending_state(ctx)?;
-        let slot_value = self.get_slot_value_from_solution(ctx, &my_state, action_solution)?;
-        distributor.insert(Spend::new(action_puzzle, action_solution));
-        Ok((
-            add_entry_message,
-            distributor
-                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
-                .remove(0),
-        ))
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
+        Ok(add_entry_message)
     }
 }
 
@@ -164,7 +156,7 @@ impl RewardDistributorAddEntryActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorAddEntryActionSolution {
     pub manager_singleton_inner_puzzle_hash: Bytes32,
     pub entry_payout_puzzle_hash: Bytes32,

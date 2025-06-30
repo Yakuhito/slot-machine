@@ -57,7 +57,7 @@ impl XchandlesRegisterAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_values_from_solution(
+    pub fn spent_slot_values(
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<[XchandlesSlotValue; 2], DriverError> {
@@ -89,7 +89,7 @@ impl XchandlesRegisterAction {
         ])
     }
 
-    pub fn get_created_slot_values_from_solution(
+    pub fn created_slot_values(
         ctx: &mut SpendContext,
         solution: NodePtr,
     ) -> Result<[XchandlesSlotValue; 3], DriverError> {
@@ -107,6 +107,8 @@ impl XchandlesRegisterAction {
         )?;
         let registration_time_delta = <(NodePtr, u64)>::from_clvm(ctx, pricing_output)?.1;
 
+        let (start_time, _) = ctx.extract::<(u64, NodePtr)>(solution.pricing_puzzle_solution)?;
+
         Ok([
             XchandlesSlotValue::new(
                 solution.neighbors.left_value,
@@ -120,7 +122,7 @@ impl XchandlesRegisterAction {
                 solution.handle_hash,
                 solution.neighbors.left_value,
                 solution.neighbors.right_value,
-                solution.start_time + registration_time_delta,
+                start_time + registration_time_delta,
                 solution.data.owner_launcher_id,
                 solution.data.resolved_data,
             ),
@@ -145,12 +147,13 @@ impl XchandlesRegisterAction {
         precommit_coin: PrecommitCoin<XchandlesPrecommitValue>,
         base_handle_price: u64,
         registration_period: u64,
-    ) -> Result<(Conditions, [Slot<XchandlesSlotValue>; 3]), DriverError> {
+        start_time: u64,
+    ) -> Result<Conditions, DriverError> {
         let handle: String = precommit_coin.value.handle.clone();
         let handle_hash: Bytes32 = handle.tree_hash().into();
+        let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
         let secret = precommit_coin.value.secret;
-        let start_time = precommit_coin.value.start_time;
 
         let num_periods = precommit_coin.coin.amount
             / XchandlesFactorPricingPuzzleArgs::get_price(base_handle_price, &handle, 1);
@@ -175,7 +178,8 @@ impl XchandlesRegisterAction {
                 base_handle_price,
                 registration_period,
             )?,
-            pricing_puzzle_solution: XchandlesFactorPricingSolution {
+            pricing_puzzle_solution: XchandlesPricingSolution {
+                buy_time: start_time,
                 current_expiration: 0,
                 handle: handle.clone(),
                 num_periods,
@@ -195,7 +199,6 @@ impl XchandlesRegisterAction {
             right_right_value: right_slot.info.value.neighbors.right_value,
             right_expiration: right_slot.info.value.expiration,
             right_data: right_slot.info.value.rest_data(),
-            start_time,
             data: XchandlesDataValue {
                 owner_launcher_id: precommit_coin.value.owner_launcher_id,
                 resolved_data: precommit_coin.value.resolved_data,
@@ -206,54 +209,26 @@ impl XchandlesRegisterAction {
         .to_clvm(ctx)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        registry.insert(Spend::new(action_puzzle, action_solution));
+        registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         // spend slots
-        registry
-            .pending_items
-            .spent_slots
-            .push(left_slot.info.value.clone());
-        registry
-            .pending_items
-            .spent_slots
-            .push(right_slot.info.value.clone());
-
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
         right_slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        let new_slots_values = Self::get_created_slot_values_from_solution(ctx, action_solution)?;
-
-        registry
-            .pending_items
-            .created_slots
-            .push(new_slots_values[0].clone());
-        registry
-            .pending_items
-            .created_slots
-            .push(new_slots_values[1].clone());
-        registry
-            .pending_items
-            .created_slots
-            .push(new_slots_values[2].clone());
-
-        Ok((
+        Ok(
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 registry.coin.puzzle_hash,
                 register_announcement,
             )),
-            registry
-                .created_slot_values_to_slots(new_slots_values.to_vec())
-                .try_into()
-                .unwrap(),
-        ))
+        )
     }
 }
 
-pub const XCHANDLES_REGISTER_PUZZLE: [u8; 1356] = hex!("ff02ffff01ff02ffff03ffff22ffff09ff4fffff0bffff0101ff82056f8080ffff20ff82026f80ffff0aff4fff8213ef80ffff0aff821befff4f80ffff09ff57ffff02ff2effff04ff02ffff04ff8202efff8080808080ffff09ff81b7ffff02ff2effff04ff02ffff04ff81afff8080808080ffff09ffff0dff8313ffef80ffff012080ffff15ffff0141ffff0dff831bffef808080ffff01ff04ff17ffff02ff1affff04ff02ffff04ffff02ff8202efffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ff8317ffef80ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ffff02ff2effff04ff02ffff04ffff04ffff04ffff04ff57ff8205ef80ffff04ff81b7ff82016f8080ffff04ffff04ff82056fff832fffef80ffff04ff8305ffefffff04ff8313ffefff831bffef80808080ff808080808080ffff0bff3cff62ff42808080ff42808080ff42808080ff8205ef8080ffff04ffff05ffff02ff81afff82016f8080ffff04ffff04ffff04ff10ffff04ff8305ffefff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff8213efffff04ff8217efff821bef8080ffff04ff822fefff825fef8080ff80808080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff821befffff04ff8213efff82bfef8080ffff04ff83017fefff8302ffef8080ff80808080ff8080808080ffff04ffff02ff16ffff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff4fff820bef80ffff04ffff10ff8305ffefffff06ffff02ff81afff82016f808080ff830bffef8080ff80808080ff8080808080ffff04ffff02ff16ffff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff8213efffff04ff8217efff4f8080ffff04ff822fefff825fef8080ff80808080ff8080808080ffff04ffff02ff16ffff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff821befffff04ff4fff82bfef8080ffff04ff83017fefff8302ffef8080ff80808080ff8080808080ff80808080808080ff80808080808080ffff01ff088080ff0180ffff04ffff01ffffff5133ff3eff4202ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff04ffff04ff2cffff04ffff0113ffff04ffff0101ffff04ff05ffff04ff0bff808080808080ffff04ffff04ff14ffff04ffff0effff0172ff0580ff808080ff178080ffff04ff18ffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ff0b8080ffff0bff3cff62ff42808080ff42808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff2cffff04ffff0112ffff04ff80ffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ff0b8080ffff0bff3cff62ff42808080ff42808080ff8080808080ff018080");
+pub const XCHANDLES_REGISTER_PUZZLE: [u8; 1345] = hex!("ff02ffff01ff02ffff03ffff22ffff09ff4fffff0bffff0101ff820b6f8080ffff20ff82056f80ffff0aff4fff8213ef80ffff0aff821befff4f80ffff09ff57ffff02ff2effff04ff02ffff04ff8202efff8080808080ffff09ff81b7ffff02ff2effff04ff02ffff04ff81afff8080808080ffff09ffff0dff8309ffef80ffff012080ffff15ffff0141ffff0dff830dffef808080ffff01ff04ff17ffff02ff1affff04ff02ffff04ffff02ff8202efffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ff830bffef80ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ffff02ff2effff04ff02ffff04ffff04ffff04ffff04ff57ff8205ef80ffff04ff81b7ff82016f8080ffff04ffff04ff820b6fff8317ffef80ffff04ff8309ffefff830dffef808080ff808080808080ffff0bff3cff62ff42808080ff42808080ff42808080ff8205ef8080ffff04ffff05ffff02ff81afff82016f8080ffff04ffff04ffff04ff10ffff04ff82026fff808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff8213efffff04ff8217efff821bef8080ffff04ff822fefff825fef8080ff80808080ff8080808080ffff04ffff02ff3effff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff821befffff04ff8213efff82bfef8080ffff04ff83017fefff8302ffef8080ff80808080ff8080808080ffff04ffff02ff16ffff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff4fff820bef80ffff04ffff10ff82026fffff06ffff02ff81afff82016f808080ff8305ffef8080ff80808080ff8080808080ffff04ffff02ff16ffff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff8213efffff04ff8217efff4f8080ffff04ff822fefff825fef8080ff80808080ff8080808080ffff04ffff02ff16ffff04ff02ffff04ff0bffff04ffff02ff2effff04ff02ffff04ffff04ffff04ff821befffff04ff4fff82bfef8080ffff04ff83017fefff8302ffef8080ff80808080ff8080808080ff80808080808080ff80808080808080ffff01ff088080ff0180ffff04ffff01ffffff5133ff3eff4202ffffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ff04ffff04ff2cffff04ffff0113ffff04ffff0101ffff04ff05ffff04ff0bff808080808080ffff04ffff04ff14ffff04ffff0effff0172ff0580ff808080ff178080ffff04ff18ffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ff0b8080ffff0bff3cff62ff42808080ff42808080ffff04ff80ffff04ffff04ff05ff8080ff8080808080ffff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff2effff04ff02ffff04ff09ff80808080ffff02ff2effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff04ff2cffff04ffff0112ffff04ff80ffff04ffff0bff52ffff0bff3cffff0bff3cff62ff0580ffff0bff3cffff0bff72ffff0bff3cffff0bff3cff62ffff0bffff0101ff0b8080ffff0bff3cff62ff42808080ff42808080ff8080808080ff018080");
 
 pub const XCHANDLES_REGISTER_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    277d7b7171f56365d124c68beb3933aecda41dd09a2112f4dd56ebde542f54e5
+    07848cf0db85d13490c15331a065364add5f5b52d8059c410f1ff7aa87e66722
     "
 ));
 
@@ -301,7 +276,7 @@ impl XchandlesRegisterActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct XchandlesRegisterActionSolution<PP, PS, CMP, CMS, S> {
     pub handle_hash: Bytes32,
     pub pricing_puzzle_reveal: PP,
@@ -315,17 +290,16 @@ pub struct XchandlesRegisterActionSolution<PP, PS, CMP, CMS, S> {
     pub right_right_value: Bytes32,
     pub right_expiration: u64,
     pub right_data: XchandlesDataValue,
-    pub start_time: u64,
     pub data: XchandlesDataValue,
     pub refund_puzzle_hash_hash: Bytes32,
     pub secret: S,
 }
 
-pub const XCHANDLES_FACTOR_PRICING_PUZZLE: [u8; 475] = hex!("ff02ffff01ff02ffff03ffff15ff3fff8080ffff01ff04ffff12ff3fff05ffff02ff06ffff04ff02ffff04ffff0dff2f80ffff04ffff02ff04ffff04ff02ffff04ff2fff80808080ff808080808080ffff12ff3fff0b8080ffff01ff088080ff0180ffff04ffff01ffff02ffff03ff05ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff016080ffff15ffff017bffff0cff05ff80ffff0101808080ffff01ff02ff04ffff04ff02ffff04ffff0cff05ffff010180ff80808080ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff012f80ffff15ffff013affff0cff05ff80ffff0101808080ffff01ff10ffff0101ffff02ff04ffff04ff02ffff04ffff0cff05ffff010180ff8080808080ffff01ff088080ff018080ff0180ff8080ff0180ff05ffff14ffff02ffff03ffff15ff05ffff010280ffff01ff02ffff03ffff15ff05ffff010480ffff01ff02ffff03ffff09ff05ffff010580ffff01ff0110ffff01ff02ffff03ffff15ff05ffff011f80ffff01ff0880ffff01ff010280ff018080ff0180ffff01ff02ffff03ffff09ff05ffff010380ffff01ff01820080ffff01ff014080ff018080ff0180ffff01ff088080ff0180ffff03ff0bffff0102ffff0101808080ff018080");
+pub const XCHANDLES_FACTOR_PRICING_PUZZLE: [u8; 475] = hex!("ff02ffff01ff02ffff03ffff15ff7fff8080ffff01ff04ffff12ff7fff05ffff02ff06ffff04ff02ffff04ffff0dff5f80ffff04ffff02ff04ffff04ff02ffff04ff5fff80808080ff808080808080ffff12ff7fff0b8080ffff01ff088080ff0180ffff04ffff01ffff02ffff03ff05ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff016080ffff15ffff017bffff0cff05ff80ffff0101808080ffff01ff02ff04ffff04ff02ffff04ffff0cff05ffff010180ff80808080ffff01ff02ffff03ffff22ffff15ffff0cff05ff80ffff010180ffff012f80ffff15ffff013affff0cff05ff80ffff0101808080ffff01ff10ffff0101ffff02ff04ffff04ff02ffff04ffff0cff05ffff010180ff8080808080ffff01ff088080ff018080ff0180ff8080ff0180ff05ffff14ffff02ffff03ffff15ff05ffff010280ffff01ff02ffff03ffff15ff05ffff010480ffff01ff02ffff03ffff09ff05ffff010580ffff01ff0110ffff01ff02ffff03ffff15ff05ffff011f80ffff01ff0880ffff01ff010280ff018080ff0180ffff01ff02ffff03ffff09ff05ffff010380ffff01ff01820080ffff01ff014080ff018080ff0180ffff01ff088080ff0180ffff03ff0bffff0102ffff0101808080ff018080");
 
 pub const XCHANDLES_FACTOR_PRICING_PUZZLE_HASH: TreeHash = TreeHash::new(hex!(
     "
-    3795a26d84d34e964f4f53ca7431d925d2b3399f9fdf2570de4d50313a3e9e4b
+    a7edc890e6c256e4e729e826e7b45ad0616ec8d431e4e051ee68ddf4cae868bb
     "
 ));
 
@@ -385,8 +359,9 @@ impl XchandlesFactorPricingPuzzleArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
-pub struct XchandlesFactorPricingSolution {
+#[clvm(list)]
+pub struct XchandlesPricingSolution {
+    pub buy_time: u64,
     pub current_expiration: u64,
     pub handle: String,
     #[clvm(rest)]
@@ -428,7 +403,8 @@ mod tests {
                         "a".repeat(handle_length)
                     };
 
-                    let solution = ctx.alloc(&XchandlesFactorPricingSolution {
+                    let solution = ctx.alloc(&XchandlesPricingSolution {
+                        buy_time: 0,
                         current_expiration: (handle_length - 3) as u64, // shouldn't matter
                         handle,
                         num_periods,
@@ -459,7 +435,8 @@ mod tests {
 
         // make sure the puzzle won't let us register a handle of length 2
 
-        let solution = ctx.alloc(&XchandlesFactorPricingSolution {
+        let solution = ctx.alloc(&XchandlesPricingSolution {
+            buy_time: 0,
             current_expiration: 0,
             handle: "aa".to_string(),
             num_periods: 1,
@@ -472,7 +449,8 @@ mod tests {
 
         // make sure the puzzle won't let us register a handle of length 32
 
-        let solution = ctx.alloc(&XchandlesFactorPricingSolution {
+        let solution = ctx.alloc(&XchandlesPricingSolution {
+            buy_time: 0,
             current_expiration: 0,
             handle: "a".repeat(32),
             num_periods: 1,
@@ -485,7 +463,8 @@ mod tests {
 
         // make sure the puzzle won't let us register a handle with invalid characters
 
-        let solution = ctx.alloc(&XchandlesFactorPricingSolution {
+        let solution = ctx.alloc(&XchandlesPricingSolution {
+            buy_time: 0,
             current_expiration: 0,
             handle: "yak@test".to_string(),
             num_periods: 1,

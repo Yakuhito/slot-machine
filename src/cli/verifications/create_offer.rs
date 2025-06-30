@@ -1,22 +1,19 @@
-use bech32::{u5, Variant};
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, SpendBundle},
-    traits::Streamable,
+    protocol::{Bytes, Bytes32, Coin, CoinSpend, Program, SpendBundle},
 };
-use chia_puzzle_types::offer::{NotarizedPayment, Payment};
-use chia_puzzles::SETTLEMENT_PAYMENT_HASH;
+use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
-    driver::{compress_offer_bytes, Offer, SpendContext},
-    types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
+    driver::{decode_offer, encode_offer, Offer, SpendContext},
+    types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
-use clvm_traits::clvm_list;
+use clvm_traits::{clvm_list, clvm_quote};
 use clvmr::serde::node_to_bytes;
 
 use crate::{
-    assets_xch_and_cat, get_coinset_client, get_latest_data_for_asset_id, hex_string_to_bytes32,
-    new_sk, no_assets, parse_amount, parse_one_sided_offer, spend_security_coin, yes_no_prompt,
-    CliError, SageClient, VerificationAsserter, VerifiedData,
+    assets_xch_and_cat, create_security_coin, get_coinset_client, get_latest_data_for_asset_id,
+    hex_string_to_bytes32, no_assets, parse_amount, spend_security_coin, yes_no_prompt, CliError,
+    SageClient, VerificationAsserter, VerifiedData,
 };
 
 pub async fn verifications_create_offer(
@@ -75,34 +72,18 @@ pub async fn verifications_create_offer(
     );
     let verification_asserter_puzzle_hash: Bytes32 = verification_asserter.tree_hash().into();
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(
-        &mut ctx,
-        offer,
-        security_coin_sk.public_key(),
-        Some(NotarizedPayment {
-            nonce: Bytes32::default(),
-            payments: vec![Payment::with_memos(
-                SETTLEMENT_PAYMENT_HASH.into(),
-                payment_amount,
-                vec![SETTLEMENT_PAYMENT_HASH.to_vec().into()],
-            )],
-        }),
-        None,
-    )?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
-    let security_coin_conditions = offer
-        .security_base_conditions
+    let security_coin_conditions = Conditions::new()
         .reserve_fee(1)
-        .assert_concurrent_spend(offer.created_cat.unwrap().coin.coin_id())
-        .create_coin(verification_asserter_puzzle_hash, 0, None)
+        .create_coin(verification_asserter_puzzle_hash, 0, Memos::None)
         .assert_concurrent_puzzle(verification_asserter_puzzle_hash);
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
+        security_coin,
         security_coin_conditions,
         &security_coin_sk,
         if testnet11 {
@@ -112,28 +93,22 @@ pub async fn verifications_create_offer(
         },
     )?;
 
-    let whole_sig = offer.aggregated_signature + &security_coin_sig;
-    let data = clvm_list!(
-        asset_id,
-        SpendBundle::new(ctx.take(), whole_sig)
-            .to_bytes()
-            .map_err(|_| CliError::Custom(
-                "Verification request serialization error 2".to_string()
-            ))?,
+    let latest_data_bytes = ctx.alloc(&clvm_quote!(latest_data))?;
+    let latest_data_bytes: Bytes = node_to_bytes(&ctx, latest_data_bytes)?.into();
+    let solution_bytes = ctx.alloc(&clvm_list!(security_coin.coin_id()))?;
+    let solution_bytes: Bytes = node_to_bytes(&ctx, solution_bytes)?.into();
+    ctx.insert(CoinSpend::new(
+        Coin::new(Bytes32::new([1; 32]), asset_id, 0),
+        Program::new(latest_data_bytes),
+        Program::new(solution_bytes),
+    ));
+    let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+
+    let verification_request = encode_offer(&sb)?;
+    println!(
+        "Verification request: {}",
+        verification_request.replace("offer1", "verificationrequest1")
     );
-    let data = ctx.alloc(&data)?;
-
-    let bytes = node_to_bytes(&ctx, data)?
-        .to_bytes()
-        .map_err(|_| CliError::Custom("Verification request serialization error 3".to_string()))?;
-    let bytes = compress_offer_bytes(&bytes)?;
-    let bytes = bech32::convert_bits(&bytes, 8, 5, true)?
-        .into_iter()
-        .map(u5::try_from_u8)
-        .collect::<Result<Vec<_>, bech32::Error>>()?;
-    let verification_request = bech32::encode("verificationrequest", bytes, Variant::Bech32m)?;
-
-    println!("Verification request: {}", verification_request);
 
     Ok(())
 }

@@ -10,7 +10,7 @@ use chia_puzzle_types::{
 };
 use chia_puzzles::{NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_HASH, SETTLEMENT_PAYMENT_HASH};
 use chia_wallet_sdk::{
-    driver::{DriverError, HashedPtr, Nft, Spend, SpendContext},
+    driver::{Asset, DriverError, HashedPtr, Nft, Spend, SpendContext},
     types::{announcement_id, Conditions},
 };
 use clvm_traits::{clvm_tuple, FromClvm, ToClvm};
@@ -64,8 +64,7 @@ impl RewardDistributorStakeAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
-        &self,
+    pub fn created_slot_value(
         ctx: &SpendContext,
         state: &RewardDistributorState,
         solution: NodePtr,
@@ -86,16 +85,9 @@ impl RewardDistributorStakeAction {
         current_nft: Nft<HashedPtr>,
         nft_launcher_proof: NftLauncherProof,
         entry_custody_puzzle_hash: Bytes32,
-    ) -> Result<
-        (
-            Conditions,
-            NotarizedPayment,
-            Slot<RewardDistributorEntrySlotValue>,
-            Nft<HashedPtr>,
-        ),
-        DriverError,
-    > {
-        let ephemeral_counter = distributor.get_latest_pending_ephemeral_state(ctx)?;
+    ) -> Result<(Conditions, NotarizedPayment, Nft<HashedPtr>), DriverError> {
+        let ephemeral_counter =
+            ctx.extract::<HashedPtr>(distributor.pending_spend.latest_state.0)?;
         let my_id = distributor.coin.coin_id();
 
         // calculate notarized payment
@@ -111,19 +103,22 @@ impl RewardDistributorStakeAction {
         .tree_hash()
         .into();
         let notarized_payment = NotarizedPayment {
-            nonce: clvm_tuple!(ephemeral_counter, my_id).tree_hash().into(),
-            payments: vec![Payment::with_memos(
+            nonce: clvm_tuple!(ephemeral_counter.tree_hash(), my_id)
+                .tree_hash()
+                .into(),
+            payments: vec![Payment::new(
                 payment_puzzle_hash,
                 1,
-                vec![payment_puzzle_hash.into()],
+                ctx.hint(payment_puzzle_hash)?,
             )],
         };
 
         // spend self
-        let nft = current_nft.wrapped_child(
+        let nft = current_nft.child(
             SETTLEMENT_PAYMENT_HASH.into(),
             None,
             current_nft.info.metadata,
+            current_nft.amount(),
         );
         let action_solution = ctx.alloc(&RewardDistributorStakeActionSolution {
             my_id,
@@ -136,7 +131,7 @@ impl RewardDistributorStakeAction {
             nft_transfer_porgram_hash: NftRoyaltyTransferPuzzleArgs::curry_tree_hash(
                 nft.info.launcher_id,
                 nft.info.royalty_puzzle_hash,
-                nft.info.royalty_ten_thousandths,
+                nft.info.royalty_basis_points,
             )
             .into(),
             nft_launcher_proof,
@@ -144,20 +139,15 @@ impl RewardDistributorStakeAction {
         })?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        let my_state = distributor.get_latest_pending_state(ctx)?;
-        let slot_value = self.get_slot_value_from_solution(ctx, &my_state, action_solution)?;
-
-        let msg: Bytes32 = notarized_payment.tree_hash().into();
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        let notarized_payment_ptr = ctx.alloc(&notarized_payment)?;
+        let msg: Bytes32 = ctx.tree_hash(notarized_payment_ptr).into();
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
         Ok((
             Conditions::new()
                 .assert_puzzle_announcement(announcement_id(nft.coin.puzzle_hash, msg)),
             notarized_payment,
-            distributor
-                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::ENTRY)
-                .remove(0),
-            nft.wrapped_child(payment_puzzle_hash, None, nft.info.metadata),
+            nft.child(payment_puzzle_hash, None, nft.info.metadata, nft.amount()),
         ))
     }
 }
@@ -258,7 +248,7 @@ pub struct NftLauncherProof {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorStakeActionSolution {
     pub my_id: Bytes32,
     pub nft_metadata_hash: Bytes32,

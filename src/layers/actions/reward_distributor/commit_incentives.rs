@@ -52,9 +52,7 @@ impl RewardDistributorCommitIncentivesAction {
         .map_err(DriverError::ToClvm)
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn get_slot_values_from_solution(
-        &self,
+    pub fn created_slot_values(
         ctx: &SpendContext,
         epoch_seconds: u64,
         solution: NodePtr,
@@ -62,7 +60,6 @@ impl RewardDistributorCommitIncentivesAction {
         (
             RewardDistributorCommitmentSlotValue,
             Vec<RewardDistributorRewardSlotValue>,
-            (RewardDistributorSlotNonce, Bytes32), // spent slot
         ),
         DriverError,
     > {
@@ -107,18 +104,20 @@ impl RewardDistributorCommitIncentivesAction {
             }
         }
 
-        let spent_slot = (
-            RewardDistributorSlotNonce::REWARD,
-            RewardDistributorRewardSlotValue {
-                epoch_start: solution.slot_epoch_time,
-                next_epoch_initialized: solution.slot_next_epoch_initialized,
-                rewards: solution.slot_total_rewards,
-            }
-            .tree_hash()
-            .into(),
-        );
+        Ok((commitment_slot_value, reward_slot_values))
+    }
 
-        Ok((commitment_slot_value, reward_slot_values, spent_slot))
+    pub fn spent_slot_value(
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<RewardDistributorRewardSlotValue, DriverError> {
+        let solution = ctx.extract::<RewardDistributorCommitIncentivesActionSolution>(solution)?;
+
+        Ok(RewardDistributorRewardSlotValue {
+            epoch_start: solution.slot_epoch_time,
+            next_epoch_initialized: solution.slot_next_epoch_initialized,
+            rewards: solution.slot_total_rewards,
+        })
     }
 
     #[allow(clippy::type_complexity)]
@@ -130,14 +129,9 @@ impl RewardDistributorCommitIncentivesAction {
         epoch_start: u64,
         clawback_ph: Bytes32,
         rewards_to_add: u64,
-    ) -> Result<
-        (
-            Conditions,
-            Slot<RewardDistributorCommitmentSlotValue>,
-            Vec<Slot<RewardDistributorRewardSlotValue>>,
-        ),
-        DriverError,
-    > {
+    ) -> Result<Conditions, DriverError> {
+        let reward_slot = distributor.actual_reward_slot_value(reward_slot);
+
         let new_commitment_slot_value = RewardDistributorCommitmentSlotValue {
             epoch_start,
             clawback_ph,
@@ -163,29 +157,13 @@ impl RewardDistributorCommitIncentivesAction {
         // spend reward slot
         reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
-        let (_commitment_slot_value, reward_slot_values, _spent) = self
-            .get_slot_values_from_solution(
-                ctx,
-                distributor.info.constants.epoch_seconds,
-                action_solution,
-            )?;
-        distributor.insert(Spend::new(action_puzzle, action_solution));
-        Ok((
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
+        Ok(
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 distributor.coin.puzzle_hash,
                 commit_reward_announcement,
             )),
-            distributor
-                .created_slot_values_to_slots(
-                    vec![new_commitment_slot_value],
-                    RewardDistributorSlotNonce::COMMITMENT,
-                )
-                .remove(0),
-            distributor.created_slot_values_to_slots(
-                reward_slot_values,
-                RewardDistributorSlotNonce::REWARD,
-            ),
-        ))
+        )
     }
 }
 
@@ -234,7 +212,7 @@ impl RewardDistributorCommitIncentivesActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorCommitIncentivesActionSolution {
     pub slot_epoch_time: u64,
     pub slot_next_epoch_initialized: bool,

@@ -167,7 +167,7 @@ impl<P> VerificationAsserterArgs<P> {
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct VerificationAsserterSolution<S> {
     pub verifier_proof: LineageProof,
     pub verification_inner_puzzle_maker_solution: S,
@@ -201,7 +201,7 @@ impl CatalogVerificationInnerPuzzleMakerArgs {
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct CatalogVerificationInnerPuzzleMakerSolution {
     pub comment: String,
 }

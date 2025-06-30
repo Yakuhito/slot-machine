@@ -122,14 +122,8 @@ impl MedievalVault {
             return Ok(None);
         };
 
-        let (new_m, new_pubkeys) = if recreate_condition.memos.is_none() {
-            (
-                parent_layers.inner_puzzle.m,
-                parent_layers.inner_puzzle.public_key_list.clone(),
-            )
-        } else {
-            let memos = recreate_condition.memos.unwrap();
-            if let Ok(memos) = ctx.extract::<MedievalVaultHint>(memos.value) {
+        let (new_m, new_pubkeys) = if let Memos::Some(memos) = recreate_condition.memos {
+            if let Ok(memos) = ctx.extract::<MedievalVaultHint>(memos) {
                 (memos.m, memos.public_key_list)
             } else {
                 (
@@ -137,6 +131,11 @@ impl MedievalVault {
                     parent_layers.inner_puzzle.public_key_list.clone(),
                 )
             }
+        } else {
+            (
+                parent_layers.inner_puzzle.m,
+                parent_layers.inner_puzzle.public_key_list.clone(),
+            )
         };
 
         let parent_info = MedievalVaultInfo::new(
@@ -238,7 +237,7 @@ impl MedievalVault {
         Ok(Conditions::new().create_coin(
             new_info.inner_puzzle_hash().into(),
             1,
-            Some(Memos::new(memos)),
+            Memos::Some(memos),
         ))
     }
 
@@ -271,11 +270,10 @@ impl MedievalVault {
     where
         M: ToClvm<Allocator>,
     {
-        let hint = ctx.hint(my_info.launcher_id)?;
         let conditions = Conditions::new().create_coin(
             my_info.inner_puzzle_hash().into(),
             my_coin.amount,
-            Some(hint),
+            ctx.hint(my_info.launcher_id)?,
         );
         let genesis_challenge = ctx.alloc(&genesis_challenge)?;
 
@@ -374,7 +372,7 @@ mod tests {
             let recreate_condition = Conditions::<NodePtr>::new().create_coin(
                 current_vault_info.inner_puzzle_hash().into(),
                 1,
-                Memos::some(recreate_memos),
+                Memos::Some(recreate_memos),
             );
 
             let mut used_keys = 0;

@@ -1,11 +1,14 @@
+use std::collections::HashSet;
+
 use chia::{
     clvm_utils::{tree_hash, ToTreeHash},
     protocol::{Bytes32, Coin},
     puzzles::{singleton::LauncherSolution, LineageProof, Proof},
 };
+use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
-    coinset::{ChiaRpcClient, CoinRecord, CoinsetClient},
-    driver::{Layer, Puzzle, SingletonLayer, SpendContext},
+    coinset::{ChiaRpcClient, CoinsetClient},
+    driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext},
     types::{Condition, Conditions},
 };
 use clvmr::NodePtr;
@@ -21,110 +24,67 @@ pub async fn sync_catalog(
     ctx: &mut SpendContext,
     constants: CatalogRegistryConstants,
 ) -> Result<CatalogRegistry, CliError> {
-    let last_unspent_coin_info = db
-        .get_last_unspent_singleton_coin(constants.launcher_id)
-        .await?;
+    let (mut catalog, mut skip_save): (CatalogRegistry, bool) =
+        if let Some((_coin_id, parent_coin_id)) = db
+            .get_last_unspent_singleton_coin(constants.launcher_id)
+            .await?
+        {
+            let parent_record = client
+                .get_coin_record_by_name(parent_coin_id)
+                .await?
+                .coin_record
+                .ok_or(CliError::CoinNotFound(parent_coin_id))?;
 
-    let last_spent_coin_id: Bytes32 =
-        if let Some((_coin_id, parent_coin_id)) = last_unspent_coin_info {
-            parent_coin_id
-        } else {
-            constants.launcher_id
-        };
+            let parent_spend = client
+                .get_puzzle_and_solution(parent_coin_id, Some(parent_record.spent_block_index))
+                .await?
+                .coin_solution
+                .ok_or(CliError::CoinNotSpent(parent_coin_id))?;
 
-    let mut last_coin_id = last_spent_coin_id;
-    let mut catalog: Option<CatalogRegistry> = None;
-    loop {
-        let coin_record_response = client.get_coin_record_by_name(last_coin_id).await?;
-        let Some(coin_record) = coin_record_response.coin_record else {
-            return Err(CliError::CoinNotFound(last_coin_id));
-        };
-        if !coin_record.spent {
-            break;
-        }
-
-        let skip_db_save = last_coin_id == last_spent_coin_id;
-        if !skip_db_save {
-            db.save_singleton_coin(constants.launcher_id, coin_record)
-                .await?;
-        }
-
-        let puzzle_and_solution_resp = client
-            .get_puzzle_and_solution(
-                coin_record.coin.coin_id(),
-                Some(coin_record.spent_block_index),
+            (
+                CatalogRegistry::from_parent_spend(ctx, &parent_spend, constants)?.ok_or(
+                    CliError::Custom("Could not parse latest spent CATalog registry".to_string()),
+                )?,
+                false,
             )
-            .await?;
-        let Some(coin_spend) = puzzle_and_solution_resp.coin_solution else {
-            return Err(CliError::CoinNotSpent(last_coin_id));
-        };
+        } else {
+            // No result -> sync from launcher
+            let launcher_record = client
+                .get_coin_record_by_name(constants.launcher_id)
+                .await?
+                .coin_record
+                .ok_or(CliError::CoinNotFound(constants.launcher_id))?;
 
-        let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
-        let parent_puzzle = Puzzle::parse(ctx, puzzle_ptr);
-        let solution_ptr = ctx.alloc(&coin_spend.solution)?;
-        if !skip_db_save {
-            if let Some(ref prev_catalog) = catalog {
-                let new_slots = prev_catalog.get_new_slots_from_spend(ctx, solution_ptr)?;
+            let launcher_spend = client
+                .get_puzzle_and_solution(
+                    constants.launcher_id,
+                    Some(launcher_record.spent_block_index),
+                )
+                .await?
+                .coin_solution
+                .ok_or(CliError::CoinNotSpent(constants.launcher_id))?;
 
-                for slot in new_slots.iter() {
-                    let asset_id = slot.info.value.asset_id;
-
-                    if let Some(previous_value_hash) =
-                        db.get_catalog_indexed_slot_value(asset_id).await?
-                    {
-                        db.mark_slot_as_spent(
-                            constants.launcher_id,
-                            0,
-                            previous_value_hash,
-                            coin_record.spent_block_index,
-                        )
-                        .await?;
-                    }
-                }
-
-                for slot in new_slots {
-                    db.save_catalog_indexed_slot_value(
-                        slot.info.value.asset_id,
-                        slot.info.value_hash,
-                    )
-                    .await?;
-                    db.save_slot(ctx, slot, 0).await?;
-                }
-            }
-        }
-
-        if let Some(some_catalog) = CatalogRegistry::from_parent_spend(
-            ctx,
-            coin_record.coin,
-            parent_puzzle,
-            solution_ptr,
-            constants,
-        )? {
-            last_coin_id = some_catalog.coin.coin_id();
-            catalog = Some(some_catalog);
-        } else if coin_record.coin.coin_id() == constants.launcher_id {
+            let solution_ptr = ctx.alloc(&launcher_spend.solution)?;
             let solution = ctx.extract::<LauncherSolution<NodePtr>>(solution_ptr)?;
             let catalog_eve_coin =
                 Coin::new(constants.launcher_id, solution.singleton_puzzle_hash, 1);
             let catalog_eve_coin_id = catalog_eve_coin.coin_id();
 
-            let eve_coin_puzzle_and_solution_resp = client
+            let eve_coin_spend = client
                 .get_puzzle_and_solution(
                     catalog_eve_coin_id,
-                    Some(coin_record.confirmed_block_index),
+                    Some(launcher_record.confirmed_block_index),
                 )
-                .await?;
-            let Some(eve_coin_spend) = eve_coin_puzzle_and_solution_resp.coin_solution else {
-                break;
-            };
+                .await?
+                .coin_solution
+                .ok_or(CliError::CoinNotSpent(catalog_eve_coin_id))?;
 
             let eve_coin_puzzle_ptr = ctx.alloc(&eve_coin_spend.puzzle_reveal)?;
             let eve_coin_puzzle = Puzzle::parse(ctx, eve_coin_puzzle_ptr);
-            let Some(eve_coin_puzzle) =
-                SingletonLayer::<NodePtr>::parse_puzzle(ctx, eve_coin_puzzle)?
-            else {
-                break;
-            };
+            let eve_coin_puzzle = SingletonLayer::<NodePtr>::parse_puzzle(ctx, eve_coin_puzzle)?
+                .ok_or(DriverError::Custom(
+                    "Could not parse eve CATalog coin puzzle".to_string(),
+                ))?;
 
             let eve_coin_inner_puzzle_hash = tree_hash(ctx, eve_coin_puzzle.inner_puzzle);
 
@@ -142,15 +102,18 @@ pub async fn sync_catalog(
                     }
                 })
             else {
-                break;
+                return Err(CliError::Custom(
+                    "Could not find odd create coin in CATalog eve coin".to_string(),
+                ));
             };
 
+            let Memos::Some(memos) = odd_create_coin.memos else {
+                return Err(CliError::Driver(DriverError::MissingHint));
+            };
             let (decoded_launcher_id, (_decoded_asset_id, (initial_state, ()))) =
-                ctx.extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(
-                    odd_create_coin.memos.unwrap().value,
-                )?;
+                ctx.extract::<(Bytes32, (Bytes32, (CatalogRegistryState, ())))>(memos)?;
             if decoded_launcher_id != constants.launcher_id {
-                break;
+                return Err(CliError::Custom("CATalog launcher ID mismatch".to_string()));
             }
 
             let new_coin = Coin::new(
@@ -206,31 +169,154 @@ pub async fn sync_catalog(
             )
             .await?;
 
-            db.save_singleton_coin(
-                constants.launcher_id,
-                CoinRecord {
-                    coin: new_coin,
-                    coinbase: false,
-                    confirmed_block_index: coin_record.spent_block_index,
-                    spent: false,
-                    spent_block_index: 0,
-                    timestamp: 0,
-                },
-            )
-            .await?;
+            // do NOT save eve coin - we're going through this path until
+            // first CATalog is spent
+            // db.save_singleton_coin(
+            //     constants.launcher_id,
+            //     CoinRecord {
+            //         coin: new_coin,
+            //         coinbase: false,
+            //         confirmed_block_index: launcher_record.confirmed_block_index,
+            //         spent: false,
+            //         spent_block_index: 0,
+            //         timestamp: 0,
+            //     },
+            // )
+            // .await?;
 
-            last_coin_id = new_catalog.coin.coin_id();
-            catalog = Some(new_catalog);
-        } else if coin_record.coin.parent_coin_info == constants.launcher_id {
-            last_coin_id = constants.launcher_id;
+            (new_catalog, true)
+        };
+
+    loop {
+        let coin_record = client
+            .get_coin_record_by_name(catalog.coin.coin_id())
+            .await?
+            .coin_record
+            .ok_or(CliError::CoinNotFound(catalog.coin.coin_id()))?;
+
+        if skip_save {
+            skip_save = false;
         } else {
+            db.save_singleton_coin(constants.launcher_id, coin_record)
+                .await?;
+        }
+
+        if !coin_record.spent {
+            break;
+        }
+
+        let coin_spend = client
+            .get_puzzle_and_solution(
+                coin_record.coin.coin_id(),
+                Some(coin_record.spent_block_index),
+            )
+            .await?
+            .coin_solution
+            .ok_or(CliError::CoinNotSpent(coin_record.coin.coin_id()))?;
+
+        catalog = CatalogRegistry::from_spend(ctx, &coin_spend, constants)?.ok_or(
+            CliError::Custom("Could not parse new CATalog registry spend".to_string()),
+        )?;
+
+        for slot_value in catalog.pending_spend.spent_slots.iter() {
+            let asset_id = slot_value.asset_id;
+
+            if let Some(previous_value_hash) = db.get_catalog_indexed_slot_value(asset_id).await? {
+                db.mark_slot_as_spent(
+                    constants.launcher_id,
+                    0,
+                    previous_value_hash,
+                    coin_record.spent_block_index,
+                )
+                .await?;
+            }
+        }
+
+        let mut processed_values = HashSet::<Bytes32>::new();
+        for slot_value in catalog.pending_spend.created_slots.iter() {
+            let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
+            if processed_values.contains(&slot_value_hash) {
+                continue;
+            }
+            processed_values.insert(slot_value_hash);
+
+            // same slot can be created and spent mutliple times in the same block
+            let no_spent = catalog
+                .pending_spend
+                .spent_slots
+                .iter()
+                .filter(|sv| sv == &slot_value)
+                .count();
+            let no_created = catalog
+                .pending_spend
+                .created_slots
+                .iter()
+                .filter(|sv| sv == &slot_value)
+                .count();
+            if no_spent >= no_created {
+                continue;
+            }
+
+            db.save_catalog_indexed_slot_value(slot_value.asset_id, slot_value_hash)
+                .await?;
+            db.save_slot(ctx, catalog.created_slot_value_to_slot(*slot_value), 0)
+                .await?;
+        }
+
+        catalog = catalog.child(catalog.pending_spend.latest_state.1);
+    }
+
+    mempool_catalog_maybe(ctx, catalog, client).await
+}
+
+pub async fn mempool_catalog_maybe(
+    ctx: &mut SpendContext,
+    on_chain_catalog: CatalogRegistry,
+    client: &CoinsetClient,
+) -> Result<CatalogRegistry, CliError> {
+    let Some(mut mempool_items) = client
+        .get_mempool_items_by_coin_name(on_chain_catalog.coin.coin_id())
+        .await?
+        .mempool_items
+    else {
+        return Ok(on_chain_catalog);
+    };
+
+    if mempool_items.is_empty() {
+        return Ok(on_chain_catalog);
+    }
+
+    let mempool_item = mempool_items.remove(0);
+    let mut catalog = on_chain_catalog;
+    let mut parent_id_to_look_for = catalog.coin.parent_coin_info;
+    loop {
+        let Some(catalog_spend) = mempool_item
+            .spend_bundle
+            .coin_spends
+            .iter()
+            .find(|c| c.coin.parent_coin_info == parent_id_to_look_for)
+        else {
             break;
         };
+
+        let Some(new_catalog) =
+            CatalogRegistry::from_spend(ctx, catalog_spend, catalog.info.constants)?
+        else {
+            break;
+        };
+        catalog = new_catalog;
+        parent_id_to_look_for = catalog.coin.coin_id();
     }
 
-    if let Some(catalog) = catalog {
-        Ok(catalog)
-    } else {
-        Err(CliError::CoinNotFound(last_coin_id))
-    }
+    mempool_item
+        .spend_bundle
+        .coin_spends
+        .into_iter()
+        .for_each(|coin_spend| {
+            if coin_spend.coin != catalog.coin {
+                ctx.insert(coin_spend);
+            }
+        });
+    catalog.set_pending_signature(mempool_item.spend_bundle.aggregated_signature);
+    Ok(catalog)
 }

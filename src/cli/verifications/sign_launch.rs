@@ -58,7 +58,7 @@ pub async fn verifications_sign_launch(
     let launch_conds_with_recreate = launch_conds.create_coin(
         medieval_vault.info.inner_puzzle_hash().into(),
         medieval_vault.coin.amount,
-        Some(ctx.hint(medieval_vault.info.launcher_id)?),
+        ctx.hint(medieval_vault.info.launcher_id)?,
     );
     let delegated_puzzle = ctx.alloc(&clvm_quote!(MedievalVault::delegated_conditions(
         launch_conds_with_recreate,

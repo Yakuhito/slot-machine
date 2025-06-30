@@ -131,7 +131,7 @@ pub struct Slot2ndCurryArgs {
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct SlotSolution {
     pub parent_parent_info: Bytes32,
     pub parent_inner_puzzle_hash: Bytes32,

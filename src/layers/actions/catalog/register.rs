@@ -47,7 +47,7 @@ impl Action<CatalogRegistry> for CatalogRegisterAction {
         Self {
             launcher_id: constants.launcher_id,
             royalty_puzzle_hash_hash: constants.royalty_address.tree_hash().into(),
-            trade_price_percentage: constants.royalty_ten_thousandths,
+            trade_price_percentage: constants.royalty_basis_points,
             relative_block_height: constants.relative_block_height,
             payout_puzzle_hash: constants.precommit_payout_puzzle_hash,
         }
@@ -69,7 +69,28 @@ impl CatalogRegisterAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_slot_values_from_solution(
+    pub fn spent_slot_values(
+        &self,
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<[CatalogSlotValue; 2], DriverError> {
+        let params = CatalogRegisterActionSolution::<NodePtr, ()>::from_clvm(ctx, solution)?;
+
+        Ok([
+            CatalogSlotValue::new(
+                params.left_tail_hash,
+                params.left_left_tail_hash,
+                params.right_tail_hash,
+            ),
+            CatalogSlotValue::new(
+                params.right_tail_hash,
+                params.left_tail_hash,
+                params.right_right_tail_hash,
+            ),
+        ])
+    }
+
+    pub fn created_slot_values(
         &self,
         ctx: &SpendContext,
         solution: NodePtr,
@@ -105,7 +126,7 @@ impl CatalogRegisterAction {
         right_slot: Slot<CatalogSlotValue>,
         precommit_coin: PrecommitCoin<CatalogPrecommitValue>,
         eve_nft_inner_spend: Spend,
-    ) -> Result<(Conditions, Vec<Slot<CatalogSlotValue>>), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // calculate announcement
         let register_announcement: Bytes32 =
             clvm_tuple!(tail_hash, precommit_coin.value.initial_inner_puzzle_hash)
@@ -135,13 +156,14 @@ impl CatalogRegisterAction {
             (),
             ANY_METADATA_UPDATER_HASH.into(),
             catalog.info.constants.royalty_address,
-            catalog.info.constants.royalty_ten_thousandths,
+            catalog.info.constants.royalty_basis_points,
         )?;
 
         // spend nft launcher
-        nft.spend(ctx, eve_nft_inner_spend)?;
+        let _new_nft = nft.spend(ctx, eve_nft_inner_spend)?;
 
         // finally, spend self
+        let (left_slot, right_slot) = catalog.actual_neigbors(tail_hash, left_slot, right_slot);
         let my_solution = CatalogRegisterActionSolution {
             cat_maker_reveal: DefaultCatMakerArgs::get_puzzle(
                 ctx,
@@ -160,20 +182,18 @@ impl CatalogRegisterAction {
         let my_solution = my_solution.to_clvm(ctx)?;
         let my_puzzle = self.construct_puzzle(ctx)?;
 
-        let slot_values = self.get_slot_values_from_solution(ctx, my_solution)?;
-        catalog.insert(Spend::new(my_puzzle, my_solution));
+        catalog.insert_action_spend(ctx, Spend::new(my_puzzle, my_solution))?;
 
         // spend slots
         left_slot.spend(ctx, my_inner_puzzle_hash)?;
         right_slot.spend(ctx, my_inner_puzzle_hash)?;
 
-        Ok((
+        Ok(
             Conditions::new().assert_puzzle_announcement(announcement_id(
                 catalog.coin.puzzle_hash,
                 register_announcement,
             )),
-            catalog.created_slot_values_to_slots(slot_values.to_vec()),
-        ))
+        )
     }
 }
 
@@ -279,7 +299,7 @@ impl CatalogRegisterActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct CatalogRegisterActionSolution<P, S> {
     pub cat_maker_reveal: P,
     pub cat_maker_solution: S,

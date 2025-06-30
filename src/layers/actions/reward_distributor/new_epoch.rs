@@ -60,31 +60,30 @@ impl RewardDistributorNewEpochAction {
         .map_err(DriverError::ToClvm)
     }
 
-    pub fn get_slot_value_from_solution(
-        &self,
+    pub fn created_slot_value(
         ctx: &SpendContext,
         solution: NodePtr,
-    ) -> Result<
-        (
-            RewardDistributorRewardSlotValue,
-            (RewardDistributorSlotNonce, Bytes32),
-        ),
-        DriverError,
-    > {
+    ) -> Result<RewardDistributorRewardSlotValue, DriverError> {
         let solution = ctx.extract::<RewardDistributorNewEpochActionSolution>(solution)?;
 
-        let slot_valie = RewardDistributorRewardSlotValue {
+        Ok(RewardDistributorRewardSlotValue {
             epoch_start: solution.slot_epoch_time,
             next_epoch_initialized: solution.slot_next_epoch_initialized,
             rewards: solution.slot_total_rewards,
-        };
-        Ok((
-            slot_valie,
-            (
-                RewardDistributorSlotNonce::REWARD,
-                slot_valie.tree_hash().into(),
-            ),
-        ))
+        })
+    }
+
+    pub fn spent_slot_value(
+        ctx: &SpendContext,
+        solution: NodePtr,
+    ) -> Result<RewardDistributorRewardSlotValue, DriverError> {
+        let solution = ctx.extract::<RewardDistributorNewEpochActionSolution>(solution)?;
+
+        Ok(RewardDistributorRewardSlotValue {
+            epoch_start: solution.slot_epoch_time,
+            next_epoch_initialized: solution.slot_next_epoch_initialized,
+            rewards: solution.slot_total_rewards,
+        })
     }
 
     pub fn spend(
@@ -92,9 +91,10 @@ impl RewardDistributorNewEpochAction {
         ctx: &mut SpendContext,
         distributor: &mut RewardDistributor,
         reward_slot: Slot<RewardDistributorRewardSlotValue>,
-    ) -> Result<(Conditions, Slot<RewardDistributorRewardSlotValue>, u64), DriverError> {
+    ) -> Result<(Conditions, u64), DriverError> {
         // also returns fee
-        let my_state = distributor.get_latest_pending_state(ctx)?;
+        let my_state = distributor.pending_spend.latest_state.1;
+        let reward_slot = distributor.actual_reward_slot_value(reward_slot);
 
         let epoch_total_rewards =
             if my_state.round_time_info.epoch_end == reward_slot.info.value.epoch_start {
@@ -128,15 +128,8 @@ impl RewardDistributorNewEpochAction {
         // spend slot
         reward_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
-        let slot_value = self.get_slot_value_from_solution(ctx, action_solution)?.0;
-        distributor.insert(Spend::new(action_puzzle, action_solution));
-        Ok((
-            new_epoch_conditions,
-            distributor
-                .created_slot_values_to_slots(vec![slot_value], RewardDistributorSlotNonce::REWARD)
-                .remove(0),
-            fee,
-        ))
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
+        Ok((new_epoch_conditions, fee))
     }
 }
 
@@ -198,7 +191,7 @@ impl RewardDistributorNewEpochActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorNewEpochActionSolution {
     pub slot_epoch_time: u64,
     pub slot_next_epoch_initialized: bool,

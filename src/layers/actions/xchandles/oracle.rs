@@ -42,7 +42,7 @@ impl XchandlesOracleAction {
         .to_clvm(ctx)?)
     }
 
-    pub fn get_spent_slot_value_from_solution(
+    pub fn spent_slot_value(
         ctx: &SpendContext,
         solution: NodePtr,
     ) -> Result<XchandlesSlotValue, DriverError> {
@@ -51,7 +51,7 @@ impl XchandlesOracleAction {
         Ok(slot_value)
     }
 
-    pub fn get_created_slot_value(spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
+    pub fn created_slot_value(spent_slot_value: XchandlesSlotValue) -> XchandlesSlotValue {
         spent_slot_value
     }
 
@@ -60,32 +60,23 @@ impl XchandlesOracleAction {
         ctx: &mut SpendContext,
         registry: &mut XchandlesRegistry,
         slot: Slot<XchandlesSlotValue>,
-    ) -> Result<(Conditions, Slot<XchandlesSlotValue>), DriverError> {
+    ) -> Result<Conditions, DriverError> {
         // spend self
+        let slot = registry.actual_slot(slot);
         let action_solution = ctx.alloc(&slot.info.value)?;
         let action_puzzle = self.construct_puzzle(ctx)?;
 
-        registry.insert(Spend::new(action_puzzle, action_solution));
+        registry.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
 
-        let new_slot = Self::get_created_slot_value(slot.info.value.clone());
-        registry.pending_items.created_slots.push(new_slot.clone());
+        let new_slot = Self::created_slot_value(slot.info.value.clone());
 
         // spend slot
-        registry
-            .pending_items
-            .spent_slots
-            .push(slot.info.value.clone());
         slot.spend(ctx, registry.info.inner_puzzle_hash().into())?;
 
         let mut oracle_ann = new_slot.tree_hash().to_vec();
         oracle_ann.insert(0, b'o');
-        Ok((
-            Conditions::new()
-                .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, oracle_ann)),
-            registry
-                .created_slot_values_to_slots(vec![new_slot.clone()])
-                .remove(0),
-        ))
+        Ok(Conditions::new()
+            .assert_puzzle_announcement(announcement_id(registry.coin.puzzle_hash, oracle_ann)))
     }
 }
 

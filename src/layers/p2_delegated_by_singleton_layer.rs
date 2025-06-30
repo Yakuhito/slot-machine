@@ -127,7 +127,7 @@ impl P2DelegatedBySingletonLayerArgs {
 }
 
 #[derive(ToClvm, FromClvm, Debug, Clone, Copy, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct P2DelegatedBySingletonLayerSolution<P, S> {
     pub singleton_inner_puzzle_hash: Bytes32,
     pub delegated_puzzle: P,

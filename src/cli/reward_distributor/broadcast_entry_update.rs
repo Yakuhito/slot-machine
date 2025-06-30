@@ -3,10 +3,10 @@ use chia::{clvm_utils::ToTreeHash, protocol::Bytes};
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
-    find_entry_slot_for_puzzle_hash, get_constants, get_last_onchain_timestamp,
-    hex_string_to_bytes32, multisig_broadcast_thing_finish, multisig_broadcast_thing_start,
-    sync_distributor, CliError, Db, MedievalVault, RewardDistributorAddEntryAction,
-    RewardDistributorRemoveEntryAction, RewardDistributorSyncAction, StateSchedulerLayerSolution,
+    find_entry_slots, get_constants, get_last_onchain_timestamp, hex_string_to_bytes32,
+    multisig_broadcast_thing_finish, multisig_broadcast_thing_start, sync_distributor, CliError,
+    Db, MedievalVault, RewardDistributorAddEntryAction, RewardDistributorRemoveEntryAction,
+    RewardDistributorSyncAction, StateSchedulerLayerSolution,
 };
 
 pub async fn reward_distributor_broadcast_entry_update(
@@ -104,14 +104,17 @@ pub async fn reward_distributor_broadcast_entry_update(
 
     if remove_entry {
         println!("Finding entry slot...");
-        let entry_slot = find_entry_slot_for_puzzle_hash(
+        let entry_slot = find_entry_slots(
             &mut ctx,
-            &db,
-            launcher_id,
+            &client,
+            reward_distributor.info.constants,
             entry_payout_puzzle_hash,
+            None,
             Some(entry_shares),
         )
         .await?
+        .into_iter()
+        .next()
         .ok_or(CliError::SlotNotFound("Mirror"))?;
 
         let (_conds, last_payment_amount) = reward_distributor
@@ -127,7 +130,7 @@ pub async fn reward_distributor_broadcast_entry_update(
             last_payment_amount
         );
     } else {
-        let (_conds, _new_slot) = reward_distributor
+        let _conds = reward_distributor
             .new_action::<RewardDistributorAddEntryAction>()
             .spend(
                 &mut ctx,
@@ -137,12 +140,12 @@ pub async fn reward_distributor_broadcast_entry_update(
                 medieval_vault_inner_ph.into(),
             )?;
     }
-    let mut _new_distributor = reward_distributor.finish_spend(&mut ctx, vec![])?;
+    let (_new_distributor, pending_sig) = reward_distributor.finish_spend(&mut ctx, vec![])?;
 
     multisig_broadcast_thing_finish(
         client,
         &mut ctx,
-        signature_from_signers,
+        signature_from_signers + &pending_sig,
         fee_str,
         testnet11,
         medieval_vault_coin_id,

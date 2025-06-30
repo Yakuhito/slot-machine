@@ -5,10 +5,9 @@ use chia::{
     protocol::{Bytes32, SpendBundle},
     puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
 };
-use chia_puzzle_types::offer::{NotarizedPayment, Payment};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{CatLayer, Layer, Offer, Puzzle, SingleCatSpend, Spend, SpendContext},
+    driver::{decode_offer, CatLayer, Layer, Offer, Puzzle, SingleCatSpend, Spend, SpendContext},
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
     utils::Address,
 };
@@ -16,12 +15,12 @@ use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, get_last_onchain_timestamp, hex_string_to_bytes32,
-    load_xchandles_premine_csv, new_sk, no_assets, parse_amount, parse_one_sided_offer,
-    spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt, CatalogPrecommitValue,
-    CliError, Db, PrecommitCoin, PrecommitLayer, SageClient, XchandlesFactorPricingPuzzleArgs,
-    XchandlesFactorPricingSolution, XchandlesPrecommitValue, XchandlesPremineRecord,
-    XchandlesRegisterAction,
+    assets_xch_and_cat, assets_xch_only, create_security_coin, get_last_onchain_timestamp,
+    hex_string_to_bytes32, load_xchandles_premine_csv, no_assets, parse_amount,
+    spend_security_coin, spend_settlement_cats, sync_xchandles, wait_for_coin, yes_no_prompt,
+    CatalogPrecommitValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
+    XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesPremineRecord,
+    XchandlesPricingSolution, XchandlesRegisterAction,
 };
 
 fn precommit_value_for_handle(
@@ -35,7 +34,8 @@ fn precommit_value_for_handle(
     Ok(XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
         XchandlesFactorPricingPuzzleArgs::curry_tree_hash(1, registration_period),
-        XchandlesFactorPricingSolution {
+        XchandlesPricingSolution {
+            buy_time: start_time,
             current_expiration: 0,
             handle: handle.handle.clone(),
             num_periods: 1,
@@ -43,7 +43,6 @@ fn precommit_value_for_handle(
         .tree_hash(),
         handle.handle.clone(),
         Bytes32::default(),
-        start_time,
         owner_nft_launcher_id,
         owner_nft_launcher_id.into(),
     ))
@@ -226,50 +225,34 @@ pub async fn xchandles_continue_launch(
                 cat_creator_conds = cat_creator_conds.create_coin(
                     inner_ph.into(),
                     amount,
-                    Some(ctx.hint(inner_ph.into())?),
+                    ctx.hint(inner_ph.into())?,
                 );
             }
             let cat_destination_puzzle_ptr = ctx.alloc(&clvm_quote!(cat_creator_conds))?;
             let cat_destination_puzzle_hash: Bytes32 =
                 ctx.tree_hash(cat_destination_puzzle_ptr).into();
 
-            let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-            let security_coin_sk = new_sk()?;
-
             // Parse one-sided offer
-            let one_sided_offer = parse_one_sided_offer(
+            let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+            let (security_coin_sk, security_coin) =
+                create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
+            let (created_cats, cat_assert) = spend_settlement_cats(
                 &mut ctx,
-                offer,
-                security_coin_sk.public_key(),
-                Some(NotarizedPayment {
-                    nonce: launcher_id,
-                    payments: vec![Payment::with_memos(
-                        cat_destination_puzzle_hash,
-                        handles_payment_total,
-                        vec![cat_destination_puzzle_hash.into()],
-                    )],
-                }),
-                None,
+                &offer,
+                payment_asset_id,
+                launcher_id,
+                vec![(cat_destination_puzzle_hash, handles_payment_total)],
             )?;
 
-            let Some(created_cat) = one_sided_offer.created_cat else {
-                eprintln!("No CAT was created in one-sided offer - aborting...");
-                return Ok(());
-            };
-            one_sided_offer
-                .coin_spends
-                .into_iter()
-                .for_each(|cs| ctx.insert(cs));
-
-            let security_coin_conditions = one_sided_offer
-                .security_base_conditions
+            let created_cat = created_cats[0];
+            let security_coin_conditions = cat_assert
                 .assert_concurrent_spend(created_cat.coin.coin_id())
                 .reserve_fee(1);
 
             // Spend security coin
             let security_coin_sig = spend_security_coin(
                 &mut ctx,
-                one_sided_offer.security_coin,
+                security_coin,
                 security_coin_conditions,
                 &security_coin_sk,
                 if testnet11 {
@@ -285,28 +268,26 @@ pub async fn xchandles_continue_launch(
                 SingleCatSpend {
                     next_coin_proof: CoinProof {
                         parent_coin_info: created_cat.coin.parent_coin_info,
-                        inner_puzzle_hash: created_cat.p2_puzzle_hash,
+                        inner_puzzle_hash: created_cat.info.p2_puzzle_hash,
                         amount: created_cat.coin.amount,
                     },
                     prev_coin_id: created_cat.coin.coin_id(),
                     prev_subtotal: 0,
                     extra_delta: 0,
-                    inner_spend: Spend::new(cat_destination_puzzle_ptr, NodePtr::NIL),
+                    p2_spend: Spend::new(cat_destination_puzzle_ptr, NodePtr::NIL),
+                    revoke: false,
                 },
             )?;
 
             // Build spend bundle
-            let sb = SpendBundle::new(
-                ctx.take(),
-                one_sided_offer.aggregated_signature + &security_coin_sig,
-            );
+            let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
 
             println!("Submitting transaction...");
             let resp = client.push_tx(sb).await?;
 
             println!("Transaction submitted; status='{}'", resp.status);
 
-            wait_for_coin(&client, one_sided_offer.security_coin.coin_id(), true).await?;
+            wait_for_coin(&client, security_coin.coin_id(), true).await?;
             println!("Confirmed!");
 
             return Ok(());
@@ -474,12 +455,11 @@ pub async fn xchandles_continue_launch(
 
     println!("Offer with id {} generated.", offer_resp.offer_id);
 
-    let offer = Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?;
-    let security_coin_sk = new_sk()?;
-    let offer = parse_one_sided_offer(&mut ctx, offer, security_coin_sk.public_key(), None, None)?;
-    offer.coin_spends.into_iter().for_each(|cs| ctx.insert(cs));
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
-    let mut security_coin_conditions = offer.security_base_conditions.reserve_fee(1);
+    let mut security_coin_conditions = Conditions::new().reserve_fee(1);
 
     for (i, precommit_value) in precommit_values.iter().enumerate() {
         let precommit_ph = precommit_puzzle_hashes[i];
@@ -515,7 +495,7 @@ pub async fn xchandles_continue_launch(
 
         let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
-        let (sec_conds, _new_slots) = registry.new_action::<XchandlesRegisterAction>().spend(
+        let sec_conds = registry.new_action::<XchandlesRegisterAction>().spend(
             &mut ctx,
             &mut registry,
             left_slot,
@@ -523,16 +503,17 @@ pub async fn xchandles_continue_launch(
             precommit_coin,
             1,
             registration_period,
+            start_time,
         )?;
 
         security_coin_conditions = security_coin_conditions.extend(sec_conds);
     }
 
-    let _new_registry = registry.finish_spend(&mut ctx)?;
+    let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
-        offer.security_coin,
+        security_coin,
         security_coin_conditions,
         &security_coin_sk,
         if testnet11 {
@@ -542,13 +523,16 @@ pub async fn xchandles_continue_launch(
         },
     )?;
 
-    let sb = SpendBundle::new(ctx.take(), offer.aggregated_signature + &security_coin_sig);
+    let sb = offer.take(SpendBundle::new(
+        ctx.take(),
+        security_coin_sig + &pending_sig,
+    ));
 
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);
-    wait_for_coin(&client, offer.security_coin.coin_id(), true).await?;
+    wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 
     Ok(())

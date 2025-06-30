@@ -6,7 +6,7 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{DriverError, OfferError, Spend, SpendContext},
+    driver::{DriverError, Spend, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
     utils::AddressError,
 };
@@ -66,9 +66,6 @@ pub enum CliError {
 
     #[error("Data directory could not be found")]
     DataDirNotFound,
-
-    #[error("offer: {0}")]
-    Offer(#[from] OfferError),
 
     #[error("could not parse db column")]
     DbColumnParse(),

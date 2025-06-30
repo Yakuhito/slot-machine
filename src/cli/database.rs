@@ -112,41 +112,15 @@ impl Db {
 
             sqlx::query(
                 "
-                CREATE TABLE IF NOT EXISTS dig_indexed_slot_values_by_epoch_start (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    epoch_start INTEGER NOT NULL,
-                    nonce INTEGER NOT NULL,
-                    slot_value_hash BLOB NOT NULL
-                )
-                ",
-            )
-            .execute(&pool)
-            .await?;
-
-            sqlx::query(
-                "
-                CREATE TABLE IF NOT EXISTS dig_indexed_slot_values_by_puzzle_hash (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    puzzle_hash BLOB NOT NULL,
-                    nonce INTEGER NOT NULL,
-                    slot_value_hash BLOB NOT NULL
+                CREATE TABLE IF NOT EXISTS xchandles_configurations (
+                    launcher_id BLOB PRIMARY KEY,
+                    constants BLOB NOT NULL
                 )
                 ",
             )
             .execute(&pool)
             .await?;
         }
-
-        sqlx::query(
-            "
-            CREATE TABLE IF NOT EXISTS xchandles_configurations (
-                launcher_id BLOB PRIMARY KEY,
-                constants BLOB NOT NULL
-            )
-            ",
-        )
-        .execute(&pool)
-        .await?;
 
         Ok(Self { pool })
     }
@@ -817,124 +791,6 @@ impl Db {
             XchandlesConstants::from_clvm(allocator, constants).map_err(DriverError::FromClvm)?;
 
         Ok(Some(constants))
-    }
-
-    pub async fn save_dig_indexed_slot_value_by_epoch_start(
-        &self,
-        epoch_start: u64,
-        nonce: u64,
-        slot_value_hash: Bytes32,
-    ) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            INSERT INTO dig_indexed_slot_values_by_epoch_start (epoch_start, nonce, slot_value_hash) VALUES (?1, ?2, ?3)
-            ",
-        )
-        .bind(epoch_start as i64)
-        .bind(nonce as i64)
-        .bind(slot_value_hash.to_vec())
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
-    }
-
-    pub async fn save_dig_indexed_slot_value_by_puzzle_hash(
-        &self,
-        puzzle_hash: Bytes32,
-        nonce: u64,
-        slot_value_hash: Bytes32,
-    ) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            INSERT INTO dig_indexed_slot_values_by_puzzle_hash (puzzle_hash, nonce, slot_value_hash) VALUES (?1, ?2, ?3)
-            ",
-        )
-        .bind(puzzle_hash.to_vec())
-        .bind(nonce as i64)
-        .bind(slot_value_hash.to_vec())
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
-    }
-
-    pub async fn get_dig_indexed_slot_values_by_epoch_start(
-        &self,
-        epoch_start: u64,
-        nonce: u64,
-    ) -> Result<Vec<Bytes32>, CliError> {
-        let row = sqlx::query(
-            "
-            SELECT slot_value_hash FROM dig_indexed_slot_values_by_epoch_start WHERE epoch_start = ?1 AND nonce = ?2
-            ",
-        )
-        .bind(epoch_start as i64)
-        .bind(nonce as i64)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        row.into_iter()
-            .map(|row| column_to_bytes32(row.get::<&[u8], _>("slot_value_hash")))
-            .collect::<Result<Vec<_>, _>>()
-    }
-
-    pub async fn get_dig_indexed_slot_values_by_puzzle_hash(
-        &self,
-        puzzle_hash: Bytes32,
-        nonce: u64,
-    ) -> Result<Vec<Bytes32>, CliError> {
-        let row = sqlx::query(
-            "
-            SELECT slot_value_hash FROM dig_indexed_slot_values_by_puzzle_hash WHERE puzzle_hash = ?1 AND nonce = ?2
-            ",
-        )
-        .bind(puzzle_hash.to_vec())
-        .bind(nonce as i64)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        row.into_iter()
-            .map(|row| column_to_bytes32(row.get::<&[u8], _>("slot_value_hash")))
-            .collect::<Result<Vec<_>, _>>()
-    }
-
-    pub async fn delete_dig_indexed_slot_values_by_epoch_start_using_value_hash(
-        &self,
-        value_hash: Bytes32,
-    ) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            DELETE FROM dig_indexed_slot_values_by_epoch_start WHERE slot_value_hash = ?1
-            ",
-        )
-        .bind(value_hash.to_vec())
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
-    }
-
-    pub async fn delete_dig_indexed_slot_values_by_puzzle_hash_using_value_hash(
-        &self,
-        value_hash: Bytes32,
-    ) -> Result<(), CliError> {
-        sqlx::query(
-            "
-            DELETE FROM dig_indexed_slot_values_by_puzzle_hash WHERE slot_value_hash = ?1
-            ",
-        )
-        .bind(value_hash.to_vec())
-        .execute(&self.pool)
-        .await
-        .map_err(CliError::Sqlx)?;
-
-        Ok(())
     }
 }
 

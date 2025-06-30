@@ -34,7 +34,7 @@ pub struct CatalogRegistryState {
 pub struct CatalogRegistryConstants {
     pub launcher_id: Bytes32,
     pub royalty_address: Bytes32,
-    pub royalty_ten_thousandths: u16,
+    pub royalty_basis_points: u16,
     pub precommit_payout_puzzle_hash: Bytes32,
     pub relative_block_height: u32,
     pub price_singleton_launcher_id: Bytes32,
@@ -45,18 +45,18 @@ impl CatalogRegistryConstants {
         if testnet11 {
             return CatalogRegistryConstants {
                 launcher_id: Bytes32::from(hex!(
-                    "05183ec35a4ee07049ba629c76f49f2d52b2056a1c4c63d780113244a7307a2f"
+                    "0b705afb0d848794311970de0cb98722468fad6c8f687337735ab9e5286d7704"
                 )),
                 royalty_address: Bytes32::from(hex!(
                     "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
                 )),
-                royalty_ten_thousandths: 100,
+                royalty_basis_points: 100,
                 precommit_payout_puzzle_hash: Bytes32::from(hex!(
                     "b3aea098428b2b5e6d57cf3bff6ee82e3950dec338b17df6d8ee20944787def5"
                 )),
-                relative_block_height: 8,
+                relative_block_height: 4,
                 price_singleton_launcher_id: Bytes32::from(hex!(
-                    "283caf3922c2ac7f7e3265bad97ae59d8395bcdae61cd7fdc98553e77873d35e"
+                    "45dff01375d9bd681d36a3a186ab3d0c86eb809d7f85fff950f0b37f068ec664"
                 )),
             };
         }

@@ -89,13 +89,13 @@ pub async fn catalog_broadcast_state_update(
         new_state,
         medieval_vault_inner_ph.into(),
     )?;
-    catalog.insert(inner_spend);
-    let mut _new_catalog = catalog.finish_spend(&mut ctx)?;
+    catalog.insert_action_spend(&mut ctx, inner_spend)?;
+    let (_new_catalog, pending_sig) = catalog.finish_spend(&mut ctx)?;
 
     multisig_broadcast_thing_finish(
         client,
         &mut ctx,
-        signature_from_signers,
+        signature_from_signers + &pending_sig,
         fee_str,
         testnet11,
         medieval_vault_coin_id,

@@ -41,14 +41,9 @@ pub async fn get_latest_data_for_asset_id(
                 possible_prelauncher_record.coin.parent_coin_info,
             ))?;
 
-        let puzzle_ptr = ctx.alloc(&catalog_spend_maybe.puzzle_reveal)?;
-        let puzzle = Puzzle::parse(ctx, puzzle_ptr);
-        let solution_ptr = ctx.alloc(&catalog_spend_maybe.solution)?;
         if let Ok(Some(_reg)) = CatalogRegistry::from_parent_spend(
             ctx,
-            catalog_spend_maybe.coin,
-            puzzle,
-            solution_ptr,
+            &catalog_spend_maybe,
             CatalogRegistryConstants::get(testnet11),
         ) {
             prelauncher_coin_id = Some(possible_prelauncher_record.coin.coin_id());

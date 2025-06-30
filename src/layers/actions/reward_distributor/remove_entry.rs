@@ -66,6 +66,8 @@ impl RewardDistributorRemoveEntryAction {
         manager_singleton_inner_puzzle_hash: Bytes32,
     ) -> Result<(Conditions, u64), DriverError> {
         // u64 = last payment amount
+        let my_state = distributor.pending_spend.latest_state.1;
+        let entry_slot = distributor.actual_entry_slot_value(entry_slot);
 
         // compute message that the manager needs to send
         let remove_entry_message: Bytes32 = clvm_tuple!(
@@ -86,7 +88,6 @@ impl RewardDistributorRemoveEntryAction {
             .assert_concurrent_puzzle(entry_slot.coin.puzzle_hash);
 
         // spend self
-        let my_state = distributor.get_latest_pending_state(ctx)?;
         let entry_payout_amount = entry_slot.info.value.shares
             * (my_state.round_reward_info.cumulative_payout
                 - entry_slot.info.value.initial_cumulative_payout);
@@ -102,27 +103,21 @@ impl RewardDistributorRemoveEntryAction {
         // spend entry slot
         entry_slot.spend(ctx, distributor.info.inner_puzzle_hash().into())?;
 
-        distributor.insert(Spend::new(action_puzzle, action_solution));
+        distributor.insert_action_spend(ctx, Spend::new(action_puzzle, action_solution))?;
         Ok((remove_entry_conditions, entry_payout_amount))
     }
 
-    pub fn get_spent_slot_value_from_solution(
-        &self,
+    pub fn spent_slot_value(
         ctx: &SpendContext,
         solution: NodePtr,
-    ) -> Result<(RewardDistributorSlotNonce, Bytes32), DriverError> {
+    ) -> Result<RewardDistributorEntrySlotValue, DriverError> {
         let solution = ctx.extract::<RewardDistributorRemoveEntryActionSolution>(solution)?;
 
-        Ok((
-            RewardDistributorSlotNonce::ENTRY,
-            RewardDistributorEntrySlotValue {
-                payout_puzzle_hash: solution.entry_payout_puzzle_hash,
-                initial_cumulative_payout: solution.entry_initial_cumulative_payout,
-                shares: solution.entry_shares,
-            }
-            .tree_hash()
-            .into(),
-        ))
+        Ok(RewardDistributorEntrySlotValue {
+            payout_puzzle_hash: solution.entry_payout_puzzle_hash,
+            initial_cumulative_payout: solution.entry_initial_cumulative_payout,
+            shares: solution.entry_shares,
+        })
     }
 }
 
@@ -183,7 +178,7 @@ impl RewardDistributorRemoveEntryActionArgs {
 }
 
 #[derive(FromClvm, ToClvm, Debug, Clone, PartialEq, Eq)]
-#[clvm(solution)]
+#[clvm(list)]
 pub struct RewardDistributorRemoveEntryActionSolution {
     pub manager_singleton_inner_puzzle_hash: Bytes32,
     pub entry_payout_amount: u64,

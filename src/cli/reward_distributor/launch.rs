@@ -1,7 +1,7 @@
 use chia::protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Offer, SpendContext},
+    driver::{decode_offer, Offer, SpendContext},
     utils::Address,
 };
 
@@ -82,9 +82,10 @@ pub async fn reward_distributor_launch(
 
     let mut ctx = SpendContext::new();
 
-    let (sig, _sk, reward_distributor, _slot) = launch_dig_reward_distributor(
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (sig, _sk, reward_distributor, _slot, _change_cat) = launch_dig_reward_distributor(
         &mut ctx,
-        Offer::decode(&offer_resp.offer).map_err(CliError::Offer)?,
+        &offer,
         first_epoch_start_timestamp,
         user_puzzle_hash,
         RewardDistributorConstants::without_launcher_id(

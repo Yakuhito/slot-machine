@@ -28,7 +28,6 @@
         precommited_pricing_puzzle_solution
         handle
         secret
-        precommited_start_time
         precommited_owner_launcher_id
         precommited_resolved_data
         refund_puzzle_hash_hash
@@ -89,19 +88,16 @@
                 (all
                     ; not (a)
                     (= precommited_cat_maker_reveal_hash Cat_Maker_Puzzle_Hash)
-                    ; not (b)
-                    (if (= precommited_pricing_puzzle_reveal_hash Pricing_Puzzle_Hash)
-                        (= handle (f (r precommited_pricing_puzzle_solution)))
-                        ; else
-                        (if (= precommited_pricing_puzzle_reveal_hash Expired_Handle_Pricing_Puzzle_Hash)
-                            (= handle (f (r (r precommited_pricing_puzzle_solution))))
-                            ; else
-                            ()
-                        )
-                    )
                     ; not (c)
+                    (= handle (f (r (r precommited_pricing_puzzle_solution))))
+                    (any
+                        (= precommited_pricing_puzzle_reveal_hash Pricing_Puzzle_Hash)
+                        (= precommited_pricing_puzzle_reveal_hash Expired_Handle_Pricing_Puzzle_Hash)
+                    )
+                    ; not (b)
                     (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
-                ) ; slot spend needed if (a), (b), and (c) are not met - we need (d)
+                ) ; slot spend needed if the precommit coin looks valid after checking (a), (b), (c) & it could be used
+                  ; to register a handle unless we're in situation (d)
                 (a
                     precommited_cat_maker_reveal
                     (c
@@ -114,7 +110,6 @@
                                 precommited_pricing_puzzle_solution
                                 handle
                                 secret
-                                precommited_start_time
                                 precommited_owner_launcher_id
                                 precommited_resolved_data
                             )) ; hash of precommit value, which is itself a hash :)
