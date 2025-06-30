@@ -83,7 +83,7 @@ pub async fn reward_distributor_launch(
     let mut ctx = SpendContext::new();
 
     let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
-    let (sig, _sk, reward_distributor, _slot) = launch_dig_reward_distributor(
+    let (sig, _sk, reward_distributor, _slot, _change_cat) = launch_dig_reward_distributor(
         &mut ctx,
         &offer,
         first_epoch_start_timestamp,
