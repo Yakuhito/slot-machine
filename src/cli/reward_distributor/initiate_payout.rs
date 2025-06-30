@@ -44,7 +44,7 @@ pub async fn reward_distributor_initiate_payout(
         );
     }
 
-    println!("Finding reward slot...");
+    println!("Finding entry slot...");
     let slot = find_entry_slots(
         &mut ctx,
         &client,
