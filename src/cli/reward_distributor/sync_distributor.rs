@@ -5,7 +5,7 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{CatLayer, DriverError, Layer, Puzzle, SpendContext},
+    driver::{CatLayer, DriverError, HashedPtr, Layer, Puzzle, SingletonLayer, SpendContext},
 };
 use clvmr::NodePtr;
 
@@ -13,7 +13,7 @@ use crate::{
     CliError, Db, P2DelegatedBySingletonLayerArgs, Reserve, RewardDistributor,
     RewardDistributorCommitmentSlotValue, RewardDistributorConstants,
     RewardDistributorEntrySlotValue, RewardDistributorRewardSlotValue, RewardDistributorSlotNonce,
-    Slot,
+    Slot, SlotInfo, SlotProof,
 };
 
 pub async fn sync_distributor(
@@ -284,7 +284,29 @@ pub async fn find_reward_slot(
             let Some(distributor) =
                 RewardDistributor::from_spend(ctx, &distributor_spent, None, constants)?
             else {
-                continue;
+                // eve spend
+                let slot_value = RewardDistributorRewardSlotValue {
+                    epoch_start,
+                    next_epoch_initialized: false,
+                    rewards: 0,
+                };
+                let slot_info = SlotInfo::<RewardDistributorRewardSlotValue>::from_value(
+                    constants.launcher_id,
+                    RewardDistributorSlotNonce::REWARD.to_u64(),
+                    slot_value,
+                );
+
+                let puzzle_ptr = ctx.alloc(&distributor_spent.puzzle_reveal)?;
+                let puzzle = Puzzle::parse(ctx, puzzle_ptr);
+                let puzzle = SingletonLayer::<HashedPtr>::parse_puzzle(ctx, puzzle)?.unwrap();
+                let slot = Slot::<RewardDistributorRewardSlotValue>::new(
+                    SlotProof {
+                        parent_parent_info: distributor_spent.coin.parent_coin_info,
+                        parent_inner_puzzle_hash: puzzle.inner_puzzle.tree_hash().into(),
+                    },
+                    slot_info,
+                );
+                return Ok(slot);
             };
 
             if let Some(slot) = distributor
