@@ -47,6 +47,7 @@ pub struct RewardDistributorPendingSpendInfo {
     pub latest_state: (NodePtr, RewardDistributorState),
 
     pub signature: Signature,
+    pub other_cats: Vec<CatSpend>,
 }
 
 impl RewardDistributorPendingSpendInfo {
@@ -61,6 +62,7 @@ impl RewardDistributorPendingSpendInfo {
             spent_entry_slots: vec![],
             latest_state: (NodePtr::NIL, latest_state),
             signature: Signature::default(),
+            other_cats: vec![],
         }
     }
 
@@ -80,6 +82,7 @@ impl RewardDistributorPendingSpendInfo {
         self.latest_state = delta.latest_state;
 
         // do not change pending signature
+        // or other cats
     }
 }
 
@@ -251,6 +254,7 @@ impl RewardDistributor {
             created_entry_slots,
             latest_state: new_state_and_ephemeral,
             signature: Signature::default(),
+            other_cats: vec![],
         })
     }
 
@@ -513,6 +517,10 @@ impl RewardDistributor {
     pub fn set_pending_signature(&mut self, signature: Signature) {
         self.pending_spend.signature = signature;
     }
+
+    pub fn set_pending_other_cats(&mut self, other_cats: Vec<CatSpend>) {
+        self.pending_spend.other_cats = other_cats;
+    }
 }
 
 impl Registry for RewardDistributor {
@@ -575,6 +583,7 @@ impl RewardDistributor {
 
         let mut cat_spends = other_cat_spends;
         cat_spends.push(cat_spend);
+        cat_spends.extend(self.pending_spend.other_cats);
         Cat::spend_all(ctx, &cat_spends)?;
 
         Ok((child, self.pending_spend.signature))

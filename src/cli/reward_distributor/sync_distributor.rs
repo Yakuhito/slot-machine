@@ -1,11 +1,15 @@
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::Bytes32,
+    protocol::{Bytes32, CoinSpend},
     puzzles::{cat::CatArgs, singleton::SingletonStruct, LineageProof},
 };
+use chia_puzzle_types::cat::CatSolution;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{CatLayer, DriverError, HashedPtr, Layer, Puzzle, SingletonLayer, SpendContext},
+    driver::{
+        Cat, CatInfo, CatLayer, CatSpend, DriverError, HashedPtr, Layer, Puzzle, SingletonLayer,
+        Spend, SpendContext,
+    },
 };
 use clvmr::NodePtr;
 
@@ -252,17 +256,82 @@ pub async fn mempool_distributor_maybe(
         parent_id_to_look_for = distributor.coin.coin_id();
     }
 
-    mempool_item
+    let reserve_spend = mempool_item
+        .spend_bundle
+        .coin_spends
+        .iter()
+        .find(|coin_spend| coin_spend.coin == distributor.reserve.coin)
+        .ok_or(DriverError::Custom("Reserve spend not found".to_string()))?
+        .clone();
+    let spends_to_add: Vec<CoinSpend> = mempool_item
         .spend_bundle
         .coin_spends
         .into_iter()
-        .for_each(|coin_spend| {
-            if coin_spend.coin != distributor.coin {
-                ctx.insert(coin_spend);
-            }
-        });
+        .filter(|coin_spend| {
+            coin_spend.coin != distributor.coin && coin_spend.coin != distributor.reserve.coin
+        })
+        .collect();
+
+    // CATs spent with reserve are stored in the pending spend info item
+    // since they need to be spent to form a ring (in finish_spend)
+    let mut other_cats = Vec::new();
+    #[allow(unused_assignments)]
+    let (mut cat_spend, mut cat_solution) = spend_to_cat_spend(ctx, reserve_spend)?;
+    loop {
+        let cat_to_find = cat_solution.prev_coin_id;
+        if cat_to_find == distributor.reserve.coin.coin_id() {
+            break;
+        }
+
+        let cat_coin_spend = spends_to_add
+            .iter()
+            .find(|coin_spend| coin_spend.coin.coin_id() == cat_to_find)
+            .ok_or(DriverError::Custom("CAT spend not found".to_string()))?
+            .clone();
+        (cat_spend, cat_solution) = spend_to_cat_spend(ctx, cat_coin_spend)?;
+        other_cats.push(cat_spend);
+    }
+
+    // finally, set things up for RBF
+    spends_to_add.into_iter().for_each(|coin_spend| {
+        if other_cats
+            .iter()
+            .all(|cat_spend| cat_spend.cat.coin != coin_spend.coin)
+        {
+            ctx.insert(coin_spend);
+        }
+    });
     distributor.set_pending_signature(mempool_item.spend_bundle.aggregated_signature);
+    distributor.set_pending_other_cats(other_cats);
+
     Ok(distributor)
+}
+
+pub fn spend_to_cat_spend(
+    ctx: &mut SpendContext,
+    spend: CoinSpend,
+) -> Result<(CatSpend, CatSolution<NodePtr>), DriverError> {
+    let puzzle_ptr = ctx.alloc(&spend.puzzle_reveal)?;
+    let solution_ptr = ctx.alloc(&spend.solution)?;
+
+    let puzzle = Puzzle::parse(ctx, puzzle_ptr);
+    let cat = CatLayer::<HashedPtr>::parse_puzzle(ctx, puzzle)?
+        .ok_or(DriverError::Custom("Not a CAT".to_string()))?;
+
+    let solution = ctx.extract::<CatSolution<NodePtr>>(solution_ptr)?;
+
+    Ok((
+        CatSpend {
+            cat: Cat::new(
+                spend.coin,
+                solution.lineage_proof,
+                CatInfo::new(cat.asset_id, None, cat.inner_puzzle.tree_hash().into()),
+            ),
+            spend: Spend::new(cat.inner_puzzle.ptr(), solution.inner_puzzle_solution),
+            hidden: false,
+        },
+        solution,
+    ))
 }
 
 pub async fn find_reward_slot(
