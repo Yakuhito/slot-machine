@@ -603,31 +603,25 @@ pub fn launch_dig_reward_distributor(
     ),
     DriverError,
 > {
-    println!("before create_security_coin"); // TODO: debug
     let (security_coin_sk, security_coin) =
         create_security_coin(ctx, offer.offered_coins().xch[0])?;
-    println!("after create_security_coin"); // TODO: debug
     offer
         .spend_bundle()
         .coin_spends
         .iter()
         .for_each(|cs| ctx.insert(cs.clone()));
-    println!("after insert coin_spends"); // TODO: debug
 
-    println!("before launcher"); // TODO: debug
     let reward_distributor_hint: Bytes32 = "Reward Distributor v1".tree_hash().into();
     let launcher_memos = ctx.memos(&(reward_distributor_hint, (comment, ())))?;
     let launcher = Launcher::with_memos(security_coin.coin_id(), 1, launcher_memos);
     let launcher_coin = launcher.coin();
     let launcher_id = launcher_coin.coin_id();
-    println!("after launcher"); // TODO: debug
 
     let controller_singleton_struct_hash: Bytes32 =
         SingletonStruct::new(launcher_id).tree_hash().into();
     let reserve_inner_ph: Bytes32 =
         P2DelegatedBySingletonLayerArgs::curry_tree_hash(controller_singleton_struct_hash, 0)
             .into();
-    println!("after reserve_inner_ph"); // TODO: debug
 
     let total_cat_amount = offer
         .offered_coins()
@@ -635,7 +629,6 @@ pub fn launch_dig_reward_distributor(
         .get(&constants.reserve_asset_id)
         .map(|cs| cs.iter().map(|c| c.coin.amount).sum::<u64>())
         .unwrap_or(1);
-    println!("after total_cat_amount, {}", total_cat_amount); // TODO: debug
 
     let interim_cat_puzzle = clvm_quote!(Conditions::new()
         .create_coin(reserve_inner_ph, 0, ctx.hint(reserve_inner_ph)?)
@@ -646,7 +639,6 @@ pub fn launch_dig_reward_distributor(
         ));
     let interim_cat_puzzle = ctx.alloc(&interim_cat_puzzle)?;
     let interim_cat_puzzle_hash = ctx.tree_hash(interim_cat_puzzle);
-    println!("after interim_cat_puzzle_hash, {}", interim_cat_puzzle_hash); // TODO: debug
 
     let (created_cats, mut security_coin_conditions) = spend_settlement_cats(
         ctx,
@@ -655,7 +647,6 @@ pub fn launch_dig_reward_distributor(
         constants.launcher_id,
         vec![(interim_cat_puzzle_hash.into(), total_cat_amount)],
     )?;
-    println!("after spend_settlement_cats"); // TODO: debug
 
     let interim_cat = created_cats[0];
     let created_cats = Cat::spend_all(
@@ -666,7 +657,6 @@ pub fn launch_dig_reward_distributor(
             hidden: false,
         }],
     )?;
-    println!("after spend_all"); // TODO: debug
 
     // Spend intermediary coin and create registry
     let target_info = RewardDistributorInfo::new(
@@ -687,7 +677,6 @@ pub fn launch_dig_reward_distributor(
         slot_value,
     );
     let slot_puzzle_hash = Slot::<RewardDistributorRewardSlotValue>::puzzle_hash(&slot_info);
-    println!("after slot_puzzle_hash"); // TODO: debug
 
     let slot_hint: Bytes32 = first_epoch_start.tree_hash().into();
     let slot_memos = ctx.hint(slot_hint)?;
@@ -696,14 +685,12 @@ pub fn launch_dig_reward_distributor(
         .create_coin(slot_puzzle_hash.into(), 0, slot_memos)
         .create_coin(target_inner_puzzle_hash.into(), 1, launcher_memos))
     .to_clvm(ctx)?;
-    println!("after eve_singleton_inner_puzzle"); // TODO: debug
 
     let eve_singleton_inner_puzzle_hash = ctx.tree_hash(eve_singleton_inner_puzzle);
     let eve_singleton_proof = Proof::Eve(EveProof {
         parent_parent_coin_info: launcher_coin.parent_coin_info,
         parent_amount: launcher_coin.amount,
     });
-    println!("after eve_singleton_proof"); // TODO: debug
 
     let (launch_conditions, eve_coin) = launcher.with_singleton_amount(1).spend(
         ctx,
@@ -711,7 +698,6 @@ pub fn launch_dig_reward_distributor(
         (first_epoch_start, target_info.constants),
     )?;
     security_coin_conditions = security_coin_conditions.extend(launch_conditions);
-    println!("after launch_conditions"); // TODO: debug
 
     let eve_coin_solution = SingletonSolution {
         lineage_proof: eve_singleton_proof,
@@ -720,12 +706,10 @@ pub fn launch_dig_reward_distributor(
     }
     .to_clvm(ctx)?;
 
-    println!("before eve_singleton_puzzle"); // TODO: debug
     let eve_singleton_puzzle =
         ctx.curry(SingletonArgs::new(launcher_id, eve_singleton_inner_puzzle))?;
     let eve_singleton_spend = Spend::new(eve_singleton_puzzle, eve_coin_solution);
     ctx.spend(eve_coin, eve_singleton_spend)?;
-    println!("after eve_singleton_puzzle"); // TODO: debug
 
     let new_registry_coin = Coin::new(
         eve_coin.coin_id(),
@@ -737,14 +721,12 @@ pub fn launch_dig_reward_distributor(
         parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
         parent_amount: 1,
     });
-    println!("after new_proof"); // TODO: debug
 
     let slot_proof = SlotProof {
         parent_parent_info: eve_coin.parent_coin_info,
         parent_inner_puzzle_hash: eve_singleton_inner_puzzle_hash.into(),
     };
     let slot = Slot::new(slot_proof, slot_info);
-    println!("after slot"); // TODO: debug
 
     // this creates the launcher & secures the spend
     let security_coin_conditions =
@@ -762,8 +744,7 @@ pub fn launch_dig_reward_distributor(
     );
     let registry = RewardDistributor::new(new_registry_coin, new_proof, target_info, reserve);
 
-    println!("after registry"); // TODO: debug
-                                // Spend security coin
+    // Spend security coin
     let security_coin_sig = spend_security_coin(
         ctx,
         security_coin,
@@ -772,8 +753,7 @@ pub fn launch_dig_reward_distributor(
         consensus_constants,
     )?;
 
-    println!("before security_coin_sig"); // TODO: debug
-                                          // Finally, return the data
+    // Finally, return the data
     Ok((
         security_coin_sig + &offer.spend_bundle().aggregated_signature,
         security_coin_sk,
@@ -2469,9 +2449,7 @@ mod tests {
         cat_minter_p2.spend(ctx, cat_minter.coin, issue_cat)?;
 
         let source_cat = source_cat[0];
-        println!("before spend_coins 1"); // TODO: debug
         sim.spend_coins(ctx.take(), &[cat_minter.sk.clone()])?;
-        println!("after spend_coins 1"); // TODO: debug
 
         // Launch manager singleton
         let (
@@ -2482,7 +2460,6 @@ mod tests {
             manager_or_did_singleton_inner_puzzle_hash,
             manager_or_did_singleton_puzzle,
         ) = launch_test_singleton(ctx, &mut sim)?;
-        println!("after launch_test_singleton"); // TODO: debug
 
         // setup config
         let constants = RewardDistributorConstants::without_launcher_id(
@@ -2511,7 +2488,6 @@ mod tests {
                 Memos::None,
             ),
         )?;
-        println!("after offer_spend"); // TODO: debug
 
         let puzzle_reveal = ctx.serialize(&offer_spend.puzzle)?;
         let solution = ctx.serialize(&offer_spend.solution)?;
@@ -2529,7 +2505,6 @@ mod tests {
                 solution: NodePtr::NIL,
             },
         )?;
-        println!("after source_cat_inner_spend"); // TODO: debug
         source_cat.spend(
             ctx,
             SingleCatSpend {
@@ -2545,21 +2520,18 @@ mod tests {
                 revoke: false,
             },
         )?;
-        println!("after source_cat.spend"); // TODO: debug
         let spends = ctx.take();
         let cat_offer_spend = spends
             .iter()
             .find(|s| s.coin.coin_id() == source_cat.coin.coin_id())
             .unwrap()
             .clone();
-        println!("after source_cat.spend"); // TODO: debug
         for spend in spends {
             if spend.coin.coin_id() != source_cat.coin.coin_id() {
                 ctx.insert(spend);
             }
         }
 
-        println!("before sign_standard_transaction"); // TODO: debug
         let agg_sig = sign_standard_transaction(
             ctx,
             launcher_bls.coin,
@@ -2567,7 +2539,6 @@ mod tests {
             &launcher_bls.sk,
             &TESTNET11_CONSTANTS,
         )?;
-        println!("after sign_standard_transaction"); // TODO: debug
         let offer = Offer::from_spend_bundle(
             ctx,
             &SpendBundle {
@@ -2578,22 +2549,19 @@ mod tests {
                 aggregated_signature: agg_sig,
             },
         )?;
-        println!("after Offer::from_spend_bundle"); // TODO: debug
 
         // Launch the reward distributor
         let first_epoch_start = 1234;
-        println!("before launch_dig_reward_distributor"); // TODO: debug
         let (_, security_sk, mut registry, first_epoch_slot, mut source_cat) =
             launch_dig_reward_distributor(
                 ctx,
                 &offer,
                 first_epoch_start,
-                Bytes32::default(),
+                source_cat.info.p2_puzzle_hash,
                 constants,
                 &TESTNET11_CONSTANTS,
                 "yak yak yak",
             )?;
-        println!("after launch_dig_reward_distributor"); // TODO: debug
 
         // sim.spend_coins(
         //     ctx.take(),
@@ -2752,6 +2720,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         // spend reserve and source cat together so deltas add up
+        let hint = ctx.hint(cat_minter.puzzle_hash)?;
         let source_cat_spend = CatSpend::new(
             source_cat,
             cat_minter_p2.spend_with_conditions(
@@ -2759,7 +2728,7 @@ mod tests {
                 secure_conditions.create_coin(
                     cat_minter.puzzle_hash,
                     source_cat.coin.amount - rewards_to_add,
-                    Memos::None,
+                    hint,
                 ),
             )?,
         );
