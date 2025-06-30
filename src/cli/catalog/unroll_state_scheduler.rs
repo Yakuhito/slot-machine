@@ -92,7 +92,7 @@ pub async fn catalog_unroll_state_scheduler(
     catalog.insert_action_spend(&mut ctx, catalog_action_spend)?;
 
     let catalog_inner_ph = catalog.info.inner_puzzle_hash();
-    let _new_catalog = catalog.finish_spend(&mut ctx)?;
+    let (_new_catalog, pending_sig) = catalog.finish_spend(&mut ctx)?;
 
     let offer_resp = sage
         .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
@@ -121,7 +121,10 @@ pub async fn catalog_unroll_state_scheduler(
 
     state_scheduler.spend(&mut ctx, catalog_inner_ph.into())?;
 
-    let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+    let sb = offer.take(SpendBundle::new(
+        ctx.take(),
+        security_coin_sig + &pending_sig,
+    ));
 
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;

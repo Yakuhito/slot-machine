@@ -140,12 +140,12 @@ pub async fn reward_distributor_broadcast_entry_update(
                 medieval_vault_inner_ph.into(),
             )?;
     }
-    let mut _new_distributor = reward_distributor.finish_spend(&mut ctx, vec![])?;
+    let (_new_distributor, pending_sig) = reward_distributor.finish_spend(&mut ctx, vec![])?;
 
     multisig_broadcast_thing_finish(
         client,
         &mut ctx,
-        signature_from_signers,
+        signature_from_signers + &pending_sig,
         fee_str,
         testnet11,
         medieval_vault_coin_id,

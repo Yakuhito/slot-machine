@@ -87,7 +87,7 @@ pub async fn reward_distributor_initiate_payout(
         .new_action::<RewardDistributorInitiatePayoutAction>()
         .spend(&mut ctx, &mut distributor, slot)?;
     sec_conds = sec_conds.extend(new_conds);
-    let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
+    let (_new_distributor, pending_sig) = distributor.finish_spend(&mut ctx, vec![])?;
 
     println!("Payout amount: {} CAT mojos", payout_amount);
 
@@ -99,7 +99,10 @@ pub async fn reward_distributor_initiate_payout(
         get_constants(testnet11),
     )?;
 
-    let spend_bundle = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+    let spend_bundle = offer.take(SpendBundle::new(
+        ctx.take(),
+        security_coin_sig + &pending_sig,
+    ));
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);

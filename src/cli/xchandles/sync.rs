@@ -219,5 +219,15 @@ pub async fn mempool_registry_maybe(
         parent_id_to_look_for = registry.coin.coin_id();
     }
 
+    mempool_item
+        .spend_bundle
+        .coin_spends
+        .into_iter()
+        .for_each(|coin_spend| {
+            if coin_spend.coin != registry.coin {
+                ctx.insert(coin_spend);
+            }
+        });
+    registry.set_pending_signature(mempool_item.spend_bundle.aggregated_signature);
     Ok(registry)
 }

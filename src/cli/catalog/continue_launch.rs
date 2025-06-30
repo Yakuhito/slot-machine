@@ -506,7 +506,7 @@ pub async fn catalog_continue_launch(
         security_coin_conditions = security_coin_conditions.extend(sec_conds);
     }
 
-    let _new_catalog = catalog.finish_spend(&mut ctx)?;
+    let (_new_catalog, pending_sig) = catalog.finish_spend(&mut ctx)?;
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
@@ -520,7 +520,10 @@ pub async fn catalog_continue_launch(
         },
     )?;
 
-    let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+    let sb = offer.take(SpendBundle::new(
+        ctx.take(),
+        security_coin_sig + &pending_sig,
+    ));
 
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;

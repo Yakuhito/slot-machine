@@ -381,7 +381,7 @@ pub async fn catalog_register(
             )?
         };
 
-        let _new_catalog = catalog.finish_spend(&mut ctx)?;
+        let (_new_catalog, pending_sig) = catalog.finish_spend(&mut ctx)?;
 
         let security_coin_sig = spend_security_coin(
             &mut ctx,
@@ -391,7 +391,10 @@ pub async fn catalog_register(
             get_constants(testnet11),
         )?;
 
-        let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+        let sb = offer.take(SpendBundle::new(
+            ctx.take(),
+            security_coin_sig + &pending_sig,
+        ));
 
         println!("Submitting transaction...");
         if log {

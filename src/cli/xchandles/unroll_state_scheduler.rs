@@ -127,7 +127,7 @@ pub async fn xchandles_unroll_state_scheduler(
     registry.insert_action_spend(&mut ctx, registry_action_spend)?;
 
     let registry_inner_ph = registry.info.inner_puzzle_hash();
-    let _new_registry = registry.finish_spend(&mut ctx)?;
+    let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;
 
     let offer_resp = sage
         .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
@@ -156,7 +156,10 @@ pub async fn xchandles_unroll_state_scheduler(
 
     state_scheduler.spend(&mut ctx, registry_inner_ph.into())?;
 
-    let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+    let sb = offer.take(SpendBundle::new(
+        ctx.take(),
+        security_coin_sig + &pending_sig,
+    ));
 
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;

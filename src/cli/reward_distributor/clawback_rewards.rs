@@ -86,7 +86,7 @@ pub async fn reward_distributor_clawback_rewards(
     let (send_message_conds, returned_amount) = distributor
         .new_action::<RewardDistributorWithdrawIncentivesAction>()
         .spend(&mut ctx, &mut distributor, commitment_slot, reward_slot)?;
-    let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
+    let (_new_distributor, pending_sig) = distributor.finish_spend(&mut ctx, vec![])?;
 
     println!("Returned amount: {} CAT mojos", returned_amount);
 
@@ -125,7 +125,7 @@ pub async fn reward_distributor_clawback_rewards(
 
     let spend_bundle = offer.take(SpendBundle::new(
         ctx.take(),
-        security_coin_sig + &message_sig,
+        security_coin_sig + &message_sig + &pending_sig,
     ));
 
     println!("Submitting transaction...");

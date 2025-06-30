@@ -217,7 +217,7 @@ pub async fn reward_distributor_unstake(
 
     let sec_conds = sec_conds.extend(conds).reserve_fee(1);
 
-    let _new_distributor = distributor.finish_spend(&mut ctx, vec![])?;
+    let (_new_distributor, pending_sig) = distributor.finish_spend(&mut ctx, vec![])?;
 
     // security coin has custody puzzle!
     println!("Signing custody coin...");
@@ -242,7 +242,10 @@ pub async fn reward_distributor_unstake(
             .replace("0x", ""),
     )?;
 
-    let spend_bundle = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+    let spend_bundle = offer.take(SpendBundle::new(
+        ctx.take(),
+        security_coin_sig + &pending_sig,
+    ));
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);

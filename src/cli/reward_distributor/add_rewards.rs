@@ -98,7 +98,7 @@ pub async fn reward_distributor_add_rewards(
         ))?[0];
     let offer_puzzle = ctx.alloc_mod::<SettlementPayment>()?;
 
-    let _new_distributor = distributor.finish_spend(
+    let (_new_distributor, pending_sig) = distributor.finish_spend(
         &mut ctx,
         vec![CatSpend {
             cat: settlement_cat,
@@ -115,7 +115,10 @@ pub async fn reward_distributor_add_rewards(
         get_constants(testnet11),
     )?;
 
-    let spend_bundle = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+    let spend_bundle = offer.take(SpendBundle::new(
+        ctx.take(),
+        security_coin_sig + &pending_sig,
+    ));
 
     println!("Submitting transaction...");
     let client = get_coinset_client(testnet11);
