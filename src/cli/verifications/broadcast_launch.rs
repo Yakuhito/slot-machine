@@ -8,13 +8,13 @@ use chia_wallet_sdk::{
     types::Conditions,
     utils::Address,
 };
-use clvm_traits::{clvm_quote, match_quote};
-use clvmr::NodePtr;
+use clvm_traits::clvm_quote;
+use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
     get_constants, get_latest_data_for_asset_id, hex_string_to_bytes32,
     multisig_broadcast_thing_finish, multisig_broadcast_thing_start, spend_settlement_cats,
-    yes_no_prompt, CliError, MedievalVault, Verification, VerificationAsserter,
+    yes_no_prompt, CatNftMetadata, CliError, MedievalVault, Verification, VerificationAsserter,
     VerificationLauncherKVList, VerifiedData,
 };
 
@@ -125,12 +125,11 @@ pub async fn verifications_broadcast_launch(
             ));
         }
 
-        let special_puzzle = ctx.alloc(&special_coin_spend.puzzle_reveal)?;
-        let (_thing, data_verif) = ctx.extract::<match_quote!(VerifiedData)>(special_puzzle)?;
-        if data_verif != verified_data {
+        let special_puzzle = node_from_bytes(&mut ctx, &special_coin_spend.puzzle_reveal)?;
+        let (_thing, nft_metadata_verif) = ctx.extract::<(u64, CatNftMetadata)>(special_puzzle)?;
+        if latest_data != nft_metadata_verif {
             return Err(CliError::Custom(
-                "Verification request offer made for a different version of verified data"
-                    .to_string(),
+                "Verification request offer made for a different version of metadata".to_string(),
             ));
         }
 
@@ -165,7 +164,7 @@ pub async fn verifications_broadcast_launch(
             conds = conds.extend(assert_cond);
         }
 
-        let solution_ptr = ctx.alloc(&special_coin_spend.solution)?;
+        let solution_ptr = node_from_bytes(&mut ctx, &special_coin_spend.solution)?;
         let (verification_asserter_parent, ()) = ctx.extract::<(Bytes32, ())>(solution_ptr)?;
         verification_asserter.spend(
             &mut ctx,
@@ -179,7 +178,7 @@ pub async fn verifications_broadcast_launch(
             comment.clone(),
         )?;
 
-        yes_no_prompt("Last check - continue?")?;
+        yes_no_prompt("Accept the payments above?")?;
         Some(conds)
     } else {
         None
