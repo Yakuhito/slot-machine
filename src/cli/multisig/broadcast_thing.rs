@@ -11,9 +11,8 @@ use chia_wallet_sdk::{
 use crate::{
     assets_xch_only, create_security_coin, get_coinset_client, hex_string_to_bytes32,
     hex_string_to_signature, no_assets, parse_amount, print_medieval_vault_configuration,
-    print_spend_bundle_to_file, spend_security_coin, sync_multisig_singleton, wait_for_coin,
-    yes_no_prompt, CliError, MedievalVault, MultisigSingleton, SageClient,
-    StateSchedulerHintedState,
+    spend_security_coin, sync_multisig_singleton, wait_for_coin, yes_no_prompt, CliError,
+    MedievalVault, MultisigSingleton, SageClient, StateSchedulerHintedState,
 };
 
 pub async fn multisig_broadcast_thing_start(
@@ -129,7 +128,6 @@ pub async fn multisig_broadcast_thing_finish(
     ));
 
     println!("Submitting transaction...");
-    print_spend_bundle_to_file(sb.coin_spends.clone(), sb.aggregated_signature, "sb.debug")?; // todo: debug
     let resp = client.push_tx(sb).await?;
 
     println!("Transaction submitted; status='{}'", resp.status);
