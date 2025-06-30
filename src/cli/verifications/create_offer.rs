@@ -1,15 +1,13 @@
-use bech32::{u5, Variant};
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes32, SpendBundle},
-    traits::Streamable,
+    protocol::{Bytes, Bytes32, Coin, CoinSpend, Program, SpendBundle},
 };
 use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
-    driver::{compress_offer_bytes, decode_offer, Offer, SpendContext},
+    driver::{decode_offer, encode_offer, Offer, SpendContext},
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
-use clvm_traits::clvm_list;
+use clvm_traits::{clvm_list, clvm_quote};
 use clvmr::serde::node_to_bytes;
 
 use crate::{
@@ -95,28 +93,22 @@ pub async fn verifications_create_offer(
         },
     )?;
 
-    let data = clvm_list!(
-        asset_id,
-        offer
-            .take(SpendBundle::new(ctx.take(), security_coin_sig))
-            .to_bytes()
-            .map_err(|_| CliError::Custom(
-                "Verification request serialization error 2".to_string()
-            ))?,
+    let latest_data_bytes = ctx.alloc(&clvm_quote!(latest_data))?;
+    let latest_data_bytes: Bytes = node_to_bytes(&ctx, latest_data_bytes)?.into();
+    let solution_bytes = ctx.alloc(&clvm_list!(security_coin.coin_id()))?;
+    let solution_bytes: Bytes = node_to_bytes(&ctx, solution_bytes)?.into();
+    ctx.insert(CoinSpend::new(
+        Coin::new(Bytes32::new([1; 32]), asset_id, 0),
+        Program::new(latest_data_bytes),
+        Program::new(solution_bytes),
+    ));
+    let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+
+    let verification_request = encode_offer(&sb)?;
+    println!(
+        "Verification request: {}",
+        verification_request.replace("offer1", "verificationrequest1")
     );
-    let data = ctx.alloc(&data)?;
-
-    let bytes = node_to_bytes(&ctx, data)?
-        .to_bytes()
-        .map_err(|_| CliError::Custom("Verification request serialization error 3".to_string()))?;
-    let bytes = compress_offer_bytes(&bytes)?;
-    let bytes = bech32::convert_bits(&bytes, 8, 5, true)?
-        .into_iter()
-        .map(u5::try_from_u8)
-        .collect::<Result<Vec<_>, bech32::Error>>()?;
-    let verification_request = bech32::encode("verificationrequest", bytes, Variant::Bech32m)?;
-
-    println!("Verification request: {}", verification_request);
 
     Ok(())
 }

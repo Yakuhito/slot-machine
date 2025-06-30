@@ -1,27 +1,21 @@
-use bech32::Variant;
 use chia::{
     clvm_utils::ToTreeHash,
-    protocol::{Bytes, Bytes32, Coin, SpendBundle},
-    traits::Streamable,
+    protocol::{Bytes32, Coin},
 };
-use chia_puzzle_types::{
-    cat::CatArgs,
-    offer::{NotarizedPayment, Payment, SettlementPaymentsSolution},
-    LineageProof,
-};
-use chia_puzzles::{CAT_PUZZLE_HASH, SETTLEMENT_PAYMENT_HASH};
+use chia_puzzle_types::LineageProof;
 use chia_wallet_sdk::{
-    driver::{decompress_offer_bytes, Cat, CatInfo, CatSpend, HashedPtr, Launcher, Puzzle, Spend},
-    types::{announcement_id, puzzles::SettlementPayment, Condition, Conditions},
+    driver::{decode_offer, Launcher, Offer},
+    types::Conditions,
     utils::Address,
 };
-use clvm_traits::clvm_quote;
-use clvmr::{serde::node_from_bytes, NodePtr};
+use clvm_traits::{clvm_quote, match_quote};
+use clvmr::NodePtr;
 
 use crate::{
     get_constants, get_latest_data_for_asset_id, hex_string_to_bytes32,
-    multisig_broadcast_thing_finish, multisig_broadcast_thing_start, yes_no_prompt, CliError,
-    MedievalVault, Verification, VerificationAsserter, VerificationLauncherKVList, VerifiedData,
+    multisig_broadcast_thing_finish, multisig_broadcast_thing_start, spend_settlement_cats,
+    yes_no_prompt, CliError, MedievalVault, Verification, VerificationAsserter,
+    VerificationLauncherKVList, VerifiedData,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -105,23 +99,40 @@ pub async fn verifications_broadcast_launch(
         );
         verification.spend(&mut ctx, None)?;
 
-        let (hrp, data, variant) = bech32::decode(&request_offer)?;
-        if variant != Variant::Bech32m || hrp.as_str() != "verificationrequest" {
-            return Err(CliError::Custom(
-                "Invalid verification request offer provided".to_string(),
-            ));
-        }
-        let bytes = bech32::convert_bits(&data, 5, 8, false)?;
-        let decompressed = decompress_offer_bytes(&bytes)?;
-        let ptr = node_from_bytes(&mut ctx, &decompressed)?;
-        let (asset_id_verif, (spend_bundle_bytes, ())) =
-            ctx.extract::<(Bytes32, (Bytes, ()))>(ptr)?;
+        let offer = Offer::from_spend_bundle(
+            &mut ctx,
+            &decode_offer(&request_offer.replace("verificationrequest1", "offer1"))?,
+        )?;
+
+        let special_parent = Bytes32::from([1; 32]);
+        let special_coin_spend = offer
+            .spend_bundle()
+            .coin_spends
+            .iter()
+            .find(|cs| cs.coin.parent_coin_info == special_parent)
+            .ok_or(CliError::Custom("Special coin spend not found".to_string()))?;
+        offer.spend_bundle().coin_spends.iter().for_each(|cs| {
+            if cs.coin.parent_coin_info != special_parent {
+                ctx.insert(cs.clone())
+            };
+        });
+        signature_from_signers += &offer.spend_bundle().aggregated_signature;
+
+        let asset_id_verif = special_coin_spend.coin.puzzle_hash;
         if asset_id_verif != asset_id {
             return Err(CliError::Custom(
                 "Verification request offer made for another asset id :(".to_string(),
             ));
         }
-        let spend_bundle = SpendBundle::from_bytes(&spend_bundle_bytes).unwrap();
+
+        let special_puzzle = ctx.alloc(&special_coin_spend.puzzle_reveal)?;
+        let (_thing, data_verif) = ctx.extract::<match_quote!(VerifiedData)>(special_puzzle)?;
+        if data_verif != verified_data {
+            return Err(CliError::Custom(
+                "Verification request offer made for a different version of verified data"
+                    .to_string(),
+            ));
+        }
 
         let verification_asserter = VerificationAsserter::from(
             launcher_id,
@@ -136,129 +147,39 @@ pub async fn verifications_broadcast_launch(
         )?)?
         .puzzle_hash;
 
-        let mut payment_sent = false;
-        let mut verification_asserter_spent = false;
         let mut conds = Conditions::new();
-        for coin_spend in spend_bundle.coin_spends.into_iter() {
-            let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
-            let solution_ptr = ctx.alloc(&coin_spend.solution)?;
-            let output = ctx.run(puzzle_ptr, solution_ptr)?;
-            let output = ctx.extract::<Conditions>(output)?;
-
-            let puzzle = Puzzle::parse(&ctx, puzzle_ptr);
-            match puzzle {
-                Puzzle::Curried(puzzle) => {
-                    if puzzle.mod_hash == CAT_PUZZLE_HASH.into() {
-                        let spent_cat_args = ctx.extract::<CatArgs<HashedPtr>>(puzzle.args)?;
-                        let payment_cat_asset_id = spent_cat_args.asset_id;
-                        let offer_puzzle_hash: Bytes32 = CatArgs::curry_tree_hash(
-                            payment_cat_asset_id,
-                            SETTLEMENT_PAYMENT_HASH.into(),
-                        )
-                        .into();
-
-                        if let Some(cc) = output.iter().find_map(|c| match c {
-                            Condition::CreateCoin(cc) => {
-                                if cc.puzzle_hash == offer_puzzle_hash {
-                                    Some(cc)
-                                } else {
-                                    None
-                                }
-                            }
-                            _ => None,
-                        }) {
-                            yes_no_prompt(format!("{} CAT mojos (asset id: {}) will be transferred to the specified recipient. Continue?", cc.amount, hex::encode(payment_cat_asset_id)).as_str())?;
-                            let hint = ctx.hint(recipient_puzzle_hash)?;
-                            let notarized_payment = NotarizedPayment {
-                                nonce: coin_spend.coin.coin_id(),
-                                payments: vec![Payment::new(
-                                    recipient_puzzle_hash,
-                                    cc.amount,
-                                    hint,
-                                )],
-                            };
-
-                            let offer_cat = Cat::new(
-                                Coin::new(coin_spend.coin.coin_id(), offer_puzzle_hash, cc.amount),
-                                Some(LineageProof {
-                                    parent_parent_coin_info: coin_spend.coin.parent_coin_info,
-                                    parent_inner_puzzle_hash: spent_cat_args
-                                        .inner_puzzle
-                                        .tree_hash()
-                                        .into(),
-                                    parent_amount: coin_spend.coin.amount,
-                                }),
-                                CatInfo::new(
-                                    payment_cat_asset_id,
-                                    None,
-                                    SETTLEMENT_PAYMENT_HASH.into(),
-                                ),
-                            );
-
-                            let offer_cat_inner_solution =
-                                ctx.alloc(&SettlementPaymentsSolution {
-                                    notarized_payments: vec![notarized_payment.clone()],
-                                })?;
-
-                            let offer_cat_spend = CatSpend::new(
-                                offer_cat,
-                                Spend::new(
-                                    ctx.alloc_mod::<SettlementPayment>()?,
-                                    offer_cat_inner_solution,
-                                ),
-                            );
-
-                            Cat::spend_all(&mut ctx, &[offer_cat_spend])?;
-
-                            payment_sent = true;
-                            let notarized_payment_ptr = ctx.alloc(&notarized_payment)?;
-                            let msg: Bytes32 = ctx.tree_hash(notarized_payment_ptr).into();
-                            conds = conds.assert_puzzle_announcement(announcement_id(
-                                offer_puzzle_hash,
-                                msg,
-                            ));
-                        }
-                    }
-                }
-                Puzzle::Raw(_puzzle) => {
-                    if let Some(cc) = output.iter().find_map(|c| match c {
-                        Condition::CreateCoin(cc) => {
-                            if cc.puzzle_hash == verification_asserter_puzzle_hash {
-                                Some(cc)
-                            } else {
-                                None
-                            }
-                        }
-                        _ => None,
-                    }) {
-                        verification_asserter.spend(
-                            &mut ctx,
-                            Coin::new(coin_spend.coin.coin_id(), cc.puzzle_hash, cc.amount),
-                            verifier_proof,
-                            launcher_coin.amount,
-                            comment.clone(),
-                        )?;
-                        verification_asserter_spent = true;
-                    }
-                }
-            };
-
-            ctx.insert(coin_spend);
+        for (asset_id, cats) in offer.offered_coins().cats.iter() {
+            let total_cat_amount = cats.iter().map(|c| c.coin.amount).sum::<u64>();
+            println!(
+                "Offer contains {} CAT mojos (asset id: {})",
+                total_cat_amount,
+                hex::encode(asset_id)
+            );
+            let (_new_cats, assert_cond) = spend_settlement_cats(
+                &mut ctx,
+                &offer,
+                *asset_id,
+                recipient_puzzle_hash,
+                vec![(recipient_puzzle_hash, total_cat_amount)],
+            )?;
+            conds = conds.extend(assert_cond);
         }
 
-        if !payment_sent {
-            return Err(CliError::Custom(
-                "Payment in offer could not be found".to_string(),
-            ));
-        }
-        if !verification_asserter_spent {
-            return Err(CliError::Custom(
-                "Verification asserter could not be found in offer - it is likely invalid"
-                    .to_string(),
-            ));
-        }
+        let solution_ptr = ctx.alloc(&special_coin_spend.solution)?;
+        let (verification_asserter_parent, ()) = ctx.extract::<(Bytes32, ())>(solution_ptr)?;
+        verification_asserter.spend(
+            &mut ctx,
+            Coin::new(
+                verification_asserter_parent,
+                verification_asserter_puzzle_hash,
+                0,
+            ),
+            verifier_proof,
+            launcher_coin.amount,
+            comment.clone(),
+        )?;
 
-        signature_from_signers += &spend_bundle.aggregated_signature;
+        yes_no_prompt("Last check - continue?")?;
         Some(conds)
     } else {
         None
