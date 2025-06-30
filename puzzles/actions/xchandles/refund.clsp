@@ -96,7 +96,8 @@
                     )
                     ; not (b)
                     (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
-                ) ; slot spend needed if (a), (b), and (c) are not met - we need (d)
+                ) ; slot spend needed if the precommit coin looks valid after checking (a), (b), (c) & it could be used
+                  ; to register a handle unless we're in situation (d)
                 (a
                     precommited_cat_maker_reveal
                     (c
