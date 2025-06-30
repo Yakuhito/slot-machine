@@ -1,4 +1,5 @@
 use chia::{
+    bls::Signature,
     clvm_utils::{tree_hash, ToTreeHash},
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{
@@ -44,6 +45,8 @@ pub struct RewardDistributorPendingSpendInfo {
     pub created_entry_slots: Vec<RewardDistributorEntrySlotValue>,
 
     pub latest_state: (NodePtr, RewardDistributorState),
+
+    pub signature: Signature,
 }
 
 impl RewardDistributorPendingSpendInfo {
@@ -57,6 +60,7 @@ impl RewardDistributorPendingSpendInfo {
             spent_commitment_slots: vec![],
             spent_entry_slots: vec![],
             latest_state: (NodePtr::NIL, latest_state),
+            signature: Signature::default(),
         }
     }
 
@@ -74,6 +78,8 @@ impl RewardDistributorPendingSpendInfo {
         self.created_entry_slots.extend(delta.created_entry_slots);
 
         self.latest_state = delta.latest_state;
+
+        // do not change pending signature
     }
 }
 
@@ -244,6 +250,7 @@ impl RewardDistributor {
             created_commitment_slots,
             created_entry_slots,
             latest_state: new_state_and_ephemeral,
+            signature: Signature::default(),
         })
     }
 
@@ -502,6 +509,10 @@ impl RewardDistributor {
 
         Ok(Some((new_distributor, slot)))
     }
+
+    pub fn set_pending_signature(&mut self, signature: Signature) {
+        self.pending_spend.signature = signature;
+    }
 }
 
 impl Registry for RewardDistributor {
@@ -514,7 +525,7 @@ impl RewardDistributor {
         self,
         ctx: &mut SpendContext,
         other_cat_spends: Vec<CatSpend>,
-    ) -> Result<Self, DriverError> {
+    ) -> Result<(Self, Signature), DriverError> {
         let layers = self.info.into_layers(ctx)?;
 
         let puzzle = layers.construct_puzzle(ctx)?;
@@ -566,7 +577,7 @@ impl RewardDistributor {
         cat_spends.push(cat_spend);
         Cat::spend_all(ctx, &cat_spends)?;
 
-        Ok(child)
+        Ok((child, self.pending_spend.signature))
     }
 
     pub fn new_action<A>(&self) -> A

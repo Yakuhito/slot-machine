@@ -1,4 +1,5 @@
 use chia::{
+    bls::Signature,
     clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
@@ -26,6 +27,8 @@ pub struct XchandlesPendingSpendInfo {
     pub created_slots: Vec<XchandlesSlotValue>,
 
     pub latest_state: (NodePtr, XchandlesRegistryState),
+
+    pub signature: Signature,
 }
 
 impl XchandlesPendingSpendInfo {
@@ -35,6 +38,7 @@ impl XchandlesPendingSpendInfo {
             created_slots: vec![],
             spent_slots: vec![],
             latest_state: (NodePtr::NIL, latest_state),
+            signature: Signature::default(),
         }
     }
 }
@@ -205,6 +209,7 @@ impl XchandlesRegistry {
             created_slots,
             spent_slots,
             latest_state: state_incl_ephemeral,
+            signature: Signature::default(),
         })
     }
 
@@ -234,6 +239,10 @@ impl XchandlesRegistry {
             info,
             pending_spend,
         }))
+    }
+
+    pub fn set_pending_signature(&mut self, signature: Signature) {
+        self.pending_spend.signature = signature;
     }
 
     pub fn child_lineage_proof(&self) -> LineageProof {
@@ -390,7 +399,7 @@ impl XchandlesRegistry {
 }
 
 impl XchandlesRegistry {
-    pub fn finish_spend(self, ctx: &mut SpendContext) -> Result<Self, DriverError> {
+    pub fn finish_spend(self, ctx: &mut SpendContext) -> Result<(Self, Signature), DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
@@ -427,7 +436,7 @@ impl XchandlesRegistry {
         let my_spend = Spend::new(puzzle, solution);
         ctx.spend(self.coin, my_spend)?;
 
-        Ok(child)
+        Ok((child, self.pending_spend.signature))
     }
 
     pub fn new_action<A>(&self) -> A

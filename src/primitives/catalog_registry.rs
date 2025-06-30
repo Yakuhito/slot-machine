@@ -1,4 +1,5 @@
 use chia::{
+    bls::Signature,
     clvm_utils::ToTreeHash,
     protocol::{Bytes32, Coin, CoinSpend},
     puzzles::{singleton::SingletonSolution, LineageProof, Proof},
@@ -24,6 +25,8 @@ pub struct CatalogPendingSpendInfo {
     pub spent_slots: Vec<CatalogSlotValue>,
 
     pub latest_state: (NodePtr, CatalogRegistryState),
+
+    pub signature: Signature,
 }
 
 impl CatalogPendingSpendInfo {
@@ -33,6 +36,7 @@ impl CatalogPendingSpendInfo {
             created_slots: vec![],
             spent_slots: vec![],
             latest_state: (NodePtr::NIL, latest_state),
+            signature: Signature::default(),
         }
     }
 }
@@ -150,7 +154,12 @@ impl CatalogRegistry {
             created_slots,
             spent_slots,
             latest_state: state_incl_ephemeral,
+            signature: Signature::default(),
         })
+    }
+
+    pub fn set_pending_signature(&mut self, signature: Signature) {
+        self.pending_spend.signature = signature;
     }
 
     pub fn from_spend(
@@ -240,7 +249,7 @@ impl Registry for CatalogRegistry {
 }
 
 impl CatalogRegistry {
-    pub fn finish_spend(self, ctx: &mut SpendContext) -> Result<Self, DriverError> {
+    pub fn finish_spend(self, ctx: &mut SpendContext) -> Result<(Self, Signature), DriverError> {
         let layers = self.info.into_layers();
 
         let puzzle = layers.construct_puzzle(ctx)?;
@@ -277,7 +286,7 @@ impl CatalogRegistry {
         let my_spend = Spend::new(puzzle, solution);
         ctx.spend(self.coin, my_spend)?;
 
-        Ok(child)
+        Ok((child, self.pending_spend.signature))
     }
 
     pub fn new_action<A>(&self) -> A

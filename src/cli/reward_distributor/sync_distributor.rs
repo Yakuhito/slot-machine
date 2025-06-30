@@ -252,6 +252,16 @@ pub async fn mempool_distributor_maybe(
         parent_id_to_look_for = distributor.coin.coin_id();
     }
 
+    mempool_item
+        .spend_bundle
+        .coin_spends
+        .into_iter()
+        .for_each(|coin_spend| {
+            if coin_spend.coin != distributor.coin {
+                ctx.insert(coin_spend);
+            }
+        });
+    distributor.set_pending_signature(mempool_item.spend_bundle.aggregated_signature);
     Ok(distributor)
 }
 
