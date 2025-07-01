@@ -1,5 +1,0 @@
-; sliding_window.clsp by yakuhito & Rigidity
-
-(mod (SECONDS Bid_Index State)
-    (list State SECONDS 1)
-)

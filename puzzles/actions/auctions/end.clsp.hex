@@ -1,1 +1,0 @@
-FAIL: can't compile ("sha256tree" (c 1 ("list" ("list" "CREATE_COIN" "King" "asset_amount" ("list" "King"))))), unknown operator ("sha256tree" (c 1 ("list" ("list" "CREATE_COIN" "King" "asset_amount" ("list" "King")))))
