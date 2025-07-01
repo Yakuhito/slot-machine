@@ -14,6 +14,8 @@
 ;; Also note that anyone can extend a handle registration, but only the owner can transfer the
 ;;   record or change the resolved_data
 
+;; Warning: Pricing puzzle is responsible for ensuring registered_time > 0
+
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
