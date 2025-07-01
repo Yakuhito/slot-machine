@@ -5,7 +5,7 @@
 ;; a) the CAT maker puzzle has changed
 ;; b) the amount is wrong
 ;; c) the pricing puzzle has changed
-;; d) the handle has already been registered
+;; d) the handle has already been registered (and the registration is active -i.e., not expired)
 
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
@@ -32,7 +32,7 @@
         precommited_resolved_data
         refund_puzzle_hash_hash
         precommit_amount . ; amount of the pre-commit coin
-        (@ slot_value ((handle_hash . rest1) . rest2))
+        (@ slot_value ((handle_hash . rest1) . (expiration .rest2)))
     )
 )
     (include condition_codes.clib)
@@ -44,7 +44,7 @@
     (defun main (
         SLOT_1ST_CURRY_HASH
         slot_value_hash
-        slot_spend_needed
+        expiration ; () if slot spend is not needed
         precommit_puzzle_hash
         precommit_amount
     )
@@ -65,6 +65,7 @@
                 )
                 (if slot_spend_needed
                     (list
+                        (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
                         (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
                         (create_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
                     )
@@ -85,19 +86,23 @@
             (main
                 SLOT_1ST_CURRY_HASH
                 (sha256tree slot_value)
-                (all
-                    ; not (a)
-                    (= precommited_cat_maker_reveal_hash Cat_Maker_Puzzle_Hash)
-                    ; not (c)
-                    (= handle (f (r (r precommited_pricing_puzzle_solution))))
-                    (any
-                        (= precommited_pricing_puzzle_reveal_hash Pricing_Puzzle_Hash)
-                        (= precommited_pricing_puzzle_reveal_hash Expired_Handle_Pricing_Puzzle_Hash)
-                    )
-                    ; not (b)
-                    (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
-                ) ; slot spend needed if the precommit coin looks valid after checking (a), (b), (c) & it could be used
-                  ; to register a handle unless we're in situation (d)
+                (if (all
+                        ; not (a)
+                        (= precommited_cat_maker_reveal_hash Cat_Maker_Puzzle_Hash)
+                        ; not (c)
+                        (= handle (f (r (r precommited_pricing_puzzle_solution))))
+                        (any
+                            (= precommited_pricing_puzzle_reveal_hash Pricing_Puzzle_Hash)
+                            (= precommited_pricing_puzzle_reveal_hash Expired_Handle_Pricing_Puzzle_Hash)
+                        )
+                        ; not (b)
+                        (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
+                    ) ; if the precommit coin looks valid after checking (a), (b), (c) & it could be used for registration,
+                      ; we must check for (d)
+                  expiration
+                  ; else
+                  () ; no slot spend needed
+                )
                 (a
                     precommited_cat_maker_reveal
                     (c
