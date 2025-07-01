@@ -4,6 +4,8 @@
 ;; Remember that the slot format is (c (c handle_hash (c left right)) (c expiration (c owner resolved)))
 ;;  but we're only modifying 'expiration' (and using handle to get correct price factor based on length)
 
+;; Warning: Pricing puzzle is responsible for ensuring registered_time > 0
+
 (mod (
     OFFER_MOD_HASH
     PAYOUT_PUZZLE_HASH

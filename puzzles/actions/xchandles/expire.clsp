@@ -4,6 +4,8 @@
 
 ;; Remember that the slot format is (c (c handle_hash (c left right)) (c expiration (c owner resolved)))
 
+;; Warning: Expired pricing puzzle is responsible for ensuring buy_time > 0
+
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
