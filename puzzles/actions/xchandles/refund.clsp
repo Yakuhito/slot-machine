@@ -63,7 +63,7 @@
                     CREATE_PUZZLE_ANNOUNCEMENT
                     (concat '$' precommit_puzzle_hash)
                 )
-                (if slot_spend_needed
+                (if expiration
                     (list
                         (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
                         (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
