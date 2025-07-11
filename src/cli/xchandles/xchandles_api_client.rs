@@ -1,11 +1,10 @@
 use chia::protocol::Bytes32;
+use chia_wallet_sdk::driver::{Slot, SlotProof};
+use chia_wallet_sdk::types::puzzles::{SlotInfo, XchandlesSlotValue};
 use reqwest::Client;
 use std::time::Duration;
 
-use crate::{
-    hex_string_to_bytes, hex_string_to_bytes32, CliError, Slot, SlotInfo, SlotProof,
-    XchandlesSlotValue,
-};
+use crate::{hex_string_to_bytes, hex_string_to_bytes32, CliError};
 
 use super::XchandlesNeighborsResponse;
 

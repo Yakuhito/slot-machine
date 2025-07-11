@@ -1,18 +1,23 @@
 use chia::clvm_utils::ToTreeHash;
 use chia_puzzle_types::singleton::SingletonSolution;
+use chia_wallet_sdk::driver::{
+    Layer, XchandlesExpirePricingPuzzle, XchandlesRegistry, XchandlesRegistryState,
+};
+use chia_wallet_sdk::types::puzzles::{
+    DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesRegisterActionSolution,
+};
+use chia_wallet_sdk::types::Mod;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Layer, SpendContext},
+    driver::{ActionLayer, SpendContext},
     utils::Address,
 };
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
     get_coinset_client, hex_string_to_bytes32, load_xchandles_premine_csv,
-    load_xchandles_state_schedule_csv, print_medieval_vault_configuration, ActionLayer, CliError,
-    DefaultCatMakerArgs, MultisigSingleton, XchandlesExponentialPremiumRenewPuzzleArgs,
-    XchandlesFactorPricingPuzzleArgs, XchandlesRegisterActionSolution, XchandlesRegistry,
-    XchandlesRegistryState,
+    load_xchandles_state_schedule_csv, print_medieval_vault_configuration, CliError,
+    MultisigSingleton,
 };
 
 use crate::sync_multisig_singleton;
@@ -172,22 +177,24 @@ pub async fn xchandles_verify_deployment(
     let mut price_schedule_ok = true;
     for (i, record) in price_schedule.iter().enumerate() {
         let (block, state) = state_scheduler_info.state_schedule[i];
+
+        let fph = XchandlesFactorPricingPuzzleArgs {
+            base_price: record.registration_price,
+            registration_period: record.registration_period,
+        }
+        .curry_tree_hash();
         if record.block_height != block
-            || state.pricing_puzzle_hash
-                != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
-                    record.registration_price,
-                    record.registration_period,
-                )
-                .into()
+            || state.pricing_puzzle_hash != fph.into()
             || state.expired_handle_pricing_puzzle_hash
-                != XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
+                != XchandlesExpirePricingPuzzle::curry_tree_hash(
                     record.registration_price,
                     record.registration_period,
-                    1000,
                 )
                 .into()
             || state.cat_maker_puzzle_hash
-                != DefaultCatMakerArgs::curry_tree_hash(record.asset_id.tree_hash().into()).into()
+                != DefaultCatMakerArgs::new(record.asset_id.tree_hash().into())
+                    .curry_tree_hash()
+                    .into()
         {
             price_schedule_ok = false;
             break;

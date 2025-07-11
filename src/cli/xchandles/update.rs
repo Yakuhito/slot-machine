@@ -5,18 +5,20 @@ use chia::{
 use chia_puzzle_types::standard::StandardArgs;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{decode_offer, Offer, Spend, SpendContext, StandardLayer},
+    driver::{
+        create_security_coin, decode_offer, sign_standard_transaction, spend_security_coin,
+        spend_settlement_nft, Offer, Spend, SpendContext, StandardLayer, XchandlesUpdateAction,
+    },
+    types::puzzles::XchandlesSlotValue,
     utils::Address,
 };
 use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_and_nft, create_security_coin, get_coinset_client, get_constants,
-    hex_string_to_bytes32, no_assets, parse_amount, quick_sync_xchandles,
-    sign_standard_transaction, spend_security_coin, spend_settlement_nft, sync_xchandles,
-    wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient, XchandlesSlotValue,
-    XchandlesUpdateAction,
+    assets_xch_and_nft, get_coinset_client, get_constants, hex_string_to_bytes32, no_assets,
+    parse_amount, quick_sync_xchandles, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db,
+    SageClient, XchandlesApiClient,
 };
 
 fn encode_nft(nft_launcher_id: Bytes32) -> Result<String, CliError> {
@@ -139,7 +141,7 @@ pub async fn xchandles_update(
         &mut registry,
         slot,
         new_owner_launcher_id,
-        new_resolved_data,
+        &new_resolved_data,
         nft.info.inner_puzzle_hash().into(),
     )?;
 

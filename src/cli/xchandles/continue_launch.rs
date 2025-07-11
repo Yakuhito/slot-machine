@@ -7,20 +7,24 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{decode_offer, CatLayer, Layer, Offer, Puzzle, SingleCatSpend, Spend, SpendContext},
-    types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
+    driver::{
+        create_security_coin, decode_offer, spend_security_coin, spend_settlement_cats, CatLayer,
+        CatalogPrecommitValue, Layer, Offer, PrecommitCoin, PrecommitLayer, Puzzle, SingleCatSpend,
+        Spend, SpendContext, XchandlesPrecommitValue, XchandlesRegisterAction,
+    },
+    types::{
+        puzzles::{XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution},
+        Conditions, Mod, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    },
     utils::Address,
 };
 use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, create_security_coin, get_last_onchain_timestamp,
-    hex_string_to_bytes32, load_xchandles_premine_csv, no_assets, parse_amount,
-    spend_security_coin, spend_settlement_cats, sync_xchandles, wait_for_coin, yes_no_prompt,
-    CatalogPrecommitValue, CliError, Db, PrecommitCoin, PrecommitLayer, SageClient,
-    XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesPremineRecord,
-    XchandlesPricingSolution, XchandlesRegisterAction,
+    assets_xch_and_cat, assets_xch_only, get_last_onchain_timestamp, hex_string_to_bytes32,
+    load_xchandles_premine_csv, no_assets, parse_amount, sync_xchandles, wait_for_coin,
+    yes_no_prompt, CliError, Db, SageClient, XchandlesPremineRecord,
 };
 
 fn precommit_value_for_handle(
@@ -33,14 +37,17 @@ fn precommit_value_for_handle(
 
     Ok(XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
-        XchandlesFactorPricingPuzzleArgs::curry_tree_hash(1, registration_period),
-        XchandlesPricingSolution {
+        XchandlesFactorPricingPuzzleArgs {
+            base_price: 1,
+            registration_period,
+        }
+        .curry_tree_hash(),
+        &XchandlesPricingSolution {
             buy_time: start_time,
             current_expiration: 0,
             handle: handle.handle.clone(),
             num_periods: 1,
-        }
-        .tree_hash(),
+        },
         handle.handle.clone(),
         Bytes32::default(),
         owner_nft_launcher_id,
@@ -241,7 +248,7 @@ pub async fn xchandles_continue_launch(
                 &offer,
                 payment_asset_id,
                 launcher_id,
-                vec![(cat_destination_puzzle_hash, handles_payment_total)],
+                &[(cat_destination_puzzle_hash, handles_payment_total)],
             )?;
 
             let created_cat = created_cats[0];

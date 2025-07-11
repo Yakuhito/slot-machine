@@ -5,19 +5,26 @@ use chia::{
 use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{decode_offer, CatLayer, DriverError, Layer, Offer, Puzzle, SpendContext},
+    driver::{
+        create_security_coin, decode_offer, spend_security_coin, CatLayer, DriverError, Layer,
+        Offer, PrecommitCoin, PrecommitLayer, Puzzle, Slot, SpendContext, XchandlesExpireAction,
+        XchandlesExpirePricingPuzzle, XchandlesPrecommitValue, XchandlesRefundAction,
+    },
+    types::{
+        puzzles::{
+            DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution,
+            XchandlesSlotValue,
+        },
+        Mod,
+    },
     utils::Address,
 };
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_only, create_security_coin, get_coinset_client, get_constants,
-    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, no_assets, parse_amount,
-    quick_sync_xchandles, spend_security_coin, sync_xchandles, wait_for_coin, yes_no_prompt,
-    CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
-    XchandlesApiClient, XchandlesExpireAction, XchandlesExponentialPremiumRenewPuzzleArgs,
-    XchandlesFactorPricingPuzzleArgs, XchandlesPrecommitValue, XchandlesPricingSolution,
-    XchandlesRefundAction, XchandlesSlotValue,
+    assets_xch_only, get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
+    hex_string_to_bytes32, no_assets, parse_amount, quick_sync_xchandles, sync_xchandles,
+    wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -60,13 +67,12 @@ pub async fn xchandles_expire(
     };
     println!("done.");
 
-    if DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
+    if DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into()).curry_tree_hash()
         != registry.info.state.cat_maker_puzzle_hash.into()
         || registry.info.state.expired_handle_pricing_puzzle_hash
-            != XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
+            != XchandlesExpirePricingPuzzle::curry_tree_hash(
                 payment_cat_base_price,
                 registration_period,
-                1000,
             )
             .into()
     {
@@ -98,18 +104,18 @@ pub async fn xchandles_expire(
     };
     println!("Using expire time: {}", expire_time);
 
-    let pricing_puzzle = XchandlesExponentialPremiumRenewPuzzleArgs::from_scale_factor(
+    let pricing_puzzle = XchandlesExpirePricingPuzzle::from_info(
         &mut ctx,
         payment_cat_base_price,
         registration_period,
-        1000,
     )?;
     println!("Original slot expiration: {}", slot.info.value.expiration);
     let mut payment_cat_amount = if refund && slot.info.value.expiration > expire_time {
         0
     } else {
-        pricing_puzzle.clone().get_price(
+        XchandlesExpirePricingPuzzle::get_price(
             &mut ctx,
+            pricing_puzzle.clone(),
             handle.clone(),
             slot.info.value.expiration,
             expire_time,
@@ -153,12 +159,8 @@ pub async fn xchandles_expire(
     };
     let precommit_coin_value = XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
-        XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
-            payment_cat_base_price,
-            registration_period,
-            1000,
-        ),
-        pricing_solution.tree_hash(),
+        XchandlesExpirePricingPuzzle::curry_tree_hash(payment_cat_base_price, registration_period),
+        &pricing_solution,
         handle.clone(),
         secret,
         nft_launcher_id,
@@ -298,20 +300,19 @@ pub async fn xchandles_expire(
             create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
         let sec_conds = if refund {
+            let factor_puzzle_hash = XchandlesFactorPricingPuzzleArgs {
+                base_price: payment_cat_base_price,
+                registration_period,
+            }
+            .curry_tree_hash();
             let slot: Option<Slot<XchandlesSlotValue>> =
-                if DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
+                if DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into()).curry_tree_hash()
                     == registry.info.state.cat_maker_puzzle_hash.into()
-                    && registry.info.state.pricing_puzzle_hash
-                        == XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
-                            payment_cat_base_price,
-                            registration_period,
-                        )
-                        .into()
+                    && registry.info.state.pricing_puzzle_hash == factor_puzzle_hash.into()
                     && registry.info.state.expired_handle_pricing_puzzle_hash
-                        == XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
+                        == XchandlesExpirePricingPuzzle::curry_tree_hash(
                             payment_cat_base_price,
                             registration_period,
-                            1000,
                         )
                         .into()
                 {
@@ -320,14 +321,14 @@ pub async fn xchandles_expire(
                     None
                 };
 
-            let precommitted_pricing_puzzle = pricing_puzzle.get_puzzle(&mut ctx)?;
+            let precommitted_pricing_puzzle = ctx.curry(pricing_puzzle)?;
             let precommitted_pricing_solution = ctx.alloc(&pricing_solution)?;
             registry
                 .new_action::<XchandlesRefundAction>()
                 .spend(
                     &mut ctx,
                     &mut registry,
-                    precommit_coin,
+                    &precommit_coin,
                     precommitted_pricing_puzzle,
                     precommitted_pricing_solution,
                     slot,

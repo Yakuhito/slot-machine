@@ -8,17 +8,15 @@ use axum::http::{HeaderValue, Method};
 use axum::{http::StatusCode, routing::get, Json, Router};
 use chia::protocol::Bytes32;
 use chia_wallet_sdk::coinset::ChiaRpcClient;
-use chia_wallet_sdk::driver::SpendContext;
+use chia_wallet_sdk::driver::{SpendContext, XchandlesRegistry};
+use chia_wallet_sdk::types::puzzles::XchandlesSlotValue;
 use clvmr::Allocator;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::CorsLayer;
 
-use crate::{
-    get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, Db, XchandlesRegistry,
-    XchandlesSlotValue,
-};
+use crate::{get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, Db};
 
 #[derive(Debug, Deserialize)]
 struct WebSocketMessage {
