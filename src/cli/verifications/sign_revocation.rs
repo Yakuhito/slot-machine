@@ -1,6 +1,8 @@
+use chia_wallet_sdk::driver::{MedievalVault, VerifiedData};
+
 use crate::{
     get_constants, get_latest_data_for_asset_id, hex_string_to_bytes32, multisig_sign_thing_finish,
-    multisig_sign_thing_start, sync_verifications, CliError, MedievalVault, VerifiedData,
+    multisig_sign_thing_start, sync_verifications, CliError,
 };
 
 pub async fn verifications_sign_revocation(

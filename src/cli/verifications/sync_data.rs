@@ -5,12 +5,13 @@ use chia::{
 use chia_puzzles::SINGLETON_LAUNCHER_HASH;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{Nft, Puzzle, SpendContext},
+    driver::{
+        CatalogRegistry, CatalogRegistryConstants, Nft, Puzzle, SpendContext, UniquenessPrelauncher,
+    },
+    types::puzzles::CatNftMetadata,
 };
 
-use crate::{
-    CatNftMetadata, CatalogRegistry, CatalogRegistryConstants, CliError, UniquenessPrelauncher,
-};
+use crate::CliError;
 
 pub async fn get_latest_data_for_asset_id(
     ctx: &mut SpendContext,
