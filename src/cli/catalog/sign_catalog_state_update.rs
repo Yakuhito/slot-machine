@@ -1,9 +1,12 @@
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
+use chia_wallet_sdk::{
+    driver::{CatalogRegistryConstants, CatalogRegistryState, MedievalVault},
+    types::{puzzles::DefaultCatMakerArgs, Mod},
+};
 
 use crate::{
     get_constants, hex_string_to_bytes32, multisig_sign_thing_finish, multisig_sign_thing_start,
-    parse_amount, quick_sync_catalog, CatalogRegistryConstants, CatalogRegistryState, CliError,
-    DefaultCatMakerArgs, MedievalVault,
+    parse_amount, quick_sync_catalog, CliError,
 };
 
 pub async fn catalog_sign_state_update(
@@ -18,10 +21,9 @@ pub async fn catalog_sign_state_update(
     let new_payment_asset_amount = parse_amount(&new_payment_asset_amount_str, true)?;
 
     let new_state = CatalogRegistryState {
-        cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
-            new_payment_asset_id.tree_hash().into(),
-        )
-        .into(),
+        cat_maker_puzzle_hash: DefaultCatMakerArgs::new(new_payment_asset_id.tree_hash().into())
+            .curry_tree_hash()
+            .into(),
         registration_price: new_payment_asset_amount,
     };
 

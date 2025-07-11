@@ -5,18 +5,24 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{decode_offer, CatLayer, Layer, Offer, Puzzle, Spend, SpendContext},
+    driver::{
+        create_security_coin, decode_offer, spend_security_coin, CatLayer, CatalogPrecommitValue,
+        CatalogRefundAction, CatalogRegisterAction, CatalogRegistryConstants, Layer, Offer,
+        PrecommitCoin, PrecommitLayer, Puzzle, Slot, Spend, SpendContext,
+    },
+    test::print_spend_bundle_to_file,
+    types::{
+        puzzles::{CatNftMetadata, CatalogSlotValue, DefaultCatMakerArgs},
+        Mod,
+    },
     utils::Address,
 };
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_only, create_security_coin, get_coinset_client, get_constants, get_prefix,
-    hex_string_to_bytes, hex_string_to_bytes32, no_assets, parse_amount,
-    print_spend_bundle_to_file, quick_sync_catalog, spend_security_coin, sync_catalog,
-    wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogApiClient, CatalogPrecommitValue,
-    CatalogRefundAction, CatalogRegisterAction, CatalogRegistryConstants, CatalogSlotValue,
-    CliError, Db, DefaultCatMakerArgs, PrecommitCoin, PrecommitLayer, SageClient, Slot,
+    assets_xch_only, get_coinset_client, get_constants, get_prefix, hex_string_to_bytes,
+    hex_string_to_bytes32, no_assets, parse_amount, quick_sync_catalog, sync_catalog,
+    wait_for_coin, yes_no_prompt, CatalogApiClient, CliError, Db, SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -36,6 +42,7 @@ pub fn initial_metadata_from_arguments(
         ticker,
         name,
         description,
+        hidden_puzzle_hash: None,
         precision,
         image_uris: image_uris_str.split(',').map(|s| s.to_string()).collect(),
         image_hash: hex_string_to_bytes32(&image_hash_str)?,
@@ -129,7 +136,7 @@ pub async fn catalog_register(
     let registered_asset_id: Bytes32 = ctx.tree_hash(tail_ptr).into();
 
     if !refund
-        && DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
+        && DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into()).curry_tree_hash()
             != catalog.info.state.cat_maker_puzzle_hash.into()
     {
         yes_no_prompt("CAT maker puzzle hash doesn't correspond to the given payment asset ID. Registration will NOT work unless the price singleton changes the registry's state. Continue at your own risk?")?;
@@ -151,7 +158,7 @@ pub async fn catalog_register(
     let initial_nft_puzzle_ptr = CatalogPrecommitValue::<()>::initial_inner_puzzle(
         &mut ctx,
         recipient_puzzle_hash,
-        initial_metadata.clone(),
+        &initial_metadata,
     )?;
 
     let precommit_value = CatalogPrecommitValue::with_default_cat_maker(
@@ -283,13 +290,11 @@ pub async fn catalog_register(
             create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
         let sec_conds = if refund {
-            let slot: Option<Slot<CatalogSlotValue>> = if DefaultCatMakerArgs::curry_tree_hash(
+            let slot: Option<Slot<CatalogSlotValue>> = if DefaultCatMakerArgs::new(
                 payment_asset_id.tree_hash().into(),
-            ) == catalog
-                .info
-                .state
-                .cat_maker_puzzle_hash
-                .into()
+            )
+            .curry_tree_hash()
+                == catalog.info.state.cat_maker_puzzle_hash.into()
                 && payment_cat_amount == catalog.info.state.registration_price
             {
                 if local {
@@ -346,7 +351,7 @@ pub async fn catalog_register(
                     &mut catalog,
                     registered_asset_id,
                     slot.as_ref().map(|s| s.info.value.neighbors),
-                    precommit_coin,
+                    &precommit_coin,
                     slot,
                 )?
                 .reserve_fee(1)
@@ -373,7 +378,7 @@ pub async fn catalog_register(
                 registered_asset_id,
                 left_slot,
                 right_slot,
-                precommit_coin,
+                &precommit_coin,
                 Spend {
                     puzzle: initial_nft_puzzle_ptr,
                     solution: NodePtr::NIL,

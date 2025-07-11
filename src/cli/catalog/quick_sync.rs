@@ -1,10 +1,10 @@
 use chia::protocol::CoinSpend;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::SpendContext,
+    driver::{CatalogRegistry, CatalogRegistryConstants, SpendContext},
 };
 
-use crate::{mempool_catalog_maybe, CatalogRegistry, CatalogRegistryConstants, CliError};
+use crate::{mempool_catalog_maybe, CliError};
 
 pub async fn quick_sync_catalog(
     client: &CoinsetClient,

@@ -8,8 +8,9 @@ use chia::{
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
-        decode_offer, CatLayer, DriverError, Layer, Offer, Puzzle, SingleCatSpend, Spend,
-        SpendContext,
+        create_security_coin, decode_offer, spend_security_coin, spend_settlement_cats, CatLayer,
+        CatalogRegisterAction, CatalogRegistryConstants, DriverError, Layer, Offer, PrecommitCoin,
+        PrecommitLayer, Puzzle, SingleCatSpend, Spend, SpendContext,
     },
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
@@ -17,12 +18,12 @@ use clvm_traits::clvm_quote;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, create_security_coin, hex_string_to_bytes32,
-    load_catalog_premine_csv, no_assets, parse_amount, spend_security_coin, spend_settlement_cats,
-    sync_catalog, wait_for_coin, yes_no_prompt, CatNftMetadata, CatalogPrecommitValue,
-    CatalogPremineRecord, CatalogRegisterAction, CatalogRegistryConstants, CliError, Db,
-    PrecommitCoin, PrecommitLayer, SageClient,
+    assets_xch_and_cat, assets_xch_only, hex_string_to_bytes32, load_catalog_premine_csv,
+    no_assets, parse_amount, sync_catalog, wait_for_coin, yes_no_prompt, CatalogPremineRecord,
+    CliError, Db, SageClient,
 };
+use chia_wallet_sdk::driver::CatalogPrecommitValue;
+use chia_wallet_sdk::types::puzzles::CatNftMetadata;
 
 pub fn initial_cat_inner_puzzle_ptr(
     ctx: &mut SpendContext,
@@ -31,10 +32,11 @@ pub fn initial_cat_inner_puzzle_ptr(
     CatalogPrecommitValue::<()>::initial_inner_puzzle(
         ctx,
         cat.owner,
-        CatNftMetadata {
+        &CatNftMetadata {
             ticker: cat.code.clone(),
             name: cat.name.clone(),
             description: "".to_string(),
+            hidden_puzzle_hash: None,
             precision: cat.precision,
             image_uris: cat.image_uris.clone(),
             image_hash: cat.image_hash,
@@ -237,7 +239,7 @@ pub async fn catalog_continue_launch(
                 &offer,
                 payment_asset_id,
                 constants.launcher_id,
-                vec![(cat_destination_puzzle_hash, cat_amount)],
+                &[(cat_destination_puzzle_hash, cat_amount)],
             )?;
 
             let created_cat = created_cats[0];
@@ -496,7 +498,7 @@ pub async fn catalog_continue_launch(
             tail_hash,
             left_slot,
             right_slot,
-            precommit_coin,
+            &precommit_coin,
             Spend {
                 puzzle: eve_nft_inner_puzzle,
                 solution: NodePtr::NIL,

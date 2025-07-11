@@ -2,7 +2,9 @@ use chia::protocol::Bytes32;
 use reqwest::Client;
 use std::time::Duration;
 
-use crate::{hex_string_to_bytes32, CatalogSlotValue, CliError, Slot, SlotInfo, SlotProof};
+use crate::{hex_string_to_bytes32, CliError};
+use chia_wallet_sdk::driver::{Slot, SlotProof};
+use chia_wallet_sdk::types::puzzles::{CatalogSlotValue, SlotInfo};
 
 use super::CatalogNeighborResponse;
 

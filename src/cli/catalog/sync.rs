@@ -8,15 +8,18 @@ use chia::{
 use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext},
-    types::{Condition, Conditions},
+    driver::{
+        CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
+        DriverError, Layer, Puzzle, SingletonLayer, Slot, SlotProof, SpendContext,
+    },
+    types::{
+        puzzles::{CatalogSlotValue, SlotInfo},
+        Condition, Conditions,
+    },
 };
 use clvmr::NodePtr;
 
-use crate::{
-    CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
-    CatalogSlotValue, CliError, Db, Slot, SlotInfo, SlotProof,
-};
+use crate::{CliError, Db};
 
 pub async fn sync_catalog(
     client: &CoinsetClient,

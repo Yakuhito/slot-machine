@@ -5,10 +5,8 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    get_coinset_client, get_prefix, launch_catalog_registry, load_catalog_state_schedule_csv,
-    no_assets, parse_amount, print_medieval_vault_configuration, wait_for_coin,
-    CatalogRegistryConstants, CatalogRegistryState, DefaultCatMakerArgs, MedievalVaultHint,
-    MedievalVaultInfo, SageClient, StateSchedulerInfo,
+    get_coinset_client, get_prefix, load_catalog_state_schedule_csv, no_assets, parse_amount,
+    print_medieval_vault_configuration, wait_for_coin, SageClient,
 };
 use chia::{
     bls::PublicKey,
@@ -18,8 +16,14 @@ use chia::{
 };
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{decode_offer, Cat, DriverError, Launcher, Offer, SpendContext},
-    types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
+    driver::{
+        decode_offer, launch_catalog_registry, Cat, CatalogRegistryConstants, CatalogRegistryState,
+        DriverError, Launcher, MedievalVaultHint, MedievalVaultInfo, Offer, SpendContext,
+        StateSchedulerInfo,
+    },
+    types::{
+        puzzles::DefaultCatMakerArgs, Conditions, Mod, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    },
     utils::Address,
 };
 use clvmr::NodePtr;
@@ -251,9 +255,10 @@ pub async fn catalog_initiate_launch(
                     (
                         ps.block_height,
                         CatalogRegistryState {
-                            cat_maker_puzzle_hash: DefaultCatMakerArgs::curry_tree_hash(
+                            cat_maker_puzzle_hash: DefaultCatMakerArgs::new(
                                 ps.asset_id.tree_hash().into(),
                             )
+                            .curry_tree_hash()
                             .into(),
                             registration_price: ps.registration_price,
                         },

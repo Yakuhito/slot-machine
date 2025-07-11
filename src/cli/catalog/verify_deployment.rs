@@ -6,20 +6,25 @@ use chia::puzzles::{LineageProof, Proof};
 use chia_puzzle_types::Memos;
 use chia_puzzles::{NFT_STATE_LAYER_HASH, SINGLETON_LAUNCHER_HASH};
 use chia_wallet_sdk::driver::DriverError;
+use chia_wallet_sdk::types::Mod;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{Layer, Puzzle, SingletonLayer, SpendContext},
-    types::{Condition, Conditions},
+    driver::{
+        CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
+        Layer, Puzzle, SingletonLayer, Slot, SpendContext, UniquenessPrelauncher,
+    },
+    types::{
+        puzzles::{CatalogSlotValue, DefaultCatMakerArgs, SlotInfo, ANY_METADATA_UPDATER_HASH},
+        Condition, Conditions,
+    },
 };
 use clvmr::serde::node_from_bytes;
 use clvmr::NodePtr;
 
 use crate::{
     get_coinset_client, initial_cat_inner_puzzle_ptr, load_catalog_premine_csv,
-    load_catalog_state_schedule_csv, print_medieval_vault_configuration, CatalogRegistry,
-    CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState, CatalogSlotValue,
-    CliError, DefaultCatMakerArgs, MultisigSingleton, Slot, SlotInfo, UniquenessPrelauncher,
-    ANY_METADATA_UPDATER_HASH,
+    load_catalog_state_schedule_csv, print_medieval_vault_configuration, CliError,
+    MultisigSingleton,
 };
 
 use crate::sync_multisig_singleton;
@@ -169,10 +174,9 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
     if hinted_launcher_id != catalog_constants.launcher_id
         || initial_state.registration_price != 1
         || initial_state.cat_maker_puzzle_hash
-            != DefaultCatMakerArgs::curry_tree_hash(
-                initial_registration_asset_id.tree_hash().into(),
-            )
-            .into()
+            != DefaultCatMakerArgs::new(initial_registration_asset_id.tree_hash().into())
+                .curry_tree_hash()
+                .into()
         || launcher_coin_record.coin.puzzle_hash != SINGLETON_LAUNCHER_HASH.into()
         || catalog_cc.amount != 1
         || catalog_cc.puzzle_hash != catalog_info.inner_puzzle_hash().into()
@@ -318,7 +322,9 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
         if record.block_height != block
             || record.registration_price != state.registration_price
             || state.cat_maker_puzzle_hash
-                != DefaultCatMakerArgs::curry_tree_hash(record.asset_id.tree_hash().into()).into()
+                != DefaultCatMakerArgs::new(record.asset_id.tree_hash().into())
+                    .curry_tree_hash()
+                    .into()
         {
             price_schedule_ok = false;
             break;

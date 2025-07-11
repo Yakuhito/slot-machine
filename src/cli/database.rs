@@ -1,5 +1,9 @@
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
-use chia_wallet_sdk::{coinset::CoinRecord, driver::DriverError};
+use chia_wallet_sdk::{
+    coinset::CoinRecord,
+    driver::{DriverError, RewardDistributorConstants, Slot, SlotProof, XchandlesConstants},
+    types::puzzles::SlotInfo,
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{
     serde::{node_from_bytes, node_to_bytes},
@@ -10,8 +14,6 @@ use sqlx::{
     Pool, Row, Sqlite,
 };
 use std::time::Duration;
-
-use crate::{RewardDistributorConstants, Slot, SlotInfo, SlotProof, XchandlesConstants};
 
 use super::CliError;
 pub struct Db {

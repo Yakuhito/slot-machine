@@ -1,6 +1,8 @@
+use chia_wallet_sdk::driver::MedievalVault;
+
 use crate::{
     get_constants, hex_string_to_pubkey, multisig_sign_thing_finish, multisig_sign_thing_start,
-    print_medieval_vault_configuration, CliError, MedievalVault,
+    print_medieval_vault_configuration, CliError,
 };
 
 pub async fn multisig_sign_rekey(

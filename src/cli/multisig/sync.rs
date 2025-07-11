@@ -7,15 +7,17 @@ use chia::{
         LineageProof, Proof,
     },
 };
-use chia_wallet_sdk::coinset::{ChiaRpcClient, CoinsetClient};
-use chia_wallet_sdk::driver::SpendContext;
+use chia_wallet_sdk::driver::{
+    MedievalVaultHint, MedievalVaultInfo, SpendContext, StateSchedulerInfo,
+};
+use chia_wallet_sdk::{
+    coinset::{ChiaRpcClient, CoinsetClient},
+    driver::{MedievalVault, StateScheduler},
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{serde::node_from_bytes, Allocator, NodePtr};
 
-use crate::{
-    get_alias_map, CliError, MedievalVault, MedievalVaultHint, MedievalVaultInfo, StateScheduler,
-    StateSchedulerInfo,
-};
+use crate::{get_alias_map, CliError};
 
 pub enum MultisigSingleton<S>
 where
@@ -106,10 +108,10 @@ where
             println!("\nFollowing state scheduler on-chain...");
         }
 
-        let mut state_scheduler = StateScheduler::<S>::from_launcher_spend(ctx, launcher_spend)?
+        let mut state_scheduler = StateScheduler::<S>::from_launcher_spend(ctx, &launcher_spend)?
             .ok_or(CliError::Custom(
-                "Failed to parse state scheduler".to_string(),
-            ))?;
+            "Failed to parse state scheduler".to_string(),
+        ))?;
 
         loop {
             let coin_record = client
@@ -163,7 +165,7 @@ where
 
         (eve_vault, Some(state_scheduler_info))
     } else {
-        let eve_vault = MedievalVault::from_launcher_spend(ctx, launcher_spend)?.ok_or(
+        let eve_vault = MedievalVault::from_launcher_spend(ctx, &launcher_spend)?.ok_or(
             CliError::Custom("Singleton not a state scheduler nor a vault".to_string()),
         )?;
 
@@ -197,7 +199,7 @@ where
             .coin_solution
             .ok_or(CliError::CoinNotSpent(vault_record.coin.parent_coin_info))?;
 
-        if let Some(vault) = MedievalVault::from_parent_spend(ctx, vault_parent_spend)? {
+        if let Some(vault) = MedievalVault::from_parent_spend(ctx, &vault_parent_spend)? {
             return Ok((MultisigSingleton::Vault(vault), state_scheduler_info));
         }
     }

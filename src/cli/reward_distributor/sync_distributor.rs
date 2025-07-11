@@ -7,18 +7,19 @@ use chia_puzzle_types::cat::CatSolution;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
-        Cat, CatInfo, CatLayer, CatSpend, DriverError, HashedPtr, Layer, Puzzle, SingletonLayer,
-        Spend, SpendContext,
+        Cat, CatInfo, CatLayer, CatSpend, DriverError, HashedPtr, Layer, Puzzle, Reserve,
+        RewardDistributor, RewardDistributorConstants, SingletonLayer, Slot, SlotProof, Spend,
+        SpendContext,
+    },
+    types::puzzles::{
+        P2DelegatedBySingletonLayerArgs, RewardDistributorCommitmentSlotValue,
+        RewardDistributorEntrySlotValue, RewardDistributorRewardSlotValue,
+        RewardDistributorSlotNonce, SlotInfo,
     },
 };
 use clvmr::NodePtr;
 
-use crate::{
-    CliError, Db, P2DelegatedBySingletonLayerArgs, Reserve, RewardDistributor,
-    RewardDistributorCommitmentSlotValue, RewardDistributorConstants,
-    RewardDistributorEntrySlotValue, RewardDistributorRewardSlotValue, RewardDistributorSlotNonce,
-    Slot, SlotInfo, SlotProof,
-};
+use crate::{CliError, Db};
 
 pub async fn sync_distributor(
     client: &CoinsetClient,
@@ -139,7 +140,7 @@ pub async fn sync_distributor(
         ctx,
         constants,
         initial_state,
-        distributor_eve_coin_spend,
+        &distributor_eve_coin_spend,
         reserve.coin.parent_coin_info,
         reserve.proof,
     )?

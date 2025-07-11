@@ -1,12 +1,17 @@
 use chia::clvm_utils::ToTreeHash;
 use chia::protocol::Bytes32;
+use chia_wallet_sdk::{
+    driver::{CatalogRegistryConstants, CatalogRegistryState, DelegatedStateAction, MedievalVault},
+    types::{
+        puzzles::{DefaultCatMakerArgs, StateSchedulerLayerSolution},
+        Mod,
+    },
+};
 use clvmr::NodePtr;
 
 use crate::{
     get_constants, hex_string_to_bytes32, multisig_broadcast_thing_finish,
-    multisig_broadcast_thing_start, parse_amount, quick_sync_catalog, CatalogRegistryConstants,
-    CatalogRegistryState, CliError, DefaultCatMakerArgs, DelegatedStateAction, MedievalVault,
-    StateSchedulerLayerSolution,
+    multisig_broadcast_thing_start, parse_amount, quick_sync_catalog, CliError,
 };
 
 pub async fn catalog_broadcast_state_update(
@@ -40,7 +45,9 @@ pub async fn catalog_broadcast_state_update(
     println!("You'll update the CATalog state to:");
 
     let new_cat_maker_puzzle_hash: Bytes32 =
-        DefaultCatMakerArgs::curry_tree_hash(new_payment_asset_id.tree_hash().into()).into();
+        DefaultCatMakerArgs::new(new_payment_asset_id.tree_hash().into())
+            .curry_tree_hash()
+            .into();
     let new_state = CatalogRegistryState {
         cat_maker_puzzle_hash: new_cat_maker_puzzle_hash,
         registration_price: new_payment_asset_amount,
