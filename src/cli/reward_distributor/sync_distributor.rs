@@ -234,6 +234,7 @@ pub async fn mempool_distributor_maybe(
     let mempool_item = mempool_items.remove(0);
     let mut distributor = on_chain_distributor;
     let mut parent_id_to_look_for = distributor.coin.parent_coin_info;
+    let mut distributor_counter = 0;
     loop {
         let Some(distributor_spend) = mempool_item
             .spend_bundle
@@ -247,7 +248,11 @@ pub async fn mempool_distributor_maybe(
         let Some(new_distributor) = RewardDistributor::from_spend(
             ctx,
             distributor_spend,
-            Some(distributor.reserve.child(1).proof),
+            Some(if distributor_counter > 0 {
+                distributor.reserve.child(1).proof
+            } else {
+                distributor.reserve.proof
+            }),
             distributor.info.constants,
         )?
         else {
@@ -255,6 +260,7 @@ pub async fn mempool_distributor_maybe(
         };
         distributor = new_distributor;
         parent_id_to_look_for = distributor.coin.coin_id();
+        distributor_counter += 1;
     }
 
     let reserve_spend = mempool_item
