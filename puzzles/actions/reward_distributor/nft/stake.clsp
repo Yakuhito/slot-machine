@@ -11,7 +11,7 @@
     ENTRY_SLOT_1ST_CURRY_HASH ; after 1st curry
     MAX_SECONDS_OFFSET ; at most this amount of seconds can pass since last update
     ; /\ this prevents someone from 'stealing' earned rewards before MAX_SECONDS_OFFSET by
-    ;    adding a mirror with a gazillion shares during long periods of non-sync
+    ;    staking a bunch of NFTs after long periods of non-sync
     (
         Ephemeral_State .
         (@
