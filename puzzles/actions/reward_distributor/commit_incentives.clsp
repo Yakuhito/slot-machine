@@ -18,9 +18,16 @@
         )
     ) ; Truth
     (
+        ; The first 3 values are data stored in a slot that's proved to exist. This slot either:
+        ;  - represents the epoch rewards are added to (if that slot is initialized)
+        ;  - represents the 'end' of the epoch list - i.e., the last initialized slot with
+        ;    an epoch start time *before* epoch_start; this way, the distributor knows to
+        ;    initialize all slots in between, as well as the slot for the epoch incentives
+        ;    are committed to
         slot_epoch_time
         slot_next_epoch_initialized
         slot_total_rewards
+        ; Next argument: the start timestamp of the epoch the user's committing rewards to
         epoch_start
         clawback_ph .
         rewards_to_add

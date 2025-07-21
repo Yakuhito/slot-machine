@@ -13,7 +13,7 @@
     ; /\ this prevents someone from 'stealing' earned rewards before MAX_SECONDS_OFFSET by
     ;    adding a mirror with a gazillion shares during long periods of non-sync
     (
-        Ephemeral_State . ; not used
+        Ephemeral_State .
         (@
             Current_State
             (
