@@ -10,7 +10,7 @@
 ;;        (it is persistent)
 ;;    ephemeral_state is not persistent - it's () for the first action of any new spend
 ;;        but passed from the previous action in the same spend
-;;    new_conditions will be directly aded to this puzzle's output conditions
+;;    new_conditions will be directly added to this puzzle's output conditions
 ;;    but the finalizer puzzle is able to filter them after all actions are run
 
 ;; Warning: This puzzle's finalizer likely assumes the singleton's amount is 1 (like the default one does).
@@ -34,6 +34,18 @@
         )
     )
 
+    ; Quex - You should see this example of proving multiple values in a merkle tree:
+    ; https://github.com/Chia-Network/chia_puzzles/pull/22/files#diff-6d0e3492d26b935e4814cb199105b259e72329198a9f9ec5854fefe577f3a5f7R1
+    ;
+    ; Using merkle roots like this you're likely to repeat hashes of siblings multiple times.
+    ;
+    ; You would need to reconfigure the "selector" logic however. I haven't put in the effort to think through the full
+    ; implications but your result of the recursive operation might need to basically return the valid selectors instead.
+    ; Then you can continue as you do what you do here where the solution uses the selectors as references to puzzles
+    ; in your grand proof.
+    ;
+    ; My intuition tells me that despite how complicated that sounds, it will be much more efficient on average.
+    ; It leans into the tree nature of CLVM rather than the linear nature of the existing list.
     (defun reduce_and_verify_proofs (
         MERKLE_ROOT
         puzzles
@@ -41,7 +53,7 @@
         (@ pending_selectors_and_proofs ((selector . proof) . remaining_pending_selectors_and_proofs))
     )
         (if pending_selectors_and_proofs
-            (if 
+            (if
                 (if proof
                     (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzles)) proof))
                     ; else
@@ -71,6 +83,11 @@
         (if pending_selectors
             (run_actions
                 puzzles
+                ; If I'm not mistaken don't you need to merge_list here?
+                ; As this stands I would expect ((condition condition) (condition condition))
+                ; ...
+                ; Ah, I see you defer this responsibility to the finalizer.
+                ; The thing is, it _must_ happen so I don't think you should make developers constantly reimplement this
                 (c new_conditions current_conditions)
                 (a (a selector puzzles) (list ephemeral_and_actual_state solution))
                 remaining_selectors
@@ -83,14 +100,14 @@
             )
         )
     )
-    
+
     (a
         FINALZIER
         (list
             MERKLE_ROOT
             STATE
             (run_actions
-                puzzles                
+                puzzles
                 ()
                 (list (c () STATE))
                 (reduce_and_verify_proofs MERKLE_ROOT puzzles () selectors_and_proofs)

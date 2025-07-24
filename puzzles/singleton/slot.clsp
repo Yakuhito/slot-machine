@@ -1,15 +1,19 @@
 ; slot.clsp by yakuhito
 ;; A singleton slot coin is created to store values that may be read at a later spend
 ;; To read the values, the singleton will spend the slot coin - so the values are only readable once
-;; Might be helpful to think of this as a one-time ticket 
+;; Might be helpful to think of this as a one-time ticket
 
 ;; Warning: Slots do not assure uniqueness - a double-linked sorted list structure on top is required for that
 ;;          An attacker might intentionally omit a given slot to trick the dApp that it doesn't exist
 ;;          For example, a naive handle reigstration app might be tricked into registering the same handle twice
 
+; A solution value wouldn't really be too much trouble right?
 ;; Warning 2: This puzzle assumes the controller singleton has an amount of 1.
 
 (mod (
+      ; I haven't seen comments explaining the following:
+      ; a) why this is double curried
+      ; b) what the difference between the NONCE and the VALUE_HASH is
       ; 1st curry
       SINGLETON_STRUCT ; owner/controller singleton
       NONCE ; different nonces will hold different data types
@@ -33,10 +37,12 @@
         )
     )
 
-    (list 
+    ; The singleton struct is hashes twice here, you can probably optimize this
+    (list
         (list ASSERT_MY_PARENT_ID
             (coinid parent_parent_info (singleton_full_puzzle_hash SINGLETON_STRUCT parent_inner_puzzle_hash) 1)
         )
+        ; comment about what 18 means would be nice
         (list RECEIVE_MESSAGE 18 () (singleton_full_puzzle_hash SINGLETON_STRUCT spender_inner_puzzle_hash)) ; puzzle-puzzle
     )
 )
