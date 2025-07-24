@@ -3,11 +3,13 @@
 ;; The current one only re-creates the singleton, but advanced dApps could use it to create other
 ;;  conditions based on the final state - e.g., re-create the singleton's reserves or modify merkle root
 
+;; It wouldn't be the worst thing in the world to take a solution value and throw in ASSERT_MY_AMOUNT no?
 ;; Note: This finalizer assumes sets the next singleton's amount to 1.
 
 (mod (
     ACTION_LAYER_MOD_HASH
     HINT
+    ; You should leave a comment that this is a second curry on top of the first
     FINALIZER_SELF_HASH
     Merkle_Root
     Initial_State ; not used for this puzzle
