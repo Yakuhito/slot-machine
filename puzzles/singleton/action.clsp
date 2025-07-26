@@ -51,36 +51,35 @@
         )
     )
 
-    (defun-inline hash_branches_and_merge_results ((tree1 selectors1) (tree2 selectors2))
+    (defun-inline hash_branches_and_merge_results ((selectors1 . tree1) (selectors2 . tree2))
         (c
-            (sha256 2 tree1 tree2)
             (merge_list selectors1 selectors2)
+            (sha256 2 tree1 tree2)
         )
     )
 
-    (defun handle_branch (puzzles branch selectors_so_far)
+    (defun handle_branch (puzzles selectors_and_branch)
         (if (l branch)
-            (consume_tree branch puzzles selectors_so_far)
+            (consume_tree puzzles selectors_and_branch)
             ; else - branch just a hash
-            (list branch puzzles ())
+            selectors_and_branch
         )
     )
 
-    ; returns (merkle_root . selectors)
+    ; returns (selectors . merkle_root)
     (defun consume_tree (
         puzzles
-        (@ tree (left_branch . right_branch))
-        selectors_so_far
+        (@ selectors_and_tree (selectors_so_far left_branch . right_branch))
     )
         (if left_branch
             (hash_branches_and_merge_results
-                (handle_branch puzzles left_branch selectors_so_far)
-                (handle_branch puzzles right_branch selectors_so_far)
+                (handle_branch puzzles (c left_branch ()))
+                (handle_branch puzzles (c selectors_so_far right_branch))
             )
             ; else - this is a reveal; selector = (r tree) = right_branch
             (c 
-                (sha256 1 (sha256tree (a right_branch puzzles)))
                 (c right_branch selectors_so_far)
+                (sha256 1 (sha256tree (a right_branch puzzles)))
             )
         )
     )
@@ -112,7 +111,7 @@
         )
     )
 
-    (defun assert_merkle_root_and_return_selectors (merkle_root (calculated_root . selector_whitelist))
+    (defun assert_merkle_root_and_return_selectors (merkle_root (selector_whitelist . calculated_root))
         (if (= merkle_root calculated_root)
             selector_whitelist
             ; else
@@ -129,7 +128,7 @@
                 puzzles                
                 ()
                 (list (c () STATE))
-                (assert_merkle_root_and_return_selectors MERKLE_ROOT (consume_tree puzzles partial_tree_reveal ()))
+                (assert_merkle_root_and_return_selectors MERKLE_ROOT (consume_tree puzzles (c () partial_tree_reveal)))
                 selectors_and_solutions
             )
             finalizer_solution
