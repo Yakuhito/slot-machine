@@ -13,6 +13,16 @@
 ;;    new_conditions will be directly added to this puzzle's output conditions
 ;;    but the finalizer puzzle is able to filter them after all actions are run
 
+;; The 'puzzles' parameter is a list of action puzzles - it's intended to allow an action to 
+;;   be run multiple times while its puzzle is only revealed and hashed once. This is done via
+;;   selectors - programs that, given 'puzzles' as a solution, return a puzzle. These selectors
+;;   are numbers (e.g., the '2' program returns (f puzzles)).
+;; 'partial_tree_reveal' is, as the name suggests, a partial reveal of the Merkle tree - it
+;;   contains partial hashes or atoms that look like (() . selector) for leaves that correspond
+;;   to puzzle hashes that are run (so their inclusion can be confirmed). The parsing process of
+;;   the tree produces two outputs: a Merkle root (validated against MERKLE_ROOT) and a list of
+;;   allowed selectors.
+
 ;; Warning: This puzzle's finalizer likely assumes the singleton's amount is 1 (like the default one does).
 
 (mod (
@@ -20,11 +30,10 @@
     MERKLE_ROOT
     STATE
     puzzles
-    selectors_and_proofs ; (list (selector . proof) ...) INVERSE ORDER
-    solutions ; (list (action_solution ...)
+    partial_tree_reveal ; tree reveal
+    selectors_and_solutions ; (list (selector . action_solution) ...)
     finalizer_solution
 )
-    (include merkle_utils.clib)
     (include sha256tree.clib)
 
     (defun item_in_list (the_item (@ the_list (first_item . remaining_list)))
@@ -34,30 +43,45 @@
         )
     )
 
-    (defun reduce_and_verify_proofs (
-        MERKLE_ROOT
-        puzzles
-        selectors_so_far
-        (@ pending_selectors_and_proofs ((selector . proof) . remaining_pending_selectors_and_proofs))
+    ; add items of list b to the beginning of list b
+    (defun merge_list (list_a list_b)
+        (if list_a
+            (c (f list_a) (merge_list (r list_a) list_b))
+            list_b
+        )
     )
-        (if pending_selectors_and_proofs
-            (if
-                (if proof
-                    (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzles)) proof))
-                    ; else
-                    (item_in_list selector selectors_so_far)
-                )
-                (reduce_and_verify_proofs
-                    MERKLE_ROOT
-                    puzzles
-                    (c selector selectors_so_far)
-                    remaining_pending_selectors_and_proofs
-                )
-                ; else
-                (x)
+
+    (defun-inline hash_branches_and_merge_results ((tree1 selectors1) (tree2 selectors2))
+        (c
+            (sha256 2 tree1 tree2)
+            (merge_list selectors1 selectors2)
+        )
+    )
+
+    (defun handle_branch (puzzles branch selectors_so_far)
+        (if (l branch)
+            (consume_tree branch puzzles selectors_so_far)
+            ; else - branch just a hash
+            (list branch puzzles ())
+        )
+    )
+
+    ; returns (merkle_root . selectors)
+    (defun consume_tree (
+        puzzles
+        (@ tree (left_branch . right_branch))
+        selectors_so_far
+    )
+        (if left_branch
+            (hash_branches_and_merge_results
+                (handle_branch puzzles left_branch selectors_so_far)
+                (handle_branch puzzles right_branch selectors_so_far)
             )
-            ; else
-            selectors_so_far
+            ; else - this is a reveal; selector = (r tree) = right_branch
+            (c 
+                (sha256 1 (sha256tree (a right_branch puzzles)))
+                (c right_branch selectors_so_far)
+            )
         )
     )
 
@@ -65,22 +89,34 @@
         puzzles
         current_conditions
         (ephemeral_and_actual_state . new_conditions)
-        (@ pending_selectors (selector . remaining_selectors))
-        (@ pending_solutions (solution . remaining_solutions))
+        selector_whitelist
+        (@ pending_selectors_and_solutions ((selector . solution) . remaining_pending_selectors_and_solutions))
     )
-        (if pending_selectors
-            (run_actions
-                puzzles
-                (c new_conditions current_conditions)
-                (a (a selector puzzles) (list ephemeral_and_actual_state solution))
-                remaining_selectors
-                remaining_solutions
+        (if remaining_pending_selectors_and_solutions
+            (if (item_in_list selector selector_whitelist)
+                (run_actions
+                    puzzles
+                    (c new_conditions current_conditions)
+                    (a (a selector puzzles) (list ephemeral_and_actual_state solution))
+                    selector_whitelist
+                    remaining_pending_selectors_and_solutions
+                )
+                ; else
+                (x)
             )
             ; else
             (c
                 ephemeral_and_actual_state
                 (c new_conditions current_conditions)
             )
+        )
+    )
+
+    (defun assert_merkle_root_and_return_selectors (merkle_root (calculated_root . selector_whitelist))
+        (if (= merkle_root calculated_root)
+            selector_whitelist
+            ; else
+            (x)
         )
     )
     
@@ -93,8 +129,8 @@
                 puzzles                
                 ()
                 (list (c () STATE))
-                (reduce_and_verify_proofs MERKLE_ROOT puzzles () selectors_and_proofs)
-                solutions
+                (assert_merkle_root_and_return_selectors MERKLE_ROOT (consume_tree puzzles partial_tree_reveal ()))
+                selectors_and_solutions
             )
             finalizer_solution
         )
