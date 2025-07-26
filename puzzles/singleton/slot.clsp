@@ -22,7 +22,7 @@
       ; 2nd curry
       VALUE_HASH
       ; info about this coin's parent (previous singleton coin)
-      (parent_parent_info parent_inner_puzzle_hash parent_amount) ; lineage proof
+      (parent_parent_info parent_inner_puzzle_hash parent_amount) . ; lineage proof
       ; info about this coin's spender (current singleton coin - the one consuming the value)
       spender_inner_puzzle_hash
 )
