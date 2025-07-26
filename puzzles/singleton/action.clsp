@@ -36,6 +36,7 @@
 )
     (include sha256tree.clib)
 
+    ; returns 1 if an item is in a list, raises otherwise
     (defun item_in_list (the_item (@ the_list (first_item . remaining_list)))
         (if (= the_item first_item)
             1
@@ -43,7 +44,7 @@
         )
     )
 
-    ; add items of list b to the beginning of list b
+    ; add items of list a to the beginning of list b
     (defun merge_list (list_a list_b)
         (if list_a
             (c (f list_a) (merge_list (r list_a) list_b))
@@ -51,14 +52,19 @@
         )
     )
 
-    (defun-inline hash_branches_and_merge_results ((selectors1 . tree1) (selectors2 . tree2))
+    ; having the results of two branches of the tree, merge them
+    ; merkle_root is (sha256tree (branch1 . branch2))
+    ; while the overall selector whitelist is the union of the two branches' whitelists
+    (defun-inline hash_branches_and_merge_results ((selectors1 . branch1) (selectors2 . branch2))
         (c
             (merge_list selectors1 selectors2)
-            (sha256 2 tree1 tree2)
+            (sha256 2 branch1 branch2)
         )
     )
 
-    (defun handle_branch (puzzles selectors_and_branch)
+    ; if the branch is a list, it either contains a new selector that needs to
+    ;   be proved and added to the whitelist or it's a subtree
+    (defun handle_branch (puzzles (@ selectors_and_branch (selectors_so_far . branch)))
         (if (l branch)
             (consume_tree puzzles selectors_and_branch)
             ; else - branch just a hash
@@ -66,7 +72,7 @@
         )
     )
 
-    ; returns (selectors . merkle_root)
+    ; consumes a partially revealed (sub)tree and returns (selectors . merkle_root)
     (defun consume_tree (
         puzzles
         (@ selectors_and_tree (selectors_so_far left_branch . right_branch))
