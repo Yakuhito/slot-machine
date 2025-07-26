@@ -14,6 +14,7 @@
       RESERVE_INNER_PUZZLE_HASH
       RESERVE_AMOUNT_FROM_STATE_PROGRAM ; default is 02 - i.e., (f State)
       HINT
+      ; 2nd curry
       FINALIZER_SELF_HASH
       Merkle_Root
       Initial_State ; used to extract current reserve amount

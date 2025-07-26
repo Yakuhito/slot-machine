@@ -8,6 +8,7 @@
 (mod (
     ACTION_LAYER_MOD_HASH
     HINT
+    ; 2nd curry
     FINALIZER_SELF_HASH
     Merkle_Root
     Initial_State ; not used for this puzzle

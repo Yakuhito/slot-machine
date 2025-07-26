@@ -10,7 +10,7 @@
 ;;        (it is persistent)
 ;;    ephemeral_state is not persistent - it's () for the first action of any new spend
 ;;        but passed from the previous action in the same spend
-;;    new_conditions will be directly aded to this puzzle's output conditions
+;;    new_conditions will be directly added to this puzzle's output conditions
 ;;    but the finalizer puzzle is able to filter them after all actions are run
 
 ;; Warning: This puzzle's finalizer likely assumes the singleton's amount is 1 (like the default one does).
@@ -41,7 +41,7 @@
         (@ pending_selectors_and_proofs ((selector . proof) . remaining_pending_selectors_and_proofs))
     )
         (if pending_selectors_and_proofs
-            (if 
+            (if
                 (if proof
                     (= MERKLE_ROOT (simplify_merkle_proof (sha256tree (a selector puzzles)) proof))
                     ; else
