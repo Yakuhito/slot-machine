@@ -36,11 +36,11 @@
 )
     (include sha256tree.clib)
 
-    ; returns 1 if an item is in a list, raises otherwise
-    (defun item_in_list (the_item (@ the_list (first_item . remaining_list)))
+    ; returns item if it is in a list, raises otherwise
+    (defun item_from_list (the_item (@ the_list (first_item . remaining_list)))
         (if (= the_item first_item)
-            1
-            (item_in_list the_item remaining_list)
+            the_item
+            (item_from_list the_item remaining_list)
         )
     )
 
@@ -97,18 +97,17 @@
         selector_whitelist
         (@ pending_selectors_and_solutions ((selector . solution) . remaining_pending_selectors_and_solutions))
     )
-        (if remaining_pending_selectors_and_solutions
-            (if (item_in_list selector selector_whitelist)
-                (run_actions
-                    puzzles
-                    (c new_conditions current_conditions)
-                    (a (a selector puzzles) (list ephemeral_and_actual_state solution))
-                    selector_whitelist
-                    remaining_pending_selectors_and_solutions
+        (if pending_selectors_and_solutions
+            (run_actions
+                puzzles
+                (c new_conditions current_conditions)
+                (a
+                    (a (item_from_list selector selector_whitelist) puzzles)
+                    (list ephemeral_and_actual_state solution)
                 )
-                ; else
-                (x)
-            )
+                selector_whitelist
+                remaining_pending_selectors_and_solutions
+            )   
             ; else
             (c
                 ephemeral_and_actual_state
