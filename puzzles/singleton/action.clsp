@@ -79,7 +79,7 @@
     )
         (if left_branch
             (hash_branches_and_merge_results
-                (handle_branch puzzles (c left_branch ()))
+                (handle_branch puzzles (c () left_branch))
                 (handle_branch puzzles (c selectors_so_far right_branch))
             )
             ; else - this is a reveal; selector = (r tree) = right_branch
