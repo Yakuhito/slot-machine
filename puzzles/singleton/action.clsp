@@ -117,10 +117,10 @@
     )
 
     (defun assert_merkle_root_and_return_selectors (merkle_root (selector_whitelist . calculated_root))
-        (if (= merkle_root calculated_root)
+        (i (= merkle_root calculated_root)
             selector_whitelist
-            ; else
-            (x)
+            ; else - empty whitelist means no selectors will be valid - so no action can run
+            ()
         )
     )
     
