@@ -3,10 +3,10 @@ use std::collections::HashSet;
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::SpendContext,
+    driver::{SpendContext, XchandlesRegistry},
 };
 
-use crate::{CliError, Db, XchandlesRegistry};
+use crate::{CliError, Db};
 
 pub async fn sync_xchandles(
     client: &CoinsetClient,

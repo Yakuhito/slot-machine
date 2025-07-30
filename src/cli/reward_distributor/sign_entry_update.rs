@@ -2,11 +2,12 @@ use chia::{
     clvm_utils::ToTreeHash,
     protocol::{Bytes, Bytes32},
 };
+use chia_wallet_sdk::driver::MedievalVault;
 use clvmr::Allocator;
 
 use crate::{
     get_constants, hex_string_to_bytes32, multisig_sign_thing_finish, multisig_sign_thing_start,
-    CliError, Db, MedievalVault,
+    CliError, Db,
 };
 
 pub async fn reward_distributor_sign_entry_update(

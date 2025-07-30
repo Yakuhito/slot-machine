@@ -1,5 +1,10 @@
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
-use chia_wallet_sdk::{coinset::CoinRecord, driver::DriverError};
+use chia_puzzle_types::LineageProof;
+use chia_wallet_sdk::{
+    coinset::CoinRecord,
+    driver::{DriverError, RewardDistributorConstants, Slot, XchandlesConstants},
+    types::puzzles::SlotInfo,
+};
 use clvm_traits::{FromClvm, ToClvm};
 use clvmr::{
     serde::{node_from_bytes, node_to_bytes},
@@ -10,8 +15,6 @@ use sqlx::{
     Pool, Row, Sqlite,
 };
 use std::time::Duration;
-
-use crate::{RewardDistributorConstants, Slot, SlotInfo, SlotProof, XchandlesConstants};
 
 use super::CliError;
 pub struct Db {
@@ -35,9 +38,10 @@ impl Db {
                     slot_value_hash BLOB NOT NULL,
                     spent_block_height INTEGER NOT NULL,
                     slot_value BLOB NOT NULL,
-                    parent_parent_info BLOB NOT NULL,
+                    parent_parent_coin_info BLOB NOT NULL,
                     parent_inner_puzzle_hash BLOB NOT NULL,
-                    PRIMARY KEY (singleton_launcher_id, nonce, slot_value_hash, parent_parent_info)
+                    parent_amount INTEGER NOT NULL,
+                    PRIMARY KEY (singleton_launcher_id, nonce, slot_value_hash, parent_parent_coin_info, parent_amount)
                 )
                 ",
             )
@@ -145,10 +149,10 @@ impl Db {
             "
             INSERT INTO slots (
                 singleton_launcher_id, nonce, slot_value_hash, spent_block_height,
-                slot_value, parent_parent_info, parent_inner_puzzle_hash
+                slot_value, parent_parent_coin_info, parent_inner_puzzle_hash, parent_amount
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-            ON CONFLICT(singleton_launcher_id, nonce, slot_value_hash, parent_parent_info) DO UPDATE SET spent_block_height = excluded.spent_block_height
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(singleton_launcher_id, nonce, slot_value_hash, parent_parent_coin_info, parent_amount) DO UPDATE SET spent_block_height = excluded.spent_block_height
             ",
         )
         .bind(slot.info.launcher_id.to_vec())
@@ -156,8 +160,9 @@ impl Db {
         .bind(slot.info.value_hash.to_vec())
         .bind(spent_block_height)
         .bind(slot_value_bytes)
-        .bind(slot.proof.parent_parent_info.to_vec())
+        .bind(slot.proof.parent_parent_coin_info.to_vec())
         .bind(slot.proof.parent_inner_puzzle_hash.to_vec())
+        .bind(slot.proof.parent_amount as i64)
         .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
@@ -171,18 +176,21 @@ impl Db {
     {
         let launcher_id = column_to_bytes32(row.get::<&[u8], _>("singleton_launcher_id"))?;
         let nonce = row.get::<i64, _>("nonce") as u64;
-        let parent_parent_info = column_to_bytes32(row.get::<&[u8], _>("parent_parent_info"))?;
+        let parent_parent_coin_info =
+            column_to_bytes32(row.get::<&[u8], _>("parent_parent_coin_info"))?;
         let parent_inner_puzzle_hash =
             column_to_bytes32(row.get::<&[u8], _>("parent_inner_puzzle_hash"))?;
+        let parent_amount = row.get::<i64, _>("parent_amount") as u64;
 
         let value = node_from_bytes(allocator, row.get::<&[u8], _>("slot_value"))?;
         let value = SV::from_clvm(allocator, value)
             .map_err(|err| CliError::Driver(DriverError::FromClvm(err)))?;
 
         Ok(Slot::new(
-            SlotProof {
-                parent_parent_info,
+            LineageProof {
+                parent_parent_coin_info,
                 parent_inner_puzzle_hash,
+                parent_amount,
             },
             SlotInfo::<SV>::from_value(launcher_id, nonce, value),
         ))

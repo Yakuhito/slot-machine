@@ -3,11 +3,14 @@ use chia_puzzle_types::singleton::LauncherSolution;
 use chia_puzzles::SINGLETON_LAUNCHER_HASH;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{DriverError, Layer, Puzzle, SingletonLayer, SpendContext},
+    driver::{
+        DriverError, Layer, Puzzle, SingletonLayer, SpendContext, Verification,
+        VerificationLauncherKVList,
+    },
 };
 use clvmr::NodePtr;
 
-use crate::{CliError, Verification, VerificationLauncherKVList};
+use crate::CliError;
 
 pub async fn sync_verifications(
     ctx: &mut SpendContext,

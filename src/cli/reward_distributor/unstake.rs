@@ -1,5 +1,5 @@
 use chia::{
-    clvm_utils::{CurriedProgram, ToTreeHash, TreeHash},
+    clvm_utils::TreeHash,
     protocol::{Bytes32, Coin, SpendBundle},
 };
 use chia_puzzle_types::{
@@ -10,10 +10,14 @@ use chia_puzzle_types::{
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
-        decode_offer, HashedPtr, Nft, Offer, Puzzle, Spend, SpendContext, SpendWithConditions,
-        StandardLayer,
+        decode_offer, Nft, Offer, Puzzle, RewardDistributorStakeAction,
+        RewardDistributorSyncAction, RewardDistributorUnstakeAction, Spend, SpendContext,
+        SpendWithConditions, StandardLayer,
     },
-    types::{puzzles::SettlementPayment, Conditions},
+    types::{
+        puzzles::{NonceWrapperArgs, SettlementPayment},
+        Conditions, Mod,
+    },
     utils::Address,
 };
 
@@ -21,8 +25,7 @@ use crate::{
     assets_xch_only, find_entry_slots, get_coinset_client, get_last_onchain_timestamp, get_prefix,
     hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature, no_assets, parse_amount,
     prompt_for_value, spend_to_coin_spend, sync_distributor, wait_for_coin, yes_no_prompt,
-    CliError, Db, NonceWrapperArgs, RewardDistributorStakeActionArgs, RewardDistributorSyncAction,
-    RewardDistributorUnstakeAction, SageClient, NONCE_WRAPPER_PUZZLE_HASH,
+    CliError, Db, SageClient,
 };
 
 pub async fn reward_distributor_unstake(
@@ -84,14 +87,11 @@ pub async fn reward_distributor_unstake(
     .ok_or(CliError::SlotNotFound("Entry"))?;
 
     println!("Fetching locked NFT...");
-    let locked_nft_hint: Bytes32 = CurriedProgram {
-        program: NONCE_WRAPPER_PUZZLE_HASH,
-        args: NonceWrapperArgs::<Bytes32, TreeHash> {
-            nonce: custody_puzzle_hash,
-            inner_puzzle: RewardDistributorStakeActionArgs::my_p2_puzzle_hash(launcher_id).into(),
-        },
+    let locked_nft_hint: Bytes32 = NonceWrapperArgs::<Bytes32, TreeHash> {
+        nonce: custody_puzzle_hash,
+        inner_puzzle: RewardDistributorStakeAction::my_p2_puzzle_hash(launcher_id).into(),
     }
-    .tree_hash()
+    .curry_tree_hash()
     .into();
 
     let possible_locked_nft_coins = client
@@ -115,7 +115,7 @@ pub async fn reward_distributor_unstake(
         let parent_puzzle = Puzzle::parse(&ctx, parent_puzzle);
         let parent_solution = ctx.alloc(&parent_coin_spend.solution)?;
 
-        if let Ok(Some(nft)) = Nft::<HashedPtr>::parse_child(
+        if let Ok(Some(nft)) = Nft::parse_child(
             &mut ctx,
             parent_coin_spend.coin,
             parent_puzzle,

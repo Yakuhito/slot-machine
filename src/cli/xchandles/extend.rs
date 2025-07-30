@@ -1,15 +1,20 @@
 use chia::{clvm_utils::ToTreeHash, protocol::SpendBundle};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{decode_offer, Offer, SpendContext},
+    driver::{
+        create_security_coin, decode_offer, spend_security_coin, spend_settlement_cats, Offer,
+        SpendContext, XchandlesExpirePricingPuzzle, XchandlesExtendAction,
+    },
+    types::{
+        puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs},
+        Mod,
+    },
 };
 
 use crate::{
-    assets_xch_and_cat, create_security_coin, get_coinset_client, get_constants,
-    get_last_onchain_timestamp, hex_string_to_bytes32, no_assets, parse_amount,
-    quick_sync_xchandles, spend_security_coin, spend_settlement_cats, sync_xchandles,
-    wait_for_coin, yes_no_prompt, CliError, Db, DefaultCatMakerArgs, SageClient,
-    XchandlesApiClient, XchandlesExtendAction, XchandlesFactorPricingPuzzleArgs,
+    assets_xch_and_cat, get_coinset_client, get_constants, get_last_onchain_timestamp,
+    hex_string_to_bytes32, no_assets, parse_amount, quick_sync_xchandles, sync_xchandles,
+    wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -42,10 +47,10 @@ pub async fn xchandles_extend(
     };
     println!("done.");
 
-    if DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into())
+    if DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into()).curry_tree_hash()
         != registry.info.state.cat_maker_puzzle_hash.into()
         || registry.info.state.pricing_puzzle_hash
-            != XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+            != XchandlesExpirePricingPuzzle::curry_tree_hash(
                 payment_cat_base_price,
                 registration_period,
             )
@@ -122,7 +127,7 @@ pub async fn xchandles_extend(
         &offer,
         payment_asset_id,
         notarized_payment.nonce,
-        vec![(
+        &[(
             notarized_payment.payments[0].puzzle_hash,
             notarized_payment.payments[0].amount,
         )],

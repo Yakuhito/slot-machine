@@ -1,9 +1,9 @@
 use chia::protocol::Bytes32;
-use chia_wallet_sdk::driver::SpendContext;
+use chia_wallet_sdk::driver::{SpendContext, VerifiedData};
 
 use crate::{
     get_coinset_client, get_latest_data_for_asset_id, hex_string_to_bytes32, sync_verifications,
-    CliError, VerifiedData,
+    CliError,
 };
 
 pub async fn verifications_view(

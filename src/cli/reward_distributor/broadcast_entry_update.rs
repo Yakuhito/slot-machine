@@ -1,12 +1,16 @@
 use chia::protocol::Bytes32;
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes};
+use chia_wallet_sdk::driver::{
+    MedievalVault, RewardDistributorAddEntryAction, RewardDistributorRemoveEntryAction,
+    RewardDistributorSyncAction, SingletonInfo,
+};
+use chia_wallet_sdk::types::puzzles::StateSchedulerLayerSolution;
 use clvmr::{Allocator, NodePtr};
 
 use crate::{
     find_entry_slots, get_constants, get_last_onchain_timestamp, hex_string_to_bytes32,
     multisig_broadcast_thing_finish, multisig_broadcast_thing_start, sync_distributor, CliError,
-    Db, MedievalVault, RewardDistributorAddEntryAction, RewardDistributorRemoveEntryAction,
-    RewardDistributorSyncAction, StateSchedulerLayerSolution,
+    Db,
 };
 
 pub async fn reward_distributor_broadcast_entry_update(

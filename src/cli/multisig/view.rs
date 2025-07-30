@@ -1,9 +1,9 @@
-use chia_wallet_sdk::driver::SpendContext;
+use chia_wallet_sdk::driver::{CatalogRegistryState, SpendContext, XchandlesRegistryState};
 use clvm_traits::{FromClvm, ToClvm};
 
 use crate::{
     get_coinset_client, hex_string_to_bytes32, print_medieval_vault_configuration,
-    sync_multisig_singleton, CatalogRegistryState, CliError, XchandlesRegistryState,
+    sync_multisig_singleton, CliError,
 };
 
 #[derive(ToClvm, FromClvm, Debug, Clone, PartialEq, Eq)]

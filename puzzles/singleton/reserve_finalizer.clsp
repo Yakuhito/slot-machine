@@ -12,11 +12,12 @@
       ACTION_LAYER_MOD_HASH
       RESERVE_FULL_PUZZLE_HASH
       RESERVE_INNER_PUZZLE_HASH
-      RESERVE_AMOUNT_FROM_STATE_PROGRAM
+      RESERVE_AMOUNT_FROM_STATE_PROGRAM ; default is 02 - i.e., (f State)
       HINT
+      ; 2nd curry
       FINALIZER_SELF_HASH
       Merkle_Root
-      Initial_State ; not used for this puzzle
+      Initial_State ; used to extract current reserve amount
       ((Last_Ephemeral_State . New_State) . Conditions) ; last action output
       (reserve_parent_id) ; my_solution
 )

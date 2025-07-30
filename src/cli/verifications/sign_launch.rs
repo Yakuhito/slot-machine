@@ -1,10 +1,11 @@
-use chia_wallet_sdk::driver::Launcher;
+use chia_wallet_sdk::driver::{
+    Launcher, MedievalVault, SingletonInfo, Verification, VerificationLauncherKVList, VerifiedData,
+};
 use clvm_traits::clvm_quote;
 
 use crate::{
     get_constants, get_latest_data_for_asset_id, hex_string_to_bytes32, multisig_sign_thing_finish,
-    multisig_sign_thing_start, CliError, MedievalVault, Verification, VerificationLauncherKVList,
-    VerifiedData,
+    multisig_sign_thing_start, CliError,
 };
 
 pub async fn verifications_sign_launch(
@@ -47,7 +48,7 @@ pub async fn verifications_sign_launch(
 
     let (launch_conds, _coin) = launcher.spend(
         &mut ctx,
-        Verification::inner_puzzle_hash(launcher_id, verified_data.clone()).into(),
+        Verification::inner_puzzle_hash(launcher_id, &verified_data).into(),
         &VerificationLauncherKVList {
             revocation_singleton_launcher_id: launcher_id,
             verified_data,

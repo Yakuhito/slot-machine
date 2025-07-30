@@ -1,9 +1,12 @@
+use chia_wallet_sdk::{
+    driver::{MedievalVault, SingletonInfo, Verification, VerifiedData},
+    types::puzzles::StateSchedulerLayerSolution,
+};
 use clvmr::NodePtr;
 
 use crate::{
     get_constants, get_latest_data_for_asset_id, hex_string_to_bytes32,
     multisig_broadcast_thing_finish, multisig_broadcast_thing_start, sync_verifications, CliError,
-    MedievalVault, StateSchedulerLayerSolution, Verification, VerifiedData,
 };
 
 pub async fn verifications_broadcast_revocation(
@@ -59,7 +62,7 @@ pub async fn verifications_broadcast_revocation(
     let delegated_solution_ptr = ctx.alloc(&StateSchedulerLayerSolution {
         other_singleton_inner_puzzle_hash: Verification::inner_puzzle_hash(
             verifications[0].info.revocation_singleton_launcher_id,
-            verifications[0].info.verified_data.clone(),
+            &verifications[0].info.verified_data,
         )
         .into(),
         inner_solution: NodePtr::NIL,

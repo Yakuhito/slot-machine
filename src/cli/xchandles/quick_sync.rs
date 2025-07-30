@@ -1,10 +1,10 @@
 use chia::protocol::{Bytes32, CoinSpend};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::SpendContext,
+    driver::{SpendContext, XchandlesRegistry},
 };
 
-use crate::{mempool_registry_maybe, CliError, Db, XchandlesRegistry};
+use crate::{mempool_registry_maybe, CliError, Db};
 
 pub async fn quick_sync_xchandles(
     client: &CoinsetClient,

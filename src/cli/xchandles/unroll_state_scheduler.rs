@@ -1,17 +1,20 @@
 use chia::{clvm_utils::ToTreeHash, protocol::SpendBundle};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{decode_offer, Offer, SpendContext},
-    types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
+    driver::{
+        create_security_coin, decode_offer, spend_security_coin, DelegatedStateAction, Offer,
+        SpendContext, XchandlesExpirePricingPuzzle, XchandlesRegistryState,
+    },
+    types::{
+        puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs},
+        Conditions, Mod, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+    },
 };
 
 use crate::{
-    assets_xch_only, create_security_coin, get_coinset_client, hex_string_to_bytes32,
-    load_xchandles_state_schedule_csv, no_assets, parse_amount, quick_sync_xchandles,
-    spend_security_coin, sync_multisig_singleton, sync_xchandles, wait_for_coin, yes_no_prompt,
-    CliError, Db, DefaultCatMakerArgs, DelegatedStateAction, MultisigSingleton, SageClient,
-    XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
-    XchandlesRegistryState,
+    assets_xch_only, get_coinset_client, hex_string_to_bytes32, load_xchandles_state_schedule_csv,
+    no_assets, parse_amount, quick_sync_xchandles, sync_multisig_singleton, sync_xchandles,
+    wait_for_coin, yes_no_prompt, CliError, Db, MultisigSingleton, SageClient,
 };
 
 pub async fn xchandles_unroll_state_scheduler(
@@ -80,15 +83,15 @@ pub async fn xchandles_unroll_state_scheduler(
     let schedule = load_xchandles_state_schedule_csv(filename)?;
     let mut found = false;
     for record in schedule.iter() {
-        let cmph = DefaultCatMakerArgs::curry_tree_hash(record.asset_id.tree_hash().into());
-        let pph = XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
+        let cmph = DefaultCatMakerArgs::new(record.asset_id.tree_hash().into()).curry_tree_hash();
+        let pph = XchandlesFactorPricingPuzzleArgs {
+            base_price: record.registration_price,
+            registration_period: record.registration_period,
+        }
+        .curry_tree_hash();
+        let eph = XchandlesExpirePricingPuzzle::curry_tree_hash(
             record.registration_price,
             record.registration_period,
-        );
-        let eph = XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
-            record.registration_price,
-            record.registration_period,
-            1000,
         );
         if cmph == new_state.cat_maker_puzzle_hash.into()
             && pph == new_state.pricing_puzzle_hash.into()

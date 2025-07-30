@@ -7,18 +7,18 @@ use chia_puzzle_types::cat::CatSolution;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
-        Cat, CatInfo, CatLayer, CatSpend, DriverError, HashedPtr, Layer, Puzzle, SingletonLayer,
-        Spend, SpendContext,
+        Cat, CatInfo, CatLayer, CatSpend, DriverError, HashedPtr, Layer, Puzzle, Reserve,
+        RewardDistributor, RewardDistributorConstants, SingletonLayer, Slot, Spend, SpendContext,
+    },
+    types::puzzles::{
+        P2DelegatedBySingletonLayerArgs, RewardDistributorCommitmentSlotValue,
+        RewardDistributorEntrySlotValue, RewardDistributorRewardSlotValue,
+        RewardDistributorSlotNonce, SlotInfo,
     },
 };
 use clvmr::NodePtr;
 
-use crate::{
-    CliError, Db, P2DelegatedBySingletonLayerArgs, Reserve, RewardDistributor,
-    RewardDistributorCommitmentSlotValue, RewardDistributorConstants,
-    RewardDistributorEntrySlotValue, RewardDistributorRewardSlotValue, RewardDistributorSlotNonce,
-    Slot, SlotInfo, SlotProof,
-};
+use crate::{CliError, Db};
 
 pub async fn sync_distributor(
     client: &CoinsetClient,
@@ -139,7 +139,7 @@ pub async fn sync_distributor(
         ctx,
         constants,
         initial_state,
-        distributor_eve_coin_spend,
+        &distributor_eve_coin_spend,
         reserve.coin.parent_coin_info,
         reserve.proof,
     )?
@@ -233,6 +233,7 @@ pub async fn mempool_distributor_maybe(
     let mempool_item = mempool_items.remove(0);
     let mut distributor = on_chain_distributor;
     let mut parent_id_to_look_for = distributor.coin.parent_coin_info;
+    let mut distributor_counter = 0;
     loop {
         let Some(distributor_spend) = mempool_item
             .spend_bundle
@@ -246,7 +247,11 @@ pub async fn mempool_distributor_maybe(
         let Some(new_distributor) = RewardDistributor::from_spend(
             ctx,
             distributor_spend,
-            Some(distributor.reserve.child(1).proof),
+            Some(if distributor_counter > 0 {
+                distributor.reserve.child(1).proof
+            } else {
+                distributor.reserve.proof
+            }),
             distributor.info.constants,
         )?
         else {
@@ -254,6 +259,7 @@ pub async fn mempool_distributor_maybe(
         };
         distributor = new_distributor;
         parent_id_to_look_for = distributor.coin.coin_id();
+        distributor_counter += 1;
     }
 
     let reserve_spend = mempool_item
@@ -379,9 +385,10 @@ pub async fn find_reward_slot(
                 let puzzle = Puzzle::parse(ctx, puzzle_ptr);
                 let puzzle = SingletonLayer::<HashedPtr>::parse_puzzle(ctx, puzzle)?.unwrap();
                 let slot = Slot::<RewardDistributorRewardSlotValue>::new(
-                    SlotProof {
-                        parent_parent_info: distributor_spent.coin.parent_coin_info,
+                    LineageProof {
+                        parent_parent_coin_info: distributor_spent.coin.parent_coin_info,
                         parent_inner_puzzle_hash: puzzle.inner_puzzle.tree_hash().into(),
+                        parent_amount: distributor_spent.coin.amount,
                     },
                     slot_info,
                 );

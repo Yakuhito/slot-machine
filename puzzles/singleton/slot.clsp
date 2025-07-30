@@ -1,23 +1,28 @@
 ; slot.clsp by yakuhito
 ;; A singleton slot coin is created to store values that may be read at a later spend
 ;; To read the values, the singleton will spend the slot coin - so the values are only readable once
-;; Might be helpful to think of this as a one-time ticket 
+;; Might be helpful to think of this as a one-time ticket
+
+;; Double currying allows the controller singleton to only care about the 1st curry hash, which means it
+;;   only needs that and VALUE_HASH to build the full slot puzzle hash. This leads to more cost saved.
+;; NONCE is used to differentiate between slot types - it avoids situations where slots representing
+;;   two separate things but that hold the same value format (e.g., list of 3 numbers) can be confused.
 
 ;; Warning: Slots do not assure uniqueness - a double-linked sorted list structure on top is required for that
 ;;          An attacker might intentionally omit a given slot to trick the dApp that it doesn't exist
 ;;          For example, a naive handle reigstration app might be tricked into registering the same handle twice
 
-;; Warning 2: This puzzle assumes the controller singleton has an amount of 1.
-
 (mod (
       ; 1st curry
-      SINGLETON_STRUCT ; owner/controller singleton
+      (@ CONTROLLER_SINGLETON_INFO (
+        SINGLETON_MOD_HASH .
+        SINGLETON_STRUCT_HASH ; treehash of owner/controller singleton struct
+      ))
       NONCE ; different nonces will hold different data types
       ; 2nd curry
       VALUE_HASH
       ; info about this coin's parent (previous singleton coin)
-      parent_parent_info
-      parent_inner_puzzle_hash
+      (parent_parent_info parent_inner_puzzle_hash parent_amount) . ; lineage proof
       ; info about this coin's spender (current singleton coin - the one consuming the value)
       spender_inner_puzzle_hash
 )
@@ -26,17 +31,26 @@
     (include sha256tree.clib)
     (include curry.clib)
 
-    (defun singleton_full_puzzle_hash (SINGLETON_STRUCT inner_puzzle_hash)
-        (curry_hashes_inline (f SINGLETON_STRUCT)
-            (sha256tree SINGLETON_STRUCT)
+    (defun singleton_full_puzzle_hash ((SINGLETON_MOD_HASH . SINGLETON_STRUCT_HASH) inner_puzzle_hash)
+        (curry_hashes_inline SINGLETON_MOD_HASH
+            SINGLETON_STRUCT_HASH
             inner_puzzle_hash
         )
     )
 
     (list 
         (list ASSERT_MY_PARENT_ID
-            (coinid parent_parent_info (singleton_full_puzzle_hash SINGLETON_STRUCT parent_inner_puzzle_hash) 1)
+            (coinid
+                parent_parent_info
+                (singleton_full_puzzle_hash CONTROLLER_SINGLETON_INFO parent_inner_puzzle_hash)
+                parent_amount
+            )
         )
-        (list RECEIVE_MESSAGE 18 () (singleton_full_puzzle_hash SINGLETON_STRUCT spender_inner_puzzle_hash)) ; puzzle-puzzle
+        (list
+            RECEIVE_MESSAGE
+            18 ; puzzle-puzzle
+            ()
+            (singleton_full_puzzle_hash CONTROLLER_SINGLETON_INFO spender_inner_puzzle_hash)
+        )
     )
 )

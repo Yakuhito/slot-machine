@@ -8,17 +8,15 @@ use axum::http::{HeaderValue, Method};
 use axum::{http::StatusCode, routing::get, Json, Router};
 use chia::protocol::Bytes32;
 use chia_wallet_sdk::coinset::ChiaRpcClient;
-use chia_wallet_sdk::driver::SpendContext;
+use chia_wallet_sdk::driver::{SpendContext, XchandlesRegistry};
+use chia_wallet_sdk::types::puzzles::XchandlesSlotValue;
 use clvmr::Allocator;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::CorsLayer;
 
-use crate::{
-    get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, Db, XchandlesRegistry,
-    XchandlesSlotValue,
-};
+use crate::{get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, Db};
 
 #[derive(Debug, Deserialize)]
 struct WebSocketMessage {
@@ -50,8 +48,10 @@ pub struct XchandlesNeighborsResponse {
 
     pub left_parent_parent_info: String,
     pub left_parent_inner_puzzle_hash: String,
+    pub left_parent_amount: u64,
     pub right_parent_parent_info: String,
     pub right_parent_inner_puzzle_hash: String,
+    pub right_parent_amount: u64,
 }
 
 #[derive(Clone)]
@@ -155,12 +155,14 @@ async fn get_neighbors(
         right_owner_launcher_id: hex::encode(right.info.value.owner_launcher_id.to_bytes()),
         right_resolved_data: hex::encode(right.info.value.resolved_data),
 
-        left_parent_parent_info: hex::encode(left.proof.parent_parent_info.to_bytes()),
+        left_parent_parent_info: hex::encode(left.proof.parent_parent_coin_info.to_bytes()),
         left_parent_inner_puzzle_hash: hex::encode(left.proof.parent_inner_puzzle_hash.to_bytes()),
-        right_parent_parent_info: hex::encode(right.proof.parent_parent_info.to_bytes()),
+        left_parent_amount: left.proof.parent_amount,
+        right_parent_parent_info: hex::encode(right.proof.parent_parent_coin_info.to_bytes()),
         right_parent_inner_puzzle_hash: hex::encode(
             right.proof.parent_inner_puzzle_hash.to_bytes(),
         ),
+        right_parent_amount: right.proof.parent_amount,
     };
 
     Ok(Json(response))

@@ -1,8 +1,10 @@
 use crate::{
     get_coinset_client, get_prefix, hex_string_to_bytes32, sync_distributor, CliError, Db,
-    RewardDistributorType,
 };
-use chia_wallet_sdk::{driver::SpendContext, utils::Address};
+use chia_wallet_sdk::{
+    driver::{RewardDistributorType, SpendContext},
+    utils::Address,
+};
 
 pub async fn reward_distributor_view(
     launcher_id_str: String,

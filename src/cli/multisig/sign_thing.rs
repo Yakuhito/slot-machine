@@ -2,6 +2,7 @@ use chia::bls::sign;
 use chia::bls::PublicKey;
 use chia::protocol::Bytes;
 use chia_wallet_sdk::coinset::CoinsetClient;
+use chia_wallet_sdk::driver::MedievalVault;
 use chia_wallet_sdk::driver::SpendContext;
 use chia_wallet_sdk::prelude::AggSig;
 use chia_wallet_sdk::prelude::AggSigKind;
@@ -12,8 +13,7 @@ use clvmr::NodePtr;
 use crate::{
     get_alias_map, get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_pubkey,
     hex_string_to_secret_key, print_medieval_vault_configuration, prompt_for_value,
-    sync_multisig_singleton, yes_no_prompt, CliError, MedievalVault, MultisigSingleton,
-    StateSchedulerHintedState,
+    sync_multisig_singleton, yes_no_prompt, CliError, MultisigSingleton, StateSchedulerHintedState,
 };
 
 pub async fn multisig_sign_thing_start(

@@ -1,10 +1,16 @@
 use chia::clvm_utils::ToTreeHash;
-use chia_wallet_sdk::{driver::SpendContext, utils::Address};
+use chia_wallet_sdk::{
+    driver::{SpendContext, XchandlesExpirePricingPuzzle},
+    types::{
+        puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs},
+        Mod,
+    },
+    utils::Address,
+};
 
 use crate::{
     get_coinset_client, get_prefix, hex_string_to_bytes32, parse_amount, quick_sync_xchandles,
-    CliError, Db, DefaultCatMakerArgs, XchandlesExponentialPremiumRenewPuzzleArgs,
-    XchandlesFactorPricingPuzzleArgs,
+    CliError, Db,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -33,7 +39,9 @@ pub async fn xchandles_view(
     if let Some(payment_asset_id) = payment_asset_id_str {
         let payment_asset_id = hex_string_to_bytes32(&payment_asset_id)?;
         if registry.info.state.cat_maker_puzzle_hash
-            == DefaultCatMakerArgs::curry_tree_hash(payment_asset_id.tree_hash().into()).into()
+            == DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into())
+                .curry_tree_hash()
+                .into()
         {
             println!(
                 "    Payment asset id: {} (VERIFIED)",
@@ -57,17 +65,16 @@ pub async fn xchandles_view(
         (payment_cat_base_price_str, registration_period)
     {
         let payment_cat_base_price = parse_amount(&payment_cat_base_price, true)?;
-        if registry.info.state.pricing_puzzle_hash
-            == XchandlesFactorPricingPuzzleArgs::curry_tree_hash(
-                payment_cat_base_price,
-                registration_period,
-            )
-            .into()
+        let fph = XchandlesFactorPricingPuzzleArgs {
+            base_price: payment_cat_base_price,
+            registration_period,
+        }
+        .curry_tree_hash();
+        if registry.info.state.pricing_puzzle_hash == fph.into()
             && registry.info.state.expired_handle_pricing_puzzle_hash
-                == XchandlesExponentialPremiumRenewPuzzleArgs::curry_tree_hash(
+                == XchandlesExpirePricingPuzzle::curry_tree_hash(
                     payment_cat_base_price,
                     registration_period,
-                    1000,
                 )
                 .into()
         {

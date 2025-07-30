@@ -1,14 +1,16 @@
 use chia::protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
-    driver::{decode_offer, Offer, SpendContext},
+    driver::{
+        decode_offer, launch_dig_reward_distributor, Offer, RewardDistributorConstants,
+        RewardDistributorType, SpendContext,
+    },
     utils::Address,
 };
 
 use crate::{
-    assets_xch_and_cat, get_coinset_client, get_constants, hex_string_to_bytes32,
-    launch_dig_reward_distributor, no_assets, parse_amount, wait_for_coin, yes_no_prompt, CliError,
-    Db, RewardDistributorConstants, RewardDistributorType, SageClient,
+    assets_xch_and_cat, get_coinset_client, get_constants, hex_string_to_bytes32, no_assets,
+    parse_amount, wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]

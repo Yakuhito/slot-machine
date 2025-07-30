@@ -956,11 +956,11 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-client"
-version = "0.27.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=2a056f03b92077fc0ce808ca2e7c01d707d04c43#2a056f03b92077fc0ce808ca2e7c01d707d04c43"
+version = "0.27.2"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
 dependencies = [
  "chia-protocol 0.26.0",
- "chia-sdk-types 0.27.0",
+ "chia-sdk-types 0.27.2",
  "chia-ssl 0.26.0",
  "chia-traits 0.26.0",
  "futures-util",
@@ -988,8 +988,8 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-coinset"
-version = "0.27.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=2a056f03b92077fc0ce808ca2e7c01d707d04c43#2a056f03b92077fc0ce808ca2e7c01d707d04c43"
+version = "0.27.2"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
 dependencies = [
  "chia-protocol 0.26.0",
  "hex",
@@ -1012,8 +1012,8 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-derive"
-version = "0.27.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=2a056f03b92077fc0ce808ca2e7c01d707d04c43#2a056f03b92077fc0ce808ca2e7c01d707d04c43"
+version = "0.27.2"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
 dependencies = [
  "convert_case",
  "quote",
@@ -1052,18 +1052,19 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-driver"
-version = "0.27.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=2a056f03b92077fc0ce808ca2e7c01d707d04c43#2a056f03b92077fc0ce808ca2e7c01d707d04c43"
+version = "0.27.2"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
 dependencies = [
  "bech32",
  "bigdecimal",
+ "bip39",
  "chia-bls 0.26.0",
  "chia-consensus 0.26.0",
  "chia-protocol 0.26.0",
  "chia-puzzle-types 0.26.0",
  "chia-puzzles",
- "chia-sdk-signer 0.27.0",
- "chia-sdk-types 0.27.0",
+ "chia-sdk-signer 0.27.2",
+ "chia-sdk-types 0.27.2",
  "chia-secp 0.26.0",
  "chia-sha2 0.26.0",
  "chia-traits 0.26.0",
@@ -1072,11 +1073,14 @@ dependencies = [
  "clvm-utils 0.26.0",
  "clvmr 0.14.0",
  "flate2",
+ "getrandom 0.2.15",
  "hex",
  "hex-literal",
  "indexmap 2.10.0",
  "num-bigint",
  "once_cell",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "thiserror 2.0.12",
 ]
 
@@ -1100,13 +1104,13 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-signer"
-version = "0.27.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=2a056f03b92077fc0ce808ca2e7c01d707d04c43#2a056f03b92077fc0ce808ca2e7c01d707d04c43"
+version = "0.27.2"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
 dependencies = [
  "chia-bls 0.26.0",
  "chia-consensus 0.26.0",
  "chia-protocol 0.26.0",
- "chia-sdk-types 0.27.0",
+ "chia-sdk-types 0.27.2",
  "chia-secp 0.26.0",
  "chia-sha2 0.26.0",
  "clvm-traits 0.26.0",
@@ -1151,8 +1155,8 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-test"
-version = "0.27.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=2a056f03b92077fc0ce808ca2e7c01d707d04c43#2a056f03b92077fc0ce808ca2e7c01d707d04c43"
+version = "0.27.2"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
 dependencies = [
  "anyhow",
  "bip39",
@@ -1160,17 +1164,21 @@ dependencies = [
  "chia-consensus 0.26.0",
  "chia-protocol 0.26.0",
  "chia-puzzle-types 0.26.0",
- "chia-sdk-signer 0.27.0",
- "chia-sdk-types 0.27.0",
+ "chia-sdk-signer 0.27.2",
+ "chia-sdk-types 0.27.2",
  "chia-secp 0.26.0",
+ "chia-sha2 0.26.0",
  "chia-traits 0.26.0",
  "clvm-traits 0.26.0",
  "clvm-utils 0.26.0",
  "clvmr 0.14.0",
  "hex",
  "indexmap 2.10.0",
+ "prettytable-rs",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "serde",
+ "serde_json",
  "thiserror 2.0.12",
 ]
 
@@ -1197,15 +1205,15 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-types"
-version = "0.27.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=2a056f03b92077fc0ce808ca2e7c01d707d04c43#2a056f03b92077fc0ce808ca2e7c01d707d04c43"
+version = "0.27.2"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
 dependencies = [
  "chia-bls 0.26.0",
  "chia-consensus 0.26.0",
  "chia-protocol 0.26.0",
  "chia-puzzle-types 0.26.0",
  "chia-puzzles",
- "chia-sdk-derive 0.27.0",
+ "chia-sdk-derive 0.27.2",
  "chia-secp 0.26.0",
  "chia-sha2 0.26.0",
  "clvm-traits 0.26.0",
@@ -1233,8 +1241,8 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-utils"
-version = "0.27.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=2a056f03b92077fc0ce808ca2e7c01d707d04c43#2a056f03b92077fc0ce808ca2e7c01d707d04c43"
+version = "0.27.2"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
 dependencies = [
  "bech32",
  "chia-protocol 0.26.0",
@@ -1417,18 +1425,18 @@ dependencies = [
 
 [[package]]
 name = "chia-wallet-sdk"
-version = "0.27.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=2a056f03b92077fc0ce808ca2e7c01d707d04c43#2a056f03b92077fc0ce808ca2e7c01d707d04c43"
+version = "0.27.2"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
 dependencies = [
  "chia-bls 0.26.0",
  "chia-protocol 0.26.0",
- "chia-sdk-client 0.27.0",
- "chia-sdk-coinset 0.27.0",
- "chia-sdk-driver 0.27.0",
- "chia-sdk-signer 0.27.0",
- "chia-sdk-test 0.27.0",
- "chia-sdk-types 0.27.0",
- "chia-sdk-utils 0.27.0",
+ "chia-sdk-client 0.27.2",
+ "chia-sdk-coinset 0.27.2",
+ "chia-sdk-driver 0.27.2",
+ "chia-sdk-signer 0.27.2",
+ "chia-sdk-test 0.27.2",
+ "chia-sdk-types 0.27.2",
+ "chia-sdk-utils 0.27.2",
  "clvm-traits 0.26.0",
  "clvm-utils 0.26.0",
  "clvmr 0.14.0",
@@ -4427,11 +4435,10 @@ dependencies = [
  "anyhow",
  "axum",
  "bech32",
- "bip39",
  "chia 0.26.0",
  "chia-puzzle-types 0.26.0",
  "chia-puzzles",
- "chia-wallet-sdk 0.27.0",
+ "chia-wallet-sdk 0.27.2",
  "clap",
  "clvm-traits 0.26.0",
  "clvmr 0.14.0",
@@ -4441,7 +4448,6 @@ dependencies = [
  "futures-util",
  "getrandom 0.3.2",
  "hex",
- "hex-literal",
  "openssl",
  "openssl-sys",
  "prettytable-rs",

@@ -4,8 +4,11 @@ use chia::{
 };
 use chia_puzzle_types::LineageProof;
 use chia_wallet_sdk::{
-    driver::{decode_offer, Launcher, Offer},
-    types::Conditions,
+    driver::{
+        decode_offer, spend_settlement_cats, Launcher, MedievalVault, Offer, SingletonInfo,
+        Verification, VerificationAsserter, VerificationLauncherKVList, VerifiedData,
+    },
+    types::{puzzles::CatNftMetadata, Conditions},
     utils::Address,
 };
 use clvm_traits::clvm_quote;
@@ -13,9 +16,7 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
     get_constants, get_latest_data_for_asset_id, hex_string_to_bytes32,
-    multisig_broadcast_thing_finish, multisig_broadcast_thing_start, spend_settlement_cats,
-    yes_no_prompt, CatNftMetadata, CliError, MedievalVault, Verification, VerificationAsserter,
-    VerificationLauncherKVList, VerifiedData,
+    multisig_broadcast_thing_finish, multisig_broadcast_thing_start, yes_no_prompt, CliError,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -63,7 +64,7 @@ pub async fn verifications_broadcast_launch(
 
     let (launch_conds, _coin) = launcher.spend(
         &mut ctx,
-        Verification::inner_puzzle_hash(launcher_id, verified_data.clone()).into(),
+        Verification::inner_puzzle_hash(launcher_id, &verified_data).into(),
         &VerificationLauncherKVList {
             revocation_singleton_launcher_id: launcher_id,
             verified_data: verified_data.clone(),
@@ -159,7 +160,7 @@ pub async fn verifications_broadcast_launch(
                 &offer,
                 *asset_id,
                 recipient_puzzle_hash,
-                vec![(recipient_puzzle_hash, total_cat_amount)],
+                &[(recipient_puzzle_hash, total_cat_amount)],
             )?;
             conds = conds.extend(assert_cond);
         }
