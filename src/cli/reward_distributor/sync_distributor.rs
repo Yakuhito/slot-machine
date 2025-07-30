@@ -8,8 +8,7 @@ use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
         Cat, CatInfo, CatLayer, CatSpend, DriverError, HashedPtr, Layer, Puzzle, Reserve,
-        RewardDistributor, RewardDistributorConstants, SingletonLayer, Slot, SlotProof, Spend,
-        SpendContext,
+        RewardDistributor, RewardDistributorConstants, SingletonLayer, Slot, Spend, SpendContext,
     },
     types::puzzles::{
         P2DelegatedBySingletonLayerArgs, RewardDistributorCommitmentSlotValue,
@@ -386,9 +385,10 @@ pub async fn find_reward_slot(
                 let puzzle = Puzzle::parse(ctx, puzzle_ptr);
                 let puzzle = SingletonLayer::<HashedPtr>::parse_puzzle(ctx, puzzle)?.unwrap();
                 let slot = Slot::<RewardDistributorRewardSlotValue>::new(
-                    SlotProof {
-                        parent_parent_info: distributor_spent.coin.parent_coin_info,
+                    LineageProof {
+                        parent_parent_coin_info: distributor_spent.coin.parent_coin_info,
                         parent_inner_puzzle_hash: puzzle.inner_puzzle.tree_hash().into(),
+                        parent_amount: distributor_spent.coin.amount,
                     },
                     slot_info,
                 );

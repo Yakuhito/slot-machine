@@ -87,9 +87,7 @@ pub async fn get_latest_data_for_asset_id(
         let puzzle_ptr = ctx.alloc(&coin_spend.puzzle_reveal)?;
         let puzzle = Puzzle::parse(ctx, puzzle_ptr);
         let solution_ptr = ctx.alloc(&coin_spend.solution)?;
-        if let Ok(Some(nft)) =
-            Nft::<CatNftMetadata>::parse_child(ctx, nft_record.coin, puzzle, solution_ptr)
-        {
+        if let Ok(Some(nft)) = Nft::parse_child(ctx, nft_record.coin, puzzle, solution_ptr) {
             next_nft_record = client
                 .get_coin_record_by_name(nft.coin.coin_id())
                 .await?
@@ -105,5 +103,6 @@ pub async fn get_latest_data_for_asset_id(
         hex::encode(asset_id)
     )))?;
 
-    Ok(latest_nft.info.metadata)
+    ctx.extract::<CatNftMetadata>(latest_nft.info.metadata.ptr())
+        .map_err(CliError::Driver)
 }

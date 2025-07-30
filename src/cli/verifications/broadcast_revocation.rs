@@ -1,5 +1,5 @@
 use chia_wallet_sdk::{
-    driver::{MedievalVault, Verification, VerifiedData},
+    driver::{MedievalVault, SingletonInfo, Verification, VerifiedData},
     types::puzzles::StateSchedulerLayerSolution,
 };
 use clvmr::NodePtr;

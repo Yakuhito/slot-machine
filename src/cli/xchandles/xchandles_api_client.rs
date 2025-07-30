@@ -1,5 +1,6 @@
 use chia::protocol::Bytes32;
-use chia_wallet_sdk::driver::{Slot, SlotProof};
+use chia_puzzle_types::LineageProof;
+use chia_wallet_sdk::driver::Slot;
 use chia_wallet_sdk::types::puzzles::{SlotInfo, XchandlesSlotValue};
 use reqwest::Client;
 use std::time::Duration;
@@ -110,18 +111,22 @@ impl XchandlesApiClient {
             hex_string_to_bytes32(&neighbors_resp.left_parent_parent_info)?;
         let left_parent_inner_puzzle_hash =
             hex_string_to_bytes32(&neighbors_resp.left_parent_inner_puzzle_hash)?;
-        let left_proof = SlotProof {
-            parent_parent_info: left_parent_parent_info,
+        let left_parent_amount = neighbors_resp.left_parent_amount;
+        let left_proof = LineageProof {
+            parent_parent_coin_info: left_parent_parent_info,
             parent_inner_puzzle_hash: left_parent_inner_puzzle_hash,
+            parent_amount: left_parent_amount,
         };
 
         let right_parent_parent_info =
             hex_string_to_bytes32(&neighbors_resp.right_parent_parent_info)?;
         let right_parent_inner_puzzle_hash =
             hex_string_to_bytes32(&neighbors_resp.right_parent_inner_puzzle_hash)?;
-        let right_proof = SlotProof {
-            parent_parent_info: right_parent_parent_info,
+        let right_parent_amount = neighbors_resp.right_parent_amount;
+        let right_proof = LineageProof {
+            parent_parent_coin_info: right_parent_parent_info,
             parent_inner_puzzle_hash: right_parent_inner_puzzle_hash,
+            parent_amount: right_parent_amount,
         };
 
         let left_info = SlotInfo::<XchandlesSlotValue>::from_value(launcher_id, 0, left_value);

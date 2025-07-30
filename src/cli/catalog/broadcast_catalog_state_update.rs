@@ -1,7 +1,10 @@
 use chia::clvm_utils::ToTreeHash;
 use chia::protocol::Bytes32;
 use chia_wallet_sdk::{
-    driver::{CatalogRegistryConstants, CatalogRegistryState, DelegatedStateAction, MedievalVault},
+    driver::{
+        CatalogRegistryConstants, CatalogRegistryState, DelegatedStateAction, MedievalVault,
+        SingletonInfo,
+    },
     types::{
         puzzles::{DefaultCatMakerArgs, StateSchedulerLayerSolution},
         Mod,

@@ -10,7 +10,7 @@ use chia_puzzle_types::{
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
-        decode_offer, HashedPtr, Nft, Offer, Puzzle, RewardDistributorStakeAction,
+        decode_offer, Nft, Offer, Puzzle, RewardDistributorStakeAction,
         RewardDistributorSyncAction, RewardDistributorUnstakeAction, Spend, SpendContext,
         SpendWithConditions, StandardLayer,
     },
@@ -115,7 +115,7 @@ pub async fn reward_distributor_unstake(
         let parent_puzzle = Puzzle::parse(&ctx, parent_puzzle);
         let parent_solution = ctx.alloc(&parent_coin_spend.solution)?;
 
-        if let Ok(Some(nft)) = Nft::<HashedPtr>::parse_child(
+        if let Ok(Some(nft)) = Nft::parse_child(
             &mut ctx,
             parent_coin_spend.coin,
             parent_puzzle,

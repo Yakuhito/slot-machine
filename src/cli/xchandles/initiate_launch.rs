@@ -17,8 +17,8 @@ use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         decode_offer, launch_xchandles_registry, Cat, DriverError, Launcher, MedievalVaultHint,
-        MedievalVaultInfo, Offer, SpendContext, StateSchedulerInfo, XchandlesConstants,
-        XchandlesRegistryState,
+        MedievalVaultInfo, Offer, SingletonInfo, SpendContext, StateSchedulerInfo,
+        XchandlesConstants, XchandlesRegistryState,
     },
     types::{
         puzzles::XchandlesFactorPricingPuzzleArgs, Conditions, MAINNET_CONSTANTS,

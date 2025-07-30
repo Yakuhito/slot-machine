@@ -7,7 +7,8 @@ use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         create_security_coin, decode_offer, sign_standard_transaction, spend_security_coin,
-        spend_settlement_nft, Offer, Spend, SpendContext, StandardLayer, XchandlesUpdateAction,
+        spend_settlement_nft, Offer, SingletonInfo, Spend, SpendContext, StandardLayer,
+        XchandlesUpdateAction,
     },
     types::puzzles::XchandlesSlotValue,
     utils::Address,

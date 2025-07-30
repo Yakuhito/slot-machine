@@ -1,5 +1,5 @@
 use chia_wallet_sdk::driver::{
-    Launcher, MedievalVault, Verification, VerificationLauncherKVList, VerifiedData,
+    Launcher, MedievalVault, SingletonInfo, Verification, VerificationLauncherKVList, VerifiedData,
 };
 use clvm_traits::clvm_quote;
 

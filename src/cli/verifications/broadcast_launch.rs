@@ -5,8 +5,8 @@ use chia::{
 use chia_puzzle_types::LineageProof;
 use chia_wallet_sdk::{
     driver::{
-        decode_offer, spend_settlement_cats, Launcher, MedievalVault, Offer, Verification,
-        VerificationAsserter, VerificationLauncherKVList, VerifiedData,
+        decode_offer, spend_settlement_cats, Launcher, MedievalVault, Offer, SingletonInfo,
+        Verification, VerificationAsserter, VerificationLauncherKVList, VerifiedData,
     },
     types::{puzzles::CatNftMetadata, Conditions},
     utils::Address,

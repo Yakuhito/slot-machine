@@ -8,7 +8,7 @@ use chia::{
     },
 };
 use chia_wallet_sdk::driver::{
-    MedievalVaultHint, MedievalVaultInfo, SpendContext, StateSchedulerInfo,
+    MedievalVaultHint, MedievalVaultInfo, SingletonInfo, SpendContext, StateSchedulerInfo,
 };
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},

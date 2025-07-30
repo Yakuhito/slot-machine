@@ -10,7 +10,7 @@ use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
         CatalogRegistry, CatalogRegistryConstants, CatalogRegistryInfo, CatalogRegistryState,
-        DriverError, Layer, Puzzle, SingletonLayer, Slot, SlotProof, SpendContext,
+        DriverError, Layer, Puzzle, SingletonLayer, Slot, SpendContext,
     },
     types::{
         puzzles::{CatalogSlotValue, SlotInfo},
@@ -135,9 +135,10 @@ pub async fn sync_catalog(
                 CatalogRegistryInfo::new(initial_state, constants),
             );
 
-            let slot_proof = SlotProof {
-                parent_parent_info: lineage_proof.parent_parent_coin_info,
+            let slot_proof = LineageProof {
+                parent_parent_coin_info: lineage_proof.parent_parent_coin_info,
                 parent_inner_puzzle_hash: lineage_proof.parent_inner_puzzle_hash,
+                parent_amount: lineage_proof.parent_amount,
             };
             let left_slot_value = CatalogSlotValue::initial_left_end();
             let right_slot_value = CatalogSlotValue::initial_right_end();

@@ -40,8 +40,10 @@ pub struct CatalogNeighborResponse {
 
     pub left_parent_parent_info: String,
     pub left_parent_inner_puzzle_hash: String,
+    pub left_parent_amount: u64,
     pub right_parent_parent_info: String,
     pub right_parent_inner_puzzle_hash: String,
+    pub right_parent_amount: u64,
 }
 
 #[derive(Clone)]
@@ -148,12 +150,14 @@ async fn get_neighbors(
         left_left_asset_id: hex::encode(left.info.value.neighbors.left_value.to_bytes()),
         right_right_asset_id: hex::encode(right.info.value.neighbors.right_value.to_bytes()),
 
-        left_parent_parent_info: hex::encode(left.proof.parent_parent_info.to_bytes()),
+        left_parent_parent_info: hex::encode(left.proof.parent_parent_coin_info.to_bytes()),
         left_parent_inner_puzzle_hash: hex::encode(left.proof.parent_inner_puzzle_hash.to_bytes()),
-        right_parent_parent_info: hex::encode(right.proof.parent_parent_info.to_bytes()),
+        left_parent_amount: left.proof.parent_amount,
+        right_parent_parent_info: hex::encode(right.proof.parent_parent_coin_info.to_bytes()),
         right_parent_inner_puzzle_hash: hex::encode(
             right.proof.parent_inner_puzzle_hash.to_bytes(),
         ),
+        right_parent_amount: right.proof.parent_amount,
     };
 
     Ok(Json(response))

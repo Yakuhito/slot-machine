@@ -2,7 +2,7 @@ use chia::protocol::Bytes32;
 use chia::{clvm_utils::ToTreeHash, protocol::Bytes};
 use chia_wallet_sdk::driver::{
     MedievalVault, RewardDistributorAddEntryAction, RewardDistributorRemoveEntryAction,
-    RewardDistributorSyncAction,
+    RewardDistributorSyncAction, SingletonInfo,
 };
 use chia_wallet_sdk::types::puzzles::StateSchedulerLayerSolution;
 use clvmr::{Allocator, NodePtr};
