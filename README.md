@@ -19,6 +19,7 @@ A transaction-efficient distribution system. Anyone can commit rewards for the c
 
 Want to learn more? Here are some resources that might help (in recommended order):
  * [CHIP-0050 (Action Layer and Slots) & CHIP-0051 (Reward Distributor)](https://github.com/Chia-Network/chips/pull/165)
+ * [CHIPs Presentation](https://pitch.com/v/chip-0050-chip-0051-xymjnx)
  * [Post: The Problem of Uniqueness](https://blog.fireacademy.io/p/uniqueness-on-chain)
  * [Post: Solving the Problem of Uniqueness](https://blog.fireacademy.io/p/solving-the-problem-of-uniqueness)
  * [Post: Announcing CATalog and XCHandles](https://blog.fireacademy.io/p/announcing-catalog-and-xchandles)
