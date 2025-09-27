@@ -2,8 +2,8 @@ use chia::protocol::CoinSpend;
 use dirs::data_dir;
 use reqwest::Identity;
 use sage_api::{
-    Amount, Assets, CatAmount, CoinJson, CoinSpendJson, GetDerivations, GetDerivationsResponse,
-    MakeOffer, MakeOfferResponse, SendCat, SendCatResponse, SendXch, SendXchResponse,
+    Amount, CoinJson, CoinSpendJson, GetDerivations, GetDerivationsResponse, MakeOffer,
+    MakeOfferResponse, OfferAmount, SendCat, SendCatResponse, SendXch, SendXchResponse,
     SignCoinSpends, SignCoinSpendsResponse,
 };
 use thiserror::Error;
@@ -61,7 +61,7 @@ impl SageClient {
         amount: u64,
         fee: u64,
         include_hint: bool,
-        memos: Option<Vec<String>>,
+        memos: Vec<String>,
         auto_submit: bool,
     ) -> Result<SendCatResponse, ClientError> {
         let url = format!("{}/send_cat", self.base_url);
@@ -76,6 +76,7 @@ impl SageClient {
                 include_hint,
                 memos,
                 auto_submit,
+                clawback: None,
             })
             .send()
             .await?;
@@ -127,7 +128,7 @@ impl SageClient {
         address: String,
         amount: u64,
         fee: u64,
-        memos: Option<Vec<String>>,
+        memos: Vec<String>,
         auto_submit: bool,
     ) -> Result<SendXchResponse, ClientError> {
         let url = format!("{}/send_xch", self.base_url);
@@ -140,6 +141,7 @@ impl SageClient {
                 fee: Amount::u64(fee),
                 memos,
                 auto_submit,
+                clawback: None,
             })
             .send()
             .await?;
@@ -203,8 +205,8 @@ impl SageClient {
 
     pub async fn make_offer(
         &self,
-        requested_assets: Assets,
-        offered_assets: Assets,
+        requested_assets: Vec<OfferAmount>,
+        offered_assets: Vec<OfferAmount>,
         fee: u64,
         receive_address: Option<String>,
         expires_at_second: Option<u64>,
@@ -238,33 +240,39 @@ impl SageClient {
     }
 }
 
-pub fn assets_xch_only(amount: u64) -> Assets {
-    Assets {
-        xch: Amount::u64(amount),
-        cats: vec![],
-        nfts: vec![],
-    }
+pub fn assets_xch_only(amount: u64) -> Vec<OfferAmount> {
+    vec![OfferAmount {
+        asset_id: None,
+        amount: Amount::u64(amount),
+    }]
 }
 
-pub fn no_assets() -> Assets {
+pub fn no_assets() -> Vec<OfferAmount> {
     assets_xch_only(0)
 }
 
-pub fn assets_xch_and_cat(xch_amount: u64, asset_id: String, cat_amount: u64) -> Assets {
-    Assets {
-        xch: Amount::u64(xch_amount),
-        cats: vec![CatAmount {
-            asset_id,
+pub fn assets_xch_and_cat(xch_amount: u64, asset_id: String, cat_amount: u64) -> Vec<OfferAmount> {
+    vec![
+        OfferAmount {
+            asset_id: None,
+            amount: Amount::u64(xch_amount),
+        },
+        OfferAmount {
+            asset_id: Some(asset_id),
             amount: Amount::u64(cat_amount),
-        }],
-        nfts: vec![],
-    }
+        },
+    ]
 }
 
-pub fn assets_xch_and_nft(xch_amount: u64, nft_id: String) -> Assets {
-    Assets {
-        xch: Amount::u64(xch_amount),
-        cats: vec![],
-        nfts: vec![nft_id],
-    }
+pub fn assets_xch_and_nft(xch_amount: u64, nft_id: String) -> Vec<OfferAmount> {
+    vec![
+        OfferAmount {
+            asset_id: None,
+            amount: Amount::u64(xch_amount),
+        },
+        OfferAmount {
+            asset_id: Some(nft_id),
+            amount: Amount::u64(1),
+        },
+    ]
 }

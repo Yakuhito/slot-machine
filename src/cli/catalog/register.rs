@@ -449,7 +449,7 @@ pub async fn catalog_register(
             payment_cat_amount,
             fee,
             true,
-            None,
+            vec![],
             true,
         )
         .await?;

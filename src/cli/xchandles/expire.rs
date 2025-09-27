@@ -403,7 +403,7 @@ pub async fn xchandles_expire(
             payment_cat_amount,
             fee,
             true,
-            None,
+            vec![],
             true,
         )
         .await?;
