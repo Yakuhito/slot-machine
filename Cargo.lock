@@ -110,9 +110,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.98"
+version = "1.0.100"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
+checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "arraydeque"
@@ -816,24 +816,6 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-client"
-version = "0.27.2"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
-dependencies = [
- "chia-protocol",
- "chia-sdk-types 0.27.2",
- "chia-ssl",
- "chia-traits 0.26.0",
- "futures-util",
- "once_cell",
- "thiserror 2.0.12",
- "tokio",
- "tokio-tungstenite 0.24.0",
- "tracing",
- "tungstenite 0.24.0",
-]
-
-[[package]]
-name = "chia-sdk-client"
 version = "0.28.0"
 source = "git+https://github.com/xch-dev/chia-wallet-sdk?rev=4ffb3ee1dc8427ee9bee0f14524133463cc54a9d#4ffb3ee1dc8427ee9bee0f14524133463cc54a9d"
 dependencies = [
@@ -846,7 +828,24 @@ dependencies = [
  "once_cell",
  "rustls",
  "rustls-pemfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
+ "tokio",
+ "tokio-tungstenite 0.24.0",
+ "tracing",
+ "tungstenite 0.24.0",
+]
+
+[[package]]
+name = "chia-sdk-client"
+version = "0.29.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git#d050ea3b4385900455852651b8f4bfc80553769d"
+dependencies = [
+ "chia-protocol",
+ "chia-sdk-types 0.29.0",
+ "chia-ssl",
+ "chia-traits 0.26.0",
+ "futures-util",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-tungstenite 0.24.0",
  "tracing",
@@ -855,8 +854,8 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-coinset"
-version = "0.27.2"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
+version = "0.28.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk?rev=4ffb3ee1dc8427ee9bee0f14524133463cc54a9d#4ffb3ee1dc8427ee9bee0f14524133463cc54a9d"
 dependencies = [
  "chia-protocol",
  "hex",
@@ -868,8 +867,8 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-coinset"
-version = "0.28.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk?rev=4ffb3ee1dc8427ee9bee0f14524133463cc54a9d#4ffb3ee1dc8427ee9bee0f14524133463cc54a9d"
+version = "0.29.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git#d050ea3b4385900455852651b8f4bfc80553769d"
 dependencies = [
  "chia-protocol",
  "hex",
@@ -881,56 +880,22 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-derive"
-version = "0.27.2"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
+version = "0.28.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk?rev=4ffb3ee1dc8427ee9bee0f14524133463cc54a9d#4ffb3ee1dc8427ee9bee0f14524133463cc54a9d"
 dependencies = [
- "convert_case 0.6.0",
+ "convert_case",
  "quote",
  "syn",
 ]
 
 [[package]]
 name = "chia-sdk-derive"
-version = "0.28.0"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk?rev=4ffb3ee1dc8427ee9bee0f14524133463cc54a9d#4ffb3ee1dc8427ee9bee0f14524133463cc54a9d"
+version = "0.29.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git#d050ea3b4385900455852651b8f4bfc80553769d"
 dependencies = [
- "convert_case 0.8.0",
+ "convert_case",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "chia-sdk-driver"
-version = "0.27.2"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
-dependencies = [
- "bech32",
- "bigdecimal",
- "bip39",
- "chia-bls 0.26.0",
- "chia-consensus",
- "chia-protocol",
- "chia-puzzle-types",
- "chia-puzzles",
- "chia-sdk-signer 0.27.2",
- "chia-sdk-types 0.27.2",
- "chia-secp",
- "chia-sha2 0.26.0",
- "chia-traits 0.26.0",
- "chia_streamable_macro 0.26.0",
- "clvm-traits",
- "clvm-utils",
- "clvmr",
- "flate2",
- "getrandom 0.2.15",
- "hex",
- "hex-literal",
- "indexmap 2.10.0",
- "num-bigint",
- "once_cell",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -959,29 +924,45 @@ dependencies = [
  "getrandom 0.2.15",
  "hex",
  "hex-literal",
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "num-bigint",
  "once_cell",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
-name = "chia-sdk-signer"
-version = "0.27.2"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
+name = "chia-sdk-driver"
+version = "0.29.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git#d050ea3b4385900455852651b8f4bfc80553769d"
 dependencies = [
+ "bech32",
+ "bigdecimal",
+ "bip39",
  "chia-bls 0.26.0",
  "chia-consensus",
  "chia-protocol",
- "chia-sdk-types 0.27.2",
+ "chia-puzzle-types",
+ "chia-puzzles",
+ "chia-sdk-signer 0.29.0",
+ "chia-sdk-types 0.29.0",
  "chia-secp",
  "chia-sha2 0.26.0",
+ "chia-traits 0.26.0",
+ "chia_streamable_macro 0.26.0",
  "clvm-traits",
+ "clvm-utils",
  "clvmr",
- "k256",
- "thiserror 2.0.12",
+ "flate2",
+ "getrandom 0.2.15",
+ "hex",
+ "hex-literal",
+ "indexmap 2.11.4",
+ "num-bigint",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -998,36 +979,24 @@ dependencies = [
  "clvm-traits",
  "clvmr",
  "k256",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
-name = "chia-sdk-test"
-version = "0.27.2"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
+name = "chia-sdk-signer"
+version = "0.29.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git#d050ea3b4385900455852651b8f4bfc80553769d"
 dependencies = [
- "anyhow",
- "bip39",
  "chia-bls 0.26.0",
  "chia-consensus",
  "chia-protocol",
- "chia-puzzle-types",
- "chia-sdk-signer 0.27.2",
- "chia-sdk-types 0.27.2",
+ "chia-sdk-types 0.29.0",
  "chia-secp",
  "chia-sha2 0.26.0",
- "chia-traits 0.26.0",
  "clvm-traits",
- "clvm-utils",
  "clvmr",
- "hex",
- "indexmap 2.10.0",
- "prettytable-rs",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "serde",
- "serde_json",
- "thiserror 2.0.12",
+ "k256",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -1053,7 +1022,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "hex",
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "itertools 0.13.0",
  "prettytable-rs",
  "rand 0.8.5",
@@ -1061,32 +1030,39 @@ dependencies = [
  "serde",
  "serde_json",
  "signature",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-tungstenite 0.24.0",
  "tracing",
 ]
 
 [[package]]
-name = "chia-sdk-types"
-version = "0.27.2"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
+name = "chia-sdk-test"
+version = "0.29.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git#d050ea3b4385900455852651b8f4bfc80553769d"
 dependencies = [
+ "anyhow",
+ "bip39",
  "chia-bls 0.26.0",
  "chia-consensus",
  "chia-protocol",
  "chia-puzzle-types",
- "chia-puzzles",
- "chia-sdk-derive 0.27.2",
+ "chia-sdk-signer 0.29.0",
+ "chia-sdk-types 0.29.0",
  "chia-secp",
  "chia-sha2 0.26.0",
+ "chia-traits 0.26.0",
  "clvm-traits",
  "clvm-utils",
- "clvm_tools_rs",
  "clvmr",
- "hex-literal",
- "once_cell",
- "thiserror 2.0.12",
+ "hex",
+ "indexmap 2.11.4",
+ "prettytable-rs",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -1108,20 +1084,28 @@ dependencies = [
  "clvmr",
  "hex-literal",
  "once_cell",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
-name = "chia-sdk-utils"
-version = "0.27.2"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
+name = "chia-sdk-types"
+version = "0.29.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git#d050ea3b4385900455852651b8f4bfc80553769d"
 dependencies = [
- "bech32",
+ "chia-bls 0.26.0",
+ "chia-consensus",
  "chia-protocol",
- "indexmap 2.10.0",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "thiserror 2.0.12",
+ "chia-puzzle-types",
+ "chia-puzzles",
+ "chia-sdk-derive 0.29.0",
+ "chia-secp",
+ "chia-sha2 0.26.0",
+ "clvm-traits",
+ "clvm-utils",
+ "clvm_tools_rs",
+ "clvmr",
+ "hex-literal",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -1131,10 +1115,23 @@ source = "git+https://github.com/xch-dev/chia-wallet-sdk?rev=4ffb3ee1dc8427ee9be
 dependencies = [
  "bech32",
  "chia-protocol",
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
+]
+
+[[package]]
+name = "chia-sdk-utils"
+version = "0.29.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git#d050ea3b4385900455852651b8f4bfc80553769d"
+dependencies = [
+ "bech32",
+ "chia-protocol",
+ "indexmap 2.11.4",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -1214,25 +1211,6 @@ dependencies = [
 
 [[package]]
 name = "chia-wallet-sdk"
-version = "0.27.2"
-source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=1199e568df1d8a77a824e166d674a1e913bef211#1199e568df1d8a77a824e166d674a1e913bef211"
-dependencies = [
- "chia-bls 0.26.0",
- "chia-protocol",
- "chia-sdk-client 0.27.2",
- "chia-sdk-coinset 0.27.2",
- "chia-sdk-driver 0.27.2",
- "chia-sdk-signer 0.27.2",
- "chia-sdk-test 0.27.2",
- "chia-sdk-types 0.27.2",
- "chia-sdk-utils 0.27.2",
- "clvm-traits",
- "clvm-utils",
- "clvmr",
-]
-
-[[package]]
-name = "chia-wallet-sdk"
 version = "0.28.0"
 source = "git+https://github.com/xch-dev/chia-wallet-sdk?rev=4ffb3ee1dc8427ee9bee0f14524133463cc54a9d#4ffb3ee1dc8427ee9bee0f14524133463cc54a9d"
 dependencies = [
@@ -1245,6 +1223,25 @@ dependencies = [
  "chia-sdk-test 0.28.0",
  "chia-sdk-types 0.28.0",
  "chia-sdk-utils 0.28.0",
+ "clvm-traits",
+ "clvm-utils",
+ "clvmr",
+]
+
+[[package]]
+name = "chia-wallet-sdk"
+version = "0.29.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git#d050ea3b4385900455852651b8f4bfc80553769d"
+dependencies = [
+ "chia-bls 0.26.0",
+ "chia-protocol",
+ "chia-sdk-client 0.29.0",
+ "chia-sdk-coinset 0.29.0",
+ "chia-sdk-driver 0.29.0",
+ "chia-sdk-signer 0.29.0",
+ "chia-sdk-test 0.29.0",
+ "chia-sdk-types 0.29.0",
+ "chia-sdk-utils 0.29.0",
  "clvm-traits",
  "clvm-utils",
  "clvmr",
@@ -1457,15 +1454,6 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
-
-[[package]]
-name = "convert_case"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
-dependencies = [
- "unicode-segmentation",
-]
 
 [[package]]
 name = "convert_case"
@@ -2193,7 +2181,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "slab",
  "tokio",
  "tokio-util",
@@ -2604,13 +2592,14 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.10.0"
+version = "2.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
+checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.2",
  "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -2786,7 +2775,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3420,7 +3409,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "rustls",
  "socket2 0.5.10",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
  "web-time",
@@ -3440,7 +3429,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tinyvec",
  "tracing",
  "web-time",
@@ -3583,7 +3572,7 @@ checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
 dependencies = [
  "getrandom 0.2.15",
  "libredox",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -3904,7 +3893,7 @@ dependencies = [
  "chia",
  "chia-wallet-sdk 0.28.0",
  "hex",
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "serde",
  "serde_with",
  "specta",
@@ -4056,7 +4045,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "serde",
  "serde_derive",
  "serde_json",
@@ -4165,7 +4154,7 @@ dependencies = [
  "chia",
  "chia-puzzle-types",
  "chia-puzzles",
- "chia-wallet-sdk 0.27.2",
+ "chia-wallet-sdk 0.29.0",
  "clap",
  "clvm-traits",
  "clvmr",
@@ -4185,7 +4174,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-tungstenite 0.26.2",
  "tower-http",
@@ -4236,7 +4225,7 @@ version = "2.0.0-rc.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab7f01e9310a820edd31c80fde3cae445295adde21a3f9416517d7d65015b971"
 dependencies = [
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "specta-macros",
  "thiserror 1.0.69",
 ]
@@ -4304,7 +4293,7 @@ dependencies = [
  "futures-util",
  "hashbrown 0.15.2",
  "hashlink",
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "log",
  "memchr",
  "native-tls",
@@ -4314,7 +4303,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "smallvec",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tracing",
  "url",
 ]
@@ -4395,7 +4384,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tracing",
  "whoami",
 ]
@@ -4432,7 +4421,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tracing",
  "whoami",
 ]
@@ -4491,9 +4480,9 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
-version = "2.0.104"
+version = "2.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17b6f705963418cdb9927482fa304bc562ece2fdd4f616084c50b7023b435a40"
+checksum = "ede7c438028d4436d71104916910f5bb611972c5cfd7f89b8300a8186e6fada6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4588,11 +4577,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.12"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
+checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
 dependencies = [
- "thiserror-impl 2.0.12",
+ "thiserror-impl 2.0.16",
 ]
 
 [[package]]
@@ -4608,9 +4597,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.12"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
+checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4790,7 +4779,7 @@ version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "toml_datetime",
  "winnow 0.5.40",
 ]
@@ -4801,7 +4790,7 @@ version = "0.22.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "583c44c02ad26b0c3f3066fe629275e50627026c51ac2e595cca4c230ce1ce1d"
 dependencies = [
- "indexmap 2.10.0",
+ "indexmap 2.11.4",
  "toml_datetime",
  "winnow 0.6.18",
 ]
@@ -4925,7 +4914,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "sha1",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "utf-8",
 ]
 
