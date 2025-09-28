@@ -30,7 +30,7 @@ futures-util = "0.3.31"
 axum = { version = "0.8.3", features = ["macros"]}
 tower-http = { version = "0.6.2", features = ["cors"] }
 futures = "0.3.31"
-chia-wallet-sdk = { git = "https://github.com/xch-dev/chia-wallet-sdk.git", features=["offer-compression", "action-layer"] }
+chia-wallet-sdk = { git = "https://github.com/xch-dev/chia-wallet-sdk.git", rev="010a5e932b6eeb2fc318d2d79492965bf4e26ef2", features=["offer-compression", "action-layer"] }
 sage-api = { version = "0.12.3", git = "https://github.com/xch-dev/sage.git" }
 chia-puzzles = "0.20.1"
 
