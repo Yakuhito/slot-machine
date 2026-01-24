@@ -42,8 +42,8 @@
 
     (defun consume_messages_and_spend_slot (
         UPDATE_SLOT_1ST_CURRY_HASH
-        update_slot_first_atom_hash
         message_without_prefix
+        update_slot_first_atom_hash
         owner_coin_id
         new_owner_singleton_puzzle_hash
         new_resolved_singleton_puzzle_hash

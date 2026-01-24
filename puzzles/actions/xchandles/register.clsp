@@ -48,7 +48,7 @@
         ; end neighbor slots info
         (@ data (owner_launcher_id . resolved_launcher_id))
         owner_inner_puzzle_hash
-        resolved_inner_puzzle_hash ; may be ()
+        resolved_inner_puzzle_hash
         ; info needed to compute precommit coin puzzle hash
         refund_puzzle_hash_hash .
         secret
@@ -80,7 +80,7 @@
                 ; announcement
                 (list
                     CREATE_PUZZLE_ANNOUNCEMENT
-                    (concat 'r' precommit_puzzle_hash) 
+                    (concat 'r' precommit_puzzle_hash)
                 )
                 (c
                     ; get approval from owner
