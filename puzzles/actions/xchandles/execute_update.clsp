@@ -7,7 +7,6 @@
 (mod (
     SINGLETON_MOD_HASH
     SINGLETON_LAUNCHER_PUZZLE_HASH
-    RELATIVE_BLOCK_HEIGHT ; how many blocks to wait before the update can be executed
     HANDLE_SLOT_1ST_CURRY_HASH ; after 1st curry
     UPDATE_SLOT_1ST_CURRY_HASH ; after 1st curry
     Truth
