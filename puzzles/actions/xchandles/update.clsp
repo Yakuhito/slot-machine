@@ -63,7 +63,7 @@
                 (list
                     RECEIVE_MESSAGE
                     18 ; puzzle-puzzle
-                    (sha256tree (c handle_hash new_data))
+                    (concat 'u' (sha256tree (c handle_hash new_data)))
                     (curry_hashes_inline SINGLETON_MOD_HASH
                         (sha256tree
                             (c SINGLETON_MOD_HASH (c current_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
