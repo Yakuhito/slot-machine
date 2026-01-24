@@ -6,10 +6,10 @@
 ;;  left_value/right_value are the keys of the slot's neighbors
 ;;  expiration is a timestamp that says when the handle will expire
 ;;  owner is a 32-byte launcher id that specifies the owner of the record, who can
-;;       update the owner_launcher (i.e., transfer the handle) and resolved_data
-;;  resolved_data is a value consiting of 0-64 bytes that specifies arbitrarty data
-;;       for XCHandles, for example. resolved_data may be a 32-byte launcher id of a name NFT
-;;       in the future, resolved_data might point to a namespace/sub-registry, for example
+;;       update the owner (i.e., transfer the handle) and resolved
+;;  resolved is a 32-byte launcher id that points to the singleton containing the resolved data
+;;       for XCHandles, for example. resolved may be a 32-byte launcher id of a name NFT
+;;       in the future, resolved might point to a namespace/sub-registry, for example
 
 ;; Also note that anyone can extend a handle registration, but only the owner can transfer the
 ;;   record or change the resolved_data
@@ -17,8 +17,10 @@
 ;; Warning: Pricing puzzle is responsible for ensuring registered_time > 0
 
 (mod (
+    SINGLETON_MOD_HASH
+    SINGLETON_LAUNCHER_PUZZLE_HASH
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
-    SLOT_1ST_CURRY_HASH ; after 1st curry
+    HANDLE_SLOT_1ST_CURRY_HASH ; after 1st curry
     (@ Truth
         (
             Ephemeral_State .
@@ -44,9 +46,11 @@
         right_expiration
         right_data
         ; end neighbor slots info
-        (@ data (owner_launcher_id . resolved_data))
+        (@ data (owner_launcher_id . resolved_launcher_id))
+        owner_inner_puzzle_hash
+        resolved_inner_puzzle_hash ; may be ()
         ; info needed to compute precommit coin puzzle hash
-        refund_puzzle_hash_hash
+        refund_puzzle_hash_hash .
         secret
     )
 )
@@ -56,9 +60,11 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun consume_precommit_and_announce (
+    (defun consume_precommit_assert_approvals_and_announce (
         precommit_puzzle_hash
         precommit_amount
+        owner_puzzle_hash
+        resolved_puzzle_hash
         base_conditions
     )
         (c
@@ -76,13 +82,34 @@
                     CREATE_PUZZLE_ANNOUNCEMENT
                     (concat 'r' precommit_puzzle_hash) 
                 )
-                base_conditions
+                (c
+                    ; get approval from owner
+                    (list
+                        RECEIVE_MESSAGE
+                        18 ; puzzle-puzzle
+                        (concat 'a' precommit_puzzle_hash)
+                        owner_puzzle_hash
+                    )
+                    ; get approval from resolved only if != owner
+                    (if (= owner_puzzle_hash resolved_puzzle_hash)
+                        base_conditions
+                        ; else
+                        (c
+                            (list
+                                RECEIVE_MESSAGE
+                                18 ; puzzle-puzzle
+                                (concat 'b' precommit_puzzle_hash)
+                                resolved_puzzle_hash
+                            )
+                        )
+                    )
+                )
             )
         )
     )
 
     (defun-inline main ((total_price . registered_time))
-        (consume_precommit_and_announce
+        (consume_precommit_assert_approvals_and_announce
             (a
                 cat_maker_puzzle_reveal
                 (c
@@ -96,27 +123,35 @@
                             handle
                             secret
                             owner_launcher_id
-                            resolved_data
+                            resolved_launcher_id
                         ))
                     ) ; Inner_Puzzle_Hash
                     cat_maker_solution
                 )
             ) ; precommit_puzzle_hash
             total_price ; precommit_amount
+            (curry_hashes_inline SINGLETON_MOD_HASH
+                (sha256tree (c SINGLETON_MOD_HASH (c owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH)))
+                owner_inner_puzzle_hash
+            )
+            (curry_hashes_inline SINGLETON_MOD_HASH
+                (sha256tree (c SINGLETON_MOD_HASH (c resolved_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH)))
+                resolved_inner_puzzle_hash
+            )
             (list
                 (list ASSERT_SECONDS_ABSOLUTE start_time)
                 
                 ; spend left slot
-                (spend_slot_inline SLOT_1ST_CURRY_HASH 
+                (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH 
                     (get_xchandles_slot_value_hash left_value (c left_left_value right_value) left_expiration left_data)
                 )
                 ; spend right slot
-                (spend_slot_inline SLOT_1ST_CURRY_HASH
+                (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
                     (get_xchandles_slot_value_hash right_value (c left_value right_right_value) right_expiration right_data)
                 )
                 
                 ; create new slot
-                (create_slot_inline SLOT_1ST_CURRY_HASH
+                (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
                     (get_xchandles_slot_value_hash
                         handle_hash
                         neighbors
@@ -126,11 +161,11 @@
                 )
 
                 ; create new left slot
-                (create_slot_inline SLOT_1ST_CURRY_HASH 
+                (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH 
                     (get_xchandles_slot_value_hash left_value (c left_left_value handle_hash) left_expiration left_data)
                 ) 
                 ; create new right slot
-                (create_slot_inline SLOT_1ST_CURRY_HASH
+                (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
                     (get_xchandles_slot_value_hash right_value (c handle_hash right_right_value) right_expiration right_data)
                 )
             ) ; base_conditions
@@ -144,8 +179,9 @@
             (>s right_value handle_hash)
             (= Cat_Maker_Puzzle_Hash (sha256tree cat_maker_puzzle_reveal)) ; cat maker puzzle reveal is correct
             (= Pricing_Puzzle_Hash (sha256tree pricing_puzzle_reveal)) ; pricing puzzle reveal is correct
-            (= (strlen owner_launcher_id) 32)
-            (> 65 (strlen resolved_data))
+            ; These are not needed as we receive a message from a singleton having them:
+            ; (= (strlen owner_launcher_id) 32)
+            ; (= (strlen resolved_launcher_id) 32)
         )
         (c
             Truth ; new ephemeral state and state

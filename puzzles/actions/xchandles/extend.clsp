@@ -9,7 +9,7 @@
 (mod (
     OFFER_MOD_HASH
     PAYOUT_PUZZLE_HASH
-    SLOT_1ST_CURRY_HASH ; after 1st curry
+    HANDLE_SLOT_1ST_CURRY_HASH ; after 1st curry
     (@ Truth
         (
             Ephemeral_State .
@@ -39,7 +39,7 @@
             Truth
             (list
                 ; spend slot
-                (spend_slot_inline SLOT_1ST_CURRY_HASH 
+                (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH 
                     (get_xchandles_slot_value_hash (sha256 1 handle) neighbors expiration rest_data)
                 )
 
@@ -53,7 +53,7 @@
                 (list ASSERT_SECONDS_ABSOLUTE buy_time)
 
                 ; create new slot
-                (create_slot_inline SLOT_1ST_CURRY_HASH
+                (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
                     (get_xchandles_slot_value_hash
                         (sha256 1 handle)
                         neighbors

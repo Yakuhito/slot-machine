@@ -9,7 +9,7 @@
 
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
-    SLOT_1ST_CURRY_HASH ; after 1st curry
+    HANDLE_SLOT_1ST_CURRY_HASH ; after 1st curry
     (@ Truth
         (
             Ephemeral_State .
@@ -42,7 +42,7 @@
     (include slots.clib)
 
     (defun main (
-        SLOT_1ST_CURRY_HASH
+        HANDLE_SLOT_1ST_CURRY_HASH
         slot_value_hash
         expiration ; () if slot spend is not needed
         precommit_puzzle_hash
@@ -66,8 +66,8 @@
                 (if expiration
                     (list
                         (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
-                        (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
-                        (create_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
+                        (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH slot_value_hash)
+                        (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH slot_value_hash)
                     )
                     ; else
                     ()
@@ -84,7 +84,7 @@
         (c
             Truth
             (main
-                SLOT_1ST_CURRY_HASH
+                HANDLE_SLOT_1ST_CURRY_HASH
                 (sha256tree slot_value)
                 (if (all
                         ; not (a)

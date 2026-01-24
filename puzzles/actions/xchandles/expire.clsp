@@ -7,8 +7,10 @@
 ;; Warning: Expired pricing puzzle is responsible for ensuring buy_time > 0
 
 (mod (
+    SINGLETON_MOD_HASH
+    SINGLETON_LAUNCHER_PUZZLE_HASH
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
-    SLOT_1ST_CURRY_HASH ; after 1st curry
+    HANDLE_SLOT_1ST_CURRY_HASH ; after 1st curry
     (@ Truth
         (
             Ephemeral_State .
@@ -26,8 +28,10 @@
         refund_puzzle_hash_hash
         secret
         neighbors ; (c left right)
-        old_rest . ; (c old_owner_launcher_id old_resolved_data)
-        (@ new_rest (new_owner_launcher_id . new_resolved_data))
+        old_rest ; (c old_owner_launcher_id old_resolved_launcher_id)
+        (@ new_rest (new_owner_launcher_id . new_resolved_launcher_id))
+        new_owner_inner_puzzle_hash .
+        new_resolved_inner_puzzle_hash ; may be ()
     )
 )
     (include condition_codes.clib)
@@ -36,9 +40,11 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun spend_precommit_coin_and_announce (
+    (defun consume_precommit_assert_approvals_and_announce (
         precommit_coin_ph
         total_price
+        owner_puzzle_hash
+        resolved_puzzle_hash
         base_conditions
     )
         (c
@@ -51,7 +57,28 @@
             )
             (c 
                 (list CREATE_PUZZLE_ANNOUNCEMENT (concat 'x' precommit_coin_ph))
-                base_conditions
+                (c
+                    ; get approval from owner
+                    (list
+                        RECEIVE_MESSAGE
+                        18 ; puzzle-puzzle
+                        (concat 'a' precommit_puzzle_hash)
+                        owner_puzzle_hash
+                    )
+                    ; get approval from resolved only if != owner
+                    (if (= owner_puzzle_hash resolved_puzzle_hash)
+                        base_conditions
+                        ; else
+                        (c
+                            (list
+                                RECEIVE_MESSAGE
+                                18 ; puzzle-puzzle
+                                (concat 'b' precommit_puzzle_hash)
+                                resolved_puzzle_hash
+                            )
+                        )
+                    )
+                )
             )
         )
     )
@@ -62,7 +89,7 @@
     )
         (c
             Truth ; nothing changes
-            (spend_precommit_coin_and_announce
+            (consume_precommit_assert_approvals_and_announce
                 (a
                     cat_maker_puzzle_reveal
                     (c
@@ -83,6 +110,14 @@
                     )
                 ) ; precommit coin full puzzle hash
                 total_price ; precommit coin amount
+                (curry_hashes_inline SINGLETON_MOD_HASH
+                    (sha256tree (c SINGLETON_MOD_HASH (c new_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH)))
+                    new_owner_inner_puzzle_hash
+                )
+                (curry_hashes_inline SINGLETON_MOD_HASH
+                    (sha256tree (c SINGLETON_MOD_HASH (c new_resolved_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH)))
+                    new_resolved_inner_puzzle_hash
+                )
                 (list
                     (list ASSERT_SECONDS_ABSOLUTE buy_time)
 
@@ -90,12 +125,12 @@
                     (list ASSERT_SECONDS_ABSOLUTE current_expiration)
 
                     ; spend slot
-                    (spend_slot_inline SLOT_1ST_CURRY_HASH 
+                    (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH 
                         (get_xchandles_slot_value_hash handle_hash neighbors current_expiration old_rest)
                     )
                     
                     ; create new slot
-                    (create_slot_inline SLOT_1ST_CURRY_HASH
+                    (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
                         (get_xchandles_slot_value_hash handle_hash neighbors (+ registered_time buy_time) new_rest)
                     )
                 ) ; base conditions
@@ -106,8 +141,9 @@
     (if (all
         (= (sha256tree cat_maker_puzzle_reveal) Cat_Maker_Puzzle_Hash)
         (= (sha256tree expired_handle_pricing_puzzle_reveal) Expired_Handle_Pricing_Puzzle_Hash)
-        (= (strlen new_owner_launcher_id) 32)
-        (> 65 (strlen new_resolved_data))
+        ; Not needed as we receive a message from a singleton having these as launcher ids:
+        ; (= (strlen new_owner_launcher_id) 32)
+        ; (= (strlen new_resolved_launcher_id) 32)
     )
         (main
             (sha256 1 handle)
