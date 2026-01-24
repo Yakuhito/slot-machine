@@ -22,7 +22,7 @@
       (list
         RECEIVE_MESSAGE
         18 ; puzzle-puzzle
-        (sha256tree new_state)
+        (concat 's' (sha256tree new_state))
         (curry_hashes_inline SINGLETON_MOD_HASH
           OTHER_SINGLETON_STRUCT_HASH
           other_singleton_inner_puzzle_hash
