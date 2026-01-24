@@ -29,7 +29,7 @@
         handle
         secret
         precommited_owner_launcher_id
-        precommited_resolved_data
+        precommited_resolved_launcher_id
         refund_puzzle_hash_hash
         precommit_amount . ; amount of the pre-commit coin
         (@ slot_value ((handle_hash . rest1) . (expiration .rest2)))
@@ -116,7 +116,7 @@
                                 handle
                                 secret
                                 precommited_owner_launcher_id
-                                precommited_resolved_data
+                                precommited_resolved_launcher_id
                             )) ; hash of precommit value, which is itself a hash :)
                         ) ; Inner_Puzzle_Hash
                         precommited_cat_maker_solution
