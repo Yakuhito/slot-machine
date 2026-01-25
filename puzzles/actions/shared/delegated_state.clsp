@@ -10,7 +10,9 @@
   SINGLETON_MOD_HASH
   OTHER_SINGLETON_STRUCT_HASH
   (Ephemeral_State . Current_State) ; Truth
-  (new_state . other_singleton_inner_puzzle_hash)
+  ; solution
+  new_state .
+  other_singleton_inner_puzzle_hash
 )
   (include condition_codes.clib)
   (include sha256tree.clib)
