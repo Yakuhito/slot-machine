@@ -35,12 +35,12 @@
     (defun assert_slot (HANDLE_SLOT_1ST_CURRY_HASH slot_value_hash base_conditions)
         (c
             ; spend slot
-            (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
+            (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH 
                 slot_value_hash
             )
             (c
                 ; re-create slot
-                (create_slot HANDLE_SLOT_1ST_CURRY_HASH
+                (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
                     slot_value_hash
                 )
                 base_conditions
@@ -64,7 +64,7 @@
             )
 
             ; create update slot
-            (create_slot_with_hint UPDATE_SLOT_1ST_CURRY_HASH
+            (create_slot_with_hint_inline UPDATE_SLOT_1ST_CURRY_HASH
                 (sha256 2
                     (sha256 2 (sha256 1 owner_coin_id) (sha256 1 min_execution_height))
                     message_without_prefix
@@ -93,7 +93,7 @@
                         ; initiator coin id
                         (coinid
                             current_owner_parent_id
-                            (curry_hashes SINGLETON_MOD_HASH
+                            (curry_hashes_inline SINGLETON_MOD_HASH
                                 (sha256tree
                                     (c SINGLETON_MOD_HASH (c current_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
                                 ) ; tree hash of SINGLETON_STRUCT
