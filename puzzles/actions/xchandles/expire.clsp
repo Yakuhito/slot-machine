@@ -20,20 +20,19 @@
             )
         )
     )
+    ; solution
     (
-        (
-            expired_handle_pricing_puzzle_reveal . 
-            (@ expired_handle_pricing_puzzle_solution (buy_time current_expiration handle . expired_handle_pricing_puzzle_solution_rest))
-        ) ; expired_handle_pricing_puzzle_data
-        (cat_maker_puzzle_reveal . cat_maker_puzzle_solution) ; cat_maker_data
-        ( 
-            (@ new_rest (new_owner_launcher_id . new_resolved_launcher_id)) .
-            (refund_puzzle_hash_hash . secret)
-        ) ; other_precommit_data
-        neighbors ; (c left right)
-        old_rest . ; (c old_owner_launcher_id old_resolved_launcher_id)
-        (new_owner_inner_puzzle_hash . new_resolved_inner_puzzle_hash) ; new_inner_puzzle_hashes
-    )
+        expired_handle_pricing_puzzle_reveal . 
+        (@ expired_handle_pricing_puzzle_solution (buy_time current_expiration handle . expired_handle_pricing_puzzle_solution_rest))
+    ) ; expired_handle_pricing_puzzle_data
+    (cat_maker_puzzle_reveal . cat_maker_puzzle_solution) ; cat_maker_data
+    ( 
+        (@ new_rest (new_owner_launcher_id . new_resolved_launcher_id)) .
+        (refund_puzzle_hash_hash . secret)
+    ) ; other_precommit_data
+    neighbors ; (c left right)
+    old_rest . ; (c old_owner_launcher_id old_resolved_launcher_id)
+    (new_owner_inner_puzzle_hash . new_resolved_inner_puzzle_hash) ; new_inner_puzzle_hashes
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
