@@ -46,6 +46,7 @@
         total_price
         owner_puzzle_hash
         resolved_puzzle_hash
+        base_conditions
     )
         (c
             (list
@@ -67,7 +68,7 @@
                     )
                     ; get approval from resolved only if != owner
                     (if (= owner_puzzle_hash resolved_puzzle_hash)
-                        ()
+                        base_conditions
                         ; else
                         (c
                             (list
@@ -76,7 +77,7 @@
                                 (concat 'b' precommit_coin_ph)
                                 resolved_puzzle_hash
                             )
-                            ()
+                            base_conditions
                         )
                     )
                 )
@@ -90,55 +91,52 @@
     )
         (c
             Truth ; nothing changes
-            (c
-                (list ASSERT_SECONDS_ABSOLUTE buy_time)
-                (c
+            (consume_precommit_assert_approvals_and_announce
+                (a
+                    cat_maker_puzzle_reveal
+                    (c
+                        (curry_hashes_inline PRECOMMIT_1ST_CURRY_HASH
+                            refund_puzzle_hash_hash
+                            (sha256 1 (xchandles_precommitment_value
+                                Cat_Maker_Puzzle_Hash
+                                cat_maker_puzzle_solution
+                                Expired_Handle_Pricing_Puzzle_Hash
+                                expired_handle_pricing_puzzle_solution
+                                handle
+                                secret
+                                new_owner_launcher_id
+                                new_resolved_data
+                            ))
+                        ) ; Inner_Puzzle_Hash
+                        cat_maker_puzzle_solution
+                    )
+                ) ; precommit coin full puzzle hash
+                total_price ; precommit coin amount
+                (curry_hashes SINGLETON_MOD_HASH
+                    (sha256tree (c SINGLETON_MOD_HASH (c new_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH)))
+                    new_owner_inner_puzzle_hash
+                )
+                (curry_hashes SINGLETON_MOD_HASH
+                    (sha256tree (c SINGLETON_MOD_HASH (c new_resolved_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH)))
+                    new_resolved_inner_puzzle_hash
+                )
+                (list
+                    (list ASSERT_SECONDS_ABSOLUTE buy_time)
+
                     ; assert handle actually expired
                     (list ASSERT_SECONDS_ABSOLUTE current_expiration)
-                    (c
-                        ; spend slot
-                        (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
-                            (get_xchandles_slot_value_hash handle_hash neighbors current_expiration old_rest)
-                        )
-                        (c
-                            ; create new slot
-                            (create_slot HANDLE_SLOT_1ST_CURRY_HASH
-                                (get_xchandles_slot_value_hash handle_hash neighbors (+ registered_time buy_time) new_rest)
-                            )
-                            (consume_precommit_assert_approvals_and_announce
-                                (a
-                                    cat_maker_puzzle_reveal
-                                    (c
-                                        (curry_hashes PRECOMMIT_1ST_CURRY_HASH
-                                            refund_puzzle_hash_hash
-                                            (sha256 1 (xchandles_precommitment_value
-                                                Cat_Maker_Puzzle_Hash
-                                                cat_maker_puzzle_solution
-                                                Expired_Handle_Pricing_Puzzle_Hash
-                                                expired_handle_pricing_puzzle_solution
-                                                handle
-                                                secret
-                                                new_owner_launcher_id
-                                                new_resolved_data
-                                            ))
-                                        ) ; Inner_Puzzle_Hash
-                                        cat_maker_puzzle_solution
-                                    )
-                                ) ; precommit coin full puzzle hash
-                                total_price ; precommit coin amount
-                                (curry_hashes SINGLETON_MOD_HASH
-                                    (sha256tree (c SINGLETON_MOD_HASH (c new_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH)))
-                                    new_owner_inner_puzzle_hash
-                                )
-                                (curry_hashes SINGLETON_MOD_HASH
-                                    (sha256tree (c SINGLETON_MOD_HASH (c new_resolved_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH)))
-                                    new_resolved_inner_puzzle_hash
-                                )
-                            ) ; conditions
-                        )
+
+                    ; spend slot
+                    (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
+                        (get_xchandles_slot_value_hash handle_hash neighbors current_expiration old_rest)
                     )
-                )
-            )
+                    
+                    ; create new slot
+                    (create_slot HANDLE_SLOT_1ST_CURRY_HASH
+                        (get_xchandles_slot_value_hash handle_hash neighbors (+ registered_time buy_time) new_rest)
+                    )
+                ) ; base conditions
+            ) ; conditions
         )
     )
 
