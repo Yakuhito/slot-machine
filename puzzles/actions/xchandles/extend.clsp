@@ -23,10 +23,10 @@
     (
         pricing_puzzle_reveal .
         (@ pricing_solution (buy_time expiration handle . rest))
-    ) ; pricing_puzzle_data
+    ) ; pricing_puzzle_and_solution
     neighbors
     rest_data .
-    (cat_maker_puzzle_reveal . cat_maker_solution) ; cat_maker_data
+    (cat_maker_puzzle_reveal . cat_maker_solution) ; cat_maker_and_solution
 )
     (include condition_codes.clib)
     (include sha256tree.clib)

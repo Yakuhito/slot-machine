@@ -24,8 +24,8 @@
     (
         expired_handle_pricing_puzzle_reveal . 
         (@ expired_handle_pricing_puzzle_solution (buy_time current_expiration handle . expired_handle_pricing_puzzle_solution_rest))
-    ) ; expired_handle_pricing_puzzle_data
-    (cat_maker_puzzle_reveal . cat_maker_puzzle_solution) ; cat_maker_data
+    ) ; expired_handle_pricing_puzzle_and_solution
+    (cat_maker_puzzle_reveal . cat_maker_puzzle_solution) ; cat_maker_and_solution
     ( 
         (@ new_rest (new_owner_launcher_id . new_resolved_launcher_id)) .
         (refund_puzzle_hash_hash . secret)
