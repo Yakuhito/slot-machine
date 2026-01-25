@@ -21,22 +21,22 @@
     )
     ; solution
     (
-        precommited_pricing_puzzle_reveal_hash
-        precommited_pricing_puzzle_reveal .
-        precommited_pricing_puzzle_solution
-    )
-    (
         precommited_cat_maker_reveal_hash
         precommited_cat_maker_reveal .
         precommited_cat_maker_solution
     )
+    (
+        precommited_pricing_puzzle_reveal_hash
+        precommited_pricing_puzzle_reveal .
+        precommited_pricing_puzzle_solution
+    )
     handle
-    precommit_amount ; amount of the pre-commit coin
-    (@ slot_value ((handle_hash . rest1) . (expiration .rest2))) .
     (
         (secret . refund_puzzle_hash_hash) .
         (precommited_owner_launcher_id . precommited_resolved_launcher_id)
     ) ; other_precommit_data
+    precommit_amount . ; amount of the pre-commit coin
+    (@ slot_value ((handle_hash . rest1) . (expiration .rest2)))
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
