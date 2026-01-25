@@ -61,7 +61,7 @@
                     (list
                         RECEIVE_MESSAGE
                         18 ; puzzle-puzzle
-                        (concat 'a' precommit_coin_ph)
+                        (concat 'e' precommit_coin_ph)
                         owner_puzzle_hash
                     )
                     ; get approval from resolved only if != owner
@@ -72,7 +72,7 @@
                             (list
                                 RECEIVE_MESSAGE
                                 18 ; puzzle-puzzle
-                                (concat 'b' precommit_coin_ph)
+                                (concat 'f' precommit_coin_ph)
                                 resolved_puzzle_hash
                             )
                             ()
