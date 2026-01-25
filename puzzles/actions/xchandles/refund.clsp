@@ -34,8 +34,8 @@
     precommit_amount ; amount of the pre-commit coin
     (@ slot_value ((handle_hash . rest1) . (expiration .rest2))) .
     (
-        (secret . refund_puzzle_hash_hash) .
-        (precommited_owner_launcher_id . precommited_resolved_launcher_id)
+        (precommited_owner_launcher_id . precommited_resolved_launcher_id) .
+        (refund_puzzle_hash_hash . secret)
     ) ; other_precommit_data
 )
     (include condition_codes.clib)
