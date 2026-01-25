@@ -30,7 +30,7 @@
     (include slots.clib)
 
     (defun singleton_puzzle_hash (SINGLETON_MOD_HASH SINGLETON_LAUNCHER_PUZZLE_HASH launcher_id inner_puzzle_hash)
-        (curry_hashes_inline SINGLETON_MOD_HASH
+        (curry_hashes SINGLETON_MOD_HASH
             (sha256tree
                 (c SINGLETON_MOD_HASH (c launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
             ) ; tree hash of SINGLETON_STRUCT
@@ -72,7 +72,7 @@
             )
 
             ; spend update slot
-            (spend_slot_inline UPDATE_SLOT_1ST_CURRY_HASH
+            (spend_slot UPDATE_SLOT_1ST_CURRY_HASH
                 (sha256 2 update_slot_first_atom_hash message_without_prefix)
             )
         )
@@ -88,12 +88,12 @@
                 (list ASSERT_HEIGHT_ABSOLUTE min_execution_height)
                 (c
                     ; spend handle slot
-                    (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH 
+                    (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
                         (sha256tree current_slot)
                     )
                     (c
                         ; create new handle slot
-                        (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
+                        (create_slot HANDLE_SLOT_1ST_CURRY_HASH
                             (sha256tree (c handle_and_neighbors (c expiration new_data)))
                         )
                         (consume_messages_and_spend_slot

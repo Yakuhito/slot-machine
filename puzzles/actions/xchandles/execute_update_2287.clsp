@@ -29,15 +29,6 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun singleton_puzzle_hash (SINGLETON_MOD_HASH SINGLETON_LAUNCHER_PUZZLE_HASH launcher_id inner_puzzle_hash)
-        (curry_hashes_inline SINGLETON_MOD_HASH
-            (sha256tree
-                (c SINGLETON_MOD_HASH (c launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
-            ) ; tree hash of SINGLETON_STRUCT
-            inner_puzzle_hash
-        )
-    )
-
     (defun consume_messages_and_spend_slot (
         UPDATE_SLOT_1ST_CURRY_HASH
         message_without_prefix
@@ -72,7 +63,7 @@
             )
 
             ; spend update slot
-            (spend_slot_inline UPDATE_SLOT_1ST_CURRY_HASH
+            (spend_slot UPDATE_SLOT_1ST_CURRY_HASH
                 (sha256 2 update_slot_first_atom_hash message_without_prefix)
             )
         )
@@ -88,12 +79,12 @@
                 (list ASSERT_HEIGHT_ABSOLUTE min_execution_height)
                 (c
                     ; spend handle slot
-                    (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH 
+                    (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
                         (sha256tree current_slot)
                     )
                     (c
                         ; create new handle slot
-                        (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
+                        (create_slot HANDLE_SLOT_1ST_CURRY_HASH
                             (sha256tree (c handle_and_neighbors (c expiration new_data)))
                         )
                         (consume_messages_and_spend_slot
@@ -105,25 +96,25 @@
                             ; initiator coin id
                             (coinid
                                 current_owner_parent_id
-                                (singleton_puzzle_hash
-                                    SINGLETON_MOD_HASH
-                                    SINGLETON_LAUNCHER_PUZZLE_HASH
-                                    current_owner_launcher_id
+                                (curry_hashes SINGLETON_MOD_HASH
+                                    (sha256tree
+                                        (c SINGLETON_MOD_HASH (c current_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
+                                    ) ; tree hash of SINGLETON_STRUCT
                                     current_owner_inner_puzzle_hash
                                 )
                                 current_owner_amount
                             )
                             ; need approval from new owner and resolved launcher id
-                            (singleton_puzzle_hash
-                                SINGLETON_MOD_HASH
-                                SINGLETON_LAUNCHER_PUZZLE_HASH
-                                new_owner_launcher_id
+                            (curry_hashes SINGLETON_MOD_HASH
+                                (sha256tree
+                                    (c SINGLETON_MOD_HASH (c new_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
+                                ) ; tree hash of SINGLETON_STRUCT
                                 new_owner_inner_puzzle_hash
                             )
-                            (singleton_puzzle_hash
-                                SINGLETON_MOD_HASH
-                                SINGLETON_LAUNCHER_PUZZLE_HASH
-                                new_resolved_launcher_id
+                            (curry_hashes SINGLETON_MOD_HASH
+                                (sha256tree
+                                    (c SINGLETON_MOD_HASH (c new_resolved_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
+                                ) ; tree hash of SINGLETON_STRUCT
                                 new_resolved_inner_puzzle_hash
                             )
                         )
