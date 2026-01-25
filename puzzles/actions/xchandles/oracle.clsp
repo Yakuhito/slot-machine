@@ -5,7 +5,8 @@
 
 (mod (
     HANDLE_SLOT_1ST_CURRY_HASH ; after 1st curry
-    Truth
+    Truth .
+    ; solution
     slot_value ; solution = slot value :)
 )
     (include condition_codes.clib)
