@@ -11,6 +11,7 @@
     UPDATE_SLOT_1ST_CURRY_HASH ; after 1st curry
     Truth
     ; solution
+    min_execution_height
     (@
         current_slot
         (
@@ -19,8 +20,7 @@
         )
     )
     (@ new_data (new_owner_launcher_id . new_resolved_launcher_id))
-    (current_owner_parent_id current_owner_inner_puzzle_hash . current_owner_amount)
-    min_execution_height . 
+    (current_owner_parent_id current_owner_inner_puzzle_hash . current_owner_amount) . 
     (new_owner_inner_puzzle_hash . new_resolved_inner_puzzle_hash) ; new_inner_puzzle_hashes
 )
     (include condition_codes.clib)
