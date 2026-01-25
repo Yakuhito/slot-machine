@@ -19,16 +19,19 @@
             )
         )
     )
+    ; solution
     (
         precommited_cat_maker_hash ; (sha256tree precommited_cat_maker_reveal)
-        precommited_cat_maker_reveal
+        precommited_cat_maker_reveal .
         precommited_cat_maker_solution
+    ) ; precommit_cat_maker_data
+    (
         tail_hash ; full TAIL in the reveal of the pre-commit coin
-        initial_nft_owner_ph ; also included in the pre-commit coin
+        initial_nft_owner_ph . ; also included in the pre-commit coin
         refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
-        precommit_amount . ; amount of the pre-commit coin
-        neighbors ; (left_tail_hash . right_tail_hash)
-    ) ; solution
+    ) ; other_precommit_data
+    precommit_amount . ; amount of the pre-commit coin
+    neighbors ; (left_tail_hash . right_tail_hash)
 )
     (include condition_codes.clib)
     (include sha256tree.clib)

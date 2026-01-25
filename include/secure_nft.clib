@@ -8,14 +8,14 @@
     ; the inner ph and potentially the owner - thus revealing them on-chain
     (defun secure_nft (
         (
-            LAUNCHER_MOD_HASH
-            SINGLETON_MOD_HASH
-            NFT_STATE_LAYER_MOD_HASH
-            METADATA_UPDATER_HASH_HASH
-            NFT_OWNERSHIP_MOD_HASH
-            TRANSFER_PROGRAM_MOD_HASH
-            ROYALTY_ADDRESS_HASH
-            TRADE_PRICE_PERCENTAGE
+            (
+                (LAUNCHER_MOD_HASH . SINGLETON_MOD_HASH) .
+                (NFT_STATE_LAYER_MOD_HASH . METADATA_UPDATER_HASH_HASH)
+            ) .
+            (
+                (NFT_OWNERSHIP_MOD_HASH . TRANSFER_PROGRAM_MOD_HASH) .
+                (ROYALTY_ADDRESS_HASH . TRADE_PRICE_PERCENTAGE)
+            )
         ) ; NFT_PACK
         inner_puzzle_hash
         launcher_id
