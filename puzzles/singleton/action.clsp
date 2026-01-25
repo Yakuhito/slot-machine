@@ -3,7 +3,7 @@
 ;; Each action will receive the current state + an ephemeral state and return new values
 ;; One or more actions may be run per spend
 
-;; An action's solution will always be: (list (Ephemeral_State . Current_State) solution)
+;; An action's solution will always be: (c (c Ephemeral_State Current_State) solution)
 ;;    (where capital first letters are used to denote Truths)
 ;; It returns three values: ((new_ephemeral_state . new_state) . new_conditions)
 ;;    state is passed from one action to the next and the latest value is saved between spends
@@ -21,7 +21,7 @@
     STATE
     puzzles
     selectors_and_proofs ; (list (selector . proof) ...) INVERSE ORDER
-    solutions ; (list (action_solution ...)
+    solutions . ; (list (action_solution ...)
     finalizer_solution
 )
     (include merkle_utils.clib)
@@ -72,7 +72,7 @@
             (run_actions
                 puzzles
                 (c new_conditions current_conditions)
-                (a (a selector puzzles) (list ephemeral_and_actual_state solution))
+                (a (a selector puzzles) (c ephemeral_and_actual_state solution))
                 remaining_selectors
                 remaining_solutions
             )
@@ -86,17 +86,18 @@
     
     (a
         FINALZIER
-        (list
-            MERKLE_ROOT
-            STATE
-            (run_actions
-                puzzles                
-                ()
-                (list (c () STATE))
-                (reduce_and_verify_proofs MERKLE_ROOT puzzles () selectors_and_proofs)
-                solutions
+        (c
+            (c MERKLE_ROOT STATE)
+            (c
+                (run_actions
+                    puzzles                
+                    ()
+                    (list (c () STATE))
+                    (reduce_and_verify_proofs MERKLE_ROOT puzzles () selectors_and_proofs)
+                    solutions
+                )
+                finalizer_solution
             )
-            finalizer_solution
         )
     )
 )
