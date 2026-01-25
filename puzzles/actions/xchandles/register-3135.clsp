@@ -33,14 +33,16 @@
     ; pricing_solution has 3 Truths: Start_Time, Current_Expiration, and Handle_Reveal
     ; solution
     handle_hash
-    (@ neighbors (left_value . right_value))
-    (cat_maker_puzzle_reveal . cat_maker_solution)
     (pricing_puzzle_reveal . (@ pricing_solution (start_time this_is_zero handle . solution_rest)))
+    (cat_maker_puzzle_reveal . cat_maker_solution)
+    ; start neighbor slots info
+    (@ neighbors (left_value . right_value))
     (left_left_value left_expiration . left_data)
     (right_right_value right_expiration . right_data)
-    (owner_inner_puzzle_hash . resolved_inner_puzzle_hash) .
+    ; end neighbor slots info
+    (@ data (owner_launcher_id . resolved_launcher_id)) .
     (
-        (@ data (owner_launcher_id . resolved_launcher_id)) .
+        (owner_inner_puzzle_hash . resolved_inner_puzzle_hash) .
         ; info needed to compute precommit coin puzzle hash
         (refund_puzzle_hash_hash . secret)
     ) ; other_precommit_data
