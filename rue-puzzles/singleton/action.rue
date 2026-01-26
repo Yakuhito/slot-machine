@@ -53,7 +53,7 @@ fn reduce_and_verify_proofs(
     if selectors_and_proofs is nil {
         selectors_so_far
     } else {
-        let (selector, proof) = selectors_and_proofs.first;
+        inline let (selector, proof) = selectors_and_proofs.first;
 
         let valid_selector = if proof is nil {
             // treat selectors as ints for item_in_list
@@ -82,8 +82,8 @@ fn run_actions(
     pending_selectors: List<Selector>,
     pending_solutions: List<Solution>,
 ) -> (StateTruth, List<List<Condition>>) {
-    let ephemeral_and_actual_state = action_output.state_truth;
-    let new_conditions = action_output.conditions;
+    inline let ephemeral_and_actual_state = action_output.state_truth;
+    inline let new_conditions = action_output.conditions;
 
     if pending_selectors is nil {
         (
@@ -91,9 +91,9 @@ fn run_actions(
             (new_conditions, current_conditions),
         )
     } else {
-        let selector = pending_selectors.first;
-        let remaining_selectors = pending_selectors.rest;
-        let (solution, remaining_solutions) = unchecked_cast::<(Solution, List<Solution>)>(pending_solutions);
+        inline let selector = pending_selectors.first;
+        inline let remaining_selectors = pending_selectors.rest;
+        inline let (solution, remaining_solutions) = unchecked_cast::<(Solution, List<Solution>)>(pending_solutions);
         
         let puzzle = selector(...puzzles);
 

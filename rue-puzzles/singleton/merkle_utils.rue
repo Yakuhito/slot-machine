@@ -6,7 +6,7 @@ export struct MerkleProof {
 }
 
 export inline fn tree_branch_hash (left: Bytes32, right: Bytes32) -> Bytes32 {
-    sha256(...[0x02, left, right])
+    sha256(0x02 + left + right)
 }
 
 export fn calculate_merkle_root(
@@ -19,11 +19,18 @@ export fn calculate_merkle_root(
     } else {
         calculate_merkle_root(
             path >>> 1,
-            if path & 1 != 0 {
-                tree_branch_hash(additional_steps.first, current_hash)
-            } else {
-                tree_branch_hash(current_hash, additional_steps.first)
-            },
+            tree_branch_hash(
+                inline if path & 1 != 0 {
+                    additional_steps.first
+                } else {
+                    current_hash
+                },
+                inline if path & 1 != 0 {
+                    current_hash
+                } else {
+                    additional_steps.first
+                }
+            ),
             additional_steps.rest
         )
     }
@@ -37,11 +44,18 @@ export fn simplify_merkle_proof_after_leaf(
         leaf_hash
     } else {
         simplify_merkle_proof_after_leaf(
-            if proof.path & 1 != 0 {
-                tree_branch_hash(proof.hashes.first, leaf_hash)
-            } else {
-                tree_branch_hash(leaf_hash, proof.hashes.first)
-            },
+            tree_branch_hash(
+                inline if proof.path & 1 != 0 {
+                    proof.hashes.first
+                } else {
+                    leaf_hash
+                },
+                inline if proof.path & 1 != 0 {
+                    leaf_hash
+                } else {
+                    proof.hashes.first
+                }
+            ),
             MerkleProof {
                 path: proof.path >>> 1,
                 hashes: proof.hashes.rest
@@ -54,5 +68,5 @@ export inline fn simplify_merkle_proof(
     leaf: Bytes32,
     proof: MerkleProof,
 ) -> Bytes32 {
-    simplify_merkle_proof_after_leaf(sha256(...[0x01, leaf]), proof)
+    simplify_merkle_proof_after_leaf(sha256(0x01 + leaf), proof)
 }
