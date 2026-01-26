@@ -48,7 +48,7 @@ export fn main(
     ACTION_LAYER_MOD_HASH: Bytes32,
     RESERVE_FULL_PUZZLE_HASH: Bytes32,
     RESERVE_INNER_PUZZLE_HASH: Bytes32,
-    RESERVE_AMOUNT_FROM_STATE_PROGRAM: fn(state: Any) -> Int, // default is 02 - i.e., (f State)
+    RESERVE_AMOUNT_FROM_STATE_PROGRAM: fn(...state: Any) -> Int, // default is 02 - i.e., (f State)
     HINT: Bytes32,
     // 2nd curry
     FINALIZER_SELF_HASH: Bytes32,
@@ -62,7 +62,7 @@ export fn main(
 
     let recreate_reserve = CreateCoin {
         puzzle_hash: RESERVE_INNER_PUZZLE_HASH,
-        amount: RESERVE_AMOUNT_FROM_STATE_PROGRAM(last_action_output.first.actual_state),
+        amount: RESERVE_AMOUNT_FROM_STATE_PROGRAM(...last_action_output.first.actual_state),
         memos: Memos {
             value: [RESERVE_INNER_PUZZLE_HASH],
         }
@@ -79,7 +79,7 @@ export fn main(
             coinid(
                 reserve_parent_id,
                 RESERVE_FULL_PUZZLE_HASH,
-                RESERVE_AMOUNT_FROM_STATE_PROGRAM(Truth.State) // initial state
+                RESERVE_AMOUNT_FROM_STATE_PROGRAM(...Truth.State) // initial state
             )
         ]
     };
