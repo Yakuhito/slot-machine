@@ -1,0 +1,19 @@
+// finalizer.rue by yakuhito
+// This puzzle is essentially used in the singleton action layer to 'finalize' a set of actions
+// The current one only re-creates the singleton, but advanced dApps could use it to create other
+//  conditions based on the final state - e.g., re-create the singleton's reserves or modify merkle root
+
+// Note: This finalizer assumes sets the next singleton's amount to 1.
+
+export struct FinalizerTruths {
+    Merkle_Root: Bytes32,
+    ...State: Any,
+}
+
+export struct FinalizerSolution {
+    truths: FinalizerTruths,
+    action_output: Any,
+    finalizer_solution: Any,
+}
+
+export type Finalizer = fn(...solution: FinalizerSolution) -> List<Condition>;

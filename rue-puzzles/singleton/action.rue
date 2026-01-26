@@ -1,0 +1,63 @@
+// action.rue by yakuhito
+// Inner puzzle for a singleton that has a state and may run any of n actions
+// Each action will receive the current state + an ephemeral state and return new values
+// One or more actions may be run per spend
+
+// An action's solution will always be: (c (c Ephemeral_State Current_State) solution)
+//    (where capital first letters are used to denote Truths)
+// It returns three values: ((new_ephemeral_state . new_state) . new_conditions)
+//    state is passed from one action to the next and the latest value is saved between spends
+//        (it is persistent)
+//    ephemeral_state is not persistent - it's () for the first action of any new spend
+//        but passed from the previous action in the same spend
+//    new_conditions will be directly added to this puzzle's output conditions
+//    but the finalizer puzzle is able to filter them after all actions are run
+
+// Warning: This puzzle's finalizer likely assumes the singleton's amount is 1 (like the default one does).
+
+import finalizer::*;
+import merkle_utils::*;
+
+fn item_in_list(item: Int, list: List<Int>) -> Bool {
+    // if the item is not found in the whole list, (r ()) will
+    //  generate an exception anyway
+    inline let (first_list_item, remaining_list) = unchecked_cast::<(Int, List<Int>)>(list);
+    if first_list_item == item {
+        true
+    } else {
+        item_in_list(item, remaining_list)
+    }
+}
+
+fn reduce_and_verify_proofs(
+    MERKLE_ROOT: Bytes32,
+    puzzles: List<Any>,
+    selectors_so_far: List<Int>,
+    selectors_and_proofs: List<(Int, MerkleProof)>,
+) -> List<Any> {
+    if selectors_and_proofs is nil {
+        selectors_so_far
+    } else {
+        // TODO
+        selectors_so_far
+    }
+}
+
+fn main(
+    FINALIZER: Finalizer,
+    MERKLE_ROOT: Bytes32,
+    STATE: Any,
+    puzzles: List<Any>,
+    selectors_and_proofs: List<(Int, MerkleProof)>,
+    solutions: List<Any>,
+    ...finalizer_solution: Any,
+) -> List<Condition> {
+    FINALIZER(...FinalizerSolution {
+        truths: FinalizerTruths {
+            Merkle_Root: MERKLE_ROOT,
+            State: STATE,
+        },
+        action_output: solutions,
+        finalizer_solution: finalizer_solution,
+    })
+}
