@@ -52,7 +52,7 @@ export fn main(
             ),
         },
         ReceiveMessage {
-            mode: 18,
+            mode: 18, // puzzle-puzzle
             message: nil,
             sender: [
                 singleton_full_puzzle_hash(CONTROLLER_SINGLETON_INFO, spender_inner_puzzle_hash)

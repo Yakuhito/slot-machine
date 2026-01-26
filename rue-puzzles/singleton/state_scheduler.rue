@@ -16,7 +16,7 @@ export fn main(
 ) -> List<Condition> {
     [
         SendMessage {
-            mode: 18,
+            mode: 18, // puzzle-puzzle
             message: MESSAGE,
             receiver: [
                 curry_tree_hash(

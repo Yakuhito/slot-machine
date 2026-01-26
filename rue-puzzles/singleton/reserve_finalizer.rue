@@ -69,7 +69,7 @@ export fn main(
     };
 
     let reserve_send_message = SendMessage {
-        mode: 23,
+        mode: 23, // puzzle-coin
         message: tree_hash(
             (1, // this is the leading 'q . ' in the delegated puzzle
                 (recreate_reserve, reserve_conditions)

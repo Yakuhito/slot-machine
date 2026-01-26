@@ -37,7 +37,7 @@ export fn main(
             },
         },
         ReceiveMessage {
-            mode: 19,
+            mode: 19, // sender puzzle + receiver puzzle + receiver amount
             message: spend_mode as Bytes,
             sender: [
                 curry_tree_hash(
