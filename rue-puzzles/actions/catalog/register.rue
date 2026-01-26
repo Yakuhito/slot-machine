@@ -1,0 +1,183 @@
+// register.rue by yakuhito
+// Responsible for registering new CATs into the regstry (CATalog)
+
+// Main idea: you're the owner of a CAT if you know the TAIL before it's published on-chain
+// To ensure uniqueness (i.e., that no CAT is registered twice), slots are used
+// A double-linked list is created, and a new item is inserted for every new CAT that is registered
+
+// Slots before insertion:
+// ---------------       ---------------
+// |  left slot  | <---> | right slot  | 
+// ---------------       ---------------
+
+// Slots after insertion:
+// ---------------       ---------------       ---------------
+// |  left slot  | <---> |  new slot   | <---> | right slot  |
+// ---------------       ---------------       ---------------
+
+// A slot's value is (my_value . (left_value . right_value))
+// For CATalog, a slot's value is the tail hash of a registered CAT
+
+import shared::*;
+
+inline fn get_slot_value_hash(
+    value: Bytes32,
+    left_value: Bytes32,
+    right_value: Bytes32
+) -> Bytes32 {
+    tree_hash((value, (left_value, right_value)))
+}
+
+export fn main(
+    // NFT_PACK definition is in 'shared.rue'
+    NFT_PACK: NftPack,
+    // after 1st curry
+    UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH: Bytes32,
+    // after 1st curry
+    PRECOMMIT_1ST_CURRY_HASH: Bytes32,
+    // after 1st curry
+    SLOT_1ST_CURRY_HASH: Bytes32,
+    Truth: CatalogStateTruth,
+    my_id: Bytes32,
+    left_slot_info: (Bytes32, Bytes32),
+    right_slot_info: (Bytes32, Bytes32),
+    cat_maker_puzzle_and_solution: PuzzleAndSolution,
+    ...other_precommit_data: OtherPrecommitData,
+) -> (CatalogStateTruth, List<Condition>) {
+    inline let Current_State = Truth.State;
+    inline let Cat_Maker_Puzzle_Hash = Current_State.Cat_Maker_Puzzle_Hash;
+    inline let Registration_Price = Current_State.Registration_Price;
+
+    inline let left_tail_hash = left_slot_info.first;
+    inline let left_left_tail_hash = left_slot_info.rest;
+    inline let right_tail_hash = right_slot_info.first;
+    inline let right_right_tail_hash = right_slot_info.rest;
+
+    inline let cat_maker_reveal = unchecked_cast::<
+        fn(Inner_Puzzle_Hash: Bytes32, ...solution_rest: Any) -> Bytes32
+    >(cat_maker_puzzle_and_solution.puzzle);
+    inline let cat_maker_solution = cat_maker_puzzle_and_solution.solution;
+
+    inline let tail_hash = other_precommit_data.tail_hash;
+    inline let initial_nft_owner_ph = other_precommit_data.initial_nft_owner_ph;
+    inline let refund_puzzle_hash_hash = other_precommit_data.refund_puzzle_hash_hash;
+
+
+    if tail_hash > left_tail_hash && right_tail_hash > tail_hash && tree_hash(cat_maker_reveal) == Cat_Maker_Puzzle_Hash {
+        let prelauncher_full_puzzle_hash = curry_tree_hash(UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH, [
+            sha256(0x01 + tail_hash)
+        ]);
+
+        let prelauncher_id = coinid(
+            my_id,
+            prelauncher_full_puzzle_hash,
+            0
+        );
+
+        let launcher_id = coinid(
+            prelauncher_id,
+            NFT_PACK.ab.a.LAUNCHER_MOD_HASH,
+            1
+        );
+
+        let precommit_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
+            refund_puzzle_hash_hash,
+            // full precommit value reveal is (TAIL . HASH)
+            // where HASH = (sha256tree initial_nft_owner_ph cat_maker_hash . cat_maker_solution)
+            sha256(
+                0x02 + tail_hash + sha256(0x01 + tree_hash(
+                        (initial_nft_owner_ph, (Cat_Maker_Puzzle_Hash, cat_maker_solution))
+                ))
+            )
+        ]);
+        let precommit_puzzle_hash = cat_maker_reveal(
+            precommit_inner_puzzle_hash,
+            ...cat_maker_solution
+        );
+
+        (
+            // nothing changes
+            Truth,
+            [
+                // create uniqueness prelauncher
+                CreateCoin {
+                    puzzle_hash: prelauncher_full_puzzle_hash,
+                    amount: 0,
+                },
+
+                secure_nft(
+                    NFT_PACK,
+                    initial_nft_owner_ph,
+                    // launcher id
+                    launcher_id
+                ),
+
+                AssertMyCoinId {
+                    coin_id: my_id,
+                },
+
+                CreatePuzzleAnnouncement {
+                    message: "r" + tree_hash((tail_hash, initial_nft_owner_ph))
+                },
+
+                // spend left slot
+                spend_slot(
+                    SLOT_1ST_CURRY_HASH,
+                    get_slot_value_hash(
+                        left_tail_hash,
+                        left_left_tail_hash,
+                        right_tail_hash
+                    )
+                ),
+                spend_slot(
+                    SLOT_1ST_CURRY_HASH,
+                    get_slot_value_hash(
+                        right_tail_hash,
+                        left_tail_hash,
+                        right_right_tail_hash
+                    )
+                ),
+
+                // create new slot
+                create_slot(
+                    SLOT_1ST_CURRY_HASH,
+                    get_slot_value_hash(
+                        tail_hash,
+                        left_tail_hash,
+                        right_tail_hash
+                    )
+                ),
+                // create new left slot
+                create_slot(
+                    SLOT_1ST_CURRY_HASH,
+                    get_slot_value_hash(
+                        left_tail_hash,
+                        left_left_tail_hash,
+                        tail_hash
+                    )
+                ),
+                // create new right slot
+                create_slot(
+                    SLOT_1ST_CURRY_HASH,
+                    get_slot_value_hash(
+                        right_tail_hash,
+                        tail_hash,
+                        right_right_tail_hash
+                    )
+                ),
+
+                // consume precommit coin
+                SendMessage {
+                    mode: 19, // sender puzzle + receiver puzzle + receiver amount
+                    message: 0x01, // message = 1 = spend to payout puzzle hash
+                    receiver: [
+                        precommit_puzzle_hash,
+                        Registration_Price
+                    ]
+                }
+            ],
+        )
+    } else {
+        raise "tail_hash not between left and right OR cat_maker_reveal is incorrect";
+    }
+}
