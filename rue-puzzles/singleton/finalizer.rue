@@ -10,10 +10,8 @@ export struct FinalizerTruths {
     ...State: Any,
 }
 
-export struct FinalizerSolution {
+export type Finalizer<S> = fn(
     truths: FinalizerTruths,
-    action_output: Any,
-    finalizer_solution: Any,
-}
-
-export type Finalizer = fn(...solution: FinalizerSolution) -> List<Condition>;
+    run_action_output: (S,List<List<Condition>>),
+    ...finalizer_solution: Any
+) -> List<Condition>;

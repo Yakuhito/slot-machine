@@ -18,7 +18,7 @@ export fn calculate_merkle_root(
         current_hash
     } else {
         calculate_merkle_root(
-            path >> -1,
+            path >>> 1,
             if path & 1 != 0 {
                 tree_branch_hash(additional_steps.first, current_hash)
             } else {
@@ -43,7 +43,7 @@ export fn simplify_merkle_proof_after_leaf(
                 tree_branch_hash(leaf_hash, proof.hashes.first)
             },
             MerkleProof {
-                path: proof.path >> -1,
+                path: proof.path >>> 1,
                 hashes: proof.hashes.rest
             }
         )
