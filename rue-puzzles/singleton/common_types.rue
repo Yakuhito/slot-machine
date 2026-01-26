@@ -1,0 +1,8 @@
+// common_types.clsp by yakuhito
+// Contains structs of common types used in many puzzles
+
+export struct CompactCoinProof {
+    parent_info: Bytes32,
+    inner_puzzle_hash: Bytes32,
+    ...amount: Int,
+}

@@ -1,4 +1,4 @@
-// reserve_finalizer.clsp by yakuhito
+// reserve_finalizer.rue by yakuhito
 // Reserve finalizer - does everything the normal finalizer does, but also
 //   manages a reserve whose amount is the first item in the state
 
@@ -37,7 +37,7 @@ fn parse_conditions(
         } else {
             parse_conditions(
                 (first_thing.rest, the_rest),
-                (condition, conditions),
+                (first_thing.first, conditions),
                 extracted_reserve_conditions
             )
         }
