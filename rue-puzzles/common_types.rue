@@ -17,3 +17,8 @@ export struct PuzzleAndSolution {
     puzzle: Any,
     ...solution: Any,
 }
+
+export struct PuzzleHashes {
+    puzzle_hash_one: Bytes32,
+    ...puzzle_hash_two: Bytes32,
+}

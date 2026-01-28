@@ -1,0 +1,40 @@
+// xchandles.rue by yakuhito
+// Shared functions for XCHandles
+
+export struct XchandlesState {
+    Cat_Maker_Puzzle_Hash: Bytes32,
+    Pricing_Puzzle_Hash: Bytes32,
+    ...Expired_Handle_Pricing_Puzzle_Hash: Bytes32,
+}
+
+export struct XchandlesStateTruth {
+    Ephemeral_State: Any,
+    ...State: XchandlesState,
+}
+
+// handle slot
+
+export struct HandleSlotNeigbors {
+    left_value: Bytes32,
+    ...right_value: Bytes32,
+}
+
+export struct HandleSlotValueA {
+    handle_hash: Bytes32,
+    ...neighbors: HandleSlotNeigbors,
+}
+
+export struct HandleSlotData {
+    owner_launcher_id: Bytes32,
+    ...resolved_launcher_id: Bytes32,
+}
+
+export struct HandleSlotValueB {
+    expiration: Int,
+    ...data: HandleSlotData,
+}
+
+export struct XchandlesHandleSlotValue {
+    a: HandleSlotValueA,
+    ...b: HandleSlotValueB,
+}
