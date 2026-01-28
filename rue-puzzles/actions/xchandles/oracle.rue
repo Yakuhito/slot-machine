@@ -1,0 +1,31 @@
+// oracle.rue by yakuhito
+// Used to 'confirm' a registration on-chain by creating a puzzle announcement
+
+import xchandles::*;
+import super::super::slot::*;
+
+export fn main(
+    HANDLE_SLOT_1ST_CURRY_HASH: Bytes32,
+    Truth: XchandlesStateTruth,
+    // solution = slot value :)
+    ...slot_value: XchandlesHandleSlotValue,
+) -> (XchandlesStateTruth, List<Condition>) {
+    let slot_value_hash = tree_hash(slot_value);
+
+    (Truth, [
+        // spend handle slot
+        spend_slot(
+            HANDLE_SLOT_1ST_CURRY_HASH,
+            slot_value_hash
+        ),
+        // create new slot
+        create_slot(
+            HANDLE_SLOT_1ST_CURRY_HASH,
+            slot_value_hash
+        ),
+        // announce value
+        CreatePuzzleAnnouncement {
+            message: "o" + slot_value_hash,
+        },
+    ])
+}
