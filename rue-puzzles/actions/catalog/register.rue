@@ -19,6 +19,9 @@
 // For CATalog, a slot's value is the tail hash of a registered CAT
 
 import shared::*;
+import super::super::common_types::*;
+import super::super::nft_pack::*;
+import super::super::slot::*;
 
 inline fn get_slot_value_hash(
     value: Bytes32,

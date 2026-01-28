@@ -7,6 +7,8 @@
 // c) the tail hash has already been registered
 
 import shared::*;
+import super::super::common_types::*;
+import super::super::slot::*;
 
 export fn main(
     PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry

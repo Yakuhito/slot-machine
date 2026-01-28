@@ -1,0 +1,51 @@
+// slot.clsp by yakuhito
+// Utility functions to use for slots
+
+export fn spend_slot(
+    SLOT_1ST_CURRY_HASH: Bytes32,
+    slot_value_hash: Bytes32,
+) -> Condition {
+    SendMessage {
+        mode: 18, // puzzle-puzzle
+        message: nil, // ()
+        receiver: [
+            curry_tree_hash(SLOT_1ST_CURRY_HASH, [
+                    sha256(0x01 + slot_value_hash)
+                ]
+            )
+        ]
+    }
+}
+
+export fn create_slot(
+    SLOT_1ST_CURRY_HASH: Bytes32,
+    slot_value_hash: Bytes32,
+) -> Condition {
+    CreateCoin {
+        puzzle_hash: curry_tree_hash(SLOT_1ST_CURRY_HASH, [
+                sha256(0x01 + slot_value_hash)
+            ]
+        ),
+        amount: 0,
+        memos: Memos {
+            value: [SLOT_1ST_CURRY_HASH],
+        }
+    }
+}
+
+export fn create_slot_with_hint(
+    SLOT_1ST_CURRY_HASH: Bytes32,
+    slot_value_hash: Bytes32,
+    hint: Bytes32,
+) -> Condition {
+    CreateCoin {
+        puzzle_hash: curry_tree_hash(SLOT_1ST_CURRY_HASH, [
+                sha256(0x01 + slot_value_hash)
+            ]
+        ),
+        amount: 0,
+        memos: Memos {
+            value: [hint],
+        }
+    }
+}

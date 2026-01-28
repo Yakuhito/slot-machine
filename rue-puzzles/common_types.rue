@@ -6,3 +6,14 @@ export struct CompactCoinProof {
     inner_puzzle_hash: Bytes32,
     ...amount: Int,
 }
+
+export struct PuzzleAndSolutionWithHash {
+    puzzle_hash: Bytes32,
+    puzzle: Any,
+    ...solution: Any,
+}
+
+export struct PuzzleAndSolution {
+    puzzle: Any,
+    ...solution: Any,
+}

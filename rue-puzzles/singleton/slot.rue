@@ -12,7 +12,7 @@
 //          An attacker might intentionally omit a given slot to trick the dApp that it doesn't exist
 //          For example, a naive handle reigstration app might be tricked into registering the same handle twice`
 
-import common_types::*;
+import super::common_types::*;
 
 struct SingletonInfo {
     singleton_mod_hash: Bytes32,

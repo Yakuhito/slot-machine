@@ -64,14 +64,6 @@ fn count_numbers_and_validate(handle: String | nil) -> Int {
     }
 }
 
-export fn strlen(s: String | nil) -> Int {
-    if s is nil {
-        0
-    } else {
-        strlen(substr(s, 1)) + 1
-    }
-}
-
 // Returns (price . registered_time)
 export fn main(
     // base price = price per month of a 6+ character handle with at least one number
@@ -96,7 +88,7 @@ export fn main(
     if num_periods > 0 {
         (
             num_periods * BASE_PRICE * get_price_factor(
-                strlen(Handle),
+                Handle.length,
                 count_numbers_and_validate(Handle)
             ),
             num_periods * REGISTRATION_PERIOD
