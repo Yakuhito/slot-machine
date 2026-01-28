@@ -1,0 +1,49 @@
+// refund.rue by yakuhito
+// Responsible for returning (i.e., sending back locked value from) invalid precommit coins.
+
+// A precommit coin is considered invalid if:
+// a) the CAT maker puzzle has changed
+// b) the amount is wrong
+// c) the pricing puzzle has changed
+// d) the handle has already been registered (and the registration is active -i.e., not expired)
+
+import xchandles::*;
+import super::super::common_types::*;
+import super::super::slot::*;
+
+export fn main(
+    PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry
+    HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
+    Truth: XchandlesStateTruth,
+    precommited_pricing_puzzle_and_solution: PuzzleAndSolutionWithHash,
+    precommitted_cat_maker_and_solution: PuzzleAndSolutionWithHash,
+    handle: String,
+    precommit_amount: Int, // amount of the pre-commit coin
+    slot_value: XchandlesHandleSlotValue | nil,
+    ...other_precommit_data: OtherPrecommitData,
+) -> (XchandlesStateTruth, List<Condition>) {
+    inline let {
+        puzzle_hash: precommited_pricing_puzzle_reveal_hash,
+        puzzle: precommited_pricing_puzzle_reveal,
+        solution: precommited_pricing_puzzle_solution,
+    } = precommited_pricing_puzzle_and_solution;
+    inline let {
+        puzzle_hash: precommitted_cat_maker_reveal_hash,
+        puzzle: precommitted_cat_maker_reveal,
+        solution: precommitted_cat_maker_solution,
+    } = precommitted_cat_maker_and_solution;
+
+    let correct_slot = if slot_value is nil {
+        true
+    } else {
+        tree_hash(handle) == slot_value.a.handle_hash
+    };
+
+    if precommited_pricing_puzzle_reveal_hash == tree_hash(precommitted_cat_maker_reveal) &&
+     precommited_pricing_puzzle_reveal_hash == tree_hash(precommited_pricing_puzzle_reveal) &&
+     correct_slot {
+        (Truth, [])
+     } else {
+        raise "Invalid puzzle reveal hashes or provided slot is incorrect";
+     }
+}
