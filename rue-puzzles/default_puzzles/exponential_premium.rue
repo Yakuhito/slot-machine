@@ -80,9 +80,9 @@ export fn main(
             BITS_LIST,
             1,
             // fractional part of n with 16 bits of precision (2 ** 16 = 65536)
-            (65536 * ((Buy_Time - Current_Expiration) % HALVING_PERIOD)) / (HALVING_PERIOD),
+            (65536 * ((Buy_Time - Current_Expiration) % HALVING_PERIOD)) / HALVING_PERIOD,
             // premium from whole periods = START_PREMIUM / 2^p
-            START_PREMIUM / (1 >>> (Current_Expiration - Buy_Time) / HALVING_PERIOD)
+            START_PREMIUM / (1 >>> -((Buy_Time - Current_Expiration) / HALVING_PERIOD))
         ),
         END_VALUE
     );
