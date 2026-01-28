@@ -84,7 +84,7 @@ export fn main(
 
     (Truth, [
         // can't update if expired
-        AssertSecondsAbsolute {
+        AssertBeforeSecondsAbsolute {
             seconds: current_slot.b.expiration,
         },
         // min_execution_height has passed
