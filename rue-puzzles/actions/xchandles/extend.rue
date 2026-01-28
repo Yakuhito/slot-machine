@@ -1,0 +1,108 @@
+// extend.rue by yakuhito
+// Used to extend the registration of a handle
+
+// Warning: Pricing puzzle is responsible for ensuring registered_time > 0
+
+import xchandles::*;
+import super::super::common_types::*;
+import super::super::slot::*;
+
+export fn main(
+    OFFER_MOD_HASH: Bytes32,
+    PAYOUT_PUZZLE_HASH: Bytes32,
+    HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
+    Truth: XchandlesStateTruth,
+    pricing_puzzle_and_solution: PuzzleAndSolution,
+    neighbors: HandleSlotNeighbors,
+    rest_data: HandleSlotData,
+    ...cat_maker_and_solution: PuzzleAndSolution,
+) -> (XchandlesStateTruth, List<Condition>) {
+    inline let {
+        puzzle: cat_maker_puzzle_reveal,
+        solution: cat_maker_solution
+    } = cat_maker_and_solution;
+    inline let {
+        puzzle: pricing_puzzle_reveal,
+        solution: pricing_solution
+    } = pricing_puzzle_and_solution;
+    inline let (
+        buy_time, (current_expiration, (handle, _rest))
+    ) = unchecked_cast::<(Int, (Int, (String, Any)))>(pricing_solution);
+
+    let (total_price, registered_time) =
+            unchecked_cast::<fn(...sol: Any) -> (Int, Int)>(
+                pricing_puzzle_reveal
+            )(...pricing_solution);
+    inline let handle_hash = sha256(0x01 + handle);
+
+    let full_offer_puzzle_hash =
+            unchecked_cast::<fn(inner_ph: Bytes32, ...sol: Any) -> Bytes32>(
+                cat_maker_puzzle_reveal
+            )(OFFER_MOD_HASH, ...cat_maker_solution);
+
+    if tree_hash(cat_maker_puzzle_reveal) == Truth.State.Cat_Maker_Puzzle_Hash &&
+    tree_hash(pricing_puzzle_reveal) == Truth.State.Pricing_Puzzle_Hash {
+        (Truth, [
+            // spend slot
+            spend_slot(
+                HANDLE_SLOT_1ST_CURRY_HASH,
+                tree_hash(XchandlesHandleSlotValue {
+                    a: HandleSlotValueA {
+                        handle_hash,
+                        neighbors,
+                    },
+                    b: HandleSlotValueB {
+                        expiration: current_expiration,
+                        data: rest_data,
+                    }
+                })
+            ),
+
+            // announcement
+            CreatePuzzleAnnouncement {
+                message: "e" + tree_hash((total_price, handle))
+            },
+
+            // can't extend if expired
+            AssertBeforeSecondsAbsolute {
+                seconds: current_expiration,
+            },
+
+            // assert buy time
+            AssertSecondsAbsolute {
+                seconds: buy_time,
+            },
+
+            // create new slot
+            create_slot(
+                HANDLE_SLOT_1ST_CURRY_HASH,
+                tree_hash(XchandlesHandleSlotValue {
+                    a: HandleSlotValueA {
+                        handle_hash,
+                        neighbors,
+                    },
+                    b: HandleSlotValueB {
+                        expiration: current_expiration + registered_time,
+                        data: rest_data,
+                    }
+                })
+            ),
+
+            // assert payment
+            AssertPuzzleAnnouncement {
+                id: sha256(
+                    full_offer_puzzle_hash +
+                    tree_hash((
+                        tree_hash((handle, current_expiration)),
+                        (
+                            (PAYOUT_PUZZLE_HASH, (total_price, ([PAYOUT_PUZZLE_HASH], nil))),
+                            nil
+                        )
+                    ))
+                ),
+            }
+        ])
+    } else {
+        raise "Invalid puzzle reveal(s0";
+    }
+}
