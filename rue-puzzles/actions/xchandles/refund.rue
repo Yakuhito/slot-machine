@@ -8,125 +8,126 @@
 // d) the handle has already been registered (and the registration is active -i.e., not expired)
 
 import xchandles::*;
-import super::super::common_types::*;
 import super::super::slot::*;
+
+struct PrecommittedPricing {
+    puzzle_hash: Bytes32,
+    puzzle: fn(...solution: PricingSolution) -> (Int, Int),
+    ...solution: PricingSolution,
+}
+
+struct PricingSolution {
+    buy_time: Int,
+    current_expiration: Int,
+    precommitted_handle: String,
+    ...rest: Any,
+}
+
+struct PrecommittedCatMaker {
+    puzzle_hash: Bytes32,
+    puzzle: fn(inner_puzzle_hash: Bytes32, ...solution: CatMakerSolution) -> Bytes32,
+    ...solution: CatMakerSolution,
+}
+
+struct CatMakerSolution {
+    total_price: Int,
+    ... registered_time: Int,
+}
 
 export fn main(
     PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     Truth: XchandlesStateTruth,
-    precommited_pricing_puzzle_and_solution: PuzzleAndSolutionWithHash,
-    precommitted_cat_maker_and_solution: PuzzleAndSolutionWithHash,
+    precommited_pricing: PrecommittedPricing,
+    precommitted_cat_maker: PrecommittedCatMaker,
     handle: String,
     precommit_amount: Int, // amount of the pre-commit coin
     slot_value: XchandlesHandleSlotValue | nil,
     ...other_precommit_data: OtherPrecommitData,
 ) -> (XchandlesStateTruth, List<Condition>) {
-    inline let {
-        puzzle_hash: precommited_pricing_puzzle_reveal_hash,
-        puzzle: precommited_pricing_puzzle_reveal,
-        solution: precommited_pricing_puzzle_solution,
-    } = precommited_pricing_puzzle_and_solution;
-    inline let {
-        puzzle_hash: precommitted_cat_maker_reveal_hash,
-        puzzle: precommitted_cat_maker_reveal,
-        solution: precommitted_cat_maker_solution,
-    } = precommitted_cat_maker_and_solution;
-
-    inline let (
-        _buy_time, (_current_expiration, (precommitted_handle, _rest))
-    ) = unchecked_cast::<(Int, (Int, (String, Any)))>(precommited_pricing_puzzle_solution);
-    let (total_price, _registered_time) =
-            unchecked_cast::<fn(...sol: Any) -> (Int, Int)>(
-                precommited_pricing_puzzle_reveal
-            )(...precommited_pricing_puzzle_solution);
-
     let correct_slot = if slot_value is nil {
         true
     } else {
         sha256(0x01 + handle) == slot_value.a.handle_hash
     };
 
-    if precommitted_cat_maker_reveal_hash == tree_hash(precommitted_cat_maker_reveal) &&
-     precommited_pricing_puzzle_reveal_hash == tree_hash(precommited_pricing_puzzle_reveal) &&
-     correct_slot {
-        let precommit_coin_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
-            other_precommit_data.refund_and_secret.refund_puzzle_hash_hash,
-            sha256(0x01 + tree_hash(PrecommitValue {
-                a: PrecommitValueA {
-                    cat_maker_details: PuzzleDetails {
-                        puzzle_hash: precommitted_cat_maker_reveal_hash,
-                        puzzle_solution: precommitted_cat_maker_solution,
-                    },
-                    pricing_puzzle_details: PuzzleDetails {
-                        puzzle_hash: precommited_pricing_puzzle_reveal_hash,
-                        puzzle_solution: precommited_pricing_puzzle_solution,
-                    },
-                },
-                b: PrecommitValueB {
-                    handle_and_secret: PrecommitHandleAndSecret {
-                        handle: handle,
-                        secret: other_precommit_data.refund_and_secret.secret,
-                    },
-                    data: other_precommit_data.new_rest,
-                },
-            }))
-        ]);
-        let precommit_coin_full_puzzle_hash =
-            unchecked_cast::<fn(inner_ph: Bytes32, ...sol: Any) -> Bytes32>(
-                precommitted_cat_maker_reveal
-            )(precommit_coin_inner_puzzle_hash, ...precommitted_cat_maker_solution);
+    let cat_maker_matches = precommitted_cat_maker.puzzle_hash == tree_hash(precommitted_cat_maker.puzzle);
+    let pricing_matches = precommited_pricing.puzzle_hash == tree_hash(precommited_pricing.puzzle);
 
-        let last_conds = if
-            // not (a)
-            Truth.State.Cat_Maker_Puzzle_Hash == precommitted_cat_maker_reveal_hash &&
-            // not (c)
-            handle == precommitted_handle &&
-            (
-                precommited_pricing_puzzle_reveal_hash == Truth.State.Pricing_Puzzle_Hash ||
-                precommited_pricing_puzzle_reveal_hash == Truth.State.Expired_Handle_Pricing_Puzzle_Hash
-            ) &&
-            // not (b)
-            precommit_amount == total_price
-        {
-            // if the precommit coin looks valid after checking (a), (b), (c) & it could be used for registration,
-            // we must check for (d)
-            inline let slot_value = unchecked_cast::<XchandlesHandleSlotValue>(slot_value);
-            let slot_value_hash = tree_hash(slot_value);
-            [
-                AssertBeforeSecondsAbsolute {
-                    seconds: slot_value.b.expiration,
+    assert cat_maker_matches && pricing_matches && correct_slot;
+
+    let precommit_coin_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
+        other_precommit_data.refund_and_secret.refund_puzzle_hash_hash,
+        tree_hash_atom(tree_hash(PrecommitValue {
+            a: PrecommitValueA {
+                cat_maker_details: PuzzleDetails {
+                    puzzle_hash: precommitted_cat_maker.puzzle_hash,
+                    puzzle_solution: precommitted_cat_maker.solution,
                 },
-                spend_slot(
-                    HANDLE_SLOT_1ST_CURRY_HASH,
-                    slot_value_hash,
-                ),
-                create_slot(
-                    HANDLE_SLOT_1ST_CURRY_HASH,
-                    slot_value_hash,
-                ),
+                pricing_puzzle_details: PuzzleDetails {
+                    puzzle_hash: precommited_pricing.puzzle_hash,
+                    puzzle_solution: precommited_pricing.solution,
+                },
+            },
+            b: PrecommitValueB {
+                handle_and_secret: PrecommitHandleAndSecret {
+                    handle: handle,
+                    secret: other_precommit_data.refund_and_secret.secret,
+                },
+                data: other_precommit_data.new_rest,
+            },
+        }))
+    ]);
+
+    let precommit_coin_full_puzzle_hash = precommitted_cat_maker.puzzle(precommit_coin_inner_puzzle_hash, ...precommitted_cat_maker.solution);
+
+    let last_conds = if
+        // not (a)
+        Truth.State.Cat_Maker_Puzzle_Hash == precommitted_cat_maker.puzzle_hash &&
+        // not (c)
+        handle == precommited_pricing.solution.precommitted_handle &&
+        (
+            precommited_pricing.puzzle_hash == Truth.State.Pricing_Puzzle_Hash ||
+            precommited_pricing.puzzle_hash == Truth.State.Expired_Handle_Pricing_Puzzle_Hash
+        ) &&
+        // not (b)
+        precommit_amount == precommitted_cat_maker.solution.total_price
+    {
+        // if the precommit coin looks valid after checking (a), (b), (c) & it could be used for registration,
+        // we must check for (d)
+        inline let slot_value = unchecked_cast::<XchandlesHandleSlotValue>(slot_value);
+        let slot_value_hash = tree_hash(slot_value);
+        [
+            AssertBeforeSecondsAbsolute {
+                seconds: slot_value.b.expiration,
+            },
+            spend_slot(
+                HANDLE_SLOT_1ST_CURRY_HASH,
+                slot_value_hash,
+            ),
+            create_slot(
+                HANDLE_SLOT_1ST_CURRY_HASH,
+                slot_value_hash,
+            ),
+        ]
+    } else {
+        []
+    };
+
+    (Truth, [
+        // consume precommit coin
+        SendMessage {
+            mode: 19, // sender puzzle + receiver puzzle + receiver amount
+            message: nil, // 0 = refund
+            receiver: [
+                precommit_coin_full_puzzle_hash,
+                precommit_amount,
             ]
-        } else {
-            []
-        };
-
-        (Truth, [
-            // consume precommit coin
-            SendMessage {
-                mode: 19, // sender puzzle + receiver puzzle + receiver amount
-                message: nil, // 0 = refund
-                receiver: [
-                    precommit_coin_full_puzzle_hash,
-                    precommit_amount,
-                ]
-            },
-            // announcement
-            CreatePuzzleAnnouncement {
-                message: "$" + precommit_coin_full_puzzle_hash,
-            },
-            ...last_conds
-        ])
-     } else {
-        raise "Invalid puzzle reveal hashes or provided slot is incorrect";
-     }
+        },
+        // announcement
+        CreatePuzzleAnnouncement {
+            message: "$" + precommit_coin_full_puzzle_hash,
+        },
+        ...last_conds
+    ])
 }
