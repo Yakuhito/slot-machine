@@ -20,15 +20,39 @@ import xchandles::*;
 import super::super::common_types::*;
 import super::super::slot::*;
 
+inline fn singleton_puzzle_hash(
+    SINGLETON_MOD_HASH: Bytes32,
+    SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
+    launcher_id: Bytes32,
+    inner_puzzle_hash: Bytes32,
+) -> Bytes32 {
+    curry_tree_hash(
+        SINGLETON_MOD_HASH,
+        [
+            tree_hash(
+                (SINGLETON_MOD_HASH, (launcher_id, SINGLETON_LAUNCHER_PUZZLE_HASH)),
+            ), // tree hash of SINGLETON_STRUCT
+            inner_puzzle_hash,
+        ]
+    )
+}
+
 export fn main(
     SINGLETON_MOD_HASH: Bytes32,
     SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
     PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
+    Truth: XchandlesStateTruth,
     handle_hash: Bytes32,
     neighbors: HandleSlotNeighbors,
-    cat_maker_puzzle_and_solution: PuzzleAndSolution,
-    pricing_puzzle_and_solution: PuzzleAndSolution,
+    {
+        puzzle: cat_maker_puzzle_reveal,
+        solution: cat_maker_solution,
+    }: PuzzleAndSolution,
+    {
+        puzzle: pricing_puzzle_reveal,
+        solution: pricing_solution,
+    }: PuzzleAndSolution,
     {
         this_this_value: left_left_value,
         this_expiration: left_expiration,
@@ -41,49 +65,40 @@ export fn main(
     }: RegisterThisSlotInfo,
     {
         puzzle_hash_one: owner_inner_puzzle_hash,
-        puzzle_hash_two: resolved_launcher_id,
+        puzzle_hash_two: resolved_inner_puzzle_hash,
     }: PuzzleHashes,
     ...other_precommit_data: OtherPrecommitData,
 ) -> (XchandlesStateTruth, List<Condition>) {
-    inline let {
-        puzzle_hash: precommited_pricing_puzzle_reveal_hash,
-        puzzle: precommited_pricing_puzzle_reveal,
-        solution: precommited_pricing_puzzle_solution,
-    } = precommited_pricing_puzzle_and_solution;
-    inline let {
-        puzzle_hash: precommitted_cat_maker_reveal_hash,
-        puzzle: precommitted_cat_maker_reveal,
-        solution: precommitted_cat_maker_solution,
-    } = precommitted_cat_maker_and_solution;
-
     inline let (
-        _buy_time, (_current_expiration, (precommitted_handle, _rest))
-    ) = unchecked_cast::<(Int, (Int, (String, Any)))>(precommited_pricing_puzzle_solution);
-    let (total_price, _registered_time) =
+        start_time, (this_is_zero, (handle, _rest))
+    ) = unchecked_cast::<(Int, (Int, (String, Any)))>(pricing_solution);
+    let (total_price, registered_time) =
             unchecked_cast::<fn(...sol: Any) -> (Int, Int)>(
-                precommited_pricing_puzzle_reveal
-            )(...precommited_pricing_puzzle_solution);
+                pricing_puzzle_reveal
+            )(...pricing_solution);
 
-    let correct_slot = if slot_value is nil {
-        true
-    } else {
-        sha256(0x01 + handle) == slot_value.a.handle_hash
-    };
-
-    if precommitted_cat_maker_reveal_hash == tree_hash(precommitted_cat_maker_reveal) &&
-     precommited_pricing_puzzle_reveal_hash == tree_hash(precommited_pricing_puzzle_reveal) &&
-     correct_slot {
+    if handle_hash == tree_hash_atom(handle) &&
+    // Current_Expiry = 0 since handle is being registered
+    this_is_zero == 0 &&
+    handle_hash > neighbors.left_value &&
+    neighbors.right_value > handle_hash &&
+    Truth.State.Cat_Maker_Puzzle_Hash == tree_hash(cat_maker_puzzle_reveal) &&
+    Truth.State.Pricing_Puzzle_Hash == tree_hash(pricing_puzzle_reveal)
+    // These are not needed as we receive a message from a singleton having them:
+    // (= (strlen owner_launcher_id) 32)
+    // (= (strlen resolved_launcher_id) 32)
+     {
         let precommit_coin_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
             other_precommit_data.refund_and_secret.refund_puzzle_hash_hash,
             sha256(0x01 + tree_hash(PrecommitValue {
                 a: PrecommitValueA {
                     cat_maker_details: PuzzleDetails {
-                        puzzle_hash: precommitted_cat_maker_reveal_hash,
-                        puzzle_solution: precommitted_cat_maker_solution,
+                        puzzle_hash: Truth.State.Cat_Maker_Puzzle_Hash,
+                        puzzle_solution: cat_maker_solution,
                     },
                     pricing_puzzle_details: PuzzleDetails {
-                        puzzle_hash: precommited_pricing_puzzle_reveal_hash,
-                        puzzle_solution: precommited_pricing_puzzle_solution,
+                        puzzle_hash: Truth.State.Pricing_Puzzle_Hash,
+                        puzzle_solution: pricing_solution,
                     },
                 },
                 b: PrecommitValueB {
@@ -97,59 +112,141 @@ export fn main(
         ]);
         let precommit_coin_full_puzzle_hash =
             unchecked_cast::<fn(inner_ph: Bytes32, ...sol: Any) -> Bytes32>(
-                precommitted_cat_maker_reveal
-            )(precommit_coin_inner_puzzle_hash, ...precommitted_cat_maker_solution);
+                cat_maker_puzzle_reveal
+            )(precommit_coin_inner_puzzle_hash, ...cat_maker_solution);
 
-        let last_conds = if
-            // not (a)
-            Truth.State.Cat_Maker_Puzzle_Hash == precommitted_cat_maker_reveal_hash &&
-            // not (c)
-            handle == precommitted_handle &&
-            (
-                precommited_pricing_puzzle_reveal_hash == Truth.State.Pricing_Puzzle_Hash ||
-                precommited_pricing_puzzle_reveal_hash == Truth.State.Expired_Handle_Pricing_Puzzle_Hash
-            ) &&
-            // not (b)
-            precommit_amount == total_price
-        {
-            // if the precommit coin looks valid after checking (a), (b), (c) & it could be used for registration,
-            // we must check for (d)
-            inline let slot_value = unchecked_cast::<XchandlesHandleSlotValue>(slot_value);
-            let slot_value_hash = tree_hash(slot_value);
-            [
-                AssertBeforeSecondsAbsolute {
-                    seconds: slot_value.b.expiration,
-                },
-                spend_slot(
-                    HANDLE_SLOT_1ST_CURRY_HASH,
-                    slot_value_hash,
-                ),
-                create_slot(
-                    HANDLE_SLOT_1ST_CURRY_HASH,
-                    slot_value_hash,
-                ),
-            ]
-        } else {
-            []
-        };
+        let owner_full_puzzle_hash = singleton_puzzle_hash(
+            SINGLETON_MOD_HASH,
+            SINGLETON_LAUNCHER_PUZZLE_HASH,
+            other_precommit_data.new_rest.owner_launcher_id,
+            owner_inner_puzzle_hash
+        );
+        let resolved_full_puzzle_hash = singleton_puzzle_hash(
+            SINGLETON_MOD_HASH,
+            SINGLETON_LAUNCHER_PUZZLE_HASH,
+            other_precommit_data.new_rest.resolved_launcher_id,
+            resolved_inner_puzzle_hash
+        );
 
         (Truth, [
+            AssertSecondsAbsolute {
+                seconds: start_time,
+            },
+            // spend left slot
+            spend_slot(
+                HANDLE_SLOT_1ST_CURRY_HASH,
+                tree_hash(XchandlesHandleSlotValue {
+                    a: HandleSlotValueA {
+                        handle_hash: neighbors.left_value,
+                        neighbors: HandleSlotNeighbors {
+                            left_value: left_left_value,
+                            right_value: neighbors.right_value,
+                        },
+                    },
+                    b: HandleSlotValueB {
+                        expiration: left_expiration,
+                        data: left_data,
+                    },
+                })
+            ),
+            // spend right slot
+            spend_slot(
+                HANDLE_SLOT_1ST_CURRY_HASH,
+                tree_hash(XchandlesHandleSlotValue {
+                    a: HandleSlotValueA {
+                        handle_hash: neighbors.right_value,
+                        neighbors: HandleSlotNeighbors {
+                            left_value: neighbors.left_value,
+                            right_value: right_right_value,
+                        },
+                    },
+                    b: HandleSlotValueB {
+                        expiration: right_expiration,
+                        data: right_data,
+                    },
+                })
+            ),
+            // create new slot
+            create_slot(
+                HANDLE_SLOT_1ST_CURRY_HASH,
+                tree_hash(XchandlesHandleSlotValue {
+                    a: HandleSlotValueA {
+                        handle_hash: handle_hash,
+                        neighbors,
+                    },
+                    b: HandleSlotValueB {
+                        expiration: start_time + registered_time,
+                        data: other_precommit_data.new_rest,
+                    },
+                })
+            ),
+            // create left slot
+            create_slot(
+                HANDLE_SLOT_1ST_CURRY_HASH,
+                tree_hash(XchandlesHandleSlotValue {
+                    a: HandleSlotValueA {
+                        handle_hash: neighbors.left_value,
+                        neighbors: HandleSlotNeighbors {
+                            left_value: left_left_value,
+                            right_value: handle_hash,
+                        },
+                    },
+                    b: HandleSlotValueB {
+                        expiration: left_expiration,
+                        data: left_data,
+                    },
+                })
+            ),
+            // create right slot
+            create_slot(
+                HANDLE_SLOT_1ST_CURRY_HASH,
+                tree_hash(XchandlesHandleSlotValue {
+                    a: HandleSlotValueA {
+                        handle_hash: neighbors.right_value,
+                        neighbors: HandleSlotNeighbors {
+                            left_value: handle_hash,
+                            right_value: right_right_value,
+                        },
+                    },
+                    b: HandleSlotValueB {
+                        expiration: right_expiration,
+                        data: right_data,
+                    },
+                })
+            ),
             // consume precommit coin
             SendMessage {
                 mode: 19, // sender puzzle + receiver puzzle + receiver amount
-                message: nil, // 0 = refund
+                message: 0x01, // message = 1 = spend to payout puzzle hash
                 receiver: [
                     precommit_coin_full_puzzle_hash,
-                    precommit_amount,
-                ]
+                    total_price,
+                ],
             },
             // announcement
             CreatePuzzleAnnouncement {
-                message: "$" + precommit_coin_full_puzzle_hash,
+                message: "r" + precommit_coin_full_puzzle_hash,
             },
-            ...last_conds
+            // get approval from owner
+            ReceiveMessage {
+                mode: 18, // puzzle-puzzle
+                message: "a" + precommit_coin_full_puzzle_hash,
+                sender: [owner_full_puzzle_hash],
+            },
+            ...if owner_full_puzzle_hash == resolved_full_puzzle_hash {
+                []
+            } else {
+                [
+                    // get approval from resolved
+                    ReceiveMessage {
+                        mode: 18, // puzzle-puzzle
+                        message: "b" + precommit_coin_full_puzzle_hash,
+                        sender: [resolved_full_puzzle_hash],
+                    },
+                ]
+            }
         ])
      } else {
-        raise "Invalid puzzle reveal hashes or provided slot is incorrect";
+        raise "Failed arg check";
      }
 }
