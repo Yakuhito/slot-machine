@@ -12,7 +12,7 @@ import super::super::slot::*;
 
 struct PrecommittedPricing {
     puzzle_hash: Bytes32,
-    puzzle: fn(...solution: PricingSolution) -> (Int, Int),
+    puzzle: fn(...solution: PricingSolution) -> PricingOutput,
     ...solution: PricingSolution,
 }
 
@@ -25,11 +25,11 @@ struct PricingSolution {
 
 struct PrecommittedCatMaker {
     puzzle_hash: Bytes32,
-    puzzle: fn(inner_puzzle_hash: Bytes32, ...solution: CatMakerSolution) -> Bytes32,
-    ...solution: CatMakerSolution,
+    puzzle: fn(inner_puzzle_hash: Bytes32, ...solution: Any) -> Bytes32,
+    ...solution: Any,
 }
 
-struct CatMakerSolution {
+struct PricingOutput {
     total_price: Int,
     ... registered_time: Int,
 }
@@ -80,6 +80,7 @@ export fn main(
     ]);
 
     let precommit_coin_full_puzzle_hash = precommitted_cat_maker.puzzle(precommit_coin_inner_puzzle_hash, ...precommitted_cat_maker.solution);
+    let pricing_output = precommited_pricing.puzzle(...precommited_pricing.solution);
 
     let last_conds = if
         // not (a)
@@ -91,7 +92,7 @@ export fn main(
             precommited_pricing.puzzle_hash == Truth.State.Expired_Handle_Pricing_Puzzle_Hash
         ) &&
         // not (b)
-        precommit_amount == precommitted_cat_maker.solution.total_price
+        precommit_amount == pricing_output.total_price
     {
         // if the precommit coin looks valid after checking (a), (b), (c) & it could be used for registration,
         // we must check for (d)
