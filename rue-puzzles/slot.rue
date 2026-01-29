@@ -1,7 +1,7 @@
 // slot.clsp by yakuhito
 // Utility functions to use for slots
 
-export fn spend_slot(
+export inline fn spend_slot(
     SLOT_1ST_CURRY_HASH: Bytes32,
     slot_value_hash: Bytes32,
 ) -> Condition {
@@ -9,10 +9,7 @@ export fn spend_slot(
         mode: 18, // puzzle-puzzle
         message: nil, // ()
         receiver: [
-            curry_tree_hash(SLOT_1ST_CURRY_HASH, [
-                    sha256(0x01 + slot_value_hash)
-                ]
-            )
+            get_slot_puzzle_hash(SLOT_1ST_CURRY_HASH, slot_value_hash)
         ]
     }
 }
@@ -22,10 +19,7 @@ export fn create_slot(
     slot_value_hash: Bytes32,
 ) -> Condition {
     CreateCoin {
-        puzzle_hash: curry_tree_hash(SLOT_1ST_CURRY_HASH, [
-                sha256(0x01 + slot_value_hash)
-            ]
-        ),
+        puzzle_hash: get_slot_puzzle_hash(SLOT_1ST_CURRY_HASH, slot_value_hash),
         amount: 0,
         memos: Memos {
             value: [SLOT_1ST_CURRY_HASH],
@@ -39,13 +33,16 @@ export fn create_slot_with_hint(
     hint: Bytes32,
 ) -> Condition {
     CreateCoin {
-        puzzle_hash: curry_tree_hash(SLOT_1ST_CURRY_HASH, [
-                sha256(0x01 + slot_value_hash)
-            ]
-        ),
+        puzzle_hash: get_slot_puzzle_hash(SLOT_1ST_CURRY_HASH, slot_value_hash),
         amount: 0,
         memos: Memos {
             value: [hint],
         }
     }
+}
+
+inline fn get_slot_puzzle_hash(SLOT_1ST_CURRY_HASH: Bytes32, slot_value_hash: Bytes32) -> Bytes32 {
+    curry_tree_hash(SLOT_1ST_CURRY_HASH, [
+        tree_hash_atom(slot_value_hash)
+    ])
 }

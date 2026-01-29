@@ -40,8 +40,8 @@ export fn main(
                 cat_maker_puzzle_reveal
             )(OFFER_MOD_HASH, ...cat_maker_solution);
 
-    if tree_hash(cat_maker_puzzle_reveal) == Truth.State.Cat_Maker_Puzzle_Hash &&
-    tree_hash(pricing_puzzle_reveal) == Truth.State.Pricing_Puzzle_Hash {
+    if (tree_hash(cat_maker_puzzle_reveal) == Truth.State.Cat_Maker_Puzzle_Hash) &
+    (tree_hash(pricing_puzzle_reveal) == Truth.State.Pricing_Puzzle_Hash) {
         (Truth, [
             // spend slot
             spend_slot(
