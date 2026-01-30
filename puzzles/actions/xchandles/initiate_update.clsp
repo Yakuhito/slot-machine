@@ -66,7 +66,8 @@
             ; create update slot
             (create_slot_with_hint UPDATE_SLOT_1ST_CURRY_HASH
                 (sha256 2
-                    (sha256 2 (sha256 1 owner_coin_id) (sha256 1 min_execution_height))
+                    ; (sha256 2 (sha256 1 owner_coin_id) (sha256 1 min_execution_height))
+                    (sha256tree (c owner_coin_id min_execution_height))
                     message_without_prefix
                 )
                 owner_coin_id

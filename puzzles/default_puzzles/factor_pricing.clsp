@@ -31,14 +31,14 @@
     (defun get_price_factor (length number_of_numbers)
         (/
             (if (> length 2)
-                (if (> length 4)
-                    (if (= length 5)
+                (i (> length 4)
+                    (i (= length 5)
                         16
                         ; else length >= 6
                         (if (> length 31) (x) 2)
                     )
                     ; else 2 < length < 5
-                    (if (= length 3)
+                    (i (= length 3)
                         128
                         ; else length = 4
                         (q . 64)
