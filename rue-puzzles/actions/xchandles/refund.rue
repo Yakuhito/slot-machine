@@ -88,8 +88,8 @@ export fn main(
         // not (c)
         (handle == precommited_pricing.solution.precommitted_handle) &
         (
-            precommited_pricing.puzzle_hash == Truth.State.Pricing_Puzzle_Hash ||
-            precommited_pricing.puzzle_hash == Truth.State.Expired_Handle_Pricing_Puzzle_Hash
+            (precommited_pricing.puzzle_hash == Truth.State.Pricing_Puzzle_Hash) |
+            (precommited_pricing.puzzle_hash == Truth.State.Expired_Handle_Pricing_Puzzle_Hash)
         ) &
         // not (b)
         (precommit_amount == pricing_output.total_price)
