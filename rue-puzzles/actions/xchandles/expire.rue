@@ -59,8 +59,8 @@ export fn main(
     } = new_inner_puzzle_hashes;
     
     if (
-        tree_hash(cat_maker_puzzle_reveal) == Truth.State.Cat_Maker_Puzzle_Hash &&
-        tree_hash(expired_handle_pricing_puzzle_reveal) == Truth.State.Expired_Handle_Pricing_Puzzle_Hash
+        (tree_hash(cat_maker_puzzle_reveal) == Truth.State.Cat_Maker_Puzzle_Hash) &
+        (tree_hash(expired_handle_pricing_puzzle_reveal) == Truth.State.Expired_Handle_Pricing_Puzzle_Hash)
     ) {
         let handle_hash = sha256(0x01 + handle);
         let (total_price, registered_time) =
