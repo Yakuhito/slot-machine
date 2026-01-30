@@ -54,7 +54,7 @@ export fn main(
     let cat_maker_matches = precommitted_cat_maker.puzzle_hash == tree_hash(precommitted_cat_maker.puzzle);
     let pricing_matches = precommited_pricing.puzzle_hash == tree_hash(precommited_pricing.puzzle);
 
-    assert cat_maker_matches && pricing_matches && correct_slot;
+    assert cat_maker_matches & pricing_matches & correct_slot;
 
     let precommit_coin_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
         other_precommit_data.refund_and_secret.refund_puzzle_hash_hash,
@@ -84,15 +84,15 @@ export fn main(
 
     let last_conds = if
         // not (a)
-        Truth.State.Cat_Maker_Puzzle_Hash == precommitted_cat_maker.puzzle_hash &&
+        (Truth.State.Cat_Maker_Puzzle_Hash == precommitted_cat_maker.puzzle_hash) &
         // not (c)
-        handle == precommited_pricing.solution.precommitted_handle &&
+        (handle == precommited_pricing.solution.precommitted_handle) &
         (
-            precommited_pricing.puzzle_hash == Truth.State.Pricing_Puzzle_Hash ||
-            precommited_pricing.puzzle_hash == Truth.State.Expired_Handle_Pricing_Puzzle_Hash
-        ) &&
+            (precommited_pricing.puzzle_hash == Truth.State.Pricing_Puzzle_Hash) |
+            (precommited_pricing.puzzle_hash == Truth.State.Expired_Handle_Pricing_Puzzle_Hash)
+        ) &
         // not (b)
-        precommit_amount == pricing_output.total_price
+        (precommit_amount == pricing_output.total_price)
     {
         // if the precommit coin looks valid after checking (a), (b), (c) & it could be used for registration,
         // we must check for (d)
