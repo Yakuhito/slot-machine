@@ -107,7 +107,7 @@ fn run_actions(
     }
 }
 
-export fn main(
+fn main(
     FINALIZER: Finalizer<StateTruth>,
     MERKLE_ROOT: Bytes32,
     STATE: Any,

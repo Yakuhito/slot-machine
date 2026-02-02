@@ -25,7 +25,7 @@ inline fn singleton_puzzle_hash(
     )
 }
 
-export fn main(
+fn main(
     SINGLETON_MOD_HASH: Bytes32,
     SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
     PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry

@@ -14,7 +14,7 @@ struct RevocableCatStruct {
     ...HIDDEN_PUZZLE_HASH_HASH: Bytes32,
 }
 
-export fn main(
+fn main(
     REVOCABLE_CAT_STRUCT: RevocableCatStruct,
     TAIL_HASH_HASH: Bytes32, // (sha256 1 TAIL_HASH) / sha256(0x01 + CAT_MOD_HASH)
     Inner_Puzzle_Hash: Bytes32,

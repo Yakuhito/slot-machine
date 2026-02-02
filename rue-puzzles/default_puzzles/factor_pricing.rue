@@ -65,7 +65,7 @@ fn count_numbers_and_validate(handle: String | nil) -> Int {
 }
 
 // Returns (price . registered_time)
-export fn main(
+fn main(
     // base price = price per month of a 6+ character handle with at least one number
     BASE_PRICE: Int,
     // number of seconds to register a handle for, in seconds

@@ -53,7 +53,7 @@ fn correct_premium(premium: Int, END_VALUE: Int) -> Int {
 }
 
 // Returns (price . registered_time)
-export fn main(
+fn main(
     // compute base price using this program
     BASE_PROGRAM: fn(...sol: SolutionAndTruths) -> (Int, Int),
     // one day = 86400 = 60 * 60 * 24 seconds

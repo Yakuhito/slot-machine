@@ -7,7 +7,7 @@ import xchandles::*;
 import super::super::common_types::*;
 import super::super::slot::*;
 
-export fn main(
+fn main(
     OFFER_MOD_HASH: Bytes32,
     PAYOUT_PUZZLE_HASH: Bytes32,
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry

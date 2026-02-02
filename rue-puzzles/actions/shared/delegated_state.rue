@@ -11,7 +11,7 @@ struct GeneralTruth {
     ...Actual_State: Any,
 }
 
-export fn main(
+fn main(
     SINGLETON_MOD_HASH: Bytes32,
     OTHER_SINGLETON_STRUCT_HASH: Bytes32,
     Truth: GeneralTruth,

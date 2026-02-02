@@ -4,7 +4,7 @@
 import xchandles::*;
 import super::super::slot::*;
 
-export fn main(
+fn main(
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32,
     Truth: XchandlesStateTruth,
     // solution = slot value :)

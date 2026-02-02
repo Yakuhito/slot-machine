@@ -31,7 +31,7 @@ inline fn get_slot_value_hash(
     tree_hash((value, (left_value, right_value)))
 }
 
-export fn main(
+fn main(
     // NFT_PACK definition is in 'shared.rue'
     NFT_PACK: NftPack,
     // after 1st curry

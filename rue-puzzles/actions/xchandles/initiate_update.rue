@@ -29,7 +29,7 @@ inline fn singleton_puzzle_hash(
     )
 }
 
-export fn main(
+fn main(
     SINGLETON_MOD_HASH: Bytes32,
     SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
     // how many blocks to wait before the update can be executed

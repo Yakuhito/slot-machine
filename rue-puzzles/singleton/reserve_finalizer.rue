@@ -44,7 +44,7 @@ fn parse_conditions(
     }
 }
 
-export fn main(
+fn main(
     ACTION_LAYER_MOD_HASH: Bytes32,
     RESERVE_FULL_PUZZLE_HASH: Bytes32,
     RESERVE_INNER_PUZZLE_HASH: Bytes32,

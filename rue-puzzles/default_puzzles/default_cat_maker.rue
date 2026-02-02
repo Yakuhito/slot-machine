@@ -7,7 +7,7 @@
 
 // Note: Truths (Inner_Puzzle_Hash) are trusted and should be verified by the outer puzzle.
 
-export fn main(
+fn main(
     CAT_MOD_HASH: Bytes32,
     TAIL_HASH_HASH: Bytes32, // (sha256 1 TAIL_HASH) / sha256(0x01 + CAT_MOD_HASH)
     Inner_Puzzle_Hash: Bytes32,

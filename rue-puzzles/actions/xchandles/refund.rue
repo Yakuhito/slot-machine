@@ -34,7 +34,7 @@ struct PricingOutput {
     ... registered_time: Int,
 }
 
-export fn main(
+fn main(
     PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     Truth: XchandlesStateTruth,
