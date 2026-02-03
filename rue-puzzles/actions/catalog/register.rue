@@ -42,28 +42,20 @@ fn main(
     SLOT_1ST_CURRY_HASH: Bytes32,
     Truth: CatalogStateTruth,
     my_id: Bytes32,
-    left_slot_info: (Bytes32, Bytes32),
-    right_slot_info: (Bytes32, Bytes32),
+    // left slot info
+    (left_tail_hash, left_left_tail_hash): (Bytes32, Bytes32),
+    // right slot info
+    (right_tail_hash, right_right_tail_hash): (Bytes32, Bytes32),
     cat_maker: CatMaker,
-    ...other_precommit_data: OtherPrecommitData,
+    ...{ tail_hash, initial_nft_owner_ph, refund_puzzle_hash_hash }: OtherPrecommitData,
 ) -> (CatalogStateTruth, List<Condition>) {
     inline let Current_State = Truth.State;
     inline let Cat_Maker_Puzzle_Hash = Current_State.Cat_Maker_Puzzle_Hash;
     inline let Registration_Price = Current_State.Registration_Price;
 
-    inline let left_tail_hash = left_slot_info.first;
-    inline let left_left_tail_hash = left_slot_info.rest;
-    inline let right_tail_hash = right_slot_info.first;
-    inline let right_right_tail_hash = right_slot_info.rest;
-
-    inline let tail_hash = other_precommit_data.tail_hash;
-    inline let initial_nft_owner_ph = other_precommit_data.initial_nft_owner_ph;
-    inline let refund_puzzle_hash_hash = other_precommit_data.refund_puzzle_hash_hash;
-
-
     if tail_hash > left_tail_hash && right_tail_hash > tail_hash && tree_hash(cat_maker.puzzle) == Cat_Maker_Puzzle_Hash {
         let prelauncher_full_puzzle_hash = curry_tree_hash(UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH, [
-            sha256(0x01 + tail_hash)
+            tree_hash_atom(tail_hash)
         ]);
 
         let prelauncher_id = coinid(
@@ -82,12 +74,15 @@ fn main(
             refund_puzzle_hash_hash,
             // full precommit value reveal is (TAIL . HASH)
             // where HASH = (sha256tree initial_nft_owner_ph cat_maker_hash . cat_maker_solution)
-            sha256(
-                0x02 + tail_hash + sha256(0x01 + tree_hash(
-                        (initial_nft_owner_ph, (Cat_Maker_Puzzle_Hash, cat_maker.solution))
-                ))
+            tree_hash_pair(
+                tail_hash,
+                tree_hash_atom(tree_hash((
+                    initial_nft_owner_ph,
+                    (Cat_Maker_Puzzle_Hash, cat_maker.solution),
+                ))),
             )
         ]);
+
         let precommit_puzzle_hash = cat_maker.puzzle(
             precommit_inner_puzzle_hash,
             ...cat_maker.solution
@@ -166,7 +161,7 @@ fn main(
 
                 // consume precommit coin
                 SendMessage {
-                    mode: 19, // sender puzzle + receiver puzzle + receiver amount
+                    mode: SENDER_PUZZLE | RECEIVER_PUZZLE | RECEIVER_AMOUNT,
                     message: 0x01, // message = 1 = spend to payout puzzle hash
                     receiver: [
                         precommit_puzzle_hash,
