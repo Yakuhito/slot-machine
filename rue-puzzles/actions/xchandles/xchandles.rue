@@ -85,3 +85,22 @@ export struct RegisterThisSlotInfo {
     this_expiration: Int,
     ...this_data: HandleSlotData,
 }
+
+// Shared types
+
+export struct HandlePricing {
+    puzzle: fn(...solution: HandlePricingSolution) -> HandlePricingOutput,
+    ...solution: HandlePricingSolution,
+}
+
+export struct HandlePricingSolution {
+    buy_time: Int,
+    current_expiration: Int,
+    handle: String,
+    ...rest: Any,
+}
+
+export struct HandlePricingOutput {
+    total_price: Int,
+    ...registered_time: Int,
+}

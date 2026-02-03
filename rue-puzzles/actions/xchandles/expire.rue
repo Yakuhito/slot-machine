@@ -31,24 +31,13 @@ fn main(
     PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     Truth: XchandlesStateTruth,
-    expired_handle_pricing_puzzle_and_solution: PuzzleAndSolution,
-    cat_maker_and_solution: PuzzleAndSolution,
+    expired_handle_pricing: HandlePricing,
+    cat_maker: CatMaker,
     other_precommit_data: OtherPrecommitData,
     neighbors: HandleSlotNeighbors,
     old_rest: HandleSlotData,
     ...new_inner_puzzle_hashes: PuzzleHashes,
 ) -> (XchandlesStateTruth, List<Condition>) {
-    inline let {
-        puzzle: expired_handle_pricing_puzzle_reveal,
-        solution: expired_handle_pricing_puzzle_solution
-    } = expired_handle_pricing_puzzle_and_solution;
-    inline let (
-        buy_time, (current_expiration, (handle, _expired_handle_pricing_puzzle_solution_rest))
-    ) = unchecked_cast::<(Int, (Int, (String, Any)))>(expired_handle_pricing_puzzle_solution);
-    inline let {
-        puzzle: cat_maker_puzzle_reveal,
-        solution: cat_maker_puzzle_solution
-    } = cat_maker_and_solution;
     inline let {
         refund_puzzle_hash_hash,
         secret,
@@ -59,14 +48,11 @@ fn main(
     } = new_inner_puzzle_hashes;
     
     if (
-        (tree_hash(cat_maker_puzzle_reveal) == Truth.State.Cat_Maker_Puzzle_Hash) &
-        (tree_hash(expired_handle_pricing_puzzle_reveal) == Truth.State.Expired_Handle_Pricing_Puzzle_Hash)
+        (tree_hash(cat_maker.puzzle) == Truth.State.Cat_Maker_Puzzle_Hash) &
+        (tree_hash(expired_handle_pricing.puzzle) == Truth.State.Expired_Handle_Pricing_Puzzle_Hash)
     ) {
-        let handle_hash = sha256(0x01 + handle);
-        let (total_price, registered_time) =
-            unchecked_cast::<fn(...sol: Any) -> (Int, Int)>(
-                expired_handle_pricing_puzzle_reveal
-            )(...expired_handle_pricing_puzzle_solution);
+        let handle_hash = sha256(0x01 + expired_handle_pricing.solution.handle);
+        let { total_price, registered_time } = expired_handle_pricing.puzzle(...expired_handle_pricing.solution);
 
         // These are calculated in the call to 'consume_precommit_assert_approvals_and_announce'
         let precommit_coin_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
@@ -75,26 +61,23 @@ fn main(
                 a: PrecommitValueA {
                     cat_maker_details: PuzzleDetails {
                         puzzle_hash: Truth.State.Cat_Maker_Puzzle_Hash,
-                        puzzle_solution: cat_maker_puzzle_solution,
+                        puzzle_solution: cat_maker.solution,
                     },
                     pricing_puzzle_details: PuzzleDetails {
                         puzzle_hash: Truth.State.Expired_Handle_Pricing_Puzzle_Hash,
-                        puzzle_solution: expired_handle_pricing_puzzle_solution,
+                        puzzle_solution: expired_handle_pricing.solution,
                     },
                 },
                 b: PrecommitValueB {
                     handle_and_secret: PrecommitHandleAndSecret {
-                        handle: handle,
+                        handle: expired_handle_pricing.solution.handle,
                         secret: secret,
                     },
                     data: other_precommit_data.new_rest,
                 },
             }))
         ]);
-        let precommit_coin_full_puzzle_hash =
-            unchecked_cast::<fn(inner_ph: Bytes32, ...sol: Any) -> Bytes32>(
-                cat_maker_puzzle_reveal
-            )(precommit_coin_inner_puzzle_hash, ...cat_maker_puzzle_solution);
+        let precommit_coin_full_puzzle_hash = cat_maker.puzzle(precommit_coin_inner_puzzle_hash, ...cat_maker.solution);
         let new_owner_puzzle_hash = singleton_puzzle_hash(
             SINGLETON_MOD_HASH,
             SINGLETON_LAUNCHER_PUZZLE_HASH,
@@ -104,11 +87,11 @@ fn main(
         
         let base_conditions = [
             AssertSecondsAbsolute {
-                seconds: buy_time,
+                seconds: expired_handle_pricing.solution.buy_time,
             },
             // assert handle actually expired
             AssertSecondsAbsolute {
-                seconds: current_expiration,
+                seconds: expired_handle_pricing.solution.current_expiration,
             },
             // spend_slot
             spend_slot(
@@ -119,7 +102,7 @@ fn main(
                         neighbors: neighbors,
                     },
                     b: HandleSlotValueB {
-                        expiration: current_expiration,
+                        expiration: expired_handle_pricing.solution.current_expiration,
                         data: old_rest,
                     },
                 })
@@ -133,7 +116,7 @@ fn main(
                         neighbors: neighbors,
                     },
                     b: HandleSlotValueB {
-                        expiration: registered_time + buy_time,
+                        expiration: registered_time + expired_handle_pricing.solution.buy_time,
                         data: other_precommit_data.new_rest,
                     },
                 })

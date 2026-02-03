@@ -7,12 +7,14 @@ export struct CompactCoinProof {
     ...amount: Int,
 }
 
-export struct PuzzleAndSolution {
-    puzzle: Any,
-    ...solution: Any,
-}
-
 export struct PuzzleHashes {
     puzzle_hash_one: Bytes32,
     ...puzzle_hash_two: Bytes32,
 }
+
+export struct CatMaker {
+    puzzle: CatMakerPuzzle,
+    ...solution: Any,
+}
+
+export type CatMakerPuzzle = fn(inner_puzzle_hash: Bytes32, ...solution: Any) -> Bytes32;

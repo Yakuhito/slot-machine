@@ -45,14 +45,8 @@ fn main(
     Truth: XchandlesStateTruth,
     handle_hash: Bytes32,
     neighbors: HandleSlotNeighbors,
-    {
-        puzzle: cat_maker_puzzle_reveal,
-        solution: cat_maker_solution,
-    }: PuzzleAndSolution,
-    {
-        puzzle: pricing_puzzle_reveal,
-        solution: pricing_solution,
-    }: PuzzleAndSolution,
+    cat_maker: CatMaker,
+    handle_pricing: HandlePricing,
     {
         this_this_value: left_left_value,
         this_expiration: left_expiration,
@@ -69,25 +63,19 @@ fn main(
     }: PuzzleHashes,
     ...other_precommit_data: OtherPrecommitData,
 ) -> (XchandlesStateTruth, List<Condition>) {
-    inline let (
-        start_time, (this_is_zero, (handle, _rest))
-    ) = unchecked_cast::<(Int, (Int, (String, Any)))>(pricing_solution);
-    let (total_price, registered_time) =
-            unchecked_cast::<fn(...sol: Any) -> (Int, Int)>(
-                pricing_puzzle_reveal
-            )(...pricing_solution);
+    let { total_price, registered_time } = handle_pricing.puzzle(...handle_pricing.solution);
 
     // These are not needed as we receive a message from a singleton having them:
     // (= (strlen owner_launcher_id) 32)
     // (= (strlen resolved_launcher_id) 32)
 
-    assert (handle_hash == tree_hash_atom(handle)) &
+    assert (handle_hash == tree_hash_atom(handle_pricing.solution.handle)) &
         // Current_Expiry = 0 since handle is being registered
-        (this_is_zero == 0) &
+        (handle_pricing.solution.current_expiration == 0) &
         (handle_hash > neighbors.left_value) &
         (neighbors.right_value > handle_hash) &
-        (Truth.State.Cat_Maker_Puzzle_Hash == tree_hash(cat_maker_puzzle_reveal)) &
-        (Truth.State.Pricing_Puzzle_Hash == tree_hash(pricing_puzzle_reveal));
+        (Truth.State.Cat_Maker_Puzzle_Hash == tree_hash(cat_maker.puzzle)) &
+        (Truth.State.Pricing_Puzzle_Hash == tree_hash(handle_pricing.puzzle));
 
     let precommit_coin_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
         other_precommit_data.refund_and_secret.refund_puzzle_hash_hash,
@@ -95,26 +83,23 @@ fn main(
             a: PrecommitValueA {
                 cat_maker_details: PuzzleDetails {
                     puzzle_hash: Truth.State.Cat_Maker_Puzzle_Hash,
-                    puzzle_solution: cat_maker_solution,
+                    puzzle_solution: cat_maker.solution,
                 },
                 pricing_puzzle_details: PuzzleDetails {
                     puzzle_hash: Truth.State.Pricing_Puzzle_Hash,
-                    puzzle_solution: pricing_solution,
+                    puzzle_solution: handle_pricing.solution,
                 },
             },
             b: PrecommitValueB {
                 handle_and_secret: PrecommitHandleAndSecret {
-                    handle: handle,
+                    handle: handle_pricing.solution.handle,
                     secret: other_precommit_data.refund_and_secret.secret,
                 },
                 data: other_precommit_data.new_rest,
             },
         }))
     ]);
-    let precommit_coin_full_puzzle_hash =
-        unchecked_cast::<fn(inner_ph: Bytes32, ...sol: Any) -> Bytes32>(
-            cat_maker_puzzle_reveal
-        )(precommit_coin_inner_puzzle_hash, ...cat_maker_solution);
+    let precommit_coin_full_puzzle_hash = cat_maker.puzzle(precommit_coin_inner_puzzle_hash, ...cat_maker.solution);
 
     let owner_full_puzzle_hash = singleton_puzzle_hash(
         SINGLETON_MOD_HASH,
@@ -131,7 +116,7 @@ fn main(
 
     (Truth, [
         AssertSecondsAbsolute {
-            seconds: start_time,
+            seconds: handle_pricing.solution.buy_time,
         },
         // spend left slot
         spend_slot(
@@ -176,7 +161,7 @@ fn main(
                     neighbors,
                 },
                 b: HandleSlotValueB {
-                    expiration: start_time + registered_time,
+                    expiration: handle_pricing.solution.buy_time + registered_time,
                     data: other_precommit_data.new_rest,
                 },
             })

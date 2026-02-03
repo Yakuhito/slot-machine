@@ -12,36 +12,18 @@ fn main(
     PAYOUT_PUZZLE_HASH: Bytes32,
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     Truth: XchandlesStateTruth,
-    pricing_puzzle_and_solution: PuzzleAndSolution,
+    handle_pricing: HandlePricing,
     neighbors: HandleSlotNeighbors,
     rest_data: HandleSlotData,
-    ...cat_maker_and_solution: PuzzleAndSolution,
+    ...cat_maker: CatMaker,
 ) -> (XchandlesStateTruth, List<Condition>) {
-    inline let {
-        puzzle: cat_maker_puzzle_reveal,
-        solution: cat_maker_solution
-    } = cat_maker_and_solution;
-    inline let {
-        puzzle: pricing_puzzle_reveal,
-        solution: pricing_solution
-    } = pricing_puzzle_and_solution;
-    inline let (
-        buy_time, (current_expiration, (handle, _rest))
-    ) = unchecked_cast::<(Int, (Int, (String, Any)))>(pricing_solution);
+    let { total_price, registered_time } = handle_pricing.puzzle(...handle_pricing.solution);
+    inline let handle_hash = sha256(0x01 + handle_pricing.solution.handle);
 
-    let (total_price, registered_time) =
-            unchecked_cast::<fn(...sol: Any) -> (Int, Int)>(
-                pricing_puzzle_reveal
-            )(...pricing_solution);
-    inline let handle_hash = sha256(0x01 + handle);
+    let full_offer_puzzle_hash = cat_maker.puzzle(OFFER_MOD_HASH, ...cat_maker.solution);
 
-    let full_offer_puzzle_hash =
-            unchecked_cast::<fn(inner_ph: Bytes32, ...sol: Any) -> Bytes32>(
-                cat_maker_puzzle_reveal
-            )(OFFER_MOD_HASH, ...cat_maker_solution);
-
-    if (tree_hash(cat_maker_puzzle_reveal) == Truth.State.Cat_Maker_Puzzle_Hash) &
-    (tree_hash(pricing_puzzle_reveal) == Truth.State.Pricing_Puzzle_Hash) {
+    if (tree_hash(cat_maker.puzzle) == Truth.State.Cat_Maker_Puzzle_Hash) &
+    (tree_hash(handle_pricing.puzzle) == Truth.State.Pricing_Puzzle_Hash) {
         (Truth, [
             // spend slot
             spend_slot(
@@ -52,7 +34,7 @@ fn main(
                         neighbors,
                     },
                     b: HandleSlotValueB {
-                        expiration: current_expiration,
+                        expiration: handle_pricing.solution.current_expiration,
                         data: rest_data,
                     }
                 })
@@ -60,17 +42,17 @@ fn main(
 
             // announcement
             CreatePuzzleAnnouncement {
-                message: "e" + tree_hash((total_price, handle))
+                message: "e" + tree_hash((total_price, handle_pricing.solution.handle))
             },
 
             // can't extend if expired
             AssertBeforeSecondsAbsolute {
-                seconds: current_expiration,
+                seconds: handle_pricing.solution.current_expiration,
             },
 
             // assert buy time
             AssertSecondsAbsolute {
-                seconds: buy_time,
+                seconds: handle_pricing.solution.buy_time,
             },
 
             // create new slot
@@ -82,7 +64,7 @@ fn main(
                         neighbors,
                     },
                     b: HandleSlotValueB {
-                        expiration: current_expiration + registered_time,
+                        expiration: handle_pricing.solution.current_expiration + registered_time,
                         data: rest_data,
                     }
                 })
@@ -93,7 +75,7 @@ fn main(
                 id: sha256(
                     full_offer_puzzle_hash +
                     tree_hash((
-                        tree_hash((handle, current_expiration)),
+                        tree_hash((handle_pricing.solution.handle, handle_pricing.solution.current_expiration)),
                         (
                             (PAYOUT_PUZZLE_HASH, (total_price, ([PAYOUT_PUZZLE_HASH], nil))),
                             nil

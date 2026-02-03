@@ -14,7 +14,7 @@ fn main(
     PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     Truth: CatalogStateTruth,
-    precommit_cat_maker_puzzle_and_solution: PuzzleAndSolution,
+    precommit_cat_maker: CatMaker,
     other_precommit_data: OtherPrecommitData,
     precommit_amount: Int,
     ...neighbors: (Bytes32, Bytes32), // (left_tail_hash . right_tail_hash)
@@ -26,12 +26,7 @@ fn main(
     // used to compute precommit coin puzzle hash
     inline let refund_puzzle_hash_hash = other_precommit_data.refund_puzzle_hash_hash;
 
-    inline let precommit_cat_maker_reveal = unchecked_cast::<
-        fn(Inner_Puzzle_Hash: Bytes32, ...solution_rest: Any) -> Bytes32
-    >(precommit_cat_maker_puzzle_and_solution.puzzle);
-    inline let precommit_cat_maker_solution = precommit_cat_maker_puzzle_and_solution.solution;
-
-    let precommit_cat_maker_hash = tree_hash(precommit_cat_maker_reveal);
+    let precommit_cat_maker_hash = tree_hash(precommit_cat_maker.puzzle);
 
     let precommit_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
         refund_puzzle_hash_hash,
@@ -39,7 +34,7 @@ fn main(
         // where HASH = (sha256tree initial_nft_owner_ph cat_maker_hash . cat_maker_solution)
         sha256(
             0x02 + tail_hash + sha256(0x01 + tree_hash(
-                (initial_nft_owner_ph, (precommit_cat_maker_hash, precommit_cat_maker_solution))
+                (initial_nft_owner_ph, (precommit_cat_maker_hash, precommit_cat_maker.solution))
             ))
         )
     ]);
@@ -54,9 +49,9 @@ fn main(
             mode: 19, // sender puzzle + receiver puzzle + receiver amount
             message: nil, // 0 = refund
             receiver: [
-                precommit_cat_maker_reveal(
+                precommit_cat_maker.puzzle(
                     precommit_inner_puzzle_hash,
-                    ...precommit_cat_maker_solution
+                    ...precommit_cat_maker.solution
                 ),
                 precommit_amount,
             ]
