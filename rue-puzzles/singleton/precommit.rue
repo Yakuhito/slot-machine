@@ -37,7 +37,7 @@ fn main(
             },
         },
         ReceiveMessage {
-            mode: 19, // sender puzzle + receiver puzzle + receiver amount
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE | RECEIVER_AMOUNT,
             message: spend_mode as Bytes,
             sender: [
                 curry_tree_hash(

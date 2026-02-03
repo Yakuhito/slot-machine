@@ -67,11 +67,8 @@ fn main(
     // 10 ** 18
     PRECISION: Int,
     BITS_LIST: List<Int>,
-    ...solution: SolutionAndTruths,
+    ...{ Buy_Time, Current_Expiration, ...solution }: SolutionAndTruths,
 ) -> (Int, Int) {
-    inline let Buy_Time = solution.Buy_Time;
-    inline let Current_Expiration = solution.Current_Expiration;
-
     let (base_program_price, base_program_registered_time) = BASE_PROGRAM(...solution);
 
     let price_delta = correct_premium(

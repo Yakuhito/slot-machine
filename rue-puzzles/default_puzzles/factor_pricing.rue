@@ -55,11 +55,8 @@ fn count_numbers_and_validate(handle: String | nil) -> Int {
         if ch > ("a" as Int - 1) && ch < ("z" as Int + 1) {
             count_numbers_and_validate(handle_rest)
         } else {
-            if ch > ("0" as Int - 1) && ch < ("9" as Int + 1) {
-                count_numbers_and_validate(handle_rest) + 1
-            } else {
-                raise "Handle contains invalid characters";
-            }
+            assert ch > ("0" as Int - 1) && ch < ("9" as Int + 1);
+            count_numbers_and_validate(handle_rest) + 1
         }
     }
 }
@@ -85,15 +82,13 @@ fn main(
     // number of periods to register the handle for (e.g., 1 year, 2 years, and so on)
     ...num_periods: Int,
 ) -> (Int, Int) {
-    if num_periods > 0 {
-        (
-            num_periods * BASE_PRICE * get_price_factor(
-                Handle.length,
-                count_numbers_and_validate(Handle)
-            ),
-            num_periods * REGISTRATION_PERIOD
-        )
-    } else {
-        raise "num_periods must be greater than 0";
-    }
+    assert num_periods > 0;
+
+    (
+        num_periods * BASE_PRICE * get_price_factor(
+            Handle.length,
+            count_numbers_and_validate(Handle)
+        ),
+        num_periods * REGISTRATION_PERIOD
+    )
 }

@@ -15,7 +15,7 @@ fn main(
     // Puzzles using the maker should prepend Inner_Puzzle_Hash to user-supplied inputs
 ) -> Bytes32 {
     curry_tree_hash(CAT_MOD_HASH, [
-        sha256(0x01 + CAT_MOD_HASH),
+        tree_hash_atom(CAT_MOD_HASH),
         TAIL_HASH_HASH,
         Inner_Puzzle_Hash,
     ])

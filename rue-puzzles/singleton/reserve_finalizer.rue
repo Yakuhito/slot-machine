@@ -69,7 +69,7 @@ fn main(
     };
 
     let reserve_send_message = SendMessage {
-        mode: 23, // puzzle-coin
+        mode: SENDER_PUZZLE | RECEIVER_COIN,
         message: tree_hash(
             (1, // this is the leading 'q . ' in the delegated puzzle
                 (recreate_reserve, reserve_conditions)
@@ -91,10 +91,10 @@ fn main(
                 curry_tree_hash(
                     FINALIZER_SELF_HASH,
                     [
-                        sha256(0x01 + FINALIZER_SELF_HASH),
+                        tree_hash_atom(FINALIZER_SELF_HASH),
                     ]
                 ), // finalizer puzzle hash
-                sha256(0x01 + Truth.Merkle_Root),
+                tree_hash_atom(Truth.Merkle_Root),
                 tree_hash(last_action_output.first.actual_state)
             ]
         ), // new inner ph
