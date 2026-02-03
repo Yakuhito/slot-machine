@@ -8,23 +8,6 @@ import xchandles::*;
 import super::super::common_types::*;
 import super::super::slot::*;
 
-inline fn singleton_puzzle_hash(
-    SINGLETON_MOD_HASH: Bytes32,
-    SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
-    launcher_id: Bytes32,
-    inner_puzzle_hash: Bytes32,
-) -> Bytes32 {
-    curry_tree_hash(
-        SINGLETON_MOD_HASH,
-        [
-            tree_hash(
-                (SINGLETON_MOD_HASH, (launcher_id, SINGLETON_LAUNCHER_PUZZLE_HASH)),
-            ), // tree hash of SINGLETON_STRUCT
-            inner_puzzle_hash,
-        ]
-    )
-}
-
 fn main(
     SINGLETON_MOD_HASH: Bytes32,
     SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
