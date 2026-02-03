@@ -51,13 +51,13 @@ fn main(
         (tree_hash(cat_maker.puzzle) == Truth.State.Cat_Maker_Puzzle_Hash) &
         (tree_hash(expired_handle_pricing.puzzle) == Truth.State.Expired_Handle_Pricing_Puzzle_Hash)
     ) {
-        let handle_hash = sha256(0x01 + expired_handle_pricing.solution.handle);
+        let handle_hash = tree_hash_atom(expired_handle_pricing.solution.handle);
         let { total_price, registered_time } = expired_handle_pricing.puzzle(...expired_handle_pricing.solution);
 
         // These are calculated in the call to 'consume_precommit_assert_approvals_and_announce'
         let precommit_coin_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
             refund_puzzle_hash_hash,
-            sha256(0x01 + tree_hash(PrecommitValue {
+            tree_hash_atom(tree_hash(PrecommitValue {
                 a: PrecommitValueA {
                     cat_maker_details: PuzzleDetails {
                         puzzle_hash: Truth.State.Cat_Maker_Puzzle_Hash,
@@ -123,7 +123,7 @@ fn main(
             ),
             // spend precommit coin
             SendMessage {
-                mode: 19, // sender puzzle + receiver puzzle + receiver amount
+                mode: SENDER_PUZZLE | RECEIVER_PUZZLE | RECEIVER_AMOUNT,
                 message: 0x01, // message = 1 = spend to payout puzzle hash
                 receiver: [
                     precommit_coin_full_puzzle_hash,
@@ -134,7 +134,7 @@ fn main(
                 message: "x" + precommit_coin_full_puzzle_hash,
             },
             ReceiveMessage {
-                mode: 18, // puzzle-puzzle
+                mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
                 message: "e" + precommit_coin_full_puzzle_hash,
                 sender: [new_owner_puzzle_hash],
             },
@@ -152,7 +152,7 @@ fn main(
 
             [
                 ReceiveMessage {
-                    mode: 18, // puzzle-puzzle
+                    mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
                     message: "f" + precommit_coin_full_puzzle_hash,
                     sender: [new_resolved_puzzle_hash],
                 },

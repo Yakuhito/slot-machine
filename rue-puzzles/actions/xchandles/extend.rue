@@ -18,7 +18,7 @@ fn main(
     ...cat_maker: CatMaker,
 ) -> (XchandlesStateTruth, List<Condition>) {
     let { total_price, registered_time } = handle_pricing.puzzle(...handle_pricing.solution);
-    inline let handle_hash = sha256(0x01 + handle_pricing.solution.handle);
+    inline let handle_hash = tree_hash_atom(handle_pricing.solution.handle);
 
     let full_offer_puzzle_hash = cat_maker.puzzle(OFFER_MOD_HASH, ...cat_maker.solution);
 

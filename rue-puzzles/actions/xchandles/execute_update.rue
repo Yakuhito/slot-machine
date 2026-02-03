@@ -109,26 +109,26 @@ fn main(
         ),
         // assert message from current owner
         ReceiveMessage {
-            mode: 58, // coin-puzzle
+            mode: SENDER_COIN | RECEIVER_PUZZLE,
             message: "u" + message_without_prefix,
             sender: [owner_coin_id],
         },
         // approval from new owner
         ReceiveMessage {
-            mode: 18, // puzzle-puzzle
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
             message: "o" + message_without_prefix,
             sender: [new_onwer_singleton_puzzle_hash],
         },
         // approval from resolved launcher id
         ReceiveMessage {
-            mode: 18, // puzzle-puzzle
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
             message: "r" + message_without_prefix,
             sender: [new_resolved_singleton_puzzle_hash],
         },
         // spend update slot
         spend_slot(
             UPDATE_SLOT_1ST_CURRY_HASH,
-            sha256(0x02 + update_slot_first_atom_hash + message_without_prefix)
+            tree_hash_pair(update_slot_first_atom_hash, message_without_prefix),
         ),
     ])
 }

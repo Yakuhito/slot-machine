@@ -202,7 +202,7 @@ fn main(
         ),
         // consume precommit coin
         SendMessage {
-            mode: 19, // sender puzzle + receiver puzzle + receiver amount
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE | RECEIVER_AMOUNT,
             message: 0x01, // message = 1 = spend to payout puzzle hash
             receiver: [
                 precommit_coin_full_puzzle_hash,
@@ -215,7 +215,7 @@ fn main(
         },
         // get approval from owner
         ReceiveMessage {
-            mode: 18, // puzzle-puzzle
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
             message: "a" + precommit_coin_full_puzzle_hash,
             sender: [owner_full_puzzle_hash],
         },
@@ -225,7 +225,7 @@ fn main(
             [
                 // get approval from resolved
                 ReceiveMessage {
-                    mode: 18, // puzzle-puzzle
+                    mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
                     message: "b" + precommit_coin_full_puzzle_hash,
                     sender: [resolved_full_puzzle_hash],
                 },
