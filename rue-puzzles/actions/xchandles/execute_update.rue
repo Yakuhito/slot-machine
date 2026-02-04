@@ -8,24 +8,7 @@ import xchandles::*;
 import super::super::common_types::*;
 import super::super::slot::*;
 
-inline fn singleton_puzzle_hash(
-    SINGLETON_MOD_HASH: Bytes32,
-    SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
-    launcher_id: Bytes32,
-    inner_puzzle_hash: Bytes32,
-) -> Bytes32 {
-    curry_tree_hash(
-        SINGLETON_MOD_HASH,
-        [
-            tree_hash(
-                (SINGLETON_MOD_HASH, (launcher_id, SINGLETON_LAUNCHER_PUZZLE_HASH)),
-            ), // tree hash of SINGLETON_STRUCT
-            inner_puzzle_hash,
-        ]
-    )
-}
-
-export fn main(
+fn main(
     SINGLETON_MOD_HASH: Bytes32,
     SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
@@ -109,26 +92,26 @@ export fn main(
         ),
         // assert message from current owner
         ReceiveMessage {
-            mode: 58, // coin-puzzle
+            mode: SENDER_COIN | RECEIVER_PUZZLE,
             message: "u" + message_without_prefix,
             sender: [owner_coin_id],
         },
         // approval from new owner
         ReceiveMessage {
-            mode: 18, // puzzle-puzzle
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
             message: "o" + message_without_prefix,
             sender: [new_onwer_singleton_puzzle_hash],
         },
         // approval from resolved launcher id
         ReceiveMessage {
-            mode: 18, // puzzle-puzzle
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
             message: "r" + message_without_prefix,
             sender: [new_resolved_singleton_puzzle_hash],
         },
         // spend update slot
         spend_slot(
             UPDATE_SLOT_1ST_CURRY_HASH,
-            sha256(0x02 + update_slot_first_atom_hash + message_without_prefix)
+            tree_hash_pair(update_slot_first_atom_hash, message_without_prefix),
         ),
     ])
 }

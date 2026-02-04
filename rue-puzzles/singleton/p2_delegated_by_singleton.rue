@@ -3,7 +3,7 @@
 // This puzzle is used to delegate a spend to a singleton.
 // The singleton will authorize the spend by sending a message via the SEND_MESSAGE condition.
 
-export fn main(
+fn main(
    SINGLETON_MOD_HASH: Bytes32,
    // The hash of (SINGLETON_MOD_HASH . (LAUNCHER_ID . SINGLETON_LAUNCHER_HASH))
    SINGLETON_STRUCT_HASH: Bytes32,
@@ -14,7 +14,7 @@ export fn main(
 ) -> List<Condition> {
     [
         ReceiveMessage {
-            mode: 23, // puzzle-coin
+            mode: SENDER_PUZZLE | RECEIVER_COIN,
             message: tree_hash(delegated_puzzle),
             sender: [
                 curry_tree_hash(

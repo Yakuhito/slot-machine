@@ -1,6 +1,23 @@
 // xchandles.rue by yakuhito
 // Shared functions for XCHandles
 
+export inline fn singleton_puzzle_hash(
+    SINGLETON_MOD_HASH: Bytes32,
+    SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
+    launcher_id: Bytes32,
+    inner_puzzle_hash: Bytes32,
+) -> Bytes32 {
+    curry_tree_hash(
+        SINGLETON_MOD_HASH,
+        [
+            tree_hash(
+                (SINGLETON_MOD_HASH, (launcher_id, SINGLETON_LAUNCHER_PUZZLE_HASH)),
+            ), // tree hash of SINGLETON_STRUCT
+            inner_puzzle_hash,
+        ]
+    )
+}
+
 export struct XchandlesState {
     Cat_Maker_Puzzle_Hash: Bytes32,
     Pricing_Puzzle_Hash: Bytes32,
@@ -84,4 +101,23 @@ export struct RegisterThisSlotInfo {
     this_this_value: Bytes32,
     this_expiration: Int,
     ...this_data: HandleSlotData,
+}
+
+// Shared types
+
+export struct HandlePricing {
+    puzzle: fn(...solution: HandlePricingSolution) -> HandlePricingOutput,
+    ...solution: HandlePricingSolution,
+}
+
+export struct HandlePricingSolution {
+    buy_time: Int,
+    current_expiration: Int,
+    handle: String,
+    ...rest: Any,
+}
+
+export struct HandlePricingOutput {
+    total_price: Int,
+    ...registered_time: Int,
 }

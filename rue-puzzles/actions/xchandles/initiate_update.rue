@@ -12,24 +12,7 @@ import xchandles::*;
 import super::super::common_types::*;
 import super::super::slot::*;
 
-inline fn singleton_puzzle_hash(
-    SINGLETON_MOD_HASH: Bytes32,
-    SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
-    launcher_id: Bytes32,
-    inner_puzzle_hash: Bytes32,
-) -> Bytes32 {
-    curry_tree_hash(
-        SINGLETON_MOD_HASH,
-        [
-            tree_hash(
-                (SINGLETON_MOD_HASH, (launcher_id, SINGLETON_LAUNCHER_PUZZLE_HASH)),
-            ), // tree hash of SINGLETON_STRUCT
-            inner_puzzle_hash,
-        ]
-    )
-}
-
-export fn main(
+fn main(
     SINGLETON_MOD_HASH: Bytes32,
     SINGLETON_LAUNCHER_PUZZLE_HASH: Bytes32,
     // how many blocks to wait before the update can be executed
@@ -86,17 +69,16 @@ export fn main(
         ),
         // assert message from current owner
         ReceiveMessage {
-            mode: 58, // coin-puzzle
+            mode: SENDER_COIN | RECEIVER_PUZZLE,
             message: "i" + message_without_prefix,
             sender: [initiator_coin_id],
         },
         // create update slot
         create_slot_with_hint(
             UPDATE_SLOT_1ST_CURRY_HASH,
-            sha256(
-                0x02 + tree_hash(
-                    (initiator_coin_id, min_height + RELATIVE_BLOCK_HEIGHT)
-                ) + message_without_prefix
+            tree_hash_pair(
+                tree_hash((initiator_coin_id, min_height + RELATIVE_BLOCK_HEIGHT)),
+                message_without_prefix,
             ),
             initiator_coin_id,
         ),

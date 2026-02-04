@@ -10,11 +10,11 @@ import shared::*;
 import super::super::common_types::*;
 import super::super::slot::*;
 
-export fn main(
+fn main(
     PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     Truth: CatalogStateTruth,
-    precommit_cat_maker_puzzle_and_solution: PuzzleAndSolution,
+    precommit_cat_maker: CatMaker,
     other_precommit_data: OtherPrecommitData,
     precommit_amount: Int,
     ...neighbors: (Bytes32, Bytes32), // (left_tail_hash . right_tail_hash)
@@ -26,22 +26,19 @@ export fn main(
     // used to compute precommit coin puzzle hash
     inline let refund_puzzle_hash_hash = other_precommit_data.refund_puzzle_hash_hash;
 
-    inline let precommit_cat_maker_reveal = unchecked_cast::<
-        fn(Inner_Puzzle_Hash: Bytes32, ...solution_rest: Any) -> Bytes32
-    >(precommit_cat_maker_puzzle_and_solution.puzzle);
-    inline let precommit_cat_maker_solution = precommit_cat_maker_puzzle_and_solution.solution;
-
-    let precommit_cat_maker_hash = tree_hash(precommit_cat_maker_reveal);
+    let precommit_cat_maker_hash = tree_hash(precommit_cat_maker.puzzle);
 
     let precommit_inner_puzzle_hash = curry_tree_hash(PRECOMMIT_1ST_CURRY_HASH, [
         refund_puzzle_hash_hash,
         // full precommit value reveal is (TAIL . HASH)
         // where HASH = (sha256tree initial_nft_owner_ph cat_maker_hash . cat_maker_solution)
-        sha256(
-            0x02 + tail_hash + sha256(0x01 + tree_hash(
-                (initial_nft_owner_ph, (precommit_cat_maker_hash, precommit_cat_maker_solution))
-            ))
-        )
+        tree_hash_pair(
+            tail_hash,
+            tree_hash_atom(tree_hash((
+                initial_nft_owner_ph,
+                (precommit_cat_maker_hash, precommit_cat_maker.solution),
+            ))),
+        ),
     ]);
 
     let base_conditions = [
@@ -51,20 +48,20 @@ export fn main(
         },
         // consume precommit coin
         SendMessage {
-            mode: 19, // sender puzzle + receiver puzzle + receiver amount
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE | RECEIVER_AMOUNT,
             message: nil, // 0 = refund
             receiver: [
-                precommit_cat_maker_reveal(
+                precommit_cat_maker.puzzle(
                     precommit_inner_puzzle_hash,
-                    ...precommit_cat_maker_solution
+                    ...precommit_cat_maker.solution
                 ),
                 precommit_amount,
             ]
         },
     ];
 
-    let conditions = if Truth.State.Registration_Price == precommit_amount &&
-      Truth.State.Cat_Maker_Puzzle_Hash == precommit_cat_maker_hash {
+    let conditions = if (Truth.State.Registration_Price == precommit_amount) &
+      (Truth.State.Cat_Maker_Puzzle_Hash == precommit_cat_maker_hash) {
         let value_hash = tree_hash((tail_hash, neighbors));
         
         [

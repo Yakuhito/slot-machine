@@ -6,7 +6,7 @@
 
 // Note: Create this coin with an amount of 0.
 
-export fn main(
+fn main(
     // 1st curry
     LAUNCHER_PH: Bytes32,
     // 2nd curry

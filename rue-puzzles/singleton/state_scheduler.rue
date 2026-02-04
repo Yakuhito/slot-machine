@@ -6,7 +6,7 @@
 
 // For an example, see actions/shared/delegated_state.clsp (this is the trusted singleton).
 
-export fn main(
+fn main(
     SINGLETON_MOD_HASH: Bytes32,
     RECEIVER_SINGLETON_STRUCT_HASH: Bytes32,
     MESSAGE: Bytes,
@@ -16,7 +16,7 @@ export fn main(
 ) -> List<Condition> {
     [
         SendMessage {
-            mode: 18, // puzzle-puzzle
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
             message: MESSAGE,
             receiver: [
                 curry_tree_hash(

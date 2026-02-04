@@ -11,7 +11,7 @@ struct GeneralTruth {
     ...Actual_State: Any,
 }
 
-export fn main(
+fn main(
     SINGLETON_MOD_HASH: Bytes32,
     OTHER_SINGLETON_STRUCT_HASH: Bytes32,
     Truth: GeneralTruth,
@@ -26,7 +26,7 @@ export fn main(
         },
         [
             ReceiveMessage {
-                mode: 18, // puzzle-puzzle
+                mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
                 message: "s" + tree_hash(new_state),
                 sender: [
                     curry_tree_hash(SINGLETON_MOD_HASH, [

@@ -32,7 +32,7 @@ fn singleton_full_puzzle_hash(
     )
 }
 
-export fn main(
+fn main(
     CONTROLLER_SINGLETON_INFO: SingletonInfo,
     // different nonces will hold different data types
     _NONCE: Any,
@@ -52,7 +52,7 @@ export fn main(
             ),
         },
         ReceiveMessage {
-            mode: 18, // puzzle-puzzle
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE,
             message: nil,
             sender: [
                 singleton_full_puzzle_hash(CONTROLLER_SINGLETON_INFO, spender_inner_puzzle_hash)

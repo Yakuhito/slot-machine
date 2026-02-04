@@ -53,7 +53,7 @@ fn correct_premium(premium: Int, END_VALUE: Int) -> Int {
 }
 
 // Returns (price . registered_time)
-export fn main(
+fn main(
     // compute base price using this program
     BASE_PROGRAM: fn(...sol: SolutionAndTruths) -> (Int, Int),
     // one day = 86400 = 60 * 60 * 24 seconds
@@ -67,11 +67,8 @@ export fn main(
     // 10 ** 18
     PRECISION: Int,
     BITS_LIST: List<Int>,
-    ...solution: SolutionAndTruths,
+    ...{ Buy_Time, Current_Expiration, ...solution }: SolutionAndTruths,
 ) -> (Int, Int) {
-    inline let Buy_Time = solution.Buy_Time;
-    inline let Current_Expiration = solution.Current_Expiration;
-
     let (base_program_price, base_program_registered_time) = BASE_PROGRAM(...solution);
 
     let price_delta = correct_premium(

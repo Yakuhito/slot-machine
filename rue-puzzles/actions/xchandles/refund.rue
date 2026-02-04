@@ -34,7 +34,7 @@ struct PricingOutput {
     ... registered_time: Int,
 }
 
-export fn main(
+fn main(
     PRECOMMIT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     Truth: XchandlesStateTruth,
@@ -48,7 +48,7 @@ export fn main(
     let correct_slot = if slot_value is nil {
         true
     } else {
-        sha256(0x01 + handle) == slot_value.a.handle_hash
+        tree_hash_atom(handle) == slot_value.a.handle_hash
     };
 
     let cat_maker_matches = precommitted_cat_maker.puzzle_hash == tree_hash(precommitted_cat_maker.puzzle);
@@ -118,7 +118,7 @@ export fn main(
     (Truth, [
         // consume precommit coin
         SendMessage {
-            mode: 19, // sender puzzle + receiver puzzle + receiver amount
+            mode: SENDER_PUZZLE | RECEIVER_PUZZLE | RECEIVER_AMOUNT,
             message: nil, // 0 = refund
             receiver: [
                 precommit_coin_full_puzzle_hash,

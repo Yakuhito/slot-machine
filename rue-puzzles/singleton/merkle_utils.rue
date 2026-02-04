@@ -5,10 +5,6 @@ export struct MerkleProof {
     ...hashes: List<Bytes32>,
 }
 
-export inline fn tree_branch_hash (left: Bytes32, right: Bytes32) -> Bytes32 {
-    sha256(0x02 + left + right)
-}
-
 export fn calculate_merkle_root(
     path: Int,
     current_hash: Bytes32,
@@ -19,7 +15,7 @@ export fn calculate_merkle_root(
     } else {
         calculate_merkle_root(
             path >>> 1,
-            tree_branch_hash(
+            tree_hash_pair(
                 inline if path & 1 != 0 {
                     additional_steps.first
                 } else {
@@ -44,7 +40,7 @@ export fn simplify_merkle_proof_after_leaf(
         leaf_hash
     } else {
         simplify_merkle_proof_after_leaf(
-            tree_branch_hash(
+            tree_hash_pair(
                 inline if proof.path & 1 != 0 {
                     proof.hashes.first
                 } else {
@@ -68,5 +64,5 @@ export inline fn simplify_merkle_proof(
     leaf: Bytes32,
     proof: MerkleProof,
 ) -> Bytes32 {
-    simplify_merkle_proof_after_leaf(sha256(0x01 + leaf), proof)
+    simplify_merkle_proof_after_leaf(tree_hash_atom(leaf), proof)
 }

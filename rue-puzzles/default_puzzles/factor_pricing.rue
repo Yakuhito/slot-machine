@@ -14,7 +14,7 @@
 
 // Note: Truths (Buy_Time, Current_Expiration, Handle) are trusted and should be verified by the outer puzzle.
 
-fn get_price_factor(length: Int, number_of_numbers: Int) -> Int {
+inline fn get_price_factor(length: Int, number_of_numbers: Int) -> Int {
     let p = if length > 2 {
         inline if length > 4 {
             inline if length == 5 {
@@ -52,20 +52,17 @@ fn count_numbers_and_validate(handle: String | nil) -> Int {
         let ch = substr(handle, 0, 1) as Int;
         let handle_rest = substr(handle, 1);
 
-        if ch > ("a" as Int - 1) && ch < ("z" as Int + 1) {
+        if (ch > ("a" as Int - 1)) & (ch < ("z" as Int + 1)) {
             count_numbers_and_validate(handle_rest)
         } else {
-            if ch > ("0" as Int - 1) && ch < ("9" as Int + 1) {
-                count_numbers_and_validate(handle_rest) + 1
-            } else {
-                raise "Handle contains invalid characters";
-            }
+            assert (ch > ("0" as Int - 1)) & (ch < ("9" as Int + 1));
+            count_numbers_and_validate(handle_rest) + 1
         }
     }
 }
 
 // Returns (price . registered_time)
-export fn main(
+fn main(
     // base price = price per month of a 6+ character handle with at least one number
     BASE_PRICE: Int,
     // number of seconds to register a handle for, in seconds
@@ -85,15 +82,13 @@ export fn main(
     // number of periods to register the handle for (e.g., 1 year, 2 years, and so on)
     ...num_periods: Int,
 ) -> (Int, Int) {
-    if num_periods > 0 {
-        (
-            num_periods * BASE_PRICE * get_price_factor(
-                Handle.length,
-                count_numbers_and_validate(Handle)
-            ),
-            num_periods * REGISTRATION_PERIOD
-        )
-    } else {
-        raise "num_periods must be greater than 0";
-    }
+    assert num_periods > 0;
+
+    (
+        num_periods * BASE_PRICE * get_price_factor(
+            Handle.length,
+            count_numbers_and_validate(Handle)
+        ),
+        num_periods * REGISTRATION_PERIOD
+    )
 }
