@@ -51,7 +51,7 @@
         )
     )
 
-    (defun-inline single_char_helper (ch rest)
+    (defun single_char_helper (ch rest)
         (if (all (> ch (- "a" 1)) (> (+ "z" 1) ch)) ; letter (a-z)
             (count_numbers_plus_validate rest)
             ; else
