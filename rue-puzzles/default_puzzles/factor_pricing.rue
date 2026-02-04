@@ -14,7 +14,7 @@
 
 // Note: Truths (Buy_Time, Current_Expiration, Handle) are trusted and should be verified by the outer puzzle.
 
-fn get_price_factor(length: Int, number_of_numbers: Int) -> Int {
+inline fn get_price_factor(length: Int, number_of_numbers: Int) -> Int {
     let p = if length > 2 {
         inline if length > 4 {
             inline if length == 5 {
