@@ -49,13 +49,13 @@ fn count_numbers_and_validate(handle: String | nil) -> Int {
     if handle is nil {
         0
     } else {
-        let ch = substr(handle, 0, 1) as Int;
-        let handle_rest = substr(handle, 1);
+        inline let ch = substr(handle, 0, 1) as Int;
+        inline let handle_rest = substr(handle, 1);
 
-        if ch > ("a" as Int - 1) && ch < ("z" as Int + 1) {
+        if (ch > ("a" as Int - 1)) & (ch < ("z" as Int + 1)) {
             count_numbers_and_validate(handle_rest)
         } else {
-            assert ch > ("0" as Int - 1) && ch < ("9" as Int + 1);
+            assert (ch > ("0" as Int - 1)) & (ch < ("9" as Int + 1));
             count_numbers_and_validate(handle_rest) + 1
         }
     }
