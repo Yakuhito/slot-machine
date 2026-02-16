@@ -71,7 +71,7 @@
         (if pending_selectors
             (run_actions
                 puzzles
-                (c new_conditions current_conditions)
+                (i new_conditions (c new_conditions current_conditions) current_conditions)
                 (a (a selector puzzles) (c ephemeral_and_actual_state solution))
                 remaining_selectors
                 remaining_solutions

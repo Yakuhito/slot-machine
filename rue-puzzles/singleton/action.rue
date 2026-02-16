@@ -99,7 +99,7 @@ fn run_actions(
 
         run_actions(
             puzzles,
-            (new_conditions, current_conditions),
+            inline if new_conditions is nil { current_conditions } else { (new_conditions, current_conditions) },
             puzzle(ephemeral_and_actual_state, ...solution),
             remaining_selectors,
             remaining_solutions,
