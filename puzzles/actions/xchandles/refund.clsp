@@ -102,7 +102,11 @@
                         (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
                     ) ; if the precommit coin looks valid after checking (a), (b), (c) & it could be used for registration,
                       ; we must check for (d)
-                  expiration
+                  (if expiration
+                    expiration ; not null
+                    ; else
+                    (x)
+                  )
                   ; else
                   () ; no slot spend needed
                 )
