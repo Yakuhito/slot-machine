@@ -71,7 +71,7 @@
         (if pending_selectors
             (run_actions
                 puzzles
-                (i new_conditions (c new_conditions current_conditions) current_conditions)
+                (c new_conditions current_conditions)
                 (a (a selector puzzles) (c ephemeral_and_actual_state solution))
                 remaining_selectors
                 remaining_solutions
@@ -84,20 +84,24 @@
         )
     )
     
-    (a
-        FINALZIER
-        (c
-            (c MERKLE_ROOT STATE)
+    (if selectors_and_proofs
+        (a
+            FINALZIER
             (c
-                (run_actions
-                    puzzles                
-                    ()
-                    (list (c () STATE))
-                    (reduce_and_verify_proofs MERKLE_ROOT puzzles () selectors_and_proofs)
-                    solutions
+                (c MERKLE_ROOT STATE)
+                (c
+                    (run_actions
+                        puzzles
+                        ()
+                        (list (c () STATE))
+                        (reduce_and_verify_proofs MERKLE_ROOT puzzles () selectors_and_proofs)
+                        solutions
+                    )
+                    finalizer_solution
                 )
-                finalizer_solution
             )
         )
+        ; else - do not allow spends with no actions called
+        (x)
     )
 )

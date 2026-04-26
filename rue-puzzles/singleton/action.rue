@@ -99,7 +99,7 @@ fn run_actions(
 
         run_actions(
             puzzles,
-            inline if new_conditions is nil { current_conditions } else { (new_conditions, current_conditions) },
+            (new_conditions, current_conditions),
             puzzle(ephemeral_and_actual_state, ...solution),
             remaining_selectors,
             remaining_solutions,
@@ -116,6 +116,8 @@ fn main(
     solutions: List<Solution>,
     ...finalizer_solution: Any,
 ) -> List<Condition> {
+    assert !(selectors_and_proofs is nil);
+
     let selectors = reduce_and_verify_proofs(
         MERKLE_ROOT,
         puzzles,
