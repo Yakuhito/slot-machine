@@ -15,7 +15,7 @@
 // |  left slot  | <---> |  new slot   | <---> | right slot  |
 // ---------------       ---------------       ---------------
 
-// A slot's value is (my_value . (left_value . right_value))
+// A slot's value is (counter . (my_value . (left_value . right_value)))
 // For CATalog, a slot's value is the tail hash of a registered CAT
 
 import shared::*;
@@ -24,11 +24,12 @@ import super::super::slot::*;
 import super::super::common_types::*;
 
 inline fn get_slot_value_hash(
+    counter: Int,
     value: Bytes32,
     left_value: Bytes32,
     right_value: Bytes32
 ) -> Bytes32 {
-    tree_hash((value, (left_value, right_value)))
+    tree_hash((counter, (value, (left_value, right_value))))
 }
 
 fn main(
@@ -43,9 +44,9 @@ fn main(
     Truth: CatalogStateTruth,
     my_id: Bytes32,
     // left slot info
-    (left_tail_hash, left_left_tail_hash): (Bytes32, Bytes32),
+    (left_counter, (left_tail_hash, left_left_tail_hash)): (Int, (Bytes32, Bytes32)),
     // right slot info
-    (right_tail_hash, right_right_tail_hash): (Bytes32, Bytes32),
+    (right_counter, (right_tail_hash, right_right_tail_hash)): (Int, (Bytes32, Bytes32)),
     cat_maker: CatMaker,
     ...{ tail_hash, initial_nft_owner_ph, refund_puzzle_hash_hash }: OtherPrecommitData,
 ) -> (CatalogStateTruth, List<Condition>) {
@@ -118,14 +119,17 @@ fn main(
             spend_slot(
                 SLOT_1ST_CURRY_HASH,
                 get_slot_value_hash(
+                    left_counter,
                     left_tail_hash,
                     left_left_tail_hash,
                     right_tail_hash
                 )
             ),
+            // spend right slot
             spend_slot(
                 SLOT_1ST_CURRY_HASH,
                 get_slot_value_hash(
+                    right_counter,
                     right_tail_hash,
                     left_tail_hash,
                     right_right_tail_hash
@@ -136,6 +140,7 @@ fn main(
             create_slot(
                 SLOT_1ST_CURRY_HASH,
                 get_slot_value_hash(
+                    0,
                     tail_hash,
                     left_tail_hash,
                     right_tail_hash
@@ -145,6 +150,7 @@ fn main(
             create_slot(
                 SLOT_1ST_CURRY_HASH,
                 get_slot_value_hash(
+                    left_counter + 1,
                     left_tail_hash,
                     left_left_tail_hash,
                     tail_hash
@@ -154,6 +160,7 @@ fn main(
             create_slot(
                 SLOT_1ST_CURRY_HASH,
                 get_slot_value_hash(
+                    right_counter + 1,
                     right_tail_hash,
                     tail_hash,
                     right_right_tail_hash

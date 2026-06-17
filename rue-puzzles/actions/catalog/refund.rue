@@ -17,7 +17,8 @@ fn main(
     precommit_cat_maker: CatMaker,
     other_precommit_data: OtherPrecommitData,
     precommit_amount: Int,
-    ...neighbors: (Bytes32, Bytes32), // (left_tail_hash . right_tail_hash)
+    neighbors: (Bytes32, Bytes32), // (left_tail_hash . right_tail_hash)
+    ...counter: Int, // required if slot spend is needed
 ) -> (CatalogStateTruth, List<Condition>) {
     // full TAIL in the reveal of the pre-commit coin
     inline let tail_hash = other_precommit_data.tail_hash;
@@ -62,11 +63,12 @@ fn main(
 
     let conditions = if (Truth.State.Registration_Price == precommit_amount) &
       (Truth.State.Cat_Maker_Puzzle_Hash == precommit_cat_maker_hash) {
-        let value_hash = tree_hash((tail_hash, neighbors));
+        let spent_slot_value_hash = tree_hash((counter, (tail_hash, neighbors)));
+        let created_slot_value_hash = tree_hash((counter + 1, (tail_hash, neighbors)));
         
         [
-            spend_slot(SLOT_1ST_CURRY_HASH, value_hash),
-            create_slot(SLOT_1ST_CURRY_HASH, value_hash),
+            spend_slot(SLOT_1ST_CURRY_HASH, spent_slot_value_hash),
+            create_slot(SLOT_1ST_CURRY_HASH, created_slot_value_hash),
             ...base_conditions
         ]
     } else {
