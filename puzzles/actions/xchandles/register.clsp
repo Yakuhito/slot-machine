@@ -1,7 +1,8 @@
 ; register.clsp by yakuhito
 ;; Responsible for registering new handles into the handle registry (XCHandles)
 
-;; Unlike CATalog, a slot's value is (c (c handle_hash (c left right)) (c expiration (c owner resolved))) where:
+;; Unlike CATalog, a slot's value is (c counter (c (c handle_hash (c left right)) (c expiration (c owner resolved)))) where:
+;;  counter is the number of times the slot has been spent
 ;;  value is the slot 'key'/id and is defined as (sha256 1 handle) / (sha256tree handle)
 ;;  left_value/right_value are the keys of the slot's neighbors
 ;;  expiration is a timestamp that says when the handle will expire
@@ -36,8 +37,8 @@
     (@ neighbors (left_value . right_value))
     (cat_maker_puzzle_reveal . cat_maker_solution)
     (pricing_puzzle_reveal . (@ pricing_solution (start_time this_is_zero handle . solution_rest)))
-    (left_left_value left_expiration . left_data)
-    (right_right_value right_expiration . right_data)
+    (left_counter left_left_value left_expiration . left_data)
+    (right_counter right_right_value right_expiration . right_data)
     (owner_inner_puzzle_hash . resolved_inner_puzzle_hash) .
     (
         (@ data (owner_launcher_id . resolved_launcher_id)) .
@@ -105,17 +106,18 @@
             (c
                 ; spend left slot
                 (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
-                    (get_xchandles_slot_value_hash left_value (c left_left_value right_value) left_expiration left_data)
+                    (get_xchandles_slot_value_hash left_counter left_value (c left_left_value right_value) left_expiration left_data)
                 )
                 (c
                     ; spend right slot
                     (spend_slot HANDLE_SLOT_1ST_CURRY_HASH
-                        (get_xchandles_slot_value_hash right_value (c left_value right_right_value) right_expiration right_data)
+                        (get_xchandles_slot_value_hash right_counter right_value (c left_value right_right_value) right_expiration right_data)
                     )
                     (c
                         ; create new slot
                         (create_slot HANDLE_SLOT_1ST_CURRY_HASH
                             (get_xchandles_slot_value_hash
+                                0
                                 handle_hash
                                 neighbors
                                 (+ start_time registered_time)
@@ -125,12 +127,12 @@
                         (c
                             ; create new left slot
                             (create_slot HANDLE_SLOT_1ST_CURRY_HASH 
-                                (get_xchandles_slot_value_hash left_value (c left_left_value handle_hash) left_expiration left_data)
+                                (get_xchandles_slot_value_hash (+ left_counter 1) left_value (c left_left_value handle_hash) left_expiration left_data)
                             )
                             (c
                                 ; create new right slot
                                 (create_slot HANDLE_SLOT_1ST_CURRY_HASH
-                                    (get_xchandles_slot_value_hash right_value (c handle_hash right_right_value) right_expiration right_data)
+                                    (get_xchandles_slot_value_hash (+ right_counter 1) right_value (c handle_hash right_right_value) right_expiration right_data)
                                 )
                                 (consume_precommit_assert_approvals_and_announce
                                     (a

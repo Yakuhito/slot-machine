@@ -97,18 +97,21 @@ fn main(
         // if the precommit coin looks valid after checking (a), (b), (c) & it could be used for registration,
         // we must check for (d)
         inline let slot_value = unchecked_cast::<XchandlesHandleSlotValue>(slot_value);
-        let slot_value_hash = tree_hash(slot_value);
         [
             AssertBeforeSecondsAbsolute {
                 seconds: slot_value.b.expiration,
             },
             spend_slot(
                 HANDLE_SLOT_1ST_CURRY_HASH,
-                slot_value_hash,
+                tree_hash(slot_value),
             ),
             create_slot(
                 HANDLE_SLOT_1ST_CURRY_HASH,
-                slot_value_hash,
+                tree_hash(XchandlesHandleSlotValue {
+                    counter: slot_value.counter + 1,
+                    a: slot_value.a,
+                    b: slot_value.b,
+                },),
             ),
         ]
     } else {

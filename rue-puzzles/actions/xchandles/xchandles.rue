@@ -52,6 +52,7 @@ export struct HandleSlotValueB {
 }
 
 export struct XchandlesHandleSlotValue {
+    counter: Int,
     a: HandleSlotValueA,
     ...b: HandleSlotValueB,
 }
@@ -98,6 +99,7 @@ export struct PrecommitValue {
 
 
 export struct RegisterThisSlotInfo {
+    this_counter: Int,
     this_this_value: Bytes32,
     this_expiration: Int,
     ...this_data: HandleSlotData,

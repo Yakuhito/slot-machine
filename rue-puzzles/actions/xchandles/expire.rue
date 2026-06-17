@@ -17,6 +17,7 @@ fn main(
     expired_handle_pricing: HandlePricing,
     cat_maker: CatMaker,
     other_precommit_data: OtherPrecommitData,
+    counter: Int,
     neighbors: HandleSlotNeighbors,
     old_rest: HandleSlotData,
     ...new_inner_puzzle_hashes: PuzzleHashes,
@@ -81,6 +82,7 @@ fn main(
         spend_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter,
                 a: HandleSlotValueA {
                     handle_hash: handle_hash,
                     neighbors: neighbors,
@@ -95,6 +97,7 @@ fn main(
         create_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter: counter + 1,
                 a: HandleSlotValueA {
                     handle_hash: handle_hash,
                     neighbors: neighbors,

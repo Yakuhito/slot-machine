@@ -46,8 +46,6 @@ fn main(
         current_owner_amount
     );
 
-    let slot_value_hash = tree_hash(current_slot);
-
     (Truth, [
         // can't update if expired
         AssertBeforeSecondsAbsolute {
@@ -60,12 +58,16 @@ fn main(
         // spend handle slot
         spend_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
-            slot_value_hash,
+            tree_hash(current_slot),
         ),
         // create new handle slot
         create_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
-            slot_value_hash,
+            tree_hash(XchandlesHandleSlotValue {
+                counter: current_slot.counter + 1,
+                a: current_slot.a,
+                b: current_slot.b,
+            }),
         ),
         // assert message from current owner
         ReceiveMessage {

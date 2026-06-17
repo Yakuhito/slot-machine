@@ -15,8 +15,11 @@
     (@
         current_slot
         (
-            (@ handle_and_neighbors (handle_hash . neighbors)) .
-            (expiration . (@ current_data (current_owner_launcher_id . current_resolved_launcher_id)))
+            counter .
+            (
+                (@ handle_and_neighbors (handle_hash . neighbors)) .
+                (expiration . (@ current_data (current_owner_launcher_id . current_resolved_launcher_id)))
+            )
         )
     )
     (@ new_data (new_owner_launcher_id . new_resolved_launcher_id))
@@ -94,7 +97,7 @@
                     (c
                         ; create new handle slot
                         (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
-                            (sha256tree (c handle_and_neighbors (c expiration new_data)))
+                            (sha256tree (c (+ counter 1) (c handle_and_neighbors (c expiration new_data))))
                         )
                         (consume_messages_and_spend_slot
                             UPDATE_SLOT_1ST_CURRY_HASH

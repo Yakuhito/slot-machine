@@ -1,7 +1,7 @@
 ; extend.clsp by yakuhito
 ;; Used to extend the registration of a handle
 
-;; Remember that the slot format is (c (c handle_hash (c left right)) (c expiration (c owner resolved)))
+;; Remember that the slot format is (c counter (c (c handle_hash (c left right)) (c expiration (c owner resolved))))
 ;;  but we're only modifying 'expiration' (and using handle to get correct price factor based on length)
 
 ;; Warning: Pricing puzzle is responsible for ensuring registered_time > 0
@@ -24,6 +24,7 @@
         pricing_puzzle_reveal .
         (@ pricing_solution (buy_time expiration handle . rest))
     ) ; pricing_puzzle_and_solution
+    counter
     neighbors
     rest_data .
     (cat_maker_puzzle_reveal . cat_maker_solution) ; cat_maker_and_solution
@@ -40,7 +41,7 @@
             (list
                 ; spend slot
                 (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH 
-                    (get_xchandles_slot_value_hash (sha256 1 handle) neighbors expiration rest_data)
+                    (get_xchandles_slot_value_hash counter (sha256 1 handle) neighbors expiration rest_data)
                 )
 
                 ; announcement
@@ -55,6 +56,7 @@
                 ; create new slot
                 (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH
                     (get_xchandles_slot_value_hash
+                        (+ counter 1)
                         (sha256 1 handle)
                         neighbors
                         (+ expiration registered_time)

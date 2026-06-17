@@ -13,6 +13,7 @@ fn main(
     HANDLE_SLOT_1ST_CURRY_HASH: Bytes32, // after 1st curry
     Truth: XchandlesStateTruth,
     handle_pricing: HandlePricing,
+    counter: Int,
     neighbors: HandleSlotNeighbors,
     rest_data: HandleSlotData,
     ...cat_maker: CatMaker,
@@ -32,6 +33,7 @@ fn main(
         spend_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter,
                 a: HandleSlotValueA {
                     handle_hash,
                     neighbors,
@@ -62,6 +64,7 @@ fn main(
         create_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter: counter + 1,
                 a: HandleSlotValueA {
                     handle_hash,
                     neighbors,

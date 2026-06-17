@@ -32,7 +32,7 @@
     )
     handle
     precommit_amount ; amount of the pre-commit coin
-    (@ slot_value ((handle_hash . rest1) . (expiration .rest2))) .
+    (@ slot_value (counter . ((handle_hash . rest1) . (expiration .rest2)))) .
     (
         (precommited_owner_launcher_id . precommited_resolved_launcher_id) .
         (refund_puzzle_hash_hash . secret)
@@ -46,7 +46,7 @@
 
     (defun main (
         HANDLE_SLOT_1ST_CURRY_HASH
-        slot_value_hash
+        (@ slot_value (counter . slot_value_part))
         expiration ; () if slot spend is not needed
         precommit_puzzle_hash
         precommit_amount
@@ -69,8 +69,14 @@
                 (if expiration
                     (list
                         (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
-                        (spend_slot_inline HANDLE_SLOT_1ST_CURRY_HASH slot_value_hash)
-                        (create_slot_inline HANDLE_SLOT_1ST_CURRY_HASH slot_value_hash)
+                        (spend_slot_inline
+                            HANDLE_SLOT_1ST_CURRY_HASH
+                            (sha256tree slot_value)
+                        )
+                        (create_slot_inline
+                            HANDLE_SLOT_1ST_CURRY_HASH
+                            (sha256tree (c (+ counter 1) slot_value_part))
+                        )
                     )
                     ; else
                     ()
@@ -88,7 +94,7 @@
             Truth
             (main
                 HANDLE_SLOT_1ST_CURRY_HASH
-                (sha256tree slot_value)
+                slot_value
                 (if (all
                         ; not (a)
                         (= precommited_cat_maker_reveal_hash Cat_Maker_Puzzle_Hash)

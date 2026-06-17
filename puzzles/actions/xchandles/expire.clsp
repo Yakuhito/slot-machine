@@ -2,7 +2,7 @@
 ;; When a handle expires, it goes into an 'auction' where the price is controlled by a puzzle
 ;;   in the registry's state.
 
-;; Remember that the slot format is (c (c handle_hash (c left right)) (c expiration (c owner resolved)))
+;; Remember that the slot format is (c counter (c (c handle_hash (c left right)) (c expiration (c owner resolved))))
 
 ;; Warning: Expired pricing puzzle is responsible for ensuring buy_time > 0
 
@@ -30,6 +30,7 @@
         (@ new_rest (new_owner_launcher_id . new_resolved_launcher_id)) .
         (refund_puzzle_hash_hash . secret)
     ) ; other_precommit_data
+    counter
     neighbors ; (c left right)
     old_rest . ; (c old_owner_launcher_id old_resolved_launcher_id)
     (new_owner_inner_puzzle_hash . new_resolved_inner_puzzle_hash) ; new_inner_puzzle_hashes
@@ -97,12 +98,12 @@
                     (c
                         ; spend slot
                         (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
-                            (get_xchandles_slot_value_hash handle_hash neighbors current_expiration old_rest)
+                            (get_xchandles_slot_value_hash counter handle_hash neighbors current_expiration old_rest)
                         )
                         (c
                             ; create new slot
                             (create_slot HANDLE_SLOT_1ST_CURRY_HASH
-                                (get_xchandles_slot_value_hash handle_hash neighbors (+ registered_time buy_time) new_rest)
+                                (get_xchandles_slot_value_hash (+ counter 1) handle_hash neighbors (+ registered_time buy_time) new_rest)
                             )
                             (consume_precommit_assert_approvals_and_announce
                                 (a

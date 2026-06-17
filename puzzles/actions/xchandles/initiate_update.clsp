@@ -17,9 +17,14 @@
     ; solution
     (@
         current_slot
-        (
-            (handle_hash . neighbors) .
-            (expiration . (@ current_data (current_owner_launcher_id . current_resolved_launcher_id)))
+        (counter .
+            (@
+                current_slot_rest
+                (
+                    (handle_hash . neighbors) .
+                    (expiration . (@ current_data (current_owner_launcher_id . current_resolved_launcher_id)))
+                )
+            )
         )
     )
     (@ new_data (new_owner_launcher_id . new_resolved_launcher_id))
@@ -31,22 +36,6 @@
     (include xchandles.clib)
     (include curry.clib)
     (include slots.clib)
-
-    (defun assert_slot (HANDLE_SLOT_1ST_CURRY_HASH slot_value_hash base_conditions)
-        (c
-            ; spend slot
-            (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
-                slot_value_hash
-            )
-            (c
-                ; re-create slot
-                (create_slot HANDLE_SLOT_1ST_CURRY_HASH
-                    slot_value_hash
-                )
-                base_conditions
-            )
-        )
-    )
 
     (defun consume_messages_and_create_slot (
         UPDATE_SLOT_1ST_CURRY_HASH
@@ -83,24 +72,32 @@
             (c
                 ; min_height is in the future
                 (list ASSERT_BEFORE_HEIGHT_ABSOLUTE min_height)
-                (assert_slot
-                    HANDLE_SLOT_1ST_CURRY_HASH
-                    (sha256tree current_slot)
-                    (consume_messages_and_create_slot
-                        UPDATE_SLOT_1ST_CURRY_HASH
-                        (+ min_height RELATIVE_BLOCK_HEIGHT)
-                        ; message
-                        (sha256tree (c handle_hash new_data))
-                        ; initiator coin id
-                        (coinid
-                            current_owner_parent_id
-                            (curry_hashes SINGLETON_MOD_HASH
-                                (sha256tree
-                                    (c SINGLETON_MOD_HASH (c current_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
-                                ) ; tree hash of SINGLETON_STRUCT
-                                current_owner_inner_puzzle_hash
+                (c
+                    ; spend slot
+                    (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
+                        (sha256tree current_slot)
+                    )
+                    (c
+                        ; re-create slot
+                        (create_slot HANDLE_SLOT_1ST_CURRY_HASH
+                            (sha256tree (c (+ counter 1) current_slot_rest))
+                        )
+                        (consume_messages_and_create_slot
+                            UPDATE_SLOT_1ST_CURRY_HASH
+                            (+ min_height RELATIVE_BLOCK_HEIGHT)
+                            ; message
+                            (sha256tree (c handle_hash new_data))
+                            ; initiator coin id
+                            (coinid
+                                current_owner_parent_id
+                                (curry_hashes SINGLETON_MOD_HASH
+                                    (sha256tree
+                                        (c SINGLETON_MOD_HASH (c current_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
+                                    ) ; tree hash of SINGLETON_STRUCT
+                                    current_owner_inner_puzzle_hash
+                                )
+                                current_owner_amount
                             )
-                            current_owner_amount
                         )
                     )
                 )

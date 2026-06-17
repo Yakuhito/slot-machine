@@ -1,7 +1,8 @@
 // register.rue by yakuhito
 // Responsible for registering new handles into the handle registry (XCHandles)
 
-// Unlike CATalog, a slot's value is (c (c handle_hash (c left right)) (c expiration (c owner resolved))) where:
+// Unlike CATalog, a slot's value is (c counter (c (c handle_hash (c left right)) (c expiration (c owner resolved)))) where:
+//  counter is the number of times the slot has been spent
 //  value is the slot 'key'/id and is defined as (sha256 1 handle) / (sha256tree handle)
 //  left_value/right_value are the keys of the slot's neighbors
 //  expiration is a timestamp that says when the handle will expire
@@ -31,11 +32,13 @@ fn main(
     cat_maker: CatMaker,
     handle_pricing: HandlePricing,
     {
+        this_counter: left_counter,
         this_this_value: left_left_value,
         this_expiration: left_expiration,
         this_data: left_data,
     }: RegisterThisSlotInfo,
     {
+        this_counter: right_counter,
         this_this_value: right_right_value,
         this_expiration: right_expiration,
         this_data: right_data,
@@ -105,6 +108,7 @@ fn main(
         spend_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter: left_counter,
                 a: HandleSlotValueA {
                     handle_hash: neighbors.left_value,
                     neighbors: HandleSlotNeighbors {
@@ -122,6 +126,7 @@ fn main(
         spend_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter: right_counter,
                 a: HandleSlotValueA {
                     handle_hash: neighbors.right_value,
                     neighbors: HandleSlotNeighbors {
@@ -139,6 +144,7 @@ fn main(
         create_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter: 0,
                 a: HandleSlotValueA {
                     handle_hash: handle_hash,
                     neighbors,
@@ -153,6 +159,7 @@ fn main(
         create_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter: left_counter + 1,
                 a: HandleSlotValueA {
                     handle_hash: neighbors.left_value,
                     neighbors: HandleSlotNeighbors {
@@ -170,6 +177,7 @@ fn main(
         create_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter: right_counter + 1,
                 a: HandleSlotValueA {
                     handle_hash: neighbors.right_value,
                     neighbors: HandleSlotNeighbors {

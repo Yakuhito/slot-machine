@@ -83,6 +83,7 @@ fn main(
         create_slot(
             HANDLE_SLOT_1ST_CURRY_HASH,
             tree_hash(XchandlesHandleSlotValue {
+                counter: current_slot.counter + 1,
                 a: current_slot.a,
                 b: HandleSlotValueB {
                     expiration: current_slot.b.expiration,
