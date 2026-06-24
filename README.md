@@ -20,6 +20,7 @@ _Note_: The reward distributor puzzles have been moved [here](https://github.com
 ## Learn More
 
 Want to learn more? Here are some resources that might help (in recommended order):
+ * [CHIP-0054: XCHandles & CHIP-0055: CATalog](https://github.com/Chia-Network/chips/pull/192)
  * [CHIP-0050 (Action Layer and Slots) & CHIP-0051 (Reward Distributor)](https://github.com/Chia-Network/chips/pull/165)
  * [CHIPs Presentation](https://pitch.com/v/chip-0050-chip-0051-xymjnx)
  * [Post: The Problem of Uniqueness](https://blog.fireacademy.io/p/uniqueness-on-chain)
