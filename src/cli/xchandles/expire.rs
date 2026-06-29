@@ -377,7 +377,10 @@ pub async fn xchandles_expire(
         println!("Submitting transaction...");
         let resp = cli.push_tx(sb).await?;
 
-        println!("Transaction submitted; status='{}'", resp.status);
+        println!(
+            "Transaction submitted; status='{}'",
+            resp.status.unwrap_or_default()
+        );
         wait_for_coin(&cli, security_coin.coin_id(), true).await?;
         println!("Confirmed!");
 

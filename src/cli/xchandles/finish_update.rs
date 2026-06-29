@@ -7,14 +7,12 @@ use chia_wallet_sdk::{
         spend_settlement_nft, Offer, SingletonInfo, Slot, Spend, SpendContext, StandardLayer,
         XchandlesExecuteUpdateAction,
     },
-    types::puzzles::{
-        CompactCoinProof, XchandlesSlotNonce, XchandlesUpdateSlotValue,
-    },
+    types::puzzles::{CompactCoinProof, XchandlesSlotNonce, XchandlesUpdateSlotValue},
     utils::Address,
 };
 use clvm_traits::clvm_quote;
-use clvmr::NodePtr;
 use clvm_utils::ToTreeHash;
+use clvmr::NodePtr;
 
 use crate::{
     assets_xch_and_nft, get_coinset_client, get_constants, hex_string_to_bytes32, no_assets,
@@ -128,7 +126,8 @@ pub async fn xchandles_finish_update(
     println!("done.");
 
     print!("Fetching update slot...");
-    let update_slot = find_update_slot(&mut ctx, &cli, &db, launcher_id, handle_hash, local).await?;
+    let update_slot =
+        find_update_slot(&mut ctx, &cli, &db, launcher_id, handle_hash, local).await?;
     println!("done.");
 
     let new_owner_launcher_id = new_owner_nft
@@ -255,7 +254,10 @@ pub async fn xchandles_finish_update(
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
+    println!(
+        "Transaction submitted; status='{}'",
+        resp.status.unwrap_or_default()
+    );
     wait_for_coin(&cli, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 

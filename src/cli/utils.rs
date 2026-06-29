@@ -64,6 +64,9 @@ pub enum CliError {
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
 
+    #[error("json: {0}")]
+    Json(#[from] serde_json::Error),
+
     #[error("Data directory could not be found")]
     DataDirNotFound,
 
@@ -196,7 +199,7 @@ pub fn hex_string_to_bytes(hex: &str) -> Result<Bytes, CliError> {
 }
 
 pub fn print_spend_bundle_to_file(spend_bundle: &SpendBundle, path: &str) -> Result<(), CliError> {
-    let contents = format!("{spend_bundle:#?}");
+    let contents = serde_json::to_string_pretty(spend_bundle)?;
     fs::write(path, contents)?;
     Ok(())
 }

@@ -11,7 +11,7 @@ repository = "https://github.com/Yakuhito/slot-machine"
 clvmr = "0.16.2"
 clvm-traits = "0.36.1"
 clvm-utils = "0.36.1"
-chia-protocol = "0.36.1"
+chia-protocol = { version = "0.36.1", features = ["serde"] }
 chia-bls = "0.36.1"
 chia-consensus = "0.36.1"
 chia-puzzle-types = "0.36.1"

@@ -86,7 +86,10 @@ pub async fn multisig_launch(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(sb).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
+    println!(
+        "Transaction submitted; status='{}'",
+        resp.status.unwrap_or_default()
+    );
 
     wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");

@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use clvm_utils::{ToTreeHash, TreeHash};
 use chia_protocol::{Bytes32, SpendBundle};
 use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof};
 use chia_wallet_sdk::{
@@ -13,6 +12,7 @@ use chia_wallet_sdk::{
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
 use clvm_traits::clvm_quote;
+use clvm_utils::{ToTreeHash, TreeHash};
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
@@ -287,7 +287,10 @@ pub async fn catalog_continue_launch(
             println!("Submitting transaction...");
             let resp = client.push_tx(sb).await?;
 
-            println!("Transaction submitted; status='{}'", resp.status);
+            println!(
+                "Transaction submitted; status='{}'",
+                resp.status.unwrap_or_default()
+            );
 
             wait_for_coin(&client, security_coin.coin_id(), true).await?;
             println!("Confirmed!");
@@ -546,7 +549,10 @@ pub async fn catalog_continue_launch(
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
+    println!(
+        "Transaction submitted; status='{}'",
+        resp.status.unwrap_or_default()
+    );
     wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
 

@@ -8,11 +8,11 @@ use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         decode_offer, Cat, Nft, Offer, Puzzle, RewardDistributorStakeAction,
-        RewardDistributorSyncAction, RewardDistributorType, RewardDistributorUnstakeAction,
-        Spend, SpendContext, SpendWithConditions, StandardLayer,
+        RewardDistributorSyncAction, RewardDistributorType, RewardDistributorUnstakeAction, Spend,
+        SpendContext, SpendWithConditions, StandardLayer,
     },
     types::{
-        puzzles::{NonceWrapperArgs, NONCE_WRAPPER_PUZZLE_HASH, SettlementPayment},
+        puzzles::{NonceWrapperArgs, SettlementPayment, NONCE_WRAPPER_PUZZLE_HASH},
         Conditions,
     },
     utils::Address,
@@ -269,7 +269,10 @@ pub async fn reward_distributor_unstake(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
+    println!(
+        "Transaction submitted; status='{}'",
+        resp.status.unwrap_or_default()
+    );
 
     wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");

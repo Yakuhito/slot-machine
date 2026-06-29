@@ -1,5 +1,4 @@
 use chia_protocol::SpendBundle;
-use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -11,6 +10,7 @@ use chia_wallet_sdk::{
         Conditions, Mod, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
     },
 };
+use clvm_utils::ToTreeHash;
 
 use crate::{
     assets_xch_only, get_coinset_client, hex_string_to_bytes32, load_xchandles_state_schedule_csv,
@@ -168,7 +168,10 @@ pub async fn xchandles_unroll_state_scheduler(
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
+    println!(
+        "Transaction submitted; status='{}'",
+        resp.status.unwrap_or_default()
+    );
 
     wait_for_coin(&cli, security_coin.coin_id(), true).await?;
     println!("Confirmed!");

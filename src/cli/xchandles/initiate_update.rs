@@ -11,8 +11,8 @@ use chia_wallet_sdk::{
     utils::Address,
 };
 use clvm_traits::clvm_quote;
-use clvmr::NodePtr;
 use clvm_utils::ToTreeHash;
+use clvmr::NodePtr;
 
 use crate::{
     assets_xch_and_nft, get_coinset_client, get_constants, hex_string_to_bytes32, no_assets,
@@ -170,7 +170,8 @@ pub async fn xchandles_initiate_update(
         )?;
 
     let nft_return_ph: Bytes32 = Address::decode(&return_address)?.puzzle_hash;
-    let nft_inner_spend = initiate_update_conds.create_coin(nft_return_ph, 1, ctx.hint(nft_return_ph)?);
+    let nft_inner_spend =
+        initiate_update_conds.create_coin(nft_return_ph, 1, ctx.hint(nft_return_ph)?);
     let nft_inner_spend = ctx.alloc(&clvm_quote!(nft_inner_spend))?;
     let nft_inner_spend = StandardLayer::new(pk)
         .delegated_inner_spend(&mut ctx, Spend::new(nft_inner_spend, NodePtr::NIL))?;
@@ -202,7 +203,10 @@ pub async fn xchandles_initiate_update(
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
+    println!(
+        "Transaction submitted; status='{}'",
+        resp.status.unwrap_or_default()
+    );
     wait_for_coin(&cli, security_coin.coin_id(), true).await?;
     println!("Confirmed! Finish the update after the relative block height elapses.");
 

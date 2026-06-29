@@ -143,7 +143,10 @@ pub async fn reward_distributor_launch(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
+    println!(
+        "Transaction submitted; status='{}'",
+        resp.status.unwrap_or_default()
+    );
 
     wait_for_coin(&client, reward_distributor.coin.parent_coin_info, true).await?;
     println!("Confirmed!");

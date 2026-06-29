@@ -10,7 +10,6 @@ use crate::{
 use chia_bls::PublicKey;
 use chia_protocol::{Bytes32, Coin, SpendBundle};
 use chia_puzzle_types::cat::GenesisByCoinIdTailArgs;
-use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -19,11 +18,12 @@ use chia_wallet_sdk::{
         XchandlesConstants, XchandlesRegistryState,
     },
     types::{
-        conditions::RunCatTail, puzzles::XchandlesFactorPricingPuzzleArgs, Conditions, MAINNET_CONSTANTS,
-        TESTNET11_CONSTANTS,
+        conditions::RunCatTail, puzzles::XchandlesFactorPricingPuzzleArgs, Conditions,
+        MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 use clvmr::NodePtr;
 
 #[allow(clippy::type_complexity)]
@@ -74,7 +74,10 @@ fn get_additional_info_for_launch(
     conditions = conditions.extend(price_singleton_launch_conds);
 
     let cat_memos = ctx.hint(cat_destination_puzzle_hash)?;
-    let run_tail = RunCatTail::new(ctx.curry(GenesisByCoinIdTailArgs::new(security_coin.coin_id()))?, NodePtr::NIL);
+    let run_tail = RunCatTail::new(
+        ctx.curry(GenesisByCoinIdTailArgs::new(security_coin.coin_id()))?,
+        NodePtr::NIL,
+    );
     let (cat_creation_conds, eve_cat) = Cat::issue(
         ctx,
         security_coin.coin_id(),
@@ -310,7 +313,10 @@ pub async fn xchandles_initiate_launch(
     println!("Submitting transaction...");
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
+    println!(
+        "Transaction submitted; status='{}'",
+        resp.status.unwrap_or_default()
+    );
 
     wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");

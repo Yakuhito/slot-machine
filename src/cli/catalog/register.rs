@@ -1,4 +1,3 @@
-use clvm_utils::ToTreeHash;
 use chia_protocol::{Bytes32, SpendBundle};
 use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, LineageProof};
 use chia_wallet_sdk::{
@@ -14,6 +13,7 @@ use chia_wallet_sdk::{
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
@@ -179,7 +179,13 @@ pub async fn catalog_register(
         CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle_hash);
 
     let Some(potential_precommit_coin_records) = cli
-        .get_coin_records_by_hint(precommit_inner_puzzle_hash.into(), None, None, Some(false), None)
+        .get_coin_records_by_hint(
+            precommit_inner_puzzle_hash.into(),
+            None,
+            None,
+            Some(false),
+            None,
+        )
         .await?
         .coin_records
     else {
@@ -404,7 +410,10 @@ pub async fn catalog_register(
         }
         let resp = cli.push_tx(sb).await?;
 
-        println!("Transaction submitted; status='{}'", resp.status);
+        println!(
+            "Transaction submitted; status='{}'",
+            resp.status.unwrap_or_default()
+        );
         wait_for_coin(&cli, security_coin.coin_id(), true).await?;
         println!("Confirmed!");
 

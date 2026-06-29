@@ -15,9 +15,9 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_and_nft, find_entry_slots, get_coinset_client, get_constants, get_last_onchain_timestamp,
-    get_prefix, hex_string_to_bytes32, hex_string_to_pubkey, no_assets, parse_amount,
-    sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
+    assets_xch_and_nft, find_entry_slots, get_coinset_client, get_constants,
+    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, hex_string_to_pubkey, no_assets,
+    parse_amount, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
 };
 
 pub async fn reward_distributor_stake(
@@ -135,7 +135,10 @@ pub async fn reward_distributor_stake(
     };
     println!(
         "done ({} intermediary coins).",
-        nft_launcher_proof.intermediary_coin_proofs.len().saturating_sub(1)
+        nft_launcher_proof
+            .intermediary_coin_proofs
+            .len()
+            .saturating_sub(1)
     );
 
     println!(
@@ -232,7 +235,10 @@ pub async fn reward_distributor_stake(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
+    println!(
+        "Transaction submitted; status='{}'",
+        resp.status.unwrap_or_default()
+    );
 
     wait_for_coin(&client, security_coin.coin_id(), true).await?;
     println!("Confirmed!");
