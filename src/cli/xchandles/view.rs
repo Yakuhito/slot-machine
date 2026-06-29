@@ -1,4 +1,4 @@
-use chia::clvm_utils::ToTreeHash;
+use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     driver::{SpendContext, XchandlesExpirePricingPuzzle},
     types::{

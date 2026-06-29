@@ -1,9 +1,9 @@
-use chia::clvm_utils::ToTreeHash;
-use chia::protocol::Bytes32;
+use clvm_utils::ToTreeHash;
+use chia_protocol::Bytes32;
 use chia_wallet_sdk::{
     driver::{
         CatalogRegistryConstants, CatalogRegistryState, DelegatedStateAction, MedievalVault,
-        SingletonInfo,
+        SingletonInfo, XchandlesRegistryReceivedMessagePrefix,
     },
     types::{
         puzzles::{DefaultCatMakerArgs, StateSchedulerLayerSolution},
@@ -74,6 +74,7 @@ pub async fn catalog_broadcast_state_update(
 
     let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes32>(
         &mut ctx,
+        XchandlesRegistryReceivedMessagePrefix::UpdateState as u8,
         new_state.tree_hash().into(),
         catalog_constants.launcher_id,
         medieval_vault.coin,

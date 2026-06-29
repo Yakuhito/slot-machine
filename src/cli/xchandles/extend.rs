@@ -1,4 +1,5 @@
-use chia::{clvm_utils::ToTreeHash, protocol::SpendBundle};
+use chia_protocol::SpendBundle;
+use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -88,19 +89,19 @@ pub async fn xchandles_extend(
     };
     println!("Current expiration: {}", slot.info.value.expiration);
 
-    let start_time = get_last_onchain_timestamp(&cli).await? - 1;
-    println!("Extension time: {}", start_time);
+    let buy_time = get_last_onchain_timestamp(&cli).await?;
+    println!("Extension time: {}", buy_time);
 
     let (sec_conds, notarized_payment) = registry.new_action::<XchandlesExtendAction>().spend(
         &mut ctx,
         &mut registry,
-        handle,
+        &handle,
         slot,
         payment_asset_id,
         payment_cat_base_price,
         registration_period,
         num_periods,
-        start_time,
+        buy_time,
     )?;
 
     yes_no_prompt("Continue with extension?")?;

@@ -1,4 +1,4 @@
-use chia::protocol::CoinSpend;
+use chia_protocol::CoinSpend;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{CatalogRegistry, CatalogRegistryConstants, SpendContext},
@@ -12,7 +12,7 @@ pub async fn quick_sync_catalog(
     constants: CatalogRegistryConstants,
 ) -> Result<CatalogRegistry, CliError> {
     let mut records = client
-        .get_coin_records_by_hint(constants.launcher_id, None, None, Some(false))
+        .get_coin_records_by_hint(constants.launcher_id, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(CliError::Custom(

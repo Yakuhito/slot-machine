@@ -1,7 +1,4 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, SpendBundle},
-};
+use chia_protocol::{Bytes32, SpendBundle};
 use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
@@ -12,13 +9,14 @@ use chia_wallet_sdk::{
     },
     types::{
         puzzles::{
-            DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution,
-            XchandlesSlotValue,
+            DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesHandleSlotValue,
+            XchandlesPricingSolution,
         },
         Mod,
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
@@ -164,7 +162,7 @@ pub async fn xchandles_expire(
         handle.clone(),
         secret,
         nft_launcher_id,
-        nft_launcher_id.into(),
+        nft_launcher_id,
     );
 
     let refund_address = if let Some(provided_refund_address) = refund_address {
@@ -190,7 +188,13 @@ pub async fn xchandles_expire(
         CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle_hash);
 
     let Some(potential_precommit_coin_records) = cli
-        .get_coin_records_by_hint(precommit_inner_puzzle_hash.into(), None, None, Some(false))
+        .get_coin_records_by_hint(
+            precommit_inner_puzzle_hash.into(),
+            None,
+            None,
+            Some(false),
+            None,
+        )
         .await?
         .coin_records
     else {
@@ -305,7 +309,7 @@ pub async fn xchandles_expire(
                 registration_period,
             }
             .curry_tree_hash();
-            let slot: Option<Slot<XchandlesSlotValue>> =
+            let slot: Option<Slot<XchandlesHandleSlotValue>> =
                 if DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into()).curry_tree_hash()
                     == registry.info.state.cat_maker_puzzle_hash.into()
                     && registry.info.state.pricing_puzzle_hash == factor_puzzle_hash.into()
@@ -335,16 +339,24 @@ pub async fn xchandles_expire(
                 )?
                 .reserve_fee(1)
         } else {
-            registry.new_action::<XchandlesExpireAction>().spend(
-                &mut ctx,
-                &mut registry,
-                slot,
-                num_periods,
-                payment_cat_base_price,
-                registration_period,
-                precommit_coin,
-                expire_time,
-            )?
+            let (expire_conds, owner_message_conds, resolved_message_conds) =
+                registry.new_action::<XchandlesExpireAction>().spend(
+                    &mut ctx,
+                    &mut registry,
+                    slot,
+                    num_periods,
+                    payment_cat_base_price,
+                    registration_period,
+                    &precommit_coin,
+                    expire_time,
+                    Bytes32::default(),
+                    Bytes32::default(),
+                )?;
+            let mut all_conds = expire_conds.extend(owner_message_conds);
+            if let Some(resolved_message_conds) = resolved_message_conds {
+                all_conds = all_conds.extend(resolved_message_conds);
+            }
+            all_conds
         };
 
         let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;

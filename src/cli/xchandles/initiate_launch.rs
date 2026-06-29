@@ -7,12 +7,10 @@ use crate::{
     get_coinset_client, get_prefix, load_xchandles_premine_csv, load_xchandles_state_schedule_csv,
     no_assets, parse_amount, print_medieval_vault_configuration, wait_for_coin, SageClient,
 };
-use chia::{
-    bls::PublicKey,
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin, SpendBundle},
-    puzzles::cat::GenesisByCoinIdTailArgs,
-};
+use chia_bls::PublicKey;
+use chia_protocol::{Bytes32, Coin, SpendBundle};
+use chia_puzzle_types::cat::GenesisByCoinIdTailArgs;
+use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -21,7 +19,7 @@ use chia_wallet_sdk::{
         XchandlesConstants, XchandlesRegistryState,
     },
     types::{
-        puzzles::XchandlesFactorPricingPuzzleArgs, Conditions, MAINNET_CONSTANTS,
+        conditions::RunCatTail, puzzles::XchandlesFactorPricingPuzzleArgs, Conditions, MAINNET_CONSTANTS,
         TESTNET11_CONSTANTS,
     },
     utils::Address,
@@ -76,10 +74,13 @@ fn get_additional_info_for_launch(
     conditions = conditions.extend(price_singleton_launch_conds);
 
     let cat_memos = ctx.hint(cat_destination_puzzle_hash)?;
-    let (cat_creation_conds, eve_cat) = Cat::issue_with_coin(
+    let run_tail = RunCatTail::new(ctx.curry(GenesisByCoinIdTailArgs::new(security_coin.coin_id()))?, NodePtr::NIL);
+    let (cat_creation_conds, eve_cat) = Cat::issue(
         ctx,
         security_coin.coin_id(),
+        None,
         cat_amount,
+        run_tail,
         Conditions::new().create_coin(cat_destination_puzzle_hash, cat_amount, cat_memos),
     )?;
     conditions = conditions.extend(cat_creation_conds);

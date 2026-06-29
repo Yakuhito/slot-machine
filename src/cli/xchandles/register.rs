@@ -1,8 +1,5 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, SpendBundle},
-    puzzles::{cat::CatArgs, singleton::SingletonStruct, LineageProof},
-};
+use chia_protocol::{Bytes32, SpendBundle};
+use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -11,22 +8,23 @@ use chia_wallet_sdk::{
         XchandlesExpirePricingPuzzle, XchandlesPrecommitValue, XchandlesRefundAction,
         XchandlesRegisterAction,
     },
-    test::print_spend_bundle_to_file,
     types::{
         puzzles::{
-            DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution,
-            XchandlesSlotValue,
+            DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesHandleSlotValue,
+            XchandlesPricingSolution,
         },
         Mod,
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
     assets_xch_only, get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, no_assets, parse_amount, quick_sync_xchandles, sync_xchandles,
-    wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
+    hex_string_to_bytes32, no_assets, parse_amount, print_spend_bundle_to_file,
+    quick_sync_xchandles, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
+    XchandlesApiClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -151,7 +149,7 @@ pub async fn xchandles_register(
         handle.clone(),
         secret,
         nft_launcher_id,
-        nft_launcher_id.into(),
+        nft_launcher_id,
     );
     let precommit_value_ptr = ctx.alloc(&precommit_value)?;
 
@@ -167,7 +165,13 @@ pub async fn xchandles_register(
         CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle_hash);
 
     let Some(potential_precommit_coin_records) = cli
-        .get_coin_records_by_hint(precommit_inner_puzzle_hash.into(), None, None, Some(false))
+        .get_coin_records_by_hint(
+            precommit_inner_puzzle_hash.into(),
+            None,
+            None,
+            Some(false),
+            None,
+        )
         .await?
         .coin_records
     else {
@@ -274,7 +278,7 @@ pub async fn xchandles_register(
         }
         .curry_tree_hash();
         let sec_conds = if refund {
-            let slot: Option<Slot<XchandlesSlotValue>> = if DefaultCatMakerArgs::new(
+            let slot: Option<Slot<XchandlesHandleSlotValue>> = if DefaultCatMakerArgs::new(
                 payment_asset_id.tree_hash().into(),
             )
             .curry_tree_hash()
@@ -298,7 +302,7 @@ pub async fn xchandles_register(
                     };
 
                     Some(
-                        db.get_slot::<XchandlesSlotValue>(
+                        db.get_slot::<XchandlesHandleSlotValue>(
                             &mut ctx,
                             launcher_id,
                             0,
@@ -343,16 +347,24 @@ pub async fn xchandles_register(
                     .await?
             };
 
-            registry.new_action::<XchandlesRegisterAction>().spend(
-                &mut ctx,
-                &mut registry,
-                left_slot,
-                right_slot,
-                precommit_coin,
-                payment_cat_base_price,
-                registration_period,
-                start_time,
-            )?
+            let (register_conds, owner_message_conds, resolved_message_conds) =
+                registry.new_action::<XchandlesRegisterAction>().spend(
+                    &mut ctx,
+                    &mut registry,
+                    left_slot,
+                    right_slot,
+                    &precommit_coin,
+                    payment_cat_base_price,
+                    registration_period,
+                    start_time,
+                    Bytes32::default(),
+                    Bytes32::default(),
+                )?;
+            let mut all_conds = register_conds.extend(owner_message_conds);
+            if let Some(resolved_message_conds) = resolved_message_conds {
+                all_conds = all_conds.extend(resolved_message_conds);
+            }
+            all_conds
         };
 
         let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;
@@ -372,11 +384,7 @@ pub async fn xchandles_register(
 
         println!("Submitting transaction...");
         if log {
-            print_spend_bundle_to_file(
-                sb.coin_spends.clone(),
-                sb.aggregated_signature.clone(),
-                "sb.debug",
-            );
+            let _ = print_spend_bundle_to_file(&sb, "sb.debug");
         }
         let resp = cli.push_tx(sb).await?;
 

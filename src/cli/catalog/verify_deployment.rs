@@ -1,8 +1,8 @@
-use chia::clvm_utils::{CurriedProgram, ToTreeHash, TreeHash};
-use chia::protocol::{Bytes32, Coin};
-use chia::puzzles::nft::{NftOwnershipLayerArgs, NftRoyaltyTransferPuzzleArgs, NftStateLayerArgs};
-use chia::puzzles::singleton::SingletonArgs;
-use chia::puzzles::{LineageProof, Proof};
+use clvm_utils::{CurriedProgram, ToTreeHash, TreeHash};
+use chia_protocol::{Bytes32, Coin};
+use chia_puzzle_types::nft::{NftOwnershipLayerArgs, NftRoyaltyTransferPuzzleArgs, NftStateLayerArgs};
+use chia_puzzle_types::singleton::SingletonArgs;
+use chia_puzzle_types::{LineageProof, Proof};
 use chia_puzzle_types::Memos;
 use chia_puzzles::{NFT_STATE_LAYER_HASH, SINGLETON_LAUNCHER_HASH};
 use chia_wallet_sdk::driver::DriverError;
@@ -211,8 +211,13 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
             break;
         };
 
-        catalog =
-            CatalogRegistry::from_spend(&mut ctx, &coin_spend, catalog.info.constants)?.unwrap();
+        catalog = CatalogRegistry::from_spend(
+            &mut ctx,
+            &coin_spend,
+            catalog.info.constants,
+            chia_bls::Signature::default(),
+        )?
+        .unwrap();
         let new_slot_values = &catalog.pending_spend.created_slots;
 
         while cat_index < cats_to_launch.len() {

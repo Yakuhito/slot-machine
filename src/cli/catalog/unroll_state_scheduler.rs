@@ -1,4 +1,4 @@
-use chia::protocol::{Bytes32, SpendBundle};
+use chia_protocol::{Bytes32, SpendBundle};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{

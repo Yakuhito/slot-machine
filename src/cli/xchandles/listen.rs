@@ -6,10 +6,10 @@ use axum::debug_handler;
 use axum::extract::{Query, State};
 use axum::http::{HeaderValue, Method};
 use axum::{http::StatusCode, routing::get, Json, Router};
-use chia::protocol::Bytes32;
+use chia_protocol::Bytes32;
 use chia_wallet_sdk::coinset::ChiaRpcClient;
 use chia_wallet_sdk::driver::{SpendContext, XchandlesRegistry};
-use chia_wallet_sdk::types::puzzles::XchandlesSlotValue;
+use chia_wallet_sdk::types::puzzles::XchandlesHandleSlotValue;
 use clvmr::Allocator;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -38,13 +38,15 @@ pub struct XchandlesNeighborsResponse {
 
     pub left_left_handle_hash: String,
     pub left_expiration: u64,
+    pub left_counter: u64,
     pub left_owner_launcher_id: String,
-    pub left_resolved_data: String,
+    pub left_resolved_launcher_id: String,
 
     pub right_right_handle_hash: String,
     pub right_expiration: u64,
+    pub right_counter: u64,
     pub right_owner_launcher_id: String,
-    pub right_resolved_data: String,
+    pub right_resolved_launcher_id: String,
 
     pub left_parent_parent_info: String,
     pub left_parent_inner_puzzle_hash: String,
@@ -135,7 +137,7 @@ async fn get_neighbors(
     let (left, right) = {
         let db = state.db.lock().await;
 
-        db.get_xchandles_neighbors::<XchandlesSlotValue>(&mut allocator, launcher_id, handle_hash)
+        db.get_xchandles_neighbors::<XchandlesHandleSlotValue>(&mut allocator, launcher_id, handle_hash)
             .await
     }?;
 
@@ -147,13 +149,15 @@ async fn get_neighbors(
 
         left_left_handle_hash: hex::encode(left.info.value.neighbors.left_value.to_bytes()),
         left_expiration: left.info.value.expiration,
+        left_counter: left.info.value.counter,
         left_owner_launcher_id: hex::encode(left.info.value.owner_launcher_id.to_bytes()),
-        left_resolved_data: hex::encode(left.info.value.resolved_data),
+        left_resolved_launcher_id: hex::encode(left.info.value.resolved_launcher_id.to_bytes()),
 
         right_right_handle_hash: hex::encode(right.info.value.neighbors.right_value.to_bytes()),
         right_expiration: right.info.value.expiration,
+        right_counter: right.info.value.counter,
         right_owner_launcher_id: hex::encode(right.info.value.owner_launcher_id.to_bytes()),
-        right_resolved_data: hex::encode(right.info.value.resolved_data),
+        right_resolved_launcher_id: hex::encode(right.info.value.resolved_launcher_id.to_bytes()),
 
         left_parent_parent_info: hex::encode(left.proof.parent_parent_coin_info.to_bytes()),
         left_parent_inner_puzzle_hash: hex::encode(left.proof.parent_inner_puzzle_hash.to_bytes()),
@@ -217,6 +221,7 @@ async fn connect_websocket(
                                 None,
                                 None,
                                 Some(true),
+                                None,
                             )
                             .await?;
 

@@ -1,5 +1,5 @@
-use chia::bls::PublicKey;
-use chia::protocol::{Bytes, Bytes32};
+use chia_bls::PublicKey;
+use chia_protocol::{Bytes, Bytes32};
 use chia_wallet_sdk::utils::Address;
 use csv::ReaderBuilder;
 use hex::FromHex;

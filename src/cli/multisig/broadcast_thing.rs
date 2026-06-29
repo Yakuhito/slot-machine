@@ -1,7 +1,5 @@
-use chia::{
-    bls::{PublicKey, Signature},
-    protocol::{Bytes32, SpendBundle},
-};
+use chia_bls::{PublicKey, Signature};
+use chia_protocol::{Bytes32, SpendBundle};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{

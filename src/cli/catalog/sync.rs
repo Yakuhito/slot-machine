@@ -1,10 +1,8 @@
 use std::collections::HashSet;
 
-use chia::{
-    clvm_utils::{tree_hash, ToTreeHash},
-    protocol::{Bytes32, Coin},
-    puzzles::{singleton::LauncherSolution, LineageProof, Proof},
-};
+use clvm_utils::{ToTreeHash, tree_hash};
+use chia_protocol::{Bytes32, Coin};
+use chia_puzzle_types::{singleton::LauncherSolution, LineageProof, Proof};
 use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
@@ -218,7 +216,13 @@ pub async fn sync_catalog(
             .coin_solution
             .ok_or(CliError::CoinNotSpent(coin_record.coin.coin_id()))?;
 
-        catalog = CatalogRegistry::from_spend(ctx, &coin_spend, constants)?.ok_or(
+        catalog = CatalogRegistry::from_spend(
+            ctx,
+            &coin_spend,
+            constants,
+            chia_bls::Signature::default(),
+        )?
+        .ok_or(
             CliError::Custom("Could not parse new CATalog registry spend".to_string()),
         )?;
 
@@ -303,8 +307,12 @@ pub async fn mempool_catalog_maybe(
             break;
         };
 
-        let Some(new_catalog) =
-            CatalogRegistry::from_spend(ctx, catalog_spend, catalog.info.constants)?
+        let Some(new_catalog) = CatalogRegistry::from_spend(
+            ctx,
+            catalog_spend,
+            catalog.info.constants,
+            chia_bls::Signature::default(),
+        )?
         else {
             break;
         };

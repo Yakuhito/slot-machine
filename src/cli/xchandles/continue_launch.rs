@@ -1,10 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use chia::{
-    clvm_utils::{ToTreeHash, TreeHash},
-    protocol::{Bytes32, SpendBundle},
-    puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
-};
+use chia_protocol::{Bytes32, SpendBundle};
+use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
@@ -19,6 +16,7 @@ use chia_wallet_sdk::{
     utils::Address,
 };
 use clvm_traits::clvm_quote;
+use clvm_utils::{ToTreeHash, TreeHash};
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
@@ -51,7 +49,7 @@ fn precommit_value_for_handle(
         handle.handle.clone(),
         Bytes32::default(),
         owner_nft_launcher_id,
-        owner_nft_launcher_id.into(),
+        owner_nft_launcher_id,
     ))
 }
 
@@ -163,7 +161,13 @@ pub async fn xchandles_continue_launch(
                 CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle);
 
             let records_resp = client
-                .get_coin_records_by_puzzle_hash(precommit_puzzle.into(), None, None, Some(true))
+                .get_coin_records_by_puzzle_hash(
+                    precommit_puzzle.into(),
+                    None,
+                    None,
+                    Some(true),
+                    None,
+                )
                 .await?;
             let Some(records) = records_resp.coin_records else {
                 break;
@@ -350,7 +354,13 @@ pub async fn xchandles_continue_launch(
 
     let expected_records = precommit_puzzle_hashes.len();
     let phes_resp = client
-        .get_coin_records_by_puzzle_hashes(precommit_puzzle_hashes.clone(), None, None, Some(false))
+        .get_coin_records_by_puzzle_hashes(
+            precommit_puzzle_hashes.clone(),
+            None,
+            None,
+            Some(false),
+            None,
+        )
         .await?;
     let Some(precommit_coin_records) = phes_resp.coin_records else {
         eprintln!("Failed to get precommitment coin records - aborting...");
@@ -405,7 +415,13 @@ pub async fn xchandles_continue_launch(
 
     let expected_records = parent_ids.len();
     let parent_records_resp = client
-        .get_coin_records_by_names(parent_ids.into_iter().collect(), None, None, Some(true))
+        .get_coin_records_by_names(
+            parent_ids.into_iter().collect(),
+            None,
+            None,
+            Some(true),
+            None,
+        )
         .await?;
     let Some(parent_records) = parent_records_resp.coin_records else {
         eprintln!("Failed to get parent records - aborting...");
@@ -502,18 +518,26 @@ pub async fn xchandles_continue_launch(
 
         let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
-        let sec_conds = registry.new_action::<XchandlesRegisterAction>().spend(
-            &mut ctx,
-            &mut registry,
-            left_slot,
-            right_slot,
-            precommit_coin,
-            1,
-            registration_period,
-            start_time,
-        )?;
+        let (register_conds, owner_message_conds, resolved_message_conds) =
+            registry.new_action::<XchandlesRegisterAction>().spend(
+                &mut ctx,
+                &mut registry,
+                left_slot,
+                right_slot,
+                &precommit_coin,
+                1,
+                registration_period,
+                start_time,
+                Bytes32::default(),
+                Bytes32::default(),
+            )?;
 
-        security_coin_conditions = security_coin_conditions.extend(sec_conds);
+        security_coin_conditions = security_coin_conditions
+            .extend(register_conds)
+            .extend(owner_message_conds);
+        if let Some(resolved_message_conds) = resolved_message_conds {
+            security_coin_conditions = security_coin_conditions.extend(resolved_message_conds);
+        }
     }
 
     let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;

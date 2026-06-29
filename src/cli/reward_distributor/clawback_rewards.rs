@@ -1,4 +1,4 @@
-use chia::protocol::{Coin, SpendBundle};
+use chia_protocol::{Coin, SpendBundle};
 use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,

@@ -1,4 +1,4 @@
-use chia::protocol::CoinSpend;
+use chia_protocol::CoinSpend;
 use dirs::data_dir;
 use reqwest::Identity;
 use sage_api::{

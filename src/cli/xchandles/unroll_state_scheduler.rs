@@ -1,4 +1,5 @@
-use chia::{clvm_utils::ToTreeHash, protocol::SpendBundle};
+use chia_protocol::SpendBundle;
+use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{

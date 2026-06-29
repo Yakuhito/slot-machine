@@ -1,10 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use chia::{
-    clvm_utils::{ToTreeHash, TreeHash},
-    protocol::{Bytes32, SpendBundle},
-    puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
-};
+use clvm_utils::{ToTreeHash, TreeHash};
+use chia_protocol::{Bytes32, SpendBundle};
+use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
@@ -161,7 +159,13 @@ pub async fn catalog_continue_launch(
                 CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle);
 
             let records_resp = client
-                .get_coin_records_by_puzzle_hash(precommit_puzzle.into(), None, None, Some(true))
+                .get_coin_records_by_puzzle_hash(
+                    precommit_puzzle.into(),
+                    None,
+                    None,
+                    Some(true),
+                    None,
+                )
                 .await?;
             let Some(records) = records_resp.coin_records else {
                 break;
@@ -333,7 +337,13 @@ pub async fn catalog_continue_launch(
 
     let expected_records = precommit_puzzle_hashes.len();
     let phes_resp = client
-        .get_coin_records_by_puzzle_hashes(precommit_puzzle_hashes.clone(), None, None, Some(false))
+        .get_coin_records_by_puzzle_hashes(
+            precommit_puzzle_hashes.clone(),
+            None,
+            None,
+            Some(false),
+            None,
+        )
         .await?;
     let Some(precommit_coin_records) = phes_resp.coin_records else {
         eprintln!("Failed to get precommitment coin records - aborting...");
@@ -386,7 +396,13 @@ pub async fn catalog_continue_launch(
 
     let expected_records = parent_ids.len();
     let parent_records_resp = client
-        .get_coin_records_by_names(parent_ids.into_iter().collect(), None, None, Some(true))
+        .get_coin_records_by_names(
+            parent_ids.into_iter().collect(),
+            None,
+            None,
+            Some(true),
+            None,
+        )
         .await?;
     let Some(parent_records) = parent_records_resp.coin_records else {
         eprintln!("Failed to get parent records - aborting...");

@@ -1,4 +1,5 @@
-use chia::{bls::PublicKey, protocol::SpendBundle};
+use chia_bls::PublicKey;
+use chia_protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{

@@ -3,7 +3,7 @@ use crate::{
     no_assets, parse_amount, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
     SageClient,
 };
-use chia::protocol::SpendBundle;
+use chia_protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{

@@ -1,8 +1,6 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes, Bytes32},
-};
-use chia_wallet_sdk::driver::MedievalVault;
+use chia_protocol::Bytes32;
+use clvm_utils::ToTreeHash;
+use chia_wallet_sdk::driver::{MedievalVault, RewardDistributorType};
 use clvmr::Allocator;
 
 use crate::{
@@ -33,9 +31,20 @@ pub async fn reward_distributor_sign_entry_update(
             "Could not get reward distributor constants - try running another command to sync it first".to_string(),
         ))?;
 
+    let manager_launcher_id = match distributor_constants.reward_distributor_type {
+        RewardDistributorType::Managed {
+            manager_singleton_launcher_id,
+        } => manager_singleton_launcher_id,
+        _ => {
+            return Err(CliError::Custom(
+                "Entry updates require a managed reward distributor".to_string(),
+            ));
+        }
+    };
+
     let (my_pubkey, mut ctx, _client, medieval_vault) = multisig_sign_thing_start(
         my_pubkey_str,
-        hex::encode(distributor_constants.manager_or_collection_did_launcher_id),
+        hex::encode(manager_launcher_id),
         testnet11,
     )
     .await?;
@@ -52,16 +61,12 @@ pub async fn reward_distributor_sign_entry_update(
     println!("  Entry shares: {}", entry_shares);
 
     let message: Bytes32 = (entry_payout_puzzle_hash, entry_shares).tree_hash().into();
-    let mut message: Vec<u8> = message.to_vec();
-    if remove_entry {
-        message.insert(0, b'r');
-    } else {
-        message.insert(0, b'a');
-    }
+    let message_prefix = if remove_entry { b'r' } else { b'a' };
 
-    let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes>(
+    let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes32>(
         &mut ctx,
-        Bytes::new(message),
+        message_prefix,
+        message,
         launcher_id,
         medieval_vault.coin,
         &medieval_vault.info,

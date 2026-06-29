@@ -51,24 +51,40 @@ pub async fn reward_distributor_view(
         hex::encode(distributor.info.constants.launcher_id)
     );
     match distributor.info.constants.reward_distributor_type {
-        RewardDistributorType::Manager => println!(
+        RewardDistributorType::Managed {
+            manager_singleton_launcher_id,
+        } => println!(
             "  Manager launcher ID: {}",
-            hex::encode(
-                distributor
-                    .info
-                    .constants
-                    .manager_or_collection_did_launcher_id
-            )
+            hex::encode(manager_singleton_launcher_id)
         ),
-        RewardDistributorType::Nft => println!(
+        RewardDistributorType::NftCollection {
+            collection_did_launcher_id,
+        } => println!(
             "  Collection DID launcher ID: {}",
-            hex::encode(
-                distributor
-                    .info
-                    .constants
-                    .manager_or_collection_did_launcher_id
-            )
+            hex::encode(collection_did_launcher_id)
         ),
+        RewardDistributorType::CuratedNft {
+            store_launcher_id,
+            refreshable,
+        } => {
+            println!(
+                "  DataStore launcher ID: {}",
+                hex::encode(store_launcher_id)
+            );
+            println!("  Refreshable: {refreshable}");
+        }
+        RewardDistributorType::Cat {
+            asset_id,
+            hidden_puzzle_hash,
+        } => {
+            println!("  Stake asset ID: {}", hex::encode(asset_id));
+            if let Some(hidden_puzzle_hash) = hidden_puzzle_hash {
+                println!(
+                    "  Hidden puzzle hash: {}",
+                    hex::encode(hidden_puzzle_hash)
+                );
+            }
+        }
     };
     println!(
         "  Fee payout address: {}",
@@ -82,6 +98,7 @@ pub async fn reward_distributor_view(
         "  Seconds per epoch: {}",
         distributor.info.constants.epoch_seconds
     );
+    println!("  Precision: {}", distributor.info.constants.precision);
     println!(
         "  Max seconds offset: {}",
         distributor.info.constants.max_seconds_offset
@@ -89,6 +106,10 @@ pub async fn reward_distributor_view(
     println!(
         "  Payout threshold: {} mojos",
         distributor.info.constants.payout_threshold
+    );
+    println!(
+        "  Require payout approval: {}",
+        distributor.info.constants.require_payout_approval
     );
     println!("  Fee bps: {}", distributor.info.constants.fee_bps);
     println!(

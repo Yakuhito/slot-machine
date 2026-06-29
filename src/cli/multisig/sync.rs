@@ -1,12 +1,10 @@
-use chia::{
-    bls::PublicKey,
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin},
-    puzzles::{
-        singleton::{LauncherSolution, SingletonArgs},
-        LineageProof, Proof,
-    },
+use chia_bls::PublicKey;
+use chia_protocol::{Bytes32, Coin};
+use chia_puzzle_types::{
+    singleton::{LauncherSolution, SingletonArgs},
+    LineageProof, Proof,
 };
+use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::driver::{
     MedievalVaultHint, MedievalVaultInfo, SingletonInfo, SpendContext, StateSchedulerInfo,
 };
@@ -180,7 +178,7 @@ where
         println!("Getting latest vault on-chain...");
     }
     let vault_records = client
-        .get_coin_records_by_hint(launcher_id, None, None, Some(false))
+        .get_coin_records_by_hint(launcher_id, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(CliError::CoinNotFound(launcher_id))?;

@@ -1,17 +1,17 @@
 use super::{ClientError, SageClient};
-use chia::{
-    bls::{self, PublicKey, SecretKey, Signature},
-    consensus::consensus_constants::ConsensusConstants,
-    protocol::{Bytes, Bytes32, Coin, CoinSpend, Program},
-};
+use chia_bls::{self, PublicKey, SecretKey, Signature};
+use chia_consensus::consensus_constants::ConsensusConstants;
+use chia_protocol::{Bytes, Bytes32, Coin, CoinSpend, Program, SpendBundle};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{DriverError, Spend, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
-    utils::AddressError,
+    utils::Bech32Error,
 };
+use clvmr::error::EvalErr;
 use hex::FromHex;
 use std::{
+    fs,
     io::{self, Write},
     num::ParseIntError,
 };
@@ -38,7 +38,7 @@ pub enum CliError {
     Bech32(#[from] bech32::Error),
 
     #[error("address: {0}")]
-    Address(#[from] AddressError),
+    Address(#[from] Bech32Error),
 
     #[error("that's not a clear 'yes'")]
     YesNoPromptRejected,
@@ -47,7 +47,7 @@ pub enum CliError {
     ParseHex(#[from] hex::FromHexError),
 
     #[error("invalid public key (or other BLS object): {0}")]
-    InvalidPublicKey(#[from] bls::Error),
+    InvalidPublicKey(#[from] chia_bls::Error),
 
     #[error("invalid amount: must contain '.'")]
     InvalidAmount,
@@ -85,8 +85,11 @@ pub enum CliError {
     #[error("constants not set (launcher id or price singletong launcher id)")]
     ConstantsNotSet,
 
-    #[error("{0} slot not found")]
+    #[error("slot not found: {0}")]
     SlotNotFound(&'static str),
+
+    #[error("clvm eval: {0}")]
+    ClvmEval(#[from] EvalErr),
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {
@@ -190,6 +193,12 @@ pub fn hex_string_to_signature(hex: &str) -> Result<Signature, CliError> {
 pub fn hex_string_to_bytes(hex: &str) -> Result<Bytes, CliError> {
     let bytes = hex::decode(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
     Ok(Bytes::from(bytes))
+}
+
+pub fn print_spend_bundle_to_file(spend_bundle: &SpendBundle, path: &str) -> Result<(), CliError> {
+    let contents = format!("{spend_bundle:#?}");
+    fs::write(path, contents)?;
+    Ok(())
 }
 
 #[allow(clippy::nonminimal_bool)]

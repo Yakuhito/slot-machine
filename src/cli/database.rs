@@ -1,4 +1,5 @@
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
+use chia_protocol::Bytes32;
+use clvm_utils::ToTreeHash;
 use chia_puzzle_types::LineageProof;
 use chia_wallet_sdk::{
     coinset::CoinRecord,

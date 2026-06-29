@@ -1,4 +1,4 @@
-use chia::protocol::{Bytes32, CoinSpend};
+use chia_protocol::{Bytes32, CoinSpend};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{SpendContext, XchandlesRegistry},
@@ -43,7 +43,7 @@ pub async fn quick_sync_xchandles(
     };
 
     let mut records = client
-        .get_coin_records_by_hint(launcher_id, None, None, Some(false))
+        .get_coin_records_by_hint(launcher_id, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(CliError::Custom(

@@ -4,8 +4,7 @@ A repo containing the main CLI and code used to interact with Chia blockchain dA
 
 ## CATalog
 
-A decentralized, shared CAT registration system for the Chia blockchain. It allows CAT creators to register new CATs and add useful information such as name and image URL. Verifiers can then create verification coins to attest that the data is not misleading, as well as assign custom metadata to the CAT that their website/apps later use.
-
+A decentralized, shared CAT registration system for the Chia blockchain. It allows CAT creators to register new CATs and add useful information such as name and image URL.
 
 ## XCHandles
 

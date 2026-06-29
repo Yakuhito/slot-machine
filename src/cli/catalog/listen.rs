@@ -35,6 +35,9 @@ pub struct CatalogNeighborResponse {
     pub left_asset_id: String,
     pub right_asset_id: String,
 
+    pub left_counter: u64,
+    pub right_counter: u64,
+
     pub left_left_asset_id: String,
     pub right_right_asset_id: String,
 
@@ -146,6 +149,9 @@ async fn get_neighbors(
 
         left_asset_id: hex::encode(left.info.value.asset_id.to_bytes()),
         right_asset_id: hex::encode(right.info.value.asset_id.to_bytes()),
+
+        left_counter: left.info.value.counter,
+        right_counter: right.info.value.counter,
 
         left_left_asset_id: hex::encode(left.info.value.neighbors.left_value.to_bytes()),
         right_right_asset_id: hex::encode(right.info.value.neighbors.right_value.to_bytes()),

@@ -1,9 +1,11 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, CoinSpend},
-    puzzles::{cat::CatArgs, singleton::SingletonStruct, LineageProof},
+use chia_protocol::{Bytes32, CoinSpend};
+use chia_bls::Signature;
+use chia_puzzle_types::{
+    cat::{CatArgs, CatSolution},
+    singleton::SingletonStruct,
+    LineageProof,
 };
-use chia_puzzle_types::cat::CatSolution;
+use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
@@ -61,7 +63,7 @@ pub async fn sync_distributor(
     };
 
     let mut records = client
-        .get_coin_records_by_hint(constants.launcher_id, None, None, Some(false))
+        .get_coin_records_by_hint(constants.launcher_id, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(CliError::Custom(
@@ -165,7 +167,7 @@ pub async fn find_reserve(
     let puzzle_hash: Bytes32 = CatArgs::curry_tree_hash(asset_id, inner_puzzle_hash).into();
 
     let Some(coin_records) = client
-        .get_coin_records_by_puzzle_hash(puzzle_hash, None, None, Some(include_spent))
+        .get_coin_records_by_puzzle_hash(puzzle_hash, None, None, Some(include_spent), None)
         .await?
         .coin_records
     else {
@@ -253,6 +255,7 @@ pub async fn mempool_distributor_maybe(
                 distributor.reserve.proof
             }),
             distributor.info.constants,
+            mempool_item.spend_bundle.aggregated_signature.clone(),
         )?
         else {
             break;
@@ -350,7 +353,7 @@ pub async fn find_reward_slot(
 
     loop {
         let mut possible_records = client
-            .get_coin_records_by_hint(epoch_start.tree_hash().into(), None, None, Some(false))
+            .get_coin_records_by_hint(epoch_start.tree_hash().into(), None, None, Some(false), None)
             .await?
             .coin_records
             .ok_or(DriverError::MissingHint)?;
@@ -367,10 +370,17 @@ pub async fn find_reward_slot(
                 .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
             let Some(distributor) =
-                RewardDistributor::from_spend(ctx, &distributor_spent, None, constants)?
+                RewardDistributor::from_spend(
+                    ctx,
+                    &distributor_spent,
+                    None,
+                    constants,
+                    Signature::default(),
+                )?
             else {
                 // eve spend
                 let slot_value = RewardDistributorRewardSlotValue {
+                    counter: 0,
                     epoch_start,
                     next_epoch_initialized: false,
                     rewards: 0,
@@ -429,7 +439,7 @@ pub async fn find_commitment_slots(
     rewards: Option<u64>,
 ) -> Result<Vec<Slot<RewardDistributorCommitmentSlotValue>>, CliError> {
     let mut possible_records = client
-        .get_coin_records_by_hint(clawback_ph, None, None, Some(false))
+        .get_coin_records_by_hint(clawback_ph, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(DriverError::MissingHint)?;
@@ -448,7 +458,13 @@ pub async fn find_commitment_slots(
             .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
         let Some(distributor) =
-            RewardDistributor::from_spend(ctx, &distributor_spent, None, constants)?
+            RewardDistributor::from_spend(
+                ctx,
+                &distributor_spent,
+                None,
+                constants,
+                Signature::default(),
+            )?
         else {
             continue;
         };
@@ -493,11 +509,11 @@ pub async fn find_entry_slots(
     client: &CoinsetClient,
     constants: RewardDistributorConstants,
     payout_puzzle_hash: Bytes32,
-    initial_cumulative_payout: Option<u64>,
+    initial_cumulative_payout: Option<u128>,
     shares: Option<u64>,
 ) -> Result<Vec<Slot<RewardDistributorEntrySlotValue>>, CliError> {
     let mut possible_records = client
-        .get_coin_records_by_hint(payout_puzzle_hash, None, None, Some(false))
+        .get_coin_records_by_hint(payout_puzzle_hash, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(DriverError::MissingHint)?;
@@ -516,7 +532,13 @@ pub async fn find_entry_slots(
             .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
         let Some(distributor) =
-            RewardDistributor::from_spend(ctx, &distributor_spent, None, constants)?
+            RewardDistributor::from_spend(
+                ctx,
+                &distributor_spent,
+                None,
+                constants,
+                Signature::default(),
+            )?
         else {
             continue;
         };

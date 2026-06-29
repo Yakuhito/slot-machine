@@ -1,4 +1,4 @@
-use chia::clvm_utils::ToTreeHash;
+use clvm_utils::ToTreeHash;
 use chia_puzzle_types::singleton::SingletonSolution;
 use chia_wallet_sdk::driver::{
     Layer, XchandlesExpirePricingPuzzle, XchandlesRegistry, XchandlesRegistryState,
@@ -130,8 +130,16 @@ pub async fn xchandles_verify_deployment(
                 Address::decode(&handles_to_launch[handle_index].owner_nft)?.puzzle_hash;
             if action_solution.handle_hash
                 != handles_to_launch[handle_index].handle.tree_hash().into()
-                || action_solution.data.owner_launcher_id != nft_launcher_id
-                || action_solution.data.resolved_data != nft_launcher_id.into()
+                || action_solution
+                    .other_precommit_data
+                    .launcher_ids
+                    .owner_launcher_id
+                    != nft_launcher_id
+                || action_solution
+                    .other_precommit_data
+                    .launcher_ids
+                    .resolved_launcher_id
+                    != nft_launcher_id
             {
                 return Err(CliError::Custom(format!(
                     "Wrong handle registered at index {}",

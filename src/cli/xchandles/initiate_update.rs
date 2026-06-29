@@ -1,20 +1,18 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, SpendBundle},
-};
+use chia_protocol::{Bytes32, SpendBundle};
 use chia_puzzle_types::standard::StandardArgs;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         create_security_coin, decode_offer, sign_standard_transaction, spend_security_coin,
         spend_settlement_nft, Offer, SingletonInfo, Spend, SpendContext, StandardLayer,
-        XchandlesUpdateAction,
+        XchandlesInitiateUpdateAction,
     },
-    types::puzzles::XchandlesSlotValue,
+    types::puzzles::{CompactCoinProof, XchandlesHandleSlotValue},
     utils::Address,
 };
 use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
+use clvm_utils::ToTreeHash;
 
 use crate::{
     assets_xch_and_nft, get_coinset_client, get_constants, hex_string_to_bytes32, no_assets,
@@ -22,17 +20,42 @@ use crate::{
     SageClient, XchandlesApiClient,
 };
 
-fn encode_nft(nft_launcher_id: Bytes32) -> Result<String, CliError> {
+pub(crate) fn encode_nft(nft_launcher_id: Bytes32) -> Result<String, CliError> {
     Address::new(nft_launcher_id, "nft".to_string())
         .encode()
         .map_err(CliError::from)
 }
 
-pub async fn xchandles_update(
+pub(crate) async fn fetch_handle_slot(
+    launcher_id: Bytes32,
+    handle: &str,
+    local: bool,
+    testnet11: bool,
+    db: &mut Db,
+    ctx: &mut SpendContext,
+) -> Result<chia_wallet_sdk::driver::Slot<XchandlesHandleSlotValue>, CliError> {
+    if local {
+        let slot_value_hash = db
+            .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
+            .await?
+            .ok_or(CliError::SlotNotFound("Handle"))?;
+        db.get_slot::<XchandlesHandleSlotValue>(ctx, launcher_id, 0, slot_value_hash, 0)
+            .await?
+            .ok_or(CliError::SlotNotFound("Handle"))
+    } else {
+        XchandlesApiClient::get(testnet11)
+            .get_slot_value(launcher_id, handle.tree_hash().into())
+            .await
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn xchandles_initiate_update(
     launcher_id_str: String,
     handle: String,
     new_owner_nft: Option<String>,
     new_resolved_nft: Option<String>,
+    min_height: Option<u32>,
     testnet11: bool,
     local: bool,
     fee_str: String,
@@ -54,20 +77,7 @@ pub async fn xchandles_update(
     println!("done.");
 
     print!("Fetching handle slot...");
-    let slot = if local {
-        let slot_value_hash = db
-            .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
-            .await?
-            .ok_or(CliError::SlotNotFound("Handle"))?;
-        db.get_slot::<XchandlesSlotValue>(&mut ctx, launcher_id, 0, slot_value_hash, 0)
-            .await?
-            .ok_or(CliError::SlotNotFound("Handle"))?
-    } else {
-        let xchandles_api_client = XchandlesApiClient::get(testnet11);
-        xchandles_api_client
-            .get_slot_value(launcher_id, handle.tree_hash().into())
-            .await?
-    };
+    let slot = fetch_handle_slot(launcher_id, &handle, local, testnet11, &mut db, &mut ctx).await?;
     println!("done.");
 
     let new_owner_launcher_id = if let Some(new_owner_nft) = new_owner_nft {
@@ -75,15 +85,26 @@ pub async fn xchandles_update(
     } else {
         slot.info.value.owner_launcher_id
     };
-    let new_resolved_data = if let Some(new_resolved_nft) = new_resolved_nft {
-        Address::decode(&new_resolved_nft)?.puzzle_hash.into()
+    let new_resolved_launcher_id = if let Some(new_resolved_nft) = new_resolved_nft {
+        Address::decode(&new_resolved_nft)?.puzzle_hash
     } else {
-        slot.info.value.resolved_data.clone()
+        slot.info.value.resolved_launcher_id
     };
 
     let return_address = sage.get_derivations(false, 0, 1).await?.derivations[0]
         .clone()
         .address;
+
+    let peak_height = cli
+        .get_blockchain_state()
+        .await?
+        .blockchain_state
+        .ok_or(CliError::Custom(
+            "Could not fetch blockchain state".to_string(),
+        ))?
+        .peak
+        .height;
+    let min_height = min_height.unwrap_or(peak_height + 1);
 
     println!("Handle: {}", handle);
     println!(
@@ -91,25 +112,18 @@ pub async fn xchandles_update(
         encode_nft(slot.info.value.owner_launcher_id)?
     );
     println!(
-        "Current resolved data: {}",
-        if let Ok(resolved_data) = slot.info.value.resolved_data.clone().try_into() {
-            encode_nft(resolved_data)?
-        } else {
-            hex::encode(slot.info.value.resolved_data.clone())
-        }
+        "Current resolved launcher id: {}",
+        encode_nft(slot.info.value.resolved_launcher_id)?
     );
     println!("New owner: {}", encode_nft(new_owner_launcher_id)?);
     println!(
-        "New resolved data: {}",
-        if let Ok(resolved_data) = new_resolved_data.clone().try_into() {
-            encode_nft(resolved_data)?
-        } else {
-            hex::encode(new_resolved_data.clone())
-        }
+        "New resolved launcher id: {}",
+        encode_nft(new_resolved_launcher_id)?
     );
+    println!("Minimum height: {}", min_height);
     println!("NFT return address: {}", return_address);
 
-    yes_no_prompt("Continue with update?")?;
+    yes_no_prompt("Continue with update initiation?")?;
 
     let offer_resp = sage
         .make_offer(
@@ -137,17 +151,26 @@ pub async fn xchandles_update(
         nft_inner_ph,
     )?;
 
-    let nft_inner_conds = registry.new_action::<XchandlesUpdateAction>().spend(
-        &mut ctx,
-        &mut registry,
-        slot,
-        new_owner_launcher_id,
-        &new_resolved_data,
-        nft.info.inner_puzzle_hash().into(),
-    )?;
+    let owner_proof = CompactCoinProof {
+        parent_coin_info: nft.coin.parent_coin_info,
+        inner_puzzle_hash: nft.info.inner_puzzle_hash().into(),
+        amount: nft.coin.amount,
+    };
+
+    let initiate_update_conds = registry
+        .new_action::<XchandlesInitiateUpdateAction>()
+        .spend(
+            &mut ctx,
+            &mut registry,
+            slot,
+            new_owner_launcher_id,
+            new_resolved_launcher_id,
+            owner_proof,
+            min_height,
+        )?;
 
     let nft_return_ph: Bytes32 = Address::decode(&return_address)?.puzzle_hash;
-    let nft_inner_spend = nft_inner_conds.create_coin(nft_return_ph, 1, ctx.hint(nft_return_ph)?);
+    let nft_inner_spend = initiate_update_conds.create_coin(nft_return_ph, 1, ctx.hint(nft_return_ph)?);
     let nft_inner_spend = ctx.alloc(&clvm_quote!(nft_inner_spend))?;
     let nft_inner_spend = StandardLayer::new(pk)
         .delegated_inner_spend(&mut ctx, Spend::new(nft_inner_spend, NodePtr::NIL))?;
@@ -181,7 +204,7 @@ pub async fn xchandles_update(
 
     println!("Transaction submitted; status='{}'", resp.status);
     wait_for_coin(&cli, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    println!("Confirmed! Finish the update after the relative block height elapses.");
 
     Ok(())
 }

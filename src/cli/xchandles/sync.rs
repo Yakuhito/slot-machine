@@ -1,9 +1,11 @@
 use std::collections::HashSet;
 
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
+use chia_protocol::Bytes32;
+use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{SpendContext, XchandlesRegistry},
+    types::puzzles::XchandlesSlotNonce,
 };
 
 use crate::{CliError, Db};
@@ -116,43 +118,52 @@ pub async fn sync_xchandles(
             .coin_solution
             .ok_or(CliError::CoinNotSpent(coin_record.coin.coin_id()))?;
 
-        registry = XchandlesRegistry::from_spend(ctx, &coin_spend, registry.info.constants)?
+        registry = XchandlesRegistry::from_spend(
+            ctx,
+            &coin_spend,
+            registry.info.constants,
+            chia_bls::Signature::default(),
+        )?
             .ok_or(CliError::Custom(
                 "Could not parse new XCHandles registry spend".to_string(),
             ))?;
 
-        for value in registry.pending_spend.spent_slots.iter() {
+        for value in registry.pending_spend.spent_handle_slots.iter() {
             db.mark_slot_as_spent(
                 launcher_id,
-                0,
+                XchandlesSlotNonce::HANDLE.to_u64(),
                 value.tree_hash().into(),
                 coin_record.spent_block_index,
             )
             .await?;
-
-            // no need to actually delete handle indexed value, as
-            //   all actions will overwrite (not remove) the handle
-            //   from the list
+        }
+        for value in registry.pending_spend.spent_update_slots.iter() {
+            db.mark_slot_as_spent(
+                launcher_id,
+                XchandlesSlotNonce::UPDATE.to_u64(),
+                value.tree_hash().into(),
+                coin_record.spent_block_index,
+            )
+            .await?;
         }
 
         let mut processed_values = HashSet::<Bytes32>::new();
-        for slot_value in registry.pending_spend.created_slots.iter() {
+        for slot_value in registry.pending_spend.created_handle_slots.iter() {
             let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
             if processed_values.contains(&slot_value_hash) {
                 continue;
             }
             processed_values.insert(slot_value_hash);
 
-            // same slot can be created and spent mutliple times in the same block
             let no_spent = registry
                 .pending_spend
-                .spent_slots
+                .spent_handle_slots
                 .iter()
                 .filter(|sv| sv.tree_hash() == slot_value_hash.into())
                 .count();
             let no_created = registry
                 .pending_spend
-                .created_slots
+                .created_handle_slots
                 .iter()
                 .filter(|sv| sv.tree_hash() == slot_value_hash.into())
                 .count();
@@ -168,8 +179,39 @@ pub async fn sync_xchandles(
             .await?;
             db.save_slot(
                 ctx,
-                registry.created_slot_value_to_slot(slot_value.clone()),
-                0,
+                registry.created_handle_slot_value_to_slot(*slot_value),
+                coin_record.spent_block_index,
+            )
+            .await?;
+        }
+
+        for slot_value in registry.pending_spend.created_update_slots.iter() {
+            let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
+            if processed_values.contains(&slot_value_hash) {
+                continue;
+            }
+            processed_values.insert(slot_value_hash);
+
+            let no_spent = registry
+                .pending_spend
+                .spent_update_slots
+                .iter()
+                .filter(|sv| sv.tree_hash() == slot_value_hash.into())
+                .count();
+            let no_created = registry
+                .pending_spend
+                .created_update_slots
+                .iter()
+                .filter(|sv| sv.tree_hash() == slot_value_hash.into())
+                .count();
+            if no_spent >= no_created {
+                continue;
+            }
+
+            db.save_slot(
+                ctx,
+                registry.created_update_slot_value_to_slot(*slot_value),
+                coin_record.spent_block_index,
             )
             .await?;
         }
@@ -210,8 +252,12 @@ pub async fn mempool_registry_maybe(
             break;
         };
 
-        let Some(new_registry) =
-            XchandlesRegistry::from_spend(ctx, registry_spend, registry.info.constants)?
+        let Some(new_registry) = XchandlesRegistry::from_spend(
+            ctx,
+            registry_spend,
+            registry.info.constants,
+            chia_bls::Signature::default(),
+        )?
         else {
             break;
         };

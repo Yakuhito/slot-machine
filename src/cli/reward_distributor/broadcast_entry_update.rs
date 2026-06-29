@@ -1,8 +1,8 @@
-use chia::protocol::Bytes32;
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes};
+use chia_protocol::Bytes32;
+use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::driver::{
     MedievalVault, RewardDistributorAddEntryAction, RewardDistributorRemoveEntryAction,
-    RewardDistributorSyncAction, SingletonInfo,
+    RewardDistributorSyncAction, RewardDistributorType, SingletonInfo,
 };
 use chia_wallet_sdk::types::puzzles::StateSchedulerLayerSolution;
 use clvmr::{Allocator, NodePtr};
@@ -36,10 +36,21 @@ pub async fn reward_distributor_broadcast_entry_update(
             "Could not get reward distributor constants - try running another command to sync it first".to_string(),
         ))?;
 
+    let manager_launcher_id = match distributor_constants.reward_distributor_type {
+        RewardDistributorType::Managed {
+            manager_singleton_launcher_id,
+        } => manager_singleton_launcher_id,
+        _ => {
+            return Err(CliError::Custom(
+                "Entry updates require a managed reward distributor".to_string(),
+            ));
+        }
+    };
+
     let (signature_from_signers, pubkeys, client, mut ctx, medieval_vault) =
         multisig_broadcast_thing_start(
             signatures_str,
-            hex::encode(distributor_constants.manager_or_collection_did_launcher_id),
+            hex::encode(manager_launcher_id),
             testnet11,
         )
         .await?;
@@ -73,21 +84,17 @@ pub async fn reward_distributor_broadcast_entry_update(
     );
     println!("  Entry shares: {}", entry_shares);
 
-    let message: Bytes32 = (entry_payout_puzzle_hash, entry_shares).tree_hash().into();
-    let mut message: Vec<u8> = message.to_vec();
-    if remove_entry {
-        message.insert(0, b'r');
-    } else {
-        message.insert(0, b'a');
-    }
-
     let constants = get_constants(testnet11);
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
     let medieval_vault_inner_ph = medieval_vault.info.inner_puzzle_hash();
 
-    let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes>(
+    let message: Bytes32 = (entry_payout_puzzle_hash, entry_shares).tree_hash().into();
+    let message_prefix = if remove_entry { b'r' } else { b'a' };
+
+    let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes32>(
         &mut ctx,
-        Bytes::from(message),
+        message_prefix,
+        message,
         launcher_id,
         medieval_vault.coin,
         &medieval_vault.info,

@@ -1,6 +1,6 @@
-use chia::bls::sign;
-use chia::bls::PublicKey;
-use chia::protocol::Bytes;
+use chia_bls::sign;
+use chia_bls::PublicKey;
+use chia_protocol::Bytes;
 use chia_wallet_sdk::coinset::CoinsetClient;
 use chia_wallet_sdk::driver::MedievalVault;
 use chia_wallet_sdk::driver::SpendContext;

@@ -1,23 +1,23 @@
-use chia::protocol::SpendBundle;
+use chia_protocol::SpendBundle;
 use chia_puzzle_types::{standard::StandardArgs, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         create_security_coin, decode_offer, spend_security_coin, spend_settlement_nft, HashedPtr,
         Layer, Offer, Puzzle, RewardDistributorStakeAction, RewardDistributorSyncAction,
-        SingletonLayer, SpendContext,
+        RewardDistributorType, SingletonLayer, SpendContext,
     },
     types::{
-        puzzles::{IntermediaryCoinProof, NftLauncherProof},
+        puzzles::{CompactLineageProof, IntermediaryCoinProof, NftLauncherProof},
         Conditions,
     },
     utils::Address,
 };
 
 use crate::{
-    assets_xch_and_nft, get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, hex_string_to_pubkey, no_assets, parse_amount, sync_distributor,
-    wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
+    assets_xch_and_nft, find_entry_slots, get_coinset_client, get_constants, get_last_onchain_timestamp,
+    get_prefix, hex_string_to_bytes32, hex_string_to_pubkey, no_assets, parse_amount,
+    sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
 };
 
 pub async fn reward_distributor_stake(
@@ -35,6 +35,28 @@ pub async fn reward_distributor_stake(
     let db = Db::new(false).await?;
     let mut ctx = SpendContext::new();
     let mut distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;
+
+    let distributor_type = distributor.info.constants.reward_distributor_type;
+    let collection_did_launcher_id = match distributor_type {
+        RewardDistributorType::NftCollection {
+            collection_did_launcher_id,
+        } => collection_did_launcher_id,
+        RewardDistributorType::CuratedNft { .. } => {
+            return Err(CliError::Custom(
+                "Curated NFT staking is not yet supported via CLI".to_string(),
+            ));
+        }
+        RewardDistributorType::Cat { .. } => {
+            return Err(CliError::Custom(
+                "CAT staking is not yet supported via CLI".to_string(),
+            ));
+        }
+        RewardDistributorType::Managed { .. } => {
+            return Err(CliError::Custom(
+                "Managed distributors use add-entry, not stake".to_string(),
+            ));
+        }
+    };
 
     let latest_timestamp = get_last_onchain_timestamp(&client).await?;
     if latest_timestamp > distributor.info.state.round_time_info.epoch_end {
@@ -89,12 +111,7 @@ pub async fn reward_distributor_stake(
                     parent_inner_puzzle_hash: layer.inner_puzzle.tree_hash().into(),
                     parent_amount: coin_record.coin.amount,
                 };
-                if layer.launcher_id
-                    != distributor
-                        .info
-                        .constants
-                        .manager_or_collection_did_launcher_id
-                {
+                if layer.launcher_id != collection_did_launcher_id {
                     println!("FAILED");
                     return Err(CliError::Custom(
                         "The DID launcher ID does not match the reward distributor's configuration - does the NFT belong to the right collection?"
@@ -113,12 +130,12 @@ pub async fn reward_distributor_stake(
     }
 
     let nft_launcher_proof = NftLauncherProof {
-        did_proof,
+        did_proof: CompactLineageProof::from(did_proof),
         intermediary_coin_proofs: intemrediary_coins.into_iter().rev().collect(),
     };
     println!(
         "done ({} intermediary coins).",
-        nft_launcher_proof.intermediary_coin_proofs.len() - 1
+        nft_launcher_proof.intermediary_coin_proofs.len().saturating_sub(1)
     );
 
     println!(
@@ -126,6 +143,21 @@ pub async fn reward_distributor_stake(
         Address::new(custody_puzzle_hash, get_prefix(testnet11)).encode()?
     );
     println!("Custody puzzle hash: {}", hex::encode(custody_puzzle_hash));
+
+    let existing_slot = find_entry_slots(
+        &mut ctx,
+        &client,
+        distributor.info.constants,
+        custody_puzzle_hash,
+        None,
+        None,
+    )
+    .await?
+    .into_iter()
+    .next();
+    if existing_slot.is_some() {
+        println!("Found existing entry slot; shares will be consolidated.");
+    }
 
     println!("A one-sided offer will be created. It will contain:");
     println!("  the NFT to be deposited");
@@ -158,29 +190,28 @@ pub async fn reward_distributor_stake(
         Conditions::new()
     };
 
-    // find NFT
     let current_nft = offer
         .offered_coins()
         .nfts
         .get(&nft_launcher_id)
         .ok_or(CliError::Custom("NFT not found in offer".to_string()))?;
 
-    // accept offer
-    let (conds, notarized_payment, _locked_nft) = distributor
+    let (conds, notarized_payments, _created_nfts) = distributor
         .new_action::<RewardDistributorStakeAction>()
-        .spend(
+        .spend_for_collection_nft_mode(
             &mut ctx,
             &mut distributor,
-            *current_nft,
-            nft_launcher_proof,
+            std::slice::from_ref(current_nft),
+            std::slice::from_ref(&nft_launcher_proof),
             custody_puzzle_hash,
+            existing_slot,
         )?;
     let (_new_nft, nft_assert) = spend_settlement_nft(
         &mut ctx,
         &offer,
         nft_launcher_id,
-        notarized_payment.nonce,
-        notarized_payment.payments[0].puzzle_hash,
+        notarized_payments[0].nonce,
+        notarized_payments[0].payments[0].puzzle_hash,
     )?;
 
     let (_new_distributor, pending_sig) = distributor.finish_spend(&mut ctx, vec![])?;
