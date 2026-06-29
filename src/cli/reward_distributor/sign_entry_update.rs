@@ -1,6 +1,7 @@
-use chia_protocol::Bytes32;
-use clvm_utils::ToTreeHash;
-use chia_wallet_sdk::driver::{MedievalVault, RewardDistributorType};
+use chia_protocol::Bytes;
+use chia_wallet_sdk::driver::{
+    MedievalVault, RewardDistributorReceivedMessagePrefix, RewardDistributorType,
+};
 use clvmr::Allocator;
 
 use crate::{
@@ -42,12 +43,9 @@ pub async fn reward_distributor_sign_entry_update(
         }
     };
 
-    let (my_pubkey, mut ctx, _client, medieval_vault) = multisig_sign_thing_start(
-        my_pubkey_str,
-        hex::encode(manager_launcher_id),
-        testnet11,
-    )
-    .await?;
+    let (my_pubkey, mut ctx, _client, medieval_vault) =
+        multisig_sign_thing_start(my_pubkey_str, hex::encode(manager_launcher_id), testnet11)
+            .await?;
 
     if remove_entry {
         println!("\nYou'll *REMOVE* the following entry from the reward list:");
@@ -60,13 +58,20 @@ pub async fn reward_distributor_sign_entry_update(
     );
     println!("  Entry shares: {}", entry_shares);
 
-    let message: Bytes32 = (entry_payout_puzzle_hash, entry_shares).tree_hash().into();
-    let message_prefix = if remove_entry { b'r' } else { b'a' };
-
-    let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes32>(
+    let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes>(
         &mut ctx,
-        message_prefix,
-        message,
+        if remove_entry {
+            RewardDistributorReceivedMessagePrefix::remove_entry(
+                entry_payout_puzzle_hash,
+                entry_shares,
+            )
+        } else {
+            RewardDistributorReceivedMessagePrefix::add_entry(
+                entry_payout_puzzle_hash,
+                entry_shares,
+            )
+        }
+        .into(),
         launcher_id,
         medieval_vault.coin,
         &medieval_vault.info,
