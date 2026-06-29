@@ -144,8 +144,9 @@ pub async fn reward_distributor_launch(
     let resp = client.push_tx(spend_bundle).await?;
 
     println!(
-        "Transaction submitted; status='{}'",
-        resp.status.unwrap_or_default()
+        "Transaction submitted; status='{}', error='{}'",
+        resp.status.unwrap_or_default(),
+        resp.error.unwrap_or_default()
     );
 
     wait_for_coin(&client, reward_distributor.coin.parent_coin_info, true).await?;

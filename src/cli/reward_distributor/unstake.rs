@@ -270,8 +270,9 @@ pub async fn reward_distributor_unstake(
     let resp = client.push_tx(spend_bundle).await?;
 
     println!(
-        "Transaction submitted; status='{}'",
-        resp.status.unwrap_or_default()
+        "Transaction submitted; status='{}', error='{}'",
+        resp.status.unwrap_or_default(),
+        resp.error.unwrap_or_default()
     );
 
     wait_for_coin(&client, security_coin.coin_id(), true).await?;
