@@ -16,13 +16,9 @@ use serde::{Deserialize, Serialize};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::CorsLayer;
 
-use crate::{get_coinset_client, hex_string_to_bytes32, sync_catalog, CliError, Db};
-
-#[derive(Debug, Deserialize)]
-struct WebSocketMessage {
-    #[serde(rename = "type")]
-    message_type: String,
-}
+use crate::{
+    get_coinset_client, hex_string_to_bytes32, sync_catalog, CliError, CoinsetWebSocketMessage, Db,
+};
 
 #[derive(Debug, Deserialize)]
 struct CatalogNeighborsQuery {
@@ -198,9 +194,10 @@ async fn connect_websocket(
 
     while let Some(message) = read.next().await {
         match message {
-            Ok(Message::Text(text)) => match serde_json::from_str::<WebSocketMessage>(&text) {
+            Ok(Message::Text(text)) => match serde_json::from_str::<CoinsetWebSocketMessage>(&text)
+            {
                 Ok(msg) => {
-                    if msg.message_type == "peak" {
+                    if msg.message_type() == "peak" {
                         let now = SystemTime::now();
                         println!(
                             "[{}] Received new peak",

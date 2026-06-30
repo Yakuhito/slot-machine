@@ -15,7 +15,32 @@ use std::{
     io::{self, Write},
     num::ParseIntError,
 };
+use serde::Deserialize;
 use thiserror::Error;
+
+#[derive(Debug, Deserialize)]
+pub struct CoinsetWebSocketMessageBody {
+    #[serde(rename = "type")]
+    message_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum CoinsetWebSocketMessage {
+    Envelope {
+        message: CoinsetWebSocketMessageBody,
+    },
+    Legacy(CoinsetWebSocketMessageBody),
+}
+
+impl CoinsetWebSocketMessage {
+    pub fn message_type(&self) -> &str {
+        match self {
+            CoinsetWebSocketMessage::Envelope { message } => &message.message_type,
+            CoinsetWebSocketMessage::Legacy(body) => &body.message_type,
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum CliError {
