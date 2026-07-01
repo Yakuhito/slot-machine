@@ -14,8 +14,8 @@ use clvm_utils::ToTreeHash;
 
 use crate::{
     assets_xch_only, get_coinset_client, hex_string_to_bytes32, load_xchandles_state_schedule_csv,
-    no_assets, parse_amount, quick_sync_xchandles, sync_multisig_singleton, sync_xchandles,
-    wait_for_coin, yes_no_prompt, CliError, Db, MultisigSingleton, SageClient,
+    no_assets,     confirm_pushed_transaction, parse_amount, quick_sync_xchandles, sync_multisig_singleton,
+    sync_xchandles, yes_no_prompt, CliError, Db, MultisigSingleton, SageClient,
 };
 
 pub async fn xchandles_unroll_state_scheduler(
@@ -168,14 +168,9 @@ pub async fn xchandles_unroll_state_scheduler(
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-
-    wait_for_coin(&cli, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&cli, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

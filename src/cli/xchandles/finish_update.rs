@@ -16,7 +16,8 @@ use clvmr::NodePtr;
 
 use crate::{
     assets_xch_and_nft, get_coinset_client, get_constants, hex_string_to_bytes32, no_assets,
-    parse_amount, quick_sync_xchandles, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db,
+    confirm_pushed_transaction, parse_amount, quick_sync_xchandles, sync_xchandles, yes_no_prompt,
+    CliError, Db,
     SageClient,
 };
 
@@ -254,13 +255,9 @@ pub async fn xchandles_finish_update(
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-    wait_for_coin(&cli, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&cli, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

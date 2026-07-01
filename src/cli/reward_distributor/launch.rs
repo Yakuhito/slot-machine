@@ -10,7 +10,7 @@ use chia_wallet_sdk::{
 
 use crate::{
     assets_xch_and_cat, get_coinset_client, get_constants, hex_string_to_bytes32, no_assets,
-    parse_amount, wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
+    confirm_pushed_transaction, parse_amount, yes_no_prompt, CliError, Db, SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -143,14 +143,16 @@ pub async fn reward_distributor_launch(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-
-    wait_for_coin(&client, reward_distributor.coin.parent_coin_info, true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(
+        &client,
+        &resp,
+        reward_distributor.coin.parent_coin_info,
+        true,
+    )
+    .await?
+    {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

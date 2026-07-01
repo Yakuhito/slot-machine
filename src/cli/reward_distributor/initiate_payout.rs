@@ -11,7 +11,7 @@ use chia_wallet_sdk::{
 use crate::{
     assets_xch_only, find_entry_slots, get_coinset_client, get_constants,
     get_last_onchain_timestamp, hex_string_to_bytes32, no_assets, parse_amount, sync_distributor,
-    wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
+    confirm_pushed_transaction, yes_no_prompt, CliError, Db, SageClient,
 };
 
 pub async fn reward_distributor_initiate_payout(
@@ -110,14 +110,9 @@ pub async fn reward_distributor_initiate_payout(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

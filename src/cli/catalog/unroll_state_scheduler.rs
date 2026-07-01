@@ -10,8 +10,8 @@ use chia_wallet_sdk::{
 
 use crate::{
     assets_xch_only, get_coinset_client, no_assets, parse_amount, print_spend_bundle_to_file,
-    sync_multisig_singleton, wait_for_coin, yes_no_prompt, CliError, Db, MultisigSingleton,
-    SageClient,
+    confirm_pushed_transaction, sync_multisig_singleton, yes_no_prompt, CliError, Db,
+    MultisigSingleton, SageClient,
 };
 
 use super::sync_catalog;
@@ -132,14 +132,9 @@ pub async fn catalog_unroll_state_scheduler(
     let _ = print_spend_bundle_to_file(&sb, "sb.debug");
     let resp = cli.push_tx(sb).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-
-    wait_for_coin(&cli, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&cli, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

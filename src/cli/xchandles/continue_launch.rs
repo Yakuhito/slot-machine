@@ -21,8 +21,8 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
     assets_xch_and_cat, assets_xch_only, get_last_onchain_timestamp, hex_string_to_bytes32,
-    load_xchandles_premine_csv, no_assets, parse_amount, sync_xchandles, wait_for_coin,
-    yes_no_prompt, CliError, Db, SageClient, XchandlesPremineRecord,
+    confirm_pushed_transaction, load_xchandles_premine_csv, no_assets, parse_amount,
+    sync_xchandles, yes_no_prompt, CliError, Db, SageClient, XchandlesPremineRecord,
 };
 
 fn precommit_value_for_handle(
@@ -296,14 +296,9 @@ pub async fn xchandles_continue_launch(
             println!("Submitting transaction...");
             let resp = client.push_tx(sb).await?;
 
-            println!(
-                "Transaction submitted; status='{}', error='{}'",
-                resp.status.unwrap_or_default(),
-                resp.error.unwrap_or_default()
-            );
-
-            wait_for_coin(&client, security_coin.coin_id(), true).await?;
-            println!("Confirmed!");
+            if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+                println!("Confirmed!");
+            }
 
             return Ok(());
         } else {
@@ -566,13 +561,9 @@ pub async fn xchandles_continue_launch(
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

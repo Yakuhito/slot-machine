@@ -23,7 +23,8 @@ use clvm_utils::{CurriedProgram, ToTreeHash, TreeHash};
 use crate::{
     assets_xch_only, find_entry_slots, get_coinset_client, get_last_onchain_timestamp, get_prefix,
     hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature, no_assets, parse_amount,
-    prompt_for_value, spend_to_coin_spend, sync_distributor, wait_for_coin, yes_no_prompt,
+    confirm_pushed_transaction, prompt_for_value, spend_to_coin_spend, sync_distributor,
+    yes_no_prompt,
     CliError, Db, SageClient,
 };
 
@@ -269,14 +270,9 @@ pub async fn reward_distributor_unstake(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

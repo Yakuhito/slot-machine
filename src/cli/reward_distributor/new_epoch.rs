@@ -1,6 +1,7 @@
 use crate::{
     assets_xch_only, find_reward_slot, get_coinset_client, get_constants, hex_string_to_bytes32,
-    no_assets, parse_amount, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
+    confirm_pushed_transaction, no_assets, parse_amount, sync_distributor, yes_no_prompt, CliError,
+    Db,
     SageClient,
 };
 use chia_protocol::SpendBundle;
@@ -91,14 +92,9 @@ pub async fn reward_distributor_new_epoch(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

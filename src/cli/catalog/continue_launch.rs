@@ -17,8 +17,8 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
     assets_xch_and_cat, assets_xch_only, hex_string_to_bytes32, load_catalog_premine_csv,
-    no_assets, parse_amount, sync_catalog, wait_for_coin, yes_no_prompt, CatalogPremineRecord,
-    CliError, Db, SageClient,
+    confirm_pushed_transaction, no_assets, parse_amount, sync_catalog, yes_no_prompt,
+    CatalogPremineRecord, CliError, Db, SageClient,
 };
 use chia_wallet_sdk::driver::CatalogPrecommitValue;
 use chia_wallet_sdk::types::puzzles::CatNftMetadata;
@@ -287,14 +287,9 @@ pub async fn catalog_continue_launch(
             println!("Submitting transaction...");
             let resp = client.push_tx(sb).await?;
 
-            println!(
-                "Transaction submitted; status='{}', error='{}'",
-                resp.status.unwrap_or_default(),
-                resp.error.unwrap_or_default()
-            );
-
-            wait_for_coin(&client, security_coin.coin_id(), true).await?;
-            println!("Confirmed!");
+            if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+                println!("Confirmed!");
+            }
 
             return Ok(());
         } else {
@@ -550,13 +545,9 @@ pub async fn catalog_continue_launch(
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

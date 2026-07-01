@@ -23,8 +23,8 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 use crate::{
     assets_xch_only, get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
     hex_string_to_bytes32, no_assets, parse_amount, print_spend_bundle_to_file,
-    quick_sync_xchandles, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
-    XchandlesApiClient,
+    confirm_pushed_transaction, quick_sync_xchandles, sync_xchandles, wait_for_coin,
+    yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -388,13 +388,9 @@ pub async fn xchandles_register(
         }
         let resp = cli.push_tx(sb).await?;
 
-        println!(
-            "Transaction submitted; status='{}', error='{}'",
-            resp.status.unwrap_or_default(),
-            resp.error.unwrap_or_default()
-        );
-        wait_for_coin(&cli, security_coin.coin_id(), true).await?;
-        println!("Confirmed!");
+        if confirm_pushed_transaction(&cli, &resp, security_coin.coin_id(), true).await? {
+            println!("Confirmed!");
+        }
 
         return Ok(());
     }

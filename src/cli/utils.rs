@@ -3,19 +3,19 @@ use chia_bls::{self, PublicKey, SecretKey, Signature};
 use chia_consensus::consensus_constants::ConsensusConstants;
 use chia_protocol::{Bytes, Bytes32, Coin, CoinSpend, Program, SpendBundle};
 use chia_wallet_sdk::{
-    coinset::{ChiaRpcClient, CoinsetClient},
+    coinset::{ChiaRpcClient, CoinsetClient, PushTxResponse},
     driver::{DriverError, Spend, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
     utils::Bech32Error,
 };
 use clvmr::error::EvalErr;
 use hex::FromHex;
+use serde::Deserialize;
 use std::{
     fs,
     io::{self, Write},
     num::ParseIntError,
 };
-use serde::Deserialize;
 use thiserror::Error;
 
 #[derive(Debug, Deserialize)]
@@ -227,6 +227,26 @@ pub fn print_spend_bundle_to_file(spend_bundle: &SpendBundle, path: &str) -> Res
     let contents = serde_json::to_string_pretty(spend_bundle)?;
     fs::write(path, contents)?;
     Ok(())
+}
+
+pub async fn confirm_pushed_transaction(
+    client: &CoinsetClient,
+    resp: &PushTxResponse,
+    coin_id: Bytes32,
+    also_wait_for_spent: bool,
+) -> Result<bool, CliError> {
+    println!(
+        "Transaction submitted; status='{}', error='{}'",
+        resp.status.as_deref().unwrap_or_default(),
+        resp.error.as_deref().unwrap_or_default()
+    );
+
+    if resp.error.is_some() {
+        return Ok(false);
+    }
+    wait_for_coin(client, coin_id, also_wait_for_spent).await?;
+
+    Ok(true)
 }
 
 #[allow(clippy::nonminimal_bool)]

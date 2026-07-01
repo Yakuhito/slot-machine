@@ -10,8 +10,9 @@ use chia_wallet_sdk::{
 
 use crate::{
     assets_xch_only, get_coinset_client, hex_string_to_bytes32, hex_string_to_signature, no_assets,
-    parse_amount, print_medieval_vault_configuration, sync_multisig_singleton, wait_for_coin,
-    yes_no_prompt, CliError, MultisigSingleton, SageClient, StateSchedulerHintedState,
+    confirm_pushed_transaction, parse_amount, print_medieval_vault_configuration,
+    sync_multisig_singleton, yes_no_prompt, CliError, MultisigSingleton, SageClient,
+    StateSchedulerHintedState,
 };
 
 pub async fn multisig_broadcast_thing_start(
@@ -129,13 +130,9 @@ pub async fn multisig_broadcast_thing_finish(
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

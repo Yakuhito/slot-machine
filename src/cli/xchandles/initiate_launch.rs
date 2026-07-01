@@ -5,7 +5,8 @@ use crate::{
         Db,
     },
     get_coinset_client, get_prefix, load_xchandles_premine_csv, load_xchandles_state_schedule_csv,
-    no_assets, parse_amount, print_medieval_vault_configuration, wait_for_coin, SageClient,
+    no_assets, parse_amount, print_medieval_vault_configuration, confirm_pushed_transaction,
+    SageClient,
 };
 use chia_bls::PublicKey;
 use chia_protocol::{Bytes32, Coin, SpendBundle};
@@ -313,14 +314,9 @@ pub async fn xchandles_initiate_launch(
     println!("Submitting transaction...");
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

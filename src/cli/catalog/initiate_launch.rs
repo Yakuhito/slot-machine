@@ -6,7 +6,7 @@ use crate::{
         Db,
     },
     get_coinset_client, get_prefix, load_catalog_state_schedule_csv, no_assets, parse_amount,
-    print_medieval_vault_configuration, wait_for_coin, SageClient,
+    confirm_pushed_transaction, print_medieval_vault_configuration, SageClient,
 };
 use chia_bls::PublicKey;
 use chia_protocol::{Bytes32, Coin, SpendBundle};
@@ -298,14 +298,9 @@ pub async fn catalog_initiate_launch(
     println!("Submitting transaction...");
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!(
-        "Transaction submitted; status='{}', error='{}'",
-        resp.status.unwrap_or_default(),
-        resp.error.unwrap_or_default()
-    );
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }
