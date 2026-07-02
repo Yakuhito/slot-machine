@@ -43,8 +43,7 @@
 
     (defun consume_messages_and_spend_slot (
         UPDATE_SLOT_1ST_CURRY_HASH
-        message_without_prefix
-        update_slot_first_atom_hash
+        update_slot_value_hash
         owner_coin_id
         new_owner_singleton_puzzle_hash
         new_resolved_singleton_puzzle_hash
@@ -54,7 +53,7 @@
             (list
                 RECEIVE_MESSAGE
                 58 ; coin-puzzle
-                (concat 'u' message_without_prefix)
+                (concat 'u' update_slot_value_hash)
                 owner_coin_id
             )
 
@@ -62,7 +61,7 @@
             (list
                 RECEIVE_MESSAGE
                 18 ; puzzle-puzzle
-                (concat 'o' message_without_prefix)
+                (concat 'o' update_slot_value_hash)
                 new_owner_singleton_puzzle_hash
             )
 
@@ -70,13 +69,13 @@
             (list
                 RECEIVE_MESSAGE
                 18 ; puzzle-puzzle
-                (concat 'r' message_without_prefix)
+                (concat 'r' update_slot_value_hash)
                 new_resolved_singleton_puzzle_hash
             )
 
             ; spend update slot
             (spend_slot_inline UPDATE_SLOT_1ST_CURRY_HASH
-                (sha256 2 update_slot_first_atom_hash message_without_prefix)
+                update_slot_value_hash
             )
         )
     )
@@ -101,10 +100,13 @@
                         )
                         (consume_messages_and_spend_slot
                             UPDATE_SLOT_1ST_CURRY_HASH
-                            ; message
-                            (sha256tree (c handle_hash new_data))
-                            ; update slot first atom hash
-                            (sha256tree (c current_owner_parent_id min_execution_height))
+                            ; update slot value hash
+                            (sha256tree
+                                (c
+                                    (c current_owner_parent_id min_execution_height)
+                                    (c handle_hash new_data)
+                                )
+                            )
                             ; initiator coin id
                             (coinid
                                 current_owner_parent_id
