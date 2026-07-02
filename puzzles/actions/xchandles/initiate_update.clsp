@@ -37,10 +37,9 @@
     (include curry.clib)
     (include slots.clib)
 
-    (defun consume_messages_and_create_slot (
+    (defun update_slot_value_hash (
         UPDATE_SLOT_1ST_CURRY_HASH
-        min_execution_height
-        message_without_prefix
+        update_slot_value_hash
         owner_coin_id
     )
         (list
@@ -48,19 +47,31 @@
             (list
                 RECEIVE_MESSAGE
                 58 ; coin-puzzle
-                (concat 'i' message_without_prefix)
+                (concat 'i' update_slot_value_hash)
                 owner_coin_id
             )
 
             ; create update slot
             (create_slot_with_hint UPDATE_SLOT_1ST_CURRY_HASH
-                (sha256 2
-                    ; (sha256 2 (sha256 1 owner_coin_id) (sha256 1 min_execution_height))
-                    (sha256tree (c owner_coin_id min_execution_height))
-                    message_without_prefix
-                )
+                update_slot_value_hash
                 owner_coin_id
             )
+        )
+    )
+
+    (defun consume_messages_and_create_slot_stager (
+        UPDATE_SLOT_1ST_CURRY_HASH
+        min_execution_height
+        update_slot_value_b ; partial update slot value
+        owner_coin_id
+    )
+        (update_slot_value_hash
+            UPDATE_SLOT_1ST_CURRY_HASH
+            (sha256tree (c
+                (c owner_coin_id min_execution_height)
+                update_slot_value_b
+            ))
+            owner_coin_id
         )
     )
 
@@ -82,11 +93,11 @@
                         (create_slot HANDLE_SLOT_1ST_CURRY_HASH
                             (sha256tree (c (+ counter 1) current_slot_rest))
                         )
-                        (consume_messages_and_create_slot
+                        (consume_messages_and_create_slot_stager
                             UPDATE_SLOT_1ST_CURRY_HASH
                             (+ min_height RELATIVE_BLOCK_HEIGHT)
-                            ; message
-                            (sha256tree (c handle_hash new_data))
+                            ; update_slot_value_b - partial update slot value
+                            (c handle_hash new_data)
                             ; initiator coin id
                             (coinid
                                 current_owner_parent_id
