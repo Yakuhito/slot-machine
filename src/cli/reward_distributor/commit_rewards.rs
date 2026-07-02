@@ -11,10 +11,9 @@ use chia_wallet_sdk::{
 use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_and_cat, find_reward_slot, get_coinset_client, get_constants, hex_string_to_bytes32,
-    confirm_pushed_transaction, no_assets, parse_amount, sync_distributor, yes_no_prompt, CliError,
-    Db,
-    SageClient,
+    assets_xch_and_cat, confirm_pushed_transaction, find_reward_slot, get_coinset_client,
+    get_constants, hex_string_to_bytes32, no_assets, parse_amount, sync_distributor, yes_no_prompt,
+    CliError, Db, SageClient,
 };
 
 pub async fn reward_distributor_commit_rewards(

@@ -1,8 +1,6 @@
 use chia_wallet_sdk::driver::{RewardDistributorType, SpendContext};
 
-use crate::{
-    get_coinset_client, hex_string_to_bytes32, sync_distributor, CliError, Db,
-};
+use crate::{get_coinset_client, hex_string_to_bytes32, sync_distributor, CliError, Db};
 
 pub async fn reward_distributor_refresh(
     launcher_id_str: String,

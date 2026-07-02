@@ -9,8 +9,8 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_and_cat, get_coinset_client, get_constants, hex_string_to_bytes32, no_assets,
-    confirm_pushed_transaction, parse_amount, yes_no_prompt, CliError, Db, SageClient,
+    assets_xch_and_cat, confirm_pushed_transaction, get_coinset_client, get_constants,
+    hex_string_to_bytes32, no_assets, parse_amount, yes_no_prompt, CliError, Db, SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]

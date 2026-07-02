@@ -134,8 +134,12 @@ async fn get_neighbors(
     let (left, right) = {
         let db = state.db.lock().await;
 
-        db.get_xchandles_neighbors::<XchandlesHandleSlotValue>(&mut allocator, launcher_id, handle_hash)
-            .await
+        db.get_xchandles_neighbors::<XchandlesHandleSlotValue>(
+            &mut allocator,
+            launcher_id,
+            handle_hash,
+        )
+        .await
     }?;
 
     let response = XchandlesNeighborsResponse {

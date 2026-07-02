@@ -9,8 +9,8 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_only, get_coinset_client, hex_string_to_bytes32, hex_string_to_signature, no_assets,
-    confirm_pushed_transaction, parse_amount, print_medieval_vault_configuration,
+    assets_xch_only, confirm_pushed_transaction, get_coinset_client, hex_string_to_bytes32,
+    hex_string_to_signature, no_assets, parse_amount, print_medieval_vault_configuration,
     sync_multisig_singleton, yes_no_prompt, CliError, MultisigSingleton, SageClient,
     StateSchedulerHintedState,
 };

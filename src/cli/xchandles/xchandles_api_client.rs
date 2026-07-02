@@ -65,7 +65,13 @@ impl XchandlesApiClient {
         &self,
         launcher_id: Bytes32,
         handle_hash: Bytes32,
-    ) -> Result<(Slot<XchandlesHandleSlotValue>, Slot<XchandlesHandleSlotValue>), CliError> {
+    ) -> Result<
+        (
+            Slot<XchandlesHandleSlotValue>,
+            Slot<XchandlesHandleSlotValue>,
+        ),
+        CliError,
+    > {
         let url = format!(
             "{}/neighbors?launcher_id={}&handle_hash={}",
             self.base_url,

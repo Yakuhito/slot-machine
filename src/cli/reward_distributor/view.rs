@@ -79,10 +79,7 @@ pub async fn reward_distributor_view(
         } => {
             println!("  Stake asset ID: {}", hex::encode(asset_id));
             if let Some(hidden_puzzle_hash) = hidden_puzzle_hash {
-                println!(
-                    "  Hidden puzzle hash: {}",
-                    hex::encode(hidden_puzzle_hash)
-                );
+                println!("  Hidden puzzle hash: {}", hex::encode(hidden_puzzle_hash));
             }
         }
     };

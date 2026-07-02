@@ -16,8 +16,8 @@ use clvm_utils::{ToTreeHash, TreeHash};
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, hex_string_to_bytes32, load_catalog_premine_csv,
-    confirm_pushed_transaction, no_assets, parse_amount, sync_catalog, yes_no_prompt,
+    assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction, hex_string_to_bytes32,
+    load_catalog_premine_csv, no_assets, parse_amount, sync_catalog, yes_no_prompt,
     CatalogPremineRecord, CliError, Db, SageClient,
 };
 use chia_wallet_sdk::driver::CatalogPrecommitValue;

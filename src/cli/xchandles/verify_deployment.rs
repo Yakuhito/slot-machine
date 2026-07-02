@@ -1,4 +1,3 @@
-use clvm_utils::ToTreeHash;
 use chia_puzzle_types::singleton::SingletonSolution;
 use chia_wallet_sdk::driver::{
     Layer, XchandlesExpirePricingPuzzle, XchandlesRegistry, XchandlesRegistryState,
@@ -12,6 +11,7 @@ use chia_wallet_sdk::{
     driver::{ActionLayer, SpendContext},
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{

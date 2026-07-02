@@ -1,4 +1,3 @@
-use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     driver::{SpendContext, XchandlesExpirePricingPuzzle},
     types::{
@@ -7,6 +6,7 @@ use chia_wallet_sdk::{
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 
 use crate::{
     get_coinset_client, get_prefix, hex_string_to_bytes32, parse_amount, quick_sync_xchandles,

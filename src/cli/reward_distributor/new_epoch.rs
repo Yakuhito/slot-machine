@@ -1,8 +1,7 @@
 use crate::{
-    assets_xch_only, find_reward_slot, get_coinset_client, get_constants, hex_string_to_bytes32,
-    confirm_pushed_transaction, no_assets, parse_amount, sync_distributor, yes_no_prompt, CliError,
-    Db,
-    SageClient,
+    assets_xch_only, confirm_pushed_transaction, find_reward_slot, get_coinset_client,
+    get_constants, hex_string_to_bytes32, no_assets, parse_amount, sync_distributor, yes_no_prompt,
+    CliError, Db, SageClient,
 };
 use chia_protocol::SpendBundle;
 use chia_wallet_sdk::{

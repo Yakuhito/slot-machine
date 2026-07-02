@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 
+use chia_bls::Signature;
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{SpendContext, XchandlesRegistry},
-    types::puzzles::XchandlesSlotNonce,
+    driver::{DriverError, Slot, SpendContext, XchandlesConstants, XchandlesRegistry},
+    types::puzzles::{XchandlesSlotNonce, XchandlesUpdateSlotValue},
 };
 use clvm_utils::ToTreeHash;
 
@@ -137,15 +138,6 @@ pub async fn sync_xchandles(
             )
             .await?;
         }
-        for value in registry.pending_spend.spent_update_slots.iter() {
-            db.mark_slot_as_spent(
-                launcher_id,
-                XchandlesSlotNonce::UPDATE.to_u64(),
-                value.tree_hash().into(),
-                coin_record.spent_block_index,
-            )
-            .await?;
-        }
 
         let mut processed_values = HashSet::<Bytes32>::new();
         for slot_value in registry.pending_spend.created_handle_slots.iter() {
@@ -185,37 +177,6 @@ pub async fn sync_xchandles(
             .await?;
         }
 
-        for slot_value in registry.pending_spend.created_update_slots.iter() {
-            let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
-            if processed_values.contains(&slot_value_hash) {
-                continue;
-            }
-            processed_values.insert(slot_value_hash);
-
-            let no_spent = registry
-                .pending_spend
-                .spent_update_slots
-                .iter()
-                .filter(|sv| sv.tree_hash() == slot_value_hash.into())
-                .count();
-            let no_created = registry
-                .pending_spend
-                .created_update_slots
-                .iter()
-                .filter(|sv| sv.tree_hash() == slot_value_hash.into())
-                .count();
-            if no_spent >= no_created {
-                continue;
-            }
-
-            db.save_slot(
-                ctx,
-                registry.created_update_slot_value_to_slot(*slot_value),
-                coin_record.spent_block_index,
-            )
-            .await?;
-        }
-
         registry = registry.child(registry.pending_spend.latest_state.1);
     }
 
@@ -236,4 +197,60 @@ pub async fn sync_xchandles(
     }
 
     Ok(registry)
+}
+
+pub async fn find_xchandles_update_slot(
+    ctx: &mut SpendContext,
+    client: &CoinsetClient,
+    constants: XchandlesConstants,
+    update_initiator_coin_id: Bytes32,
+    handle_hash: Bytes32,
+) -> Result<Slot<XchandlesUpdateSlotValue>, CliError> {
+    let mut possible_records = client
+        .get_coin_records_by_hint(update_initiator_coin_id, None, None, Some(false), None)
+        .await?
+        .coin_records
+        .ok_or(CliError::Driver(DriverError::MissingHint))?;
+
+    while !possible_records.is_empty() {
+        let coin_record = possible_records.remove(0);
+        let registry_spent = client
+            .get_puzzle_and_solution(
+                coin_record.coin.parent_coin_info,
+                Some(coin_record.confirmed_block_index),
+            )
+            .await?
+            .coin_solution
+            .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
+
+        let Some(registry) =
+            XchandlesRegistry::from_spend(ctx, &registry_spent, constants, Signature::default())?
+        else {
+            continue;
+        };
+
+        if let Some(slot) =
+            registry
+                .pending_spend
+                .created_update_slots
+                .iter()
+                .find_map(|slot_value| {
+                    if slot_value.handle_hash != handle_hash
+                        || slot_value.update_initiator_coin_id != update_initiator_coin_id
+                    {
+                        return None;
+                    }
+                    let slot = registry.created_update_slot_value_to_slot(*slot_value);
+                    if slot.coin == coin_record.coin {
+                        Some(slot)
+                    } else {
+                        None
+                    }
+                })
+        {
+            return Ok(slot);
+        }
+    }
+
+    Err(CliError::SlotNotFound("Update"))
 }

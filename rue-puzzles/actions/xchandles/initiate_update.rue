@@ -31,10 +31,6 @@ fn main(
         amount: current_owner_amount,
     } = current_owner_proof;
 
-
-    let message_without_prefix = tree_hash(
-        (current_slot.a.handle_hash, new_data)
-    );
     let initiator_coin_id = coinid(
         current_owner_parent_id,
         singleton_puzzle_hash(
@@ -45,6 +41,17 @@ fn main(
         ),
         current_owner_amount
     );
+
+    let slot_value_hash = tree_hash(XchandlesUpdateSlotValue {
+        a: UpdateSlotValueA {
+            initiator_coin_id,
+            min_execution_height: min_height + RELATIVE_BLOCK_HEIGHT,
+        },
+        b: UpdateSlotValueB {
+            handle_hash: current_slot.a.handle_hash,
+            new_data,
+        },
+    });
 
     (Truth, [
         // can't update if expired
@@ -72,16 +79,13 @@ fn main(
         // assert message from current owner
         ReceiveMessage {
             mode: SENDER_COIN | RECEIVER_PUZZLE,
-            message: "i" + message_without_prefix,
+            message: "i" + slot_value_hash,
             sender: [initiator_coin_id],
         },
         // create update slot
         create_slot_with_hint(
             UPDATE_SLOT_1ST_CURRY_HASH,
-            tree_hash_pair(
-                tree_hash((initiator_coin_id, min_height + RELATIVE_BLOCK_HEIGHT)),
-                message_without_prefix,
-            ),
+            slot_value_hash,
             initiator_coin_id,
         ),
     ])

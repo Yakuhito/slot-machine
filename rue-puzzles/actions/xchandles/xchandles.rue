@@ -57,6 +57,22 @@ export struct XchandlesHandleSlotValue {
     ...b: HandleSlotValueB,
 }
 
+// update slot
+
+export struct UpdateSlotValueA {
+    initiator_coin_id: Bytes32,
+    ...min_execution_height: Int,
+}
+
+export struct UpdateSlotValueB {
+    handle_hash: Bytes32,
+    ...new_data: HandleSlotData,
+}
+
+export struct XchandlesUpdateSlotValue {
+    a: UpdateSlotValueA,
+    ...b: UpdateSlotValueB,
+}
 // OtherPrecommitData
 
 export struct PrecommitRefundAndSecret {

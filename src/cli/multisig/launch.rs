@@ -10,9 +10,8 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_only, get_coinset_client, get_constants, no_assets, parse_amount,
-    confirm_pushed_transaction, print_medieval_vault_configuration, yes_no_prompt, CliError,
-    SageClient,
+    assets_xch_only, confirm_pushed_transaction, get_coinset_client, get_constants, no_assets,
+    parse_amount, print_medieval_vault_configuration, yes_no_prompt, CliError, SageClient,
 };
 
 pub async fn multisig_launch(

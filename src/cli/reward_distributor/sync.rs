@@ -8,10 +8,9 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_only, get_coinset_client, get_constants, get_last_onchain_timestamp,
-    confirm_pushed_transaction, hex_string_to_bytes32, no_assets, parse_amount, sync_distributor,
-    yes_no_prompt,
-    CliError, Db, SageClient,
+    assets_xch_only, confirm_pushed_transaction, get_coinset_client, get_constants,
+    get_last_onchain_timestamp, hex_string_to_bytes32, no_assets, parse_amount, sync_distributor,
+    yes_no_prompt, CliError, Db, SageClient,
 };
 
 pub async fn reward_distributor_sync(

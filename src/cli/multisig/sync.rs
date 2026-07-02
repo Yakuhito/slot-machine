@@ -4,7 +4,6 @@ use chia_puzzle_types::{
     singleton::{LauncherSolution, SingletonArgs},
     LineageProof, Proof,
 };
-use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::driver::{
     MedievalVaultHint, MedievalVaultInfo, SingletonInfo, SpendContext, StateSchedulerInfo,
 };
@@ -13,6 +12,7 @@ use chia_wallet_sdk::{
     driver::{MedievalVault, StateScheduler},
 };
 use clvm_traits::{FromClvm, ToClvm};
+use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, Allocator, NodePtr};
 
 use crate::{get_alias_map, CliError};

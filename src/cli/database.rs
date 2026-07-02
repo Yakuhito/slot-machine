@@ -1,5 +1,4 @@
 use chia_protocol::Bytes32;
-use clvm_utils::ToTreeHash;
 use chia_puzzle_types::LineageProof;
 use chia_wallet_sdk::{
     coinset::CoinRecord,
@@ -7,6 +6,7 @@ use chia_wallet_sdk::{
     types::puzzles::SlotInfo,
 };
 use clvm_traits::{FromClvm, ToClvm};
+use clvm_utils::ToTreeHash;
 use clvmr::{
     serde::{node_from_bytes, node_to_bytes},
     Allocator,
