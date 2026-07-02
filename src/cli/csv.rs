@@ -172,6 +172,18 @@ pub fn load_xchandles_state_schedule_csv<P: AsRef<Path>>(
 pub struct XchandlesPremineRecord {
     pub handle: String,
     pub owner_nft: String,
+    #[serde(deserialize_with = "deserialize_string_array")]
+    pub image_uris: Vec<String>,
+    #[serde(deserialize_with = "hex_string_to_bytes32")]
+    pub image_hash: Bytes32,
+    #[serde(deserialize_with = "deserialize_string_array")]
+    pub metadata_uris: Vec<String>,
+    #[serde(deserialize_with = "hex_string_to_bytes32")]
+    pub metadata_hash: Bytes32,
+    #[serde(deserialize_with = "deserialize_string_array")]
+    pub license_uris: Vec<String>,
+    #[serde(deserialize_with = "hex_string_to_bytes32")]
+    pub license_hash: Bytes32,
 }
 
 pub fn load_xchandles_premine_csv<P: AsRef<Path>>(
