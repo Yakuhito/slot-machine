@@ -4,7 +4,7 @@ use chia_wallet_sdk::{
     driver::{SpendContext, XchandlesRegistry},
 };
 
-use crate::{mempool_registry_maybe, CliError, Db};
+use crate::{CliError, Db};
 
 pub async fn quick_sync_xchandles(
     client: &CoinsetClient,
@@ -47,7 +47,7 @@ pub async fn quick_sync_xchandles(
         .await?
         .coin_records
         .ok_or(CliError::Custom(
-            "No unspent CATalog records found".to_string(),
+            "No unspent XCHandles records found".to_string(),
         ))?
         .into_iter();
 
@@ -84,10 +84,26 @@ pub async fn quick_sync_xchandles(
         "Could not find XCHandles registry".to_string(),
     ))?;
 
+    if let Some(mempool_items) = client
+        .get_mempool_items_by_coin_name(coin_spend.coin.coin_id())
+        .await?
+        .mempool_items
+    {
+        if !mempool_items.is_empty() {
+            if let Some(new_registry) = XchandlesRegistry::from_mempool_item(
+                ctx,
+                mempool_items[0].spend_bundle.clone(),
+                constants,
+            )? {
+                return Ok(new_registry);
+            }
+        }
+    }
+
     let on_chain_registry = XchandlesRegistry::from_parent_spend(ctx, &coin_spend, constants)?
         .ok_or(CliError::Custom(
             "Could not parse latest XCHandles registry".to_string(),
         ))?;
 
-    mempool_registry_maybe(ctx, on_chain_registry, client).await
+    Ok(on_chain_registry)
 }

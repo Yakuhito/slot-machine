@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 
 use chia_protocol::Bytes32;
-use clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{SpendContext, XchandlesRegistry},
     types::puzzles::XchandlesSlotNonce,
 };
+use clvm_utils::ToTreeHash;
 
 use crate::{CliError, Db};
 
@@ -124,9 +124,9 @@ pub async fn sync_xchandles(
             registry.info.constants,
             chia_bls::Signature::default(),
         )?
-            .ok_or(CliError::Custom(
-                "Could not parse new XCHandles registry spend".to_string(),
-            ))?;
+        .ok_or(CliError::Custom(
+            "Could not parse new XCHandles registry spend".to_string(),
+        ))?;
 
         for value in registry.pending_spend.spent_handle_slots.iter() {
             db.mark_slot_as_spent(
@@ -219,61 +219,21 @@ pub async fn sync_xchandles(
         registry = registry.child(registry.pending_spend.latest_state.1);
     }
 
-    mempool_registry_maybe(ctx, registry, client).await
-}
-
-pub async fn mempool_registry_maybe(
-    ctx: &mut SpendContext,
-    on_chain_registry: XchandlesRegistry,
-    client: &CoinsetClient,
-) -> Result<XchandlesRegistry, CliError> {
-    let Some(mut mempool_items) = client
-        .get_mempool_items_by_coin_name(on_chain_registry.coin.coin_id())
+    if let Some(mempool_items) = client
+        .get_mempool_items_by_coin_name(registry.coin.coin_id())
         .await?
         .mempool_items
-    else {
-        return Ok(on_chain_registry);
-    };
-
-    if mempool_items.is_empty() {
-        return Ok(on_chain_registry);
-    }
-
-    let mempool_item = mempool_items.remove(0);
-    let mut registry = on_chain_registry;
-    let mut parent_id_to_look_for = registry.coin.parent_coin_info;
-    loop {
-        let Some(registry_spend) = mempool_item
-            .spend_bundle
-            .coin_spends
-            .iter()
-            .find(|c| c.coin.parent_coin_info == parent_id_to_look_for)
-        else {
-            break;
-        };
-
-        let Some(new_registry) = XchandlesRegistry::from_spend(
-            ctx,
-            registry_spend,
-            registry.info.constants,
-            chia_bls::Signature::default(),
-        )?
-        else {
-            break;
-        };
-        registry = new_registry;
-        parent_id_to_look_for = registry.coin.coin_id();
-    }
-
-    mempool_item
-        .spend_bundle
-        .coin_spends
-        .into_iter()
-        .for_each(|coin_spend| {
-            if coin_spend.coin != registry.coin {
-                ctx.insert(coin_spend);
+    {
+        if !mempool_items.is_empty() {
+            if let Some(new_registry) = XchandlesRegistry::from_mempool_item(
+                ctx,
+                mempool_items[0].spend_bundle.clone(),
+                registry.info.constants,
+            )? {
+                return Ok(new_registry);
             }
-        });
-    registry.set_pending_signature(mempool_item.spend_bundle.aggregated_signature);
+        }
+    }
+
     Ok(registry)
 }
