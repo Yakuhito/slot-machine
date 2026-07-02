@@ -223,6 +223,7 @@ impl SageClient {
                 receive_address,
                 expires_at_second,
                 auto_import,
+                coin_ids: None,
             })
             .send()
             .await?;
@@ -243,6 +244,7 @@ impl SageClient {
 pub fn assets_xch_only(amount: u64) -> Vec<OfferAmount> {
     vec![OfferAmount {
         asset_id: None,
+        hidden_puzzle_hash: None,
         amount: Amount::u64(amount),
     }]
 }
@@ -255,10 +257,12 @@ pub fn assets_xch_and_cat(xch_amount: u64, asset_id: String, cat_amount: u64) ->
     vec![
         OfferAmount {
             asset_id: None,
+            hidden_puzzle_hash: None,
             amount: Amount::u64(xch_amount),
         },
         OfferAmount {
             asset_id: Some(asset_id),
+            hidden_puzzle_hash: None,
             amount: Amount::u64(cat_amount),
         },
     ]
@@ -268,10 +272,12 @@ pub fn assets_xch_and_nft(xch_amount: u64, nft_id: String) -> Vec<OfferAmount> {
     vec![
         OfferAmount {
             asset_id: None,
+            hidden_puzzle_hash: None,
             amount: Amount::u64(xch_amount),
         },
         OfferAmount {
             asset_id: Some(nft_id),
+            hidden_puzzle_hash: None,
             amount: Amount::u64(1),
         },
     ]

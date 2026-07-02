@@ -11,7 +11,7 @@ pub async fn quick_sync_catalog(
     ctx: &mut SpendContext,
     constants: CatalogRegistryConstants,
 ) -> Result<CatalogRegistry, CliError> {
-    let mut records = client
+    let records = client
         .get_coin_records_by_hint(constants.launcher_id, None, None, Some(false), None)
         .await?
         .coin_records
@@ -21,24 +21,19 @@ pub async fn quick_sync_catalog(
         .into_iter();
 
     let mut coin_spend: Option<CoinSpend> = None;
-    loop {
-        let Some(next_coin_record) = records.next() else {
-            break;
-        };
-        if next_coin_record.spent_block_index > 0 {
+    for coin_record in records {
+        if coin_record.spent_block_index > 0 {
             continue;
         }
 
         let next_spend = client
             .get_puzzle_and_solution(
-                next_coin_record.coin.parent_coin_info,
-                Some(next_coin_record.confirmed_block_index),
+                coin_record.coin.parent_coin_info,
+                Some(coin_record.confirmed_block_index),
             )
             .await?
             .coin_solution
-            .ok_or(CliError::CoinNotSpent(
-                next_coin_record.coin.parent_coin_info,
-            ))?;
+            .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
         let mut temp_ctx = SpendContext::new();
         let catalog_maybe =
