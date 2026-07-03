@@ -23,7 +23,7 @@ use chia_wallet_sdk::{
     utils::Address,
 };
 use clvm_traits::clvm_quote;
-use clvm_utils::{ToTreeHash, TreeHash};
+use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
@@ -262,53 +262,24 @@ pub async fn xchandles_continue_launch(
     if i == 0 {
         println!("No handles registered yet - looking for precommitment coins...");
 
-        let inner_puzzle_hashes = handles_to_launch
-            .iter()
-            .map(|handle| {
-                let precommit_value = precommit_value_for_handle(
-                    handle,
-                    payment_asset_id,
-                    start_time,
-                    registration_period,
-                )?;
-                let precommit_value_ptr = ctx.alloc(&precommit_value)?;
-                let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
-
-                Ok::<TreeHash, CliError>(PrecommitLayer::<XchandlesPrecommitValue>::puzzle_hash(
-                    SingletonStruct::new(constants.launcher_id)
-                        .tree_hash()
-                        .into(),
-                    constants.relative_block_height,
-                    constants.precommit_payout_puzzle_hash,
-                    Bytes32::default(),
-                    precommit_value_hash,
-                ))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
         let mut i = 0;
         while i < handles_to_launch.len() {
-            let precommit_inner_puzzle = inner_puzzle_hashes[i];
-
-            let precommit_puzzle =
-                CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle);
-
-            let records_resp = client
-                .get_coin_records_by_puzzle_hash(
-                    precommit_puzzle.into(),
-                    None,
-                    None,
-                    Some(true),
-                    None,
-                )
-                .await?;
-            let Some(records) = records_resp.coin_records else {
+            let Some(eve_nft) = eve_nft_for_handle(
+                &mut ctx,
+                &client,
+                registry.info.constants.launcher_id,
+                &handles_to_launch[i],
+                (i) as u64,
+                handles_to_launch.len() as u64,
+                royalty_puzzle_hash,
+                royalty_basis_points,
+                eve_nft_temp_inner_ph,
+                false,
+            )
+            .await?
+            else {
                 break;
             };
-
-            if records.is_empty() {
-                break;
-            }
 
             i += 1;
         }
@@ -333,16 +304,13 @@ pub async fn xchandles_continue_launch(
 
             // (inner puzzle hash, amount)
             let mut handles_payment_total = 0;
-            let mut precommitment_info_to_launch = Vec::with_capacity(handles_per_spend);
             let mut handle_infos = Vec::with_capacity(handles_per_spend);
             j = i;
             while j < handles_to_launch.len() && j - i < handles_per_spend {
                 let handle_reg_price =
                     XchandlesFactorPricingPuzzleArgs::get_price(1, &handles_to_launch[j].handle, 1);
 
-                precommitment_info_to_launch.push((inner_puzzle_hashes[j], handle_reg_price));
                 handles_payment_total += handle_reg_price;
-
                 handle_infos.push(handles_to_launch[j].clone());
 
                 j += 1;
@@ -362,7 +330,7 @@ pub async fn xchandles_continue_launch(
             println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
             println!(
                 "  - {} mojo(s) to mint the eve NFTs for handles",
-                precommitment_info_to_launch.len()
+                handle_infos.len()
             );
             println!("Eve NFTs will be temporarily stored in your wallet before being transferred to the final recipient.");
             yes_no_prompt("Proceed?")?;
@@ -371,7 +339,7 @@ pub async fn xchandles_continue_launch(
                 .make_offer(
                     no_assets(),
                     assets_xch_and_cat(
-                        precommitment_info_to_launch.len() as u64,
+                        handle_infos.len() as u64,
                         payment_asset_id_str,
                         handles_payment_total,
                     ),
@@ -384,11 +352,34 @@ pub async fn xchandles_continue_launch(
             println!("Offer with id {} generated.", offer_resp.offer_id);
 
             let mut cat_creator_conds = Conditions::new();
-            for (inner_ph, amount) in precommitment_info_to_launch {
+            for handle in handle_infos.iter() {
+                let handle_reg_price =
+                    XchandlesFactorPricingPuzzleArgs::get_price(1, &handles_to_launch[j].handle, 1);
+
+                let precommit_value = precommit_value_for_handle(
+                    handle,
+                    handle_nft_launcher_id_todo,
+                    payment_asset_id,
+                    start_time,
+                    registration_period,
+                )?;
+                let precommit_value_ptr = ctx.alloc(&precommit_value)?;
+                let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
+
+                let inner_puzzle_hash = PrecommitLayer::<XchandlesPrecommitValue>::puzzle_hash(
+                    SingletonStruct::new(constants.launcher_id)
+                        .tree_hash()
+                        .into(),
+                    constants.relative_block_height,
+                    constants.precommit_payout_puzzle_hash,
+                    Bytes32::default(),
+                    precommit_value_hash,
+                );
+
                 cat_creator_conds = cat_creator_conds.create_coin(
-                    inner_ph.into(),
-                    amount,
-                    ctx.hint(inner_ph.into())?,
+                    inner_puzzle_hash.into(),
+                    handle_reg_price,
+                    ctx.hint(inner_puzzle_hash.into())?,
                 );
             }
             let cat_destination_puzzle_ptr = ctx.alloc(&clvm_quote!(cat_creator_conds))?;
