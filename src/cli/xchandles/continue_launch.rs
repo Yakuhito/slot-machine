@@ -77,6 +77,103 @@ fn metadata_for_handle_nft(
     }
 }
 
+async fn eve_nft_for_handle(
+    ctx: &mut SpendContext,
+    client: &CoinsetClient,
+    registry_launcher_id: Bytes32,
+    handle: &XchandlesPremineRecord,
+    handle_index: u64,
+    total_handles: u64,
+    royalty_puzzle_hash: Bytes32,
+    royalty_basis_points: u16,
+    eve_nft_temp_inner_ph: Bytes32,
+    include_spent_coins: bool,
+) -> Result<Option<Nft>, CliError> {
+    let hint = (registry_launcher_id, handle.handle.tree_hash())
+        .tree_hash()
+        .into();
+
+    let metadata = metadata_for_handle_nft(handle.clone(), handle_index + 1, total_handles);
+    let metadata = ctx.alloc_hashed(&metadata)?;
+
+    let Some(mut possible_launcher_records) = client
+        .get_coin_records_by_hint(hint, None, None, Some(true), None)
+        .await?
+        .coin_records
+    else {
+        return Err(CliError::Custom(
+            "Failed to get possible launchers - aborting...".to_string(),
+        ));
+    };
+
+    possible_launcher_records.retain(|cr| {
+        cr.coin.amount % 2 == 0 && cr.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into()
+    });
+
+    let expected_coins: Vec<(NftInfo, Coin)> = possible_launcher_records
+        .iter()
+        .map(|possible_launcher_record| {
+            let nft_info = NftInfo::new(
+                possible_launcher_record.coin.coin_id(),
+                metadata,
+                ANY_METADATA_UPDATER_HASH.into(),
+                None,
+                royalty_puzzle_hash,
+                royalty_basis_points,
+                eve_nft_temp_inner_ph,
+            );
+            let eve_nft_ph = nft_info.puzzle_hash();
+
+            (
+                nft_info,
+                Coin::new(
+                    possible_launcher_record.coin.coin_id(),
+                    eve_nft_ph.into(),
+                    1,
+                ),
+            )
+        })
+        .collect();
+
+    let expected_coin_ids: Vec<Bytes32> = expected_coins.iter().map(|c| c.1.coin_id()).collect();
+
+    let Some(coin_records) = client
+        .get_coin_records_by_names(
+            expected_coin_ids,
+            None,
+            None,
+            Some(include_spent_coins),
+            None,
+        )
+        .await?
+        .coin_records
+    else {
+        return Ok(None);
+    };
+
+    if coin_records.is_empty() {
+        return Ok(None);
+    }
+
+    let Some(found_index) = expected_coins
+        .iter()
+        .position(|(_, coin)| *coin == coin_records[0].coin)
+    else {
+        return Ok(None);
+    };
+
+    let proof = Proof::Eve(EveProof {
+        parent_parent_coin_info: possible_launcher_records[found_index].coin.parent_coin_info,
+        parent_amount: possible_launcher_records[found_index].coin.amount,
+    });
+
+    Ok(Some(Nft::new(
+        coin_records[0].coin,
+        proof,
+        expected_coins[found_index].0,
+    )))
+}
+
 pub async fn xchandles_continue_launch(
     launcher_id_str: String,
     payment_asset_id_str: String,
@@ -424,80 +521,27 @@ pub async fn xchandles_continue_launch(
     let mut eve_nfts = Vec::with_capacity(handles.len());
 
     for (index, handle) in handles.iter().enumerate() {
-        let hint = (
+        let Some(eve_nft) = eve_nft_for_handle(
+            &mut ctx,
+            &client,
             registry.info.constants.launcher_id,
-            handle.handle.tree_hash(),
-        )
-            .tree_hash()
-            .into();
-
-        let metadata = metadata_for_handle_nft(
-            handle.clone(),
+            handle,
             (i + index) as u64,
-            handles_to_launch.len() as u64,
-        );
-        let metadata = ctx.alloc_hashed(&metadata)?;
-
-        let Some(possible_launcher_records) = client
-            .get_coin_records_by_hint(hint, None, None, Some(true), None)
-            .await?
-            .coin_records
+            handles.len() as u64,
+            royalty_puzzle_hash,
+            royalty_basis_points,
+            eve_nft_temp_inner_ph,
+            false,
+        )
+        .await?
         else {
-            return Err(CliError::Custom(
-                "Failed to get possible launchers - aborting...".to_string(),
-            ));
+            return Err(CliError::Custom(format!(
+                "No valid eve NFT found for handle {} - aborting...",
+                handle.handle,
+            )));
         };
 
-        for possible_launcher_record in possible_launcher_records.iter().filter(|cr| {
-            cr.coin.amount % 2 == 0 && cr.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into()
-        }) {
-            let nft_info = NftInfo::new(
-                possible_launcher_record.coin.coin_id(),
-                metadata,
-                ANY_METADATA_UPDATER_HASH.into(),
-                None,
-                royalty_puzzle_hash,
-                royalty_basis_points,
-                eve_nft_temp_inner_ph,
-            );
-            let eve_nft_ph = nft_info.puzzle_hash();
-            let expected_eve_coin = Coin::new(
-                possible_launcher_record.coin.coin_id(),
-                eve_nft_ph.into(),
-                1,
-            );
-
-            let Ok(resp) = client
-                .get_coin_record_by_name(expected_eve_coin.coin_id())
-                .await
-            else {
-                continue;
-            };
-            let Some(eve_coin_record) = resp.coin_record else {
-                continue;
-            };
-
-            if eve_coin_record.spent {
-                return Err(CliError::Custom(format!(
-                    "Eve NFT for handle {} was spent - aborting...",
-                    handle.handle,
-                )));
-            }
-
-            let proof = Proof::Eve(EveProof {
-                parent_parent_coin_info: possible_launcher_record.coin.parent_coin_info,
-                parent_amount: possible_launcher_record.coin.amount,
-            });
-
-            let eve_nft = Nft::new(eve_coin_record.coin, proof, nft_info);
-            eve_nfts.push(eve_nft);
-            break;
-        }
-
-        return Err(CliError::Custom(format!(
-            "No valid eve NFT found for handle {} - aborting...",
-            handle.handle,
-        )));
+        eve_nfts.push(eve_nft);
     }
 
     // check if precommitment coins are available and have the appropriate age
@@ -715,12 +759,15 @@ pub async fn xchandles_continue_launch(
                 Bytes32::default(),
             )?;
 
-        security_coin_conditions = security_coin_conditions
-            .extend(register_conds)
-            .extend(owner_message_conds);
+        let mut nft_conds = owner_message_conds;
         if let Some(resolved_message_conds) = resolved_message_conds {
-            security_coin_conditions = security_coin_conditions.extend(resolved_message_conds);
+            nft_conds = nft_conds.extend(resolved_message_conds);
         }
+
+        todo!("Transfer eve NFT to intended owner, sign");
+        // eve_nfts[i].transfer(&mut ctx, inner, p2_puzzle_hash, nft_conds);
+
+        security_coin_conditions = security_coin_conditions.extend(register_conds);
     }
 
     let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;
