@@ -171,7 +171,8 @@ pub fn load_xchandles_state_schedule_csv<P: AsRef<Path>>(
 #[derive(Debug, Deserialize, Clone)]
 pub struct XchandlesPremineRecord {
     pub handle: String,
-    pub owner_nft: String,
+    #[serde(deserialize_with = "decode_bech32m")]
+    pub recipient: Bytes32,
     #[serde(deserialize_with = "deserialize_string_array")]
     pub image_uris: Vec<String>,
     #[serde(deserialize_with = "hex_string_to_bytes32")]

@@ -171,8 +171,10 @@ pub async fn xchandles_initiate_launch(
     );
     for record in handles_to_launch.iter().take(7) {
         println!(
-            "  handle: {:}, owner_nft: {:}",
-            record.handle, record.owner_nft
+            "  handle: {:}, recipient: {:}, image_uris: {:?}",
+            record.handle,
+            Address::new(record.recipient, get_prefix(testnet11)).encode()?,
+            record.image_uris.join("|")
         );
     }
 
