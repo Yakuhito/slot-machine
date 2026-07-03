@@ -1,28 +1,34 @@
 use std::collections::{HashMap, HashSet};
 
 use chia_protocol::{Bytes32, SpendBundle};
-use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof};
+use chia_puzzle_types::{
+    cat::CatArgs, nft::NftMetadata, singleton::SingletonStruct, CoinProof, LineageProof, Memos,
+};
+use chia_puzzles::SINGLETON_LAUNCHER_HASH;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
         create_security_coin, decode_offer, spend_security_coin, spend_settlement_cats, CatLayer,
-        CatalogPrecommitValue, Layer, Offer, PrecommitCoin, PrecommitLayer, Puzzle, SingleCatSpend,
-        Spend, SpendContext, XchandlesPrecommitValue, XchandlesRegisterAction,
+        CatalogPrecommitValue, Launcher, Layer, Offer, PrecommitCoin, PrecommitLayer, Puzzle,
+        SingleCatSpend, Spend, SpendContext, XchandlesPrecommitValue, XchandlesRegisterAction,
     },
     types::{
-        puzzles::{XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution},
+        puzzles::{
+            XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution, ANY_METADATA_UPDATER_HASH,
+        },
         Conditions, Mod, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
     },
     utils::Address,
 };
 use clvm_traits::clvm_quote;
-use clvm_utils::{ToTreeHash, TreeHash};
+use clvm_utils::{tree_hash, ToTreeHash, TreeHash};
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction, get_last_onchain_timestamp,
-    hex_string_to_bytes32, load_xchandles_premine_csv, no_assets, parse_amount, sync_xchandles,
-    yes_no_prompt, CliError, Db, SageClient, XchandlesPremineRecord,
+    assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction, encode_nft,
+    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, load_xchandles_premine_csv,
+    no_assets, parse_amount, sync_xchandles, yes_no_prompt, CliError, Db, SageClient,
+    XchandlesPremineRecord,
 };
 
 fn precommit_value_for_handle(
@@ -53,9 +59,28 @@ fn precommit_value_for_handle(
     ))
 }
 
+fn metadata_for_handle_nft(
+    handle_info: XchandlesPremineRecord,
+    edition_number: u64,
+    edition_total: u64,
+) -> NftMetadata {
+    NftMetadata {
+        edition_number,
+        edition_total,
+        data_uris: handle_info.image_uris,
+        data_hash: Some(handle_info.image_hash),
+        metadata_uris: handle_info.metadata_uris,
+        metadata_hash: Some(handle_info.metadata_hash),
+        license_uris: handle_info.license_uris,
+        license_hash: Some(handle_info.license_hash),
+    }
+}
+
 pub async fn xchandles_continue_launch(
     launcher_id_str: String,
     payment_asset_id_str: String,
+    royalty_address: String,
+    royalty_basis_points: u16,
     handles_per_spend: usize,
     start_time: Option<u64>,
     registration_period: u64,
@@ -190,8 +215,10 @@ pub async fn xchandles_continue_launch(
             let mut j = i;
             while j < handles_to_launch.len() && j - i < handles_per_spend {
                 println!(
-                    "  handle: {:}, owner NFT: {:}",
-                    handles_to_launch[j].handle, handles_to_launch[j].owner_nft
+                    "  handle: {:}, recipient: {:}, image_uris: {:?}",
+                    handles_to_launch[j].handle,
+                    Address::new(handles_to_launch[j].recipient, get_prefix(testnet11)).encode()?,
+                    handles_to_launch[j].image_uris.join("|")
                 );
                 j += 1;
             }
@@ -199,6 +226,7 @@ pub async fn xchandles_continue_launch(
             // (inner puzzle hash, amount)
             let mut handles_payment_total = 0;
             let mut precommitment_info_to_launch = Vec::with_capacity(handles_per_spend);
+            let mut handle_infos = Vec::with_capacity(handles_per_spend);
             j = i;
             while j < handles_to_launch.len() && j - i < handles_per_spend {
                 let handle_reg_price =
@@ -207,8 +235,18 @@ pub async fn xchandles_continue_launch(
                 precommitment_info_to_launch.push((inner_puzzle_hashes[j], handle_reg_price));
                 handles_payment_total += handle_reg_price;
 
+                handle_infos.push(handles_to_launch[j].clone());
+
                 j += 1;
             }
+
+            let royalty_puzzle_hash = Address::decode(&royalty_address)?.puzzle_hash;
+
+            println!(
+                "NFTs will be minted with royalty address: {}",
+                royalty_address
+            );
+            println!("Royalty basis points: {}", royalty_basis_points);
 
             println!("A one-sided offer will be created; it will consume:");
             println!(
@@ -216,13 +254,30 @@ pub async fn xchandles_continue_launch(
                 handles_payment_total,
             );
             println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
-            println!("  - 1 mojo for the sake of it");
+            println!(
+                "  - {} mojo(s) to mint the eve NFTs for handles",
+                precommitment_info_to_launch.len()
+            );
+            println!("Eve NFTs will be temporarily stored in your wallet before being transferred to the final recipient.");
+
+            let derivation_resp = sage.get_derivations(false, 0, 1).await?;
+            println!(
+                "Active wallet address: {})",
+                derivation_resp.derivations[0].address
+            );
+
+            let eve_nft_temp_inner_ph =
+                Address::decode(&derivation_resp.derivations[0].address)?.puzzle_hash;
             yes_no_prompt("Proceed?")?;
 
             let offer_resp = sage
                 .make_offer(
                     no_assets(),
-                    assets_xch_and_cat(1, payment_asset_id_str, handles_payment_total),
+                    assets_xch_and_cat(
+                        precommitment_info_to_launch.len() as u64,
+                        payment_asset_id_str,
+                        handles_payment_total,
+                    ),
                     fee,
                     None,
                     None,
@@ -256,9 +311,48 @@ pub async fn xchandles_continue_launch(
             )?;
 
             let created_cat = created_cats[0];
-            let security_coin_conditions = cat_assert
-                .assert_concurrent_spend(created_cat.coin.coin_id())
-                .reserve_fee(1);
+            let mut security_coin_conditions =
+                cat_assert.assert_concurrent_spend(created_cat.coin.coin_id());
+
+            for (index, handle_info) in handle_infos.into_iter().enumerate() {
+                let launcher_amount = (index * 2) as u64;
+                let launcher = Launcher::new(security_coin.coin_id(), launcher_amount);
+
+                println!(
+                    "Handle {} will be represented by NFT {}",
+                    handle_info.handle,
+                    encode_nft(launcher.coin().coin_id())?
+                );
+
+                let metadata = metadata_for_handle_nft(
+                    handle_info,
+                    (i + index) as u64,
+                    handles_to_launch.len() as u64,
+                );
+                let metadata = ctx.alloc_hashed(&metadata)?;
+
+                let (sec_conditions, _eve_nft) = launcher.mint_eve_nft(
+                    &mut ctx,
+                    eve_nft_temp_inner_ph,
+                    metadata,
+                    ANY_METADATA_UPDATER_HASH.into(),
+                    royalty_puzzle_hash,
+                    royalty_basis_points,
+                )?;
+
+                // unique hint per deployment to minimize confusions
+                let hint: Bytes32 = (
+                    registry.info.constants.launcher_id,
+                    handle_info.handle.tree_hash(),
+                )
+                    .tree_hash()
+                    .into();
+                let hint = ctx.hint(hint)?;
+
+                security_coin_conditions = security_coin_conditions
+                    .create_coin(SINGLETON_LAUNCHER_HASH.into(), launcher_amount, hint)
+                    .extend(sec_conditions);
+            }
 
             // Spend security coin
             let security_coin_sig = spend_security_coin(
@@ -318,8 +412,10 @@ pub async fn xchandles_continue_launch(
     );
     for handle in &handles {
         println!(
-            "  handle: {:}, owner NFT: {:}",
-            handle.handle, handle.owner_nft
+            "  handle: {:}, recipient: {:}, image_uris: {:?}",
+            handle.handle,
+            Address::new(handle.recipient, get_prefix(testnet11)).encode()?,
+            handle.image_uris.join("|")
         );
     }
 
@@ -465,6 +561,8 @@ pub async fn xchandles_continue_launch(
     }
 
     println!("Done!");
+
+    println!("Fetching eve NFTs for handles...");
 
     println!("A one-sided offer will be created; it will consume:");
     println!("  - 1 mojo for the sake of it");

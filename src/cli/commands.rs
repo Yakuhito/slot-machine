@@ -384,6 +384,14 @@ enum XchandlesCliAction {
         #[arg(long)]
         payment_asset_id: String,
 
+        /// Royalty address for minted NFTs
+        #[arg(long)]
+        royalty_address: String,
+
+        /// Royalty basis points for the launch
+        #[arg(long, default_value = "1000")]
+        royalty_basis_points: u16,
+
         /// How many handles to deploy for this spend
         #[arg(long)]
         handles_per_spend: usize,
@@ -1178,6 +1186,8 @@ pub async fn run_cli() {
             XchandlesCliAction::ContinueLaunch {
                 launcher_id,
                 payment_asset_id,
+                royalty_address,
+                royalty_basis_points,
                 handles_per_spend,
                 start_time,
                 registration_period,
@@ -1187,6 +1197,8 @@ pub async fn run_cli() {
                 xchandles_continue_launch(
                     launcher_id,
                     payment_asset_id,
+                    royalty_address,
+                    royalty_basis_points,
                     handles_per_spend,
                     start_time,
                     registration_period,

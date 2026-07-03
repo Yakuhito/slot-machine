@@ -1,3 +1,4 @@
+use chia_protocol::Bytes32;
 use chia_puzzle_types::singleton::SingletonSolution;
 use chia_wallet_sdk::driver::{
     Layer, XchandlesExpirePricingPuzzle, XchandlesRegistry, XchandlesRegistryState,
@@ -126,8 +127,8 @@ pub async fn xchandles_verify_deployment(
                 NodePtr,
             >>(action_spend.solution)?;
 
-            let nft_launcher_id =
-                Address::decode(&handles_to_launch[handle_index].owner_nft)?.puzzle_hash;
+            let nft_launcher_id = Bytes32::default();
+            // Address::decode(&handles_to_launch[handle_index].owner_nft)?.puzzle_hash;
             if action_solution.handle_hash
                 != handles_to_launch[handle_index].handle.tree_hash().into()
                 || action_solution
