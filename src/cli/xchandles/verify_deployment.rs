@@ -10,7 +10,6 @@ use chia_wallet_sdk::types::Mod;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{ActionLayer, SpendContext},
-    utils::Address,
 };
 use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
