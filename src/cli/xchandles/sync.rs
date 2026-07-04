@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use chia_bls::Signature;
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::{
@@ -129,39 +127,8 @@ pub async fn sync_xchandles(
             "Could not parse new XCHandles registry spend".to_string(),
         ))?;
 
-        for value in registry.pending_spend.spent_handle_slots.iter() {
-            db.mark_slot_as_spent(
-                launcher_id,
-                XchandlesSlotNonce::HANDLE.to_u64(),
-                value.tree_hash().into(),
-                coin_record.spent_block_index,
-            )
-            .await?;
-        }
-
-        let mut processed_values = HashSet::<Bytes32>::new();
         for slot_value in registry.pending_spend.created_handle_slots.iter() {
             let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
-            if processed_values.contains(&slot_value_hash) {
-                continue;
-            }
-            processed_values.insert(slot_value_hash);
-
-            let no_spent = registry
-                .pending_spend
-                .spent_handle_slots
-                .iter()
-                .filter(|sv| sv.tree_hash() == slot_value_hash.into())
-                .count();
-            let no_created = registry
-                .pending_spend
-                .created_handle_slots
-                .iter()
-                .filter(|sv| sv.tree_hash() == slot_value_hash.into())
-                .count();
-            if no_spent >= no_created {
-                continue;
-            }
 
             db.save_xchandles_indexed_slot_value(
                 registry.info.constants.launcher_id,
@@ -172,6 +139,16 @@ pub async fn sync_xchandles(
             db.save_slot(
                 ctx,
                 registry.created_handle_slot_value_to_slot(*slot_value),
+                0,
+            )
+            .await?;
+        }
+
+        for value in registry.pending_spend.spent_handle_slots.iter() {
+            db.mark_slot_as_spent(
+                launcher_id,
+                XchandlesSlotNonce::HANDLE.to_u64(),
+                value.tree_hash().into(),
                 coin_record.spent_block_index,
             )
             .await?;
