@@ -152,10 +152,12 @@ async fn eve_nft_for_handle(
         .await?
         .coin_records
     else {
+        println!("No coin records"); // todo: debug
         return Ok(None);
     };
 
     if coin_records.is_empty() {
+        println!("Empty coin records"); // todo: debug
         return Ok(None);
     }
 
@@ -163,6 +165,7 @@ async fn eve_nft_for_handle(
         .iter()
         .position(|(_, coin)| *coin == coin_records[0].coin)
     else {
+        println!("No found_index in coin records"); // todo: debug
         return Ok(None);
     };
 
@@ -385,7 +388,8 @@ pub async fn xchandles_continue_launch(
 
                 // Launch eve NFT
                 let launcher_amount = (index * 2) as u64;
-                let launcher = Launcher::with_memos(security_coin.coin_id(), launcher_amount, hint);
+                let launcher = Launcher::with_memos(security_coin.coin_id(), launcher_amount, hint)
+                    .with_singleton_amount(1);
                 let launcher_id = launcher.coin().coin_id();
 
                 println!(
