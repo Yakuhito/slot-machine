@@ -380,6 +380,10 @@ enum XchandlesCliAction {
         #[arg(long)]
         launcher_id: String,
 
+        /// Skip checking this number of handles for being created/precommitted (for efficiency only)
+        #[arg(long, default_value = "0")]
+        skip: usize,
+
         /// Payment asset id (payment CAT tail hash from launch initiation)
         #[arg(long)]
         payment_asset_id: String,
@@ -1185,6 +1189,7 @@ pub async fn run_cli() {
             }
             XchandlesCliAction::ContinueLaunch {
                 launcher_id,
+                skip,
                 payment_asset_id,
                 royalty_address,
                 royalty_basis_points,
@@ -1196,6 +1201,7 @@ pub async fn run_cli() {
             } => {
                 xchandles_continue_launch(
                     launcher_id,
+                    skip,
                     payment_asset_id,
                     royalty_address,
                     royalty_basis_points,

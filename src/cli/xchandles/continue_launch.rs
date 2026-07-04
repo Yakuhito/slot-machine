@@ -181,6 +181,7 @@ async fn eve_nft_for_handle(
 #[allow(clippy::too_many_arguments)]
 pub async fn xchandles_continue_launch(
     launcher_id_str: String,
+    skip: usize,
     payment_asset_id_str: String,
     royalty_address: String,
     royalty_basis_points: u16,
@@ -233,7 +234,11 @@ pub async fn xchandles_continue_launch(
             break;
         }
 
-        i += 1;
+        if i == 0 && skip > 1 {
+            i = skip - 1;
+        } else {
+            i += 1;
+        }
     }
 
     if i == handles_to_launch.len() {
@@ -286,7 +291,11 @@ pub async fn xchandles_continue_launch(
                 break;
             };
 
-            i += 1;
+            if i == 0 && skip > 1 {
+                i = skip - 1;
+            } else {
+                i += 1;
+            }
         }
 
         if i != handles_to_launch.len() {
