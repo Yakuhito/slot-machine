@@ -776,6 +776,10 @@ pub async fn xchandles_continue_launch(
             .get_xchandles_neighbors(&mut ctx, constants.launcher_id, handle_hash)
             .await?;
 
+        let eve_nft = eve_nfts[i];
+        let eve_nft_layers = eve_nft.info.into_layers(eve_nft_temp_p2);
+        let eve_nft_inner_puzzle_hash = eve_nft.info.inner_puzzle_hash().into();
+
         let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
         let (register_conds, owner_message_conds, resolved_message_conds) =
@@ -788,17 +792,14 @@ pub async fn xchandles_continue_launch(
                 1,
                 registration_period,
                 start_time,
-                Bytes32::default(),
-                Bytes32::default(),
+                eve_nft_inner_puzzle_hash,
+                eve_nft_inner_puzzle_hash,
             )?;
 
         let mut nft_conds = owner_message_conds;
         if let Some(resolved_message_conds) = resolved_message_conds {
             nft_conds = nft_conds.extend(resolved_message_conds);
         }
-
-        let eve_nft = eve_nfts[i];
-        let eve_nft_layers = eve_nft.info.into_layers(eve_nft_temp_p2);
 
         let hint = ctx.hint(destination_puzzle_hashes[i])?;
         let delegated_puzzle = ctx.alloc(&clvm_quote!(nft_conds.create_coin(
