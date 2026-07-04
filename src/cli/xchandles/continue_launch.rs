@@ -32,9 +32,8 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 use crate::{
     assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction, encode_nft,
     get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, hex_string_to_pubkey,
-    hex_string_to_signature, load_xchandles_premine_csv, no_assets, parse_amount,
-    print_spend_bundle_to_file, sync_xchandles, yes_no_prompt, CliError, Db, SageClient,
-    XchandlesPremineRecord,
+    hex_string_to_signature, load_xchandles_premine_csv, no_assets, parse_amount, sync_xchandles,
+    yes_no_prompt, CliError, Db, SageClient, XchandlesPremineRecord,
 };
 
 fn precommit_value_for_handle(
@@ -98,11 +97,6 @@ async fn eve_nft_for_handle(
         .tree_hash()
         .into();
 
-    println!(
-        "handle_index: {:?}; total_handles: {:?}",
-        handle_index + 1,
-        total_handles
-    ); // todo: debug
     let metadata = metadata_for_handle_nft(handle.clone(), handle_index + 1, total_handles);
     let metadata = ctx.alloc_hashed(&metadata)?;
 
@@ -119,10 +113,6 @@ async fn eve_nft_for_handle(
     possible_launcher_records.retain(|cr| {
         cr.coin.amount % 2 == 0 && cr.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into()
     });
-    println!(
-        "possible launcher records length: {:?}",
-        possible_launcher_records.len()
-    ); // todo: debug
 
     let expected_coins: Vec<(NftInfo, Coin)> = possible_launcher_records
         .iter()
@@ -156,12 +146,10 @@ async fn eve_nft_for_handle(
         .await?
         .coin_records
     else {
-        println!("No coin records"); // todo: debug
         return Ok(None);
     };
 
     if coin_records.is_empty() {
-        println!("Empty coin records"); // todo: debug
         return Ok(None);
     }
 
@@ -169,7 +157,6 @@ async fn eve_nft_for_handle(
         .iter()
         .position(|(_, coin)| *coin == coin_records[0].coin)
     else {
-        println!("No found_index in coin records"); // todo: debug
         return Ok(None);
     };
 
@@ -402,11 +389,6 @@ pub async fn xchandles_continue_launch(
                     encode_nft(launcher.coin().coin_id())?
                 );
 
-                println!(
-                    "edition number: {:?}; total edition number: {:?}",
-                    (i + index + 1) as u64,
-                    handles_to_launch.len() as u64
-                ); // todo: debug
                 let metadata = metadata_for_handle_nft(
                     handle_info.clone(),
                     (i + index + 1) as u64,
@@ -505,7 +487,6 @@ pub async fn xchandles_continue_launch(
 
             // Build spend bundle
             let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
-            let _ = print_spend_bundle_to_file(&sb, "sb.debug")?; // todo: debug
 
             println!("Submitting transaction...");
             let resp = client.push_tx(sb).await?;
@@ -547,7 +528,6 @@ pub async fn xchandles_continue_launch(
     let mut destination_puzzle_hashes = Vec::with_capacity(handles.len());
 
     for (index, handle) in handles.iter().enumerate() {
-        println!("i_offset: {:?} index: {:?}", i_offset, index); // todo: debug
         let Some(eve_nft) = eve_nft_for_handle(
             &mut ctx,
             &client,
@@ -865,18 +845,6 @@ pub async fn xchandles_continue_launch(
         ctx.take(),
         security_coin_sig + &pending_sig + &nft_sig,
     ));
-
-    let _ = print_spend_bundle_to_file(&sb, "sb.debug")?; // todo: debug
-    for cs in &sb.coin_spends {
-        // todo: debug ----------
-        let coin_id = cs.coin.coin_id();
-        let record = client.get_coin_record_by_name(coin_id).await?;
-        let mut spent = false;
-        if let Some(record) = record.coin_record {
-            spent = record.spent;
-        }
-        println!("coin_id: {:?}; spent: {:?}", coin_id, spent); // todo: debug
-    } // todo: debug ------
 
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
