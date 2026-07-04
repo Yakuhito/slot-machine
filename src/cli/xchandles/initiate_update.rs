@@ -7,7 +7,7 @@ use chia_wallet_sdk::{
         spend_settlement_nft, Offer, SingletonInfo, Spend, SpendContext, StandardLayer,
         XchandlesInitiateUpdateAction,
     },
-    types::puzzles::{CompactCoinProof, XchandlesHandleSlotValue},
+    types::puzzles::{CompactCoinProof, XchandlesHandleSlotValue, XchandlesSlotNonce},
     utils::Address,
 };
 use clvm_traits::clvm_quote;
@@ -39,7 +39,13 @@ pub(crate) async fn fetch_handle_slot(
             .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
             .await?
             .ok_or(CliError::SlotNotFound("Handle"))?;
-        db.get_slot::<XchandlesHandleSlotValue>(ctx, launcher_id, 0, slot_value_hash, 0)
+        db.get_slot::<XchandlesHandleSlotValue>(
+            ctx,
+            launcher_id,
+            XchandlesSlotNonce::HANDLE.to_u64(),
+            slot_value_hash,
+            0,
+        )
             .await?
             .ok_or(CliError::SlotNotFound("Handle"))
     } else {

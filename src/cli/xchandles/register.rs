@@ -11,7 +11,7 @@ use chia_wallet_sdk::{
     types::{
         puzzles::{
             DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesHandleSlotValue,
-            XchandlesPricingSolution,
+            XchandlesPricingSolution, XchandlesSlotNonce,
         },
         Mod,
     },
@@ -305,7 +305,7 @@ pub async fn xchandles_register(
                         db.get_slot::<XchandlesHandleSlotValue>(
                             &mut ctx,
                             launcher_id,
-                            0,
+                            XchandlesSlotNonce::HANDLE.to_u64(),
                             slot_value_hash,
                             0,
                         )

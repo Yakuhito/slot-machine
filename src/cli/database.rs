@@ -3,7 +3,7 @@ use chia_puzzle_types::LineageProof;
 use chia_wallet_sdk::{
     coinset::CoinRecord,
     driver::{DriverError, RewardDistributorConstants, Slot, XchandlesConstants},
-    types::puzzles::SlotInfo,
+    types::puzzles::{SlotInfo, XchandlesSlotNonce},
 };
 use clvm_traits::{FromClvm, ToClvm};
 use clvm_utils::ToTreeHash;
@@ -546,7 +546,7 @@ impl Db {
             SELECT 'left' AS side, s.* 
             FROM slots s
             WHERE s.singleton_launcher_id = ?1
-              AND s.nonce = 0
+              AND s.nonce = ?3
               AND s.spent_block_height = 0
               AND s.slot_value_hash = (
                   SELECT slot_value_hash 
@@ -559,7 +559,7 @@ impl Db {
             SELECT 'right' AS side, s.* 
             FROM slots s
             WHERE s.singleton_launcher_id = ?1
-              AND s.nonce = 0
+              AND s.nonce = ?3
               AND s.spent_block_height = 0
               AND s.slot_value_hash = (
                   SELECT slot_value_hash 
@@ -571,7 +571,8 @@ impl Db {
             ",
         )
         .bind(launcher_id.to_vec())
-        .bind(handle_hash.to_vec());
+        .bind(handle_hash.to_vec())
+        .bind(XchandlesSlotNonce::HANDLE.to_u64() as i64);
 
         let rows = query.fetch_all(&self.pool).await.map_err(CliError::Sqlx)?;
 

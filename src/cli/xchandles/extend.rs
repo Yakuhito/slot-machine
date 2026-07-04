@@ -6,7 +6,7 @@ use chia_wallet_sdk::{
         SpendContext, XchandlesExpirePricingPuzzle, XchandlesExtendAction,
     },
     types::{
-        puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs},
+        puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesSlotNonce},
         Mod,
     },
 };
@@ -79,9 +79,15 @@ pub async fn xchandles_extend(
             .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
             .await?
             .ok_or(CliError::SlotNotFound("Handle"))?;
-        db.get_slot(&mut ctx, launcher_id, 0, slot_value_hash, 0)
-            .await?
-            .ok_or(CliError::SlotNotFound("Handle"))?
+        db.get_slot(
+            &mut ctx,
+            launcher_id,
+            XchandlesSlotNonce::HANDLE.to_u64(),
+            slot_value_hash,
+            0,
+        )
+        .await?
+        .ok_or(CliError::SlotNotFound("Handle"))?
     } else {
         let xchandles_api_client = XchandlesApiClient::get(testnet11);
         xchandles_api_client

@@ -1,7 +1,7 @@
 use chia_protocol::Bytes32;
 use chia_puzzle_types::LineageProof;
 use chia_wallet_sdk::driver::Slot;
-use chia_wallet_sdk::types::puzzles::{SlotInfo, XchandlesHandleSlotValue};
+use chia_wallet_sdk::types::puzzles::{SlotInfo, XchandlesHandleSlotValue, XchandlesSlotNonce};
 use reqwest::Client;
 use std::time::Duration;
 
@@ -139,12 +139,18 @@ impl XchandlesApiClient {
             parent_amount: right_parent_amount,
         };
 
-        let left_info =
-            SlotInfo::<XchandlesHandleSlotValue>::from_value(launcher_id, 0, left_value);
+        let left_info = SlotInfo::<XchandlesHandleSlotValue>::from_value(
+            launcher_id,
+            XchandlesSlotNonce::HANDLE.to_u64(),
+            left_value,
+        );
         let left = Slot::<XchandlesHandleSlotValue>::new(left_proof, left_info);
 
-        let right_info =
-            SlotInfo::<XchandlesHandleSlotValue>::from_value(launcher_id, 0, right_value);
+        let right_info = SlotInfo::<XchandlesHandleSlotValue>::from_value(
+            launcher_id,
+            XchandlesSlotNonce::HANDLE.to_u64(),
+            right_value,
+        );
         let right = Slot::<XchandlesHandleSlotValue>::new(right_proof, right_info);
 
         Ok((left, right))
