@@ -77,6 +77,7 @@ fn metadata_for_handle_nft(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn eve_nft_for_handle(
     ctx: &mut SpendContext,
     client: &CoinsetClient,
@@ -174,6 +175,7 @@ async fn eve_nft_for_handle(
     )))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn xchandles_continue_launch(
     launcher_id_str: String,
     payment_asset_id_str: String,
@@ -264,7 +266,7 @@ pub async fn xchandles_continue_launch(
 
         let mut i = 0;
         while i < handles_to_launch.len() {
-            let Some(eve_nft) = eve_nft_for_handle(
+            let Some(_eve_nft) = eve_nft_for_handle(
                 &mut ctx,
                 &client,
                 registry.info.constants.launcher_id,
@@ -351,60 +353,19 @@ pub async fn xchandles_continue_launch(
                 .await?;
             println!("Offer with id {} generated.", offer_resp.offer_id);
 
-            let mut cat_creator_conds = Conditions::new();
-            for handle in handle_infos.iter() {
-                let handle_reg_price =
-                    XchandlesFactorPricingPuzzleArgs::get_price(1, &handles_to_launch[j].handle, 1);
-
-                let precommit_value = precommit_value_for_handle(
-                    handle,
-                    handle_nft_launcher_id_todo,
-                    payment_asset_id,
-                    start_time,
-                    registration_period,
-                )?;
-                let precommit_value_ptr = ctx.alloc(&precommit_value)?;
-                let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
-
-                let inner_puzzle_hash = PrecommitLayer::<XchandlesPrecommitValue>::puzzle_hash(
-                    SingletonStruct::new(constants.launcher_id)
-                        .tree_hash()
-                        .into(),
-                    constants.relative_block_height,
-                    constants.precommit_payout_puzzle_hash,
-                    Bytes32::default(),
-                    precommit_value_hash,
-                );
-
-                cat_creator_conds = cat_creator_conds.create_coin(
-                    inner_puzzle_hash.into(),
-                    handle_reg_price,
-                    ctx.hint(inner_puzzle_hash.into())?,
-                );
-            }
-            let cat_destination_puzzle_ptr = ctx.alloc(&clvm_quote!(cat_creator_conds))?;
-            let cat_destination_puzzle_hash: Bytes32 =
-                ctx.tree_hash(cat_destination_puzzle_ptr).into();
-
             // Parse one-sided offer
             let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
             let (security_coin_sk, security_coin) =
                 create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
-            let (created_cats, cat_assert) = spend_settlement_cats(
-                &mut ctx,
-                &offer,
-                payment_asset_id,
-                launcher_id,
-                &[(cat_destination_puzzle_hash, handles_payment_total)],
-            )?;
 
-            let created_cat = created_cats[0];
-            let mut security_coin_conditions =
-                cat_assert.assert_concurrent_spend(created_cat.coin.coin_id());
+            let mut security_coin_conditions = Conditions::new();
+            let mut cat_creator_conds = Conditions::new();
 
             for (index, handle_info) in handle_infos.into_iter().enumerate() {
+                // Launch eve NFT
                 let launcher_amount = (index * 2) as u64;
                 let launcher = Launcher::new(security_coin.coin_id(), launcher_amount);
+                let launcher_id = launcher.coin().coin_id();
 
                 println!(
                     "  Handle {} will be represented by NFT {}",
@@ -413,7 +374,7 @@ pub async fn xchandles_continue_launch(
                 );
 
                 let metadata = metadata_for_handle_nft(
-                    handle_info,
+                    handle_info.clone(),
                     (i + index) as u64,
                     handles_to_launch.len() as u64,
                 );
@@ -440,7 +401,53 @@ pub async fn xchandles_continue_launch(
                 security_coin_conditions = security_coin_conditions
                     .create_coin(SINGLETON_LAUNCHER_HASH.into(), launcher_amount, hint)
                     .extend(sec_conditions);
+
+                // Create precommitment coin
+                let handle_reg_price =
+                    XchandlesFactorPricingPuzzleArgs::get_price(1, &handle_info.handle, 1);
+
+                let precommit_value = precommit_value_for_handle(
+                    &handle_info,
+                    launcher_id,
+                    payment_asset_id,
+                    start_time,
+                    registration_period,
+                )?;
+                let precommit_value_ptr = ctx.alloc(&precommit_value)?;
+                let precommit_value_hash = ctx.tree_hash(precommit_value_ptr);
+
+                let inner_puzzle_hash = PrecommitLayer::<XchandlesPrecommitValue>::puzzle_hash(
+                    SingletonStruct::new(constants.launcher_id)
+                        .tree_hash()
+                        .into(),
+                    constants.relative_block_height,
+                    constants.precommit_payout_puzzle_hash,
+                    Bytes32::default(),
+                    precommit_value_hash,
+                );
+
+                cat_creator_conds = cat_creator_conds.create_coin(
+                    inner_puzzle_hash.into(),
+                    handle_reg_price,
+                    ctx.hint(inner_puzzle_hash.into())?,
+                );
             }
+
+            // Spend offered CAT
+            let cat_destination_puzzle = ctx.alloc_hashed(&clvm_quote!(cat_creator_conds))?;
+            let cat_destination_puzzle_hash: Bytes32 = cat_destination_puzzle.tree_hash().into();
+
+            let (created_cats, cat_assert) = spend_settlement_cats(
+                &mut ctx,
+                &offer,
+                payment_asset_id,
+                launcher_id,
+                &[(cat_destination_puzzle_hash, handles_payment_total)],
+            )?;
+
+            let created_cat = created_cats[0];
+            security_coin_conditions =
+                cat_assert.assert_concurrent_spend(created_cat.coin.coin_id());
 
             // Spend security coin
             let security_coin_sig = spend_security_coin(
@@ -467,7 +474,7 @@ pub async fn xchandles_continue_launch(
                     prev_coin_id: created_cat.coin.coin_id(),
                     prev_subtotal: 0,
                     extra_delta: 0,
-                    p2_spend: Spend::new(cat_destination_puzzle_ptr, NodePtr::NIL),
+                    p2_spend: Spend::new(cat_destination_puzzle.ptr(), NodePtr::NIL),
                     revoke: false,
                 },
             )?;
