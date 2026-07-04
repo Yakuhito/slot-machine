@@ -374,13 +374,22 @@ pub async fn xchandles_continue_launch(
             let mut cat_creator_conds = Conditions::new();
 
             for (index, handle_info) in handle_infos.into_iter().enumerate() {
+                // unique hint per deployment to minimize confusions
+                let hint: Bytes32 = (
+                    registry.info.constants.launcher_id,
+                    handle_info.handle.tree_hash(),
+                )
+                    .tree_hash()
+                    .into();
+                let hint = ctx.hint(hint)?;
+
                 // Launch eve NFT
                 let launcher_amount = (index * 2) as u64;
-                let launcher = Launcher::new(security_coin.coin_id(), launcher_amount);
+                let launcher = Launcher::with_memos(security_coin.coin_id(), launcher_amount, hint);
                 let launcher_id = launcher.coin().coin_id();
 
                 println!(
-                    "  Handle {} will be represented by NFT {}",
+                    "Handle {} will be represented by NFT {}",
                     handle_info.handle,
                     encode_nft(launcher.coin().coin_id())?
                 );
@@ -401,18 +410,7 @@ pub async fn xchandles_continue_launch(
                     royalty_basis_points,
                 )?;
 
-                // unique hint per deployment to minimize confusions
-                let hint: Bytes32 = (
-                    registry.info.constants.launcher_id,
-                    handle_info.handle.tree_hash(),
-                )
-                    .tree_hash()
-                    .into();
-                let hint = ctx.hint(hint)?;
-
-                security_coin_conditions = security_coin_conditions
-                    .create_coin(SINGLETON_LAUNCHER_HASH.into(), launcher_amount, hint)
-                    .extend(sec_conditions);
+                security_coin_conditions = security_coin_conditions.extend(sec_conditions);
 
                 // Create precommitment coin
                 let handle_reg_price =
@@ -458,8 +456,9 @@ pub async fn xchandles_continue_launch(
             )?;
 
             let created_cat = created_cats[0];
-            security_coin_conditions =
-                cat_assert.assert_concurrent_spend(created_cat.coin.coin_id());
+            security_coin_conditions = security_coin_conditions
+                .extend(cat_assert)
+                .assert_concurrent_spend(created_cat.coin.coin_id());
 
             // Spend security coin
             let security_coin_sig = spend_security_coin(
