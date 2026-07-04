@@ -1,9 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use chia_protocol::{Bytes32, Coin, SpendBundle};
+use chia_protocol::{Bytes32, Coin, CoinSpend, SpendBundle};
 use chia_puzzle_types::{
-    cat::CatArgs, nft::NftMetadata, singleton::SingletonStruct, CoinProof, EveProof, LineageProof,
-    Proof,
+    cat::CatArgs,
+    nft::{NftMetadata, NftOwnershipLayerSolution, NftStateLayerSolution},
+    singleton::{SingletonSolution, SingletonStruct},
+    standard::StandardSolution,
+    CoinProof, EveProof, LineageProof, Proof,
 };
 use chia_puzzles::SINGLETON_LAUNCHER_HASH;
 use chia_wallet_sdk::{
@@ -11,8 +14,8 @@ use chia_wallet_sdk::{
     driver::{
         create_security_coin, decode_offer, spend_security_coin, spend_settlement_cats, CatLayer,
         CatalogPrecommitValue, Launcher, Layer, Nft, NftInfo, Offer, PrecommitCoin, PrecommitLayer,
-        Puzzle, SingleCatSpend, SingletonInfo, Spend, SpendContext, XchandlesPrecommitValue,
-        XchandlesRegisterAction,
+        Puzzle, SingleCatSpend, SingletonInfo, Spend, SpendContext, StandardLayer,
+        XchandlesPrecommitValue, XchandlesRegisterAction,
     },
     types::{
         puzzles::{
@@ -28,9 +31,9 @@ use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
     assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction, encode_nft,
-    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, load_xchandles_premine_csv,
-    no_assets, parse_amount, sync_xchandles, yes_no_prompt, CliError, Db, SageClient,
-    XchandlesPremineRecord,
+    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, hex_string_to_pubkey,
+    hex_string_to_signature, load_xchandles_premine_csv, no_assets, parse_amount, sync_xchandles,
+    yes_no_prompt, CliError, Db, SageClient, XchandlesPremineRecord,
 };
 
 fn precommit_value_for_handle(
@@ -517,6 +520,7 @@ pub async fn xchandles_continue_launch(
     println!("Fetching eve NFTs for handles...");
 
     let mut eve_nfts = Vec::with_capacity(handles.len());
+    let mut destination_puzzle_hashes = Vec::with_capacity(handles.len());
 
     for (index, handle) in handles.iter().enumerate() {
         let Some(eve_nft) = eve_nft_for_handle(
@@ -540,6 +544,7 @@ pub async fn xchandles_continue_launch(
         };
 
         eve_nfts.push(eve_nft);
+        destination_puzzle_hashes.push(handle.recipient);
     }
 
     // check if precommitment coins are available and have the appropriate age
@@ -707,7 +712,12 @@ pub async fn xchandles_continue_launch(
     let (security_coin_sk, security_coin) =
         create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
+    let eve_nft_temp_pubkey = hex_string_to_pubkey(&derivation_resp.derivations[0].public_key)?;
+    let eve_nft_temp_p2 = StandardLayer::new(eve_nft_temp_pubkey);
+
     let mut security_coin_conditions = Conditions::new().reserve_fee(1);
+
+    let mut nft_coin_spends = Vec::with_capacity(precommit_values.len());
 
     for (i, precommit_value) in precommit_values.iter().enumerate() {
         let precommit_ph = precommit_puzzle_hashes[i];
@@ -762,11 +772,54 @@ pub async fn xchandles_continue_launch(
             nft_conds = nft_conds.extend(resolved_message_conds);
         }
 
-        todo!("Transfer eve NFT to intended owner, sign");
-        // eve_nfts[i].transfer(&mut ctx, inner, p2_puzzle_hash, nft_conds);
+        let eve_nft = eve_nfts[i];
+        let eve_nft_layers = eve_nft.info.into_layers(eve_nft_temp_p2);
 
+        let hint = ctx.hint(destination_puzzle_hashes[i])?;
+        let delegated_puzzle = ctx.alloc(&clvm_quote!(nft_conds.create_coin(
+            destination_puzzle_hashes[i],
+            1,
+            hint
+        )))?;
+
+        let eve_nft_spend = eve_nft_layers.construct_spend(
+            &mut ctx,
+            SingletonSolution {
+                lineage_proof: eve_nft.proof,
+                amount: eve_nft.coin.amount,
+                inner_solution: NftStateLayerSolution {
+                    inner_solution: NftOwnershipLayerSolution {
+                        inner_solution: StandardSolution {
+                            original_public_key: None,
+                            delegated_puzzle,
+                            solution: NodePtr::NIL,
+                        },
+                    },
+                },
+            },
+        )?;
+
+        let eve_nft_spend_puzzle = ctx.serialize(&eve_nft_spend.puzzle)?;
+        let eve_nft_spend_solution = ctx.serialize(&eve_nft_spend.solution)?;
+        let eve_nft_coin_spend =
+            CoinSpend::new(eve_nft.coin, eve_nft_spend_puzzle, eve_nft_spend_solution);
+
+        ctx.insert(eve_nft_coin_spend.clone());
+        nft_coin_spends.push(eve_nft_coin_spend);
+
+        // no need to assert NFT being spent as register won't go through without the NFT
+        //  approving registration via message
         security_coin_conditions = security_coin_conditions.extend(register_conds);
     }
+
+    // Get signature required to spend eve NFTs
+    let nft_sig = hex_string_to_signature(
+        &sage
+            .sign_coin_spends(nft_coin_spends, false, true)
+            .await?
+            .spend_bundle
+            .aggregated_signature,
+    )?;
 
     let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;
 
@@ -784,7 +837,7 @@ pub async fn xchandles_continue_launch(
 
     let sb = offer.take(SpendBundle::new(
         ctx.take(),
-        security_coin_sig + &pending_sig,
+        security_coin_sig + &pending_sig + &nft_sig,
     ));
 
     println!("Submitting transaction...");
