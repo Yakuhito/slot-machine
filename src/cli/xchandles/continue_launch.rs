@@ -867,6 +867,16 @@ pub async fn xchandles_continue_launch(
     ));
 
     let _ = print_spend_bundle_to_file(&sb, "sb.debug")?; // todo: debug
+    for cs in &sb.coin_spends {
+        // todo: debug ----------
+        let coin_id = cs.coin.coin_id();
+        let record = client.get_coin_record_by_name(coin_id).await?;
+        let mut spent = false;
+        if let Some(record) = record.coin_record {
+            spent = record.spent;
+        }
+        println!("coin_id: {:?}; spent: {:?}", coin_id, spent); // todo: debug
+    } // todo: debug ------
 
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
