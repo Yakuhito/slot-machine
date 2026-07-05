@@ -289,7 +289,7 @@ enum CatalogCliAction {
         testnet11: bool,
     },
     /// Sign a CATalog state update transaction
-    SignCatalogStateUpdate {
+    SignStateUpdate {
         /// New payment asset id
         #[arg(long)]
         new_payment_asset_id: String,
@@ -315,7 +315,7 @@ enum CatalogCliAction {
         debug: bool,
     },
     /// Broadcast a CATalog state update transaction
-    BroadcastCatalogStateUpdate {
+    BroadcastStateUpdate {
         /// New payment asset id
         #[arg(long)]
         new_payment_asset_id: String,
@@ -1121,7 +1121,7 @@ pub async fn run_cli() {
                 .await
             }
             CatalogCliAction::Listen { testnet11 } => catalog_listen(testnet11).await,
-            CatalogCliAction::SignCatalogStateUpdate {
+            CatalogCliAction::SignStateUpdate {
                 new_payment_asset_id,
                 new_payment_asset_amount,
                 my_pubkey,
@@ -1139,7 +1139,7 @@ pub async fn run_cli() {
                 )
                 .await
             }
-            CatalogCliAction::BroadcastCatalogStateUpdate {
+            CatalogCliAction::BroadcastStateUpdate {
                 new_payment_asset_id,
                 new_payment_asset_amount,
                 sigs,
