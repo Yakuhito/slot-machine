@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
 
-use crate::{reward_distributor_stake, reward_distributor_unstake, xchandles_execute_update};
+use crate::{
+    reward_distributor_stake, reward_distributor_unstake, xchandles_broadcast_state_update,
+    xchandles_execute_update, xchandles_sign_state_update,
+};
 
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
@@ -694,6 +697,98 @@ enum XchandlesCliAction {
         #[arg(long, default_value = "31557600")]
         registration_period: Option<u64>,
     },
+    /// Signs a proposed state update for an XCHandles registry
+    SignStateUpdate {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// New payment asset id
+        #[arg(long)]
+        new_payment_asset_id: String,
+
+        /// New payment CAT base price
+        #[arg(long)]
+        new_payment_cat_base_price: String,
+
+        /// New registration base period in seconds
+        #[arg(long, default_value = "31557600")]
+        new_registration_period: u64,
+
+        /// Current payment asset id hint (for current state verification)
+        #[arg(long)]
+        payment_asset_id: Option<String>,
+
+        /// Current payment CAT base price hint (for current state verification)
+        #[arg(long)]
+        payment_cat_base_price: Option<String>,
+
+        /// Current registration base period in seconds (for current state verification)
+        #[arg(long, default_value = "31557600")]
+        registration_period: Option<u64>,
+
+        /// My public key
+        #[arg(long)]
+        my_pubkey: String,
+
+        /// Multisig/price singleton launcher id
+        #[arg(long)]
+        multisig_launcher_id: String,
+
+        /// Testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Debug signing mode
+        #[arg(long, default_value_t = false)]
+        debug: bool,
+    },
+    /// Broadcasts a state update for an XCHandles registry
+    BroadcastStateUpdate {
+        /// XCHandles (sub)registry launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// New payment asset id
+        #[arg(long)]
+        new_payment_asset_id: String,
+
+        /// New payment CAT base price
+        #[arg(long)]
+        new_payment_cat_base_price: String,
+
+        /// New registration base period in seconds
+        #[arg(long, default_value = "31557600")]
+        new_registration_period: u64,
+
+        /// Current payment asset id hint (for current state verification)
+        #[arg(long)]
+        payment_asset_id: Option<String>,
+
+        /// Current payment CAT base price hint (for current state verification)
+        #[arg(long)]
+        payment_cat_base_price: Option<String>,
+
+        /// Current registration base period in seconds (for current state verification)
+        #[arg(long, default_value = "31557600")]
+        registration_period: Option<u64>,
+
+        /// Multisig/price singleton launcher id
+        #[arg(long)]
+        multisig_launcher_id: String,
+
+        /// Signatures from signers
+        #[arg(long)]
+        signatures: String,
+
+        /// Testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1358,6 +1453,62 @@ pub async fn run_cli() {
                     payment_asset_id,
                     payment_cat_base_price,
                     registration_period,
+                )
+                .await
+            }
+            XchandlesCliAction::SignStateUpdate {
+                launcher_id,
+                new_payment_asset_id,
+                new_payment_cat_base_price,
+                new_registration_period,
+                payment_asset_id,
+                payment_cat_base_price,
+                registration_period,
+                my_pubkey,
+                multisig_launcher_id,
+                testnet11,
+                debug,
+            } => {
+                xchandles_sign_state_update(
+                    launcher_id,
+                    new_payment_asset_id,
+                    new_payment_cat_base_price,
+                    new_registration_period,
+                    payment_asset_id,
+                    payment_cat_base_price,
+                    registration_period,
+                    my_pubkey,
+                    multisig_launcher_id,
+                    testnet11,
+                    debug,
+                )
+                .await
+            }
+            XchandlesCliAction::BroadcastStateUpdate {
+                launcher_id,
+                new_payment_asset_id,
+                new_payment_cat_base_price,
+                new_registration_period,
+                payment_asset_id,
+                payment_cat_base_price,
+                registration_period,
+                multisig_launcher_id,
+                signatures,
+                testnet11,
+                fee,
+            } => {
+                xchandles_broadcast_state_update(
+                    launcher_id,
+                    new_payment_asset_id,
+                    new_payment_cat_base_price,
+                    new_registration_period,
+                    payment_asset_id,
+                    payment_cat_base_price,
+                    registration_period,
+                    multisig_launcher_id,
+                    signatures,
+                    testnet11,
+                    fee,
                 )
                 .await
             }
