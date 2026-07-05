@@ -1,11 +1,12 @@
+use chia_bls::Signature;
 use chia_protocol::{Bytes32, SpendBundle};
 use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
-        create_security_coin, decode_offer, spend_security_coin, CatLayer, DriverError, Layer,
-        Offer, PrecommitCoin, PrecommitLayer, Puzzle, Slot, SpendContext,
-        XchandlesExpirePricingPuzzle, XchandlesPrecommitValue, XchandlesRefundAction,
+        create_security_coin, decode_offer, spend_security_coin, Asset, CatLayer, DriverError,
+        Layer, Nft, Offer, PrecommitCoin, PrecommitLayer, Puzzle, SingletonInfo, Slot,
+        SpendContext, XchandlesExpirePricingPuzzle, XchandlesPrecommitValue, XchandlesRefundAction,
         XchandlesRegisterAction,
     },
     types::{
@@ -257,9 +258,59 @@ pub async fn xchandles_register(
             payment_cat_amount,
         )?;
 
-        println!("Fetching your NFT's info...");
+        let nft_and_p2 = if !refund {
+            println!("Fetching your NFT's info...");
 
-        todo!();
+            let Some(nft_info) = sage.get_nft(nft).await?.nft else {
+                return Err(CliError::Custom(
+                    "Failed to fetch NFT info from your wallet - do you own the NFT?".to_string(),
+                ));
+            };
+
+            println!("Parsing on-chain NFT...");
+
+            let nft_coin_id = hex_string_to_bytes32(&nft_info.coin_id)?;
+            let nft_coin_record = cli
+                .get_coin_record_by_name(nft_coin_id)
+                .await?
+                .coin_record
+                .ok_or(CliError::CoinNotFound(nft_coin_id))?;
+            let parent_coin_spend = cli
+                .get_puzzle_and_solution(
+                    nft_coin_record.coin.parent_coin_info,
+                    Some(nft_coin_record.confirmed_block_index),
+                )
+                .await?
+                .coin_solution
+                .ok_or(CliError::CoinNotSpent(
+                    nft_coin_record.coin.parent_coin_info,
+                ))?;
+
+            let parent_puzzle_ptr = ctx.alloc(&parent_coin_spend.puzzle_reveal)?;
+            let parent_puzzle = Puzzle::parse(&ctx, parent_puzzle_ptr);
+            let parent_solution_ptr = ctx.alloc(&parent_coin_spend.solution)?;
+
+            let Some(nft) = Nft::parse_child(
+                &mut ctx,
+                parent_coin_spend.coin,
+                parent_puzzle,
+                parent_solution_ptr,
+            )?
+            else {
+                return Err(CliError::Custom(
+                    "Failed to parse NFT from on-chain data".to_string(),
+                ));
+            };
+
+            assert_eq!(
+                nft.p2_puzzle_hash(),
+                Address::decode(&nft_info.address)?.puzzle_hash
+            );
+
+            Some((nft, p2_layer))
+        } else {
+            None
+        };
 
         println!("A one-sided offer will be created; it will consume:");
         println!("  - 1 mojo");
@@ -284,7 +335,7 @@ pub async fn xchandles_register(
             registration_period,
         }
         .curry_tree_hash();
-        let sec_conds = if refund {
+        let (sec_conds, sig) = if refund {
             let slot: Option<Slot<XchandlesHandleSlotValue>> = if DefaultCatMakerArgs::new(
                 payment_asset_id.tree_hash().into(),
             )
@@ -332,17 +383,20 @@ pub async fn xchandles_register(
             };
 
             let precommitted_pricing_solution = ctx.alloc(&pricing_solution)?;
-            registry
-                .new_action::<XchandlesRefundAction>()
-                .spend(
-                    &mut ctx,
-                    &mut registry,
-                    &precommit_coin,
-                    precommitted_pricing_puzzle,
-                    precommitted_pricing_solution,
-                    slot,
-                )?
-                .reserve_fee(1)
+            (
+                registry
+                    .new_action::<XchandlesRefundAction>()
+                    .spend(
+                        &mut ctx,
+                        &mut registry,
+                        &precommit_coin,
+                        precommitted_pricing_puzzle,
+                        precommitted_pricing_solution,
+                        slot,
+                    )?
+                    .reserve_fee(1),
+                Signature::default(),
+            )
         } else {
             let (left_slot, right_slot) = if local {
                 db.get_xchandles_neighbors(&mut ctx, launcher_id, handle.tree_hash().into())
@@ -354,6 +408,9 @@ pub async fn xchandles_register(
                     .await?
             };
 
+            let (nft, p2_layer) = nft_and_p2.unwrap();
+            let nft_inner_ph = nft.info.inner_puzzle_hash();
+
             let (register_conds, owner_message_conds, resolved_message_conds) =
                 registry.new_action::<XchandlesRegisterAction>().spend(
                     &mut ctx,
@@ -364,14 +421,21 @@ pub async fn xchandles_register(
                     payment_cat_base_price,
                     registration_period,
                     start_time,
-                    Bytes32::default(),
-                    Bytes32::default(),
+                    nft_inner_ph.into(),
+                    nft_inner_ph.into(),
                 )?;
-            let mut all_conds = register_conds.extend(owner_message_conds);
+
+            let mut nft_conds = owner_message_conds;
             if let Some(resolved_message_conds) = resolved_message_conds {
-                all_conds = all_conds.extend(resolved_message_conds);
+                nft_conds = nft_conds.extend(resolved_message_conds);
             }
-            all_conds
+
+            let nft_p2_ph = nft.p2_puzzle_hash();
+            nft_conds = nft_conds.create_coin(nft.p2_puzzle_hash(), 1, ctx.hint(nft_p2_ph)?);
+
+            let nft_layers = nft.info.into_layers(p2_layer)?;
+
+            (register_conds, sig)
         };
 
         let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;
