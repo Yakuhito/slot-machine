@@ -90,23 +90,6 @@ pub async fn xchandles_execute_update(
     .await?;
     println!("done.");
 
-    println!("A one-sided offer will be created; it will consume:");
-    println!("  - 1 mojo");
-    println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
-    println!("For security, your two NFTs (current owner and new owner) will be spent separately and re-created into your wallet.");
-
-    yes_no_prompt("Continue with update execution?")?;
-
-    let offer_resp = sage
-        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
-        .await?;
-
-    println!("Offer with id {} generated.", offer_resp.offer_id);
-
-    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
-    let (security_coin_sk, security_coin) =
-        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
-
     loop {
         let resp = cli.get_blockchain_state().await?;
         let Some(blockchain_state) = resp.blockchain_state else {
@@ -125,6 +108,23 @@ pub async fn xchandles_execute_update(
         );
         tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
     }
+
+    println!("A one-sided offer will be created; it will consume:");
+    println!("  - 1 mojo");
+    println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
+    println!("For security, your two NFTs (current owner and new owner) will be spent separately and re-created into your wallet.");
+
+    yes_no_prompt("Continue with update execution?")?;
+
+    let offer_resp = sage
+        .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
+        .await?;
+
+    println!("Offer with id {} generated.", offer_resp.offer_id);
+
+    let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
+    let (security_coin_sk, security_coin) =
+        create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
     let current_owner_proof = CompactCoinProof {
         parent_coin_info: current_owner_nft.coin.parent_coin_info,
