@@ -161,14 +161,17 @@ impl XchandlesApiClient {
         launcher_id: Bytes32,
         handle_hash: Bytes32,
     ) -> Result<Slot<XchandlesHandleSlotValue>, CliError> {
-        let (left, right) = self.get_neighbors(launcher_id, handle_hash).await?;
-
-        if left.info.value.handle_hash == handle_hash {
-            Ok(left)
-        } else if right.info.value.handle_hash == handle_hash {
-            Ok(right)
-        } else {
-            Err(CliError::SlotNotFound("Handle"))
+        let mut handle_hash_minus_one = handle_hash.to_bytes();
+        let mut index = 31;
+        while handle_hash_minus_one[index] == 0 {
+            index -= 1;
         }
+        handle_hash_minus_one[index] -= 1;
+        let handle_hash_minus_one = Bytes32::from(handle_hash_minus_one);
+
+        Ok(self
+            .get_neighbors(launcher_id, handle_hash_minus_one)
+            .await?
+            .1)
     }
 }

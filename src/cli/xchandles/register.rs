@@ -125,11 +125,10 @@ pub async fn xchandles_register(
         st
     };
 
-    let args = XchandlesExpirePricingPuzzle::from_info(
-        &mut ctx,
-        payment_cat_base_price,
+    let args = XchandlesFactorPricingPuzzleArgs {
+        base_price: payment_cat_base_price,
         registration_period,
-    )?;
+    };
     let precommitted_pricing_puzzle = ctx.curry(args)?;
     let pricing_solution = XchandlesPricingSolution {
         buy_time: start_time,
@@ -153,7 +152,7 @@ pub async fn xchandles_register(
 
     let precommit_value = XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
-        ctx.tree_hash(precommitted_pricing_puzzle),
+        args.curry_tree_hash(),
         &pricing_solution,
         handle.clone(),
         secret,
