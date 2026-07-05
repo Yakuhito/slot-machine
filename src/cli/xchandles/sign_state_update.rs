@@ -14,7 +14,7 @@ use clvm_utils::ToTreeHash;
 
 use crate::{
     get_constants, hex_string_to_bytes32, multisig_sign_thing_finish, multisig_sign_thing_start,
-    parse_amount, quick_sync_xchandles, CliError, Db,
+    parse_amount, print_registry_state, quick_sync_xchandles, CliError, Db,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -35,7 +35,7 @@ pub async fn sync_show_changes_and_compute_new_state(
 
     println!("\nSyncing XCHandles registry... ");
     let mut db = Db::new(true).await?;
-    let registry = quick_sync_xchandles(&client, &mut db, ctx, registry_launcher_id).await?;
+    let registry = quick_sync_xchandles(client, &mut db, ctx, registry_launcher_id).await?;
     println!("Done!");
 
     let new_state = XchandlesRegistryState {
@@ -56,41 +56,19 @@ pub async fn sync_show_changes_and_compute_new_state(
     };
 
     println!("Current registry state:");
-    println!(
-        "  CAT Maker: {}",
-        hex::encode(registry.info.state.cat_maker_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Registration pricing puzzle hash: {}",
-        hex::encode(registry.info.state.pricing_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Expired handle pricing puzzle hash: {}",
-        hex::encode(
-            registry
-                .info
-                .state
-                .expired_handle_pricing_puzzle_hash
-                .to_bytes()
-        )
-    );
-    println!("You'll update the registry state to:");
-    println!(
-        "  CAT Maker: {}",
-        hex::encode(new_state.cat_maker_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Registration pricing puzzle hash: {}",
-        hex::encode(new_state.pricing_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Expired handle pricing puzzle hash: {}",
-        hex::encode(new_state.expired_handle_pricing_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Payment asset id: {}",
-        hex::encode(new_payment_asset_id.to_bytes())
-    );
+    print_registry_state(
+        registry.info.state,
+        payment_asset_id_str,
+        payment_cat_base_price_str,
+        registration_period,
+    )?;
+    println!("New registry state:");
+    print_registry_state(
+        new_state,
+        Some(new_payment_asset_id_str),
+        Some(new_payment_cat_base_price_str),
+        Some(new_registration_period),
+    )?;
 
     Ok((new_state, registry))
 }
