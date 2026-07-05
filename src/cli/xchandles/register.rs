@@ -363,9 +363,11 @@ pub async fn xchandles_register(
         println!("A one-sided offer will be created; it will consume:");
         println!("  - 1 mojo");
         println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
-        println!(
-            "For security, your NFT will be spent separately and re-created into your wallet."
-        );
+        if !refund {
+            println!(
+                "For security, your NFT will be spent separately and re-created into your wallet."
+            );
+        }
         yes_no_prompt("Proceed?")?;
 
         let offer_resp = sage
