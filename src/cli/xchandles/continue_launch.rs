@@ -63,7 +63,7 @@ fn precommit_value_for_handle(
     ))
 }
 
-fn metadata_for_handle_nft(
+pub fn metadata_for_handle_nft(
     handle_info: XchandlesPremineRecord,
     edition_number: u64,
     edition_total: u64,

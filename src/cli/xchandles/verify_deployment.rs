@@ -1,12 +1,15 @@
-use chia_protocol::Bytes32;
-use chia_puzzle_types::singleton::SingletonSolution;
+use chia_protocol::{Bytes, Bytes32, Coin};
+use chia_puzzle_types::singleton::{LauncherSolution, SingletonSolution};
+use chia_puzzle_types::Memos;
 use chia_wallet_sdk::driver::{
-    Layer, XchandlesExpirePricingPuzzle, XchandlesRegistry, XchandlesRegistryState,
+    Layer, Nft, Puzzle, XchandlesExpirePricingPuzzle, XchandlesRegistry,
+    XchandlesRegistryReceivedMessagePrefix, XchandlesRegistryState,
 };
 use chia_wallet_sdk::types::puzzles::{
     DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesRegisterActionSolution,
 };
-use chia_wallet_sdk::types::Mod;
+use chia_wallet_sdk::types::{Condition, Conditions, Mod};
+use chia_wallet_sdk::utils::Address;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{ActionLayer, SpendContext},
@@ -15,9 +18,9 @@ use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, load_xchandles_premine_csv,
-    load_xchandles_state_schedule_csv, print_medieval_vault_configuration, CliError,
-    MultisigSingleton,
+    get_coinset_client, get_prefix, hex_string_to_bytes32, load_xchandles_premine_csv,
+    load_xchandles_state_schedule_csv, metadata_for_handle_nft, print_medieval_vault_configuration,
+    CliError, MultisigSingleton,
 };
 
 use crate::sync_multisig_singleton;
@@ -93,6 +96,9 @@ pub async fn xchandles_verify_deployment(
     );
 
     let mut handle_index = 0;
+    let mut royalty_puzzle_hash: Option<Bytes32> = None;
+    let mut royalty_basis_points: Option<u16> = None;
+    let mut eve_nft_temp_inner_ph: Option<Bytes32> = None;
 
     while handle_index < handles_to_launch.len() {
         let Some(coin_record) = cli
@@ -126,15 +132,12 @@ pub async fn xchandles_verify_deployment(
                 NodePtr,
             >>(action_spend.solution)?;
 
-            let nft_launcher_id = Bytes32::default();
-            // Address::decode(&handles_to_launch[handle_index].owner_nft)?.puzzle_hash;
+            let nft_launcher_id = action_solution
+                .other_precommit_data
+                .launcher_ids
+                .owner_launcher_id;
             if action_solution.handle_hash
                 != handles_to_launch[handle_index].handle.tree_hash().into()
-                || action_solution
-                    .other_precommit_data
-                    .launcher_ids
-                    .owner_launcher_id
-                    != nft_launcher_id
                 || action_solution
                     .other_precommit_data
                     .launcher_ids
@@ -143,6 +146,174 @@ pub async fn xchandles_verify_deployment(
             {
                 return Err(CliError::Custom(format!(
                     "Wrong handle registered at index {}",
+                    handle_index
+                )));
+            }
+
+            let Some(launcher_coin_record) = cli
+                .get_coin_record_by_name(nft_launcher_id)
+                .await?
+                .coin_record
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not fetch record for launcher coin {}",
+                    hex::encode(nft_launcher_id)
+                )));
+            };
+
+            let Some(launcher_spend) = cli
+                .get_puzzle_and_solution(
+                    nft_launcher_id,
+                    Some(launcher_coin_record.spent_block_index),
+                )
+                .await?
+                .coin_solution
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not fetch coin spend for launcher coin {}",
+                    hex::encode(nft_launcher_id)
+                )));
+            };
+
+            let launcher_solution = ctx.alloc(&launcher_spend.solution)?;
+            let launcher_solution = ctx.extract::<LauncherSolution<NodePtr>>(launcher_solution)?;
+
+            let eve_nft_coin =
+                Coin::new(nft_launcher_id, launcher_solution.singleton_puzzle_hash, 1);
+
+            let Some(eve_nft_record) = cli
+                .get_coin_record_by_name(eve_nft_coin.coin_id())
+                .await?
+                .coin_record
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not fetch record for eve nft coin {}",
+                    hex::encode(eve_nft_coin.coin_id())
+                )));
+            };
+
+            let Some(eve_nft_spend) = cli
+                .get_puzzle_and_solution(
+                    eve_nft_coin.coin_id(),
+                    Some(eve_nft_record.spent_block_index),
+                )
+                .await?
+                .coin_solution
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not fetch coin spend for eve nft coin {}",
+                    hex::encode(eve_nft_coin.coin_id())
+                )));
+            };
+
+            let puzzle_ptr = ctx.alloc(&eve_nft_spend.puzzle_reveal)?;
+            let puzzle = Puzzle::parse(&ctx, puzzle_ptr);
+            let solution_ptr = ctx.alloc(&eve_nft_spend.solution)?;
+
+            let Some((eve_nft, inner_puzzle, inner_solution_ptr)) =
+                Nft::parse(&ctx, eve_nft_coin, puzzle, solution_ptr)?
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not parse eve nft coin {}",
+                    hex::encode(eve_nft_coin.coin_id())
+                )));
+            };
+
+            // First, verify NFT info, starting from constants 'deduced' from the first NFT.
+
+            if royalty_puzzle_hash.is_none() {
+                println!(
+                    " Royalty address: {}",
+                    Address::new(eve_nft.info.royalty_puzzle_hash, get_prefix(testnet11))
+                        .encode()?
+                );
+                royalty_puzzle_hash = Some(eve_nft.info.royalty_puzzle_hash);
+            } else if royalty_puzzle_hash != Some(eve_nft.info.royalty_puzzle_hash) {
+                return Err(CliError::Custom(format!(
+                    "Royalty puzzle hash mismatch for handle #{}",
+                    handle_index
+                )));
+            }
+
+            if royalty_basis_points.is_none() {
+                println!(
+                    " Royalty basis points: {} BPS",
+                    eve_nft.info.royalty_basis_points
+                );
+                royalty_basis_points = Some(eve_nft.info.royalty_basis_points);
+            } else if royalty_basis_points != Some(eve_nft.info.royalty_basis_points) {
+                return Err(CliError::Custom(format!(
+                    "Royalty basis points mismatch for handle #{}",
+                    handle_index
+                )));
+            }
+
+            let inner_puzzle_hash: Bytes32 = inner_puzzle.tree_hash().into();
+            if eve_nft_temp_inner_ph.is_none() {
+                println!(
+                    " Temporary eve NFT address: {}",
+                    Address::new(inner_puzzle_hash, get_prefix(testnet11)).encode()?
+                );
+                eve_nft_temp_inner_ph = Some(inner_puzzle_hash);
+            } else if eve_nft_temp_inner_ph != Some(inner_puzzle_hash) {
+                return Err(CliError::Custom(format!(
+                    "Inner puzzle hash mismatch for handle #{}",
+                    handle_index
+                )));
+            }
+
+            // Then, check metadata.
+            let expected_metadata_hash = metadata_for_handle_nft(
+                handles_to_launch[handle_index].clone(),
+                handle_index as u64,
+                handles_to_launch.len() as u64,
+            )
+            .tree_hash();
+            if expected_metadata_hash != eve_nft.info.metadata.tree_hash() {
+                return Err(CliError::Custom(format!(
+                    "Metadata hash mismatch for handle #{}",
+                    handle_index
+                )));
+            }
+
+            // Lastly, check p2 output only contains the SEND_MESSAGE to the registry
+            //   as well as the correct re-creation condition.
+            let p2_output = ctx.run(inner_puzzle.ptr(), inner_solution_ptr)?;
+            let p2_output = ctx.extract::<Conditions<Bytes>>(p2_output)?;
+            let p2_output = p2_output.into_vec();
+
+            if p2_output.len() != 2 {
+                return Err(CliError::Custom(format!(
+                    "P2 output contains {} conditions, expected 2 for handle #{}",
+                    p2_output.len(),
+                    handle_index
+                )));
+            }
+
+            let target_ph = handles_to_launch[handle_index].recipient;
+            let target_memo = Memos::Some(target_ph.into());
+            if p2_output[1] != Condition::create_coin(target_ph, 1, target_memo) {
+                return Err(CliError::Custom(format!(
+                    "P2 output does not contain the correct recreation condition for handle #{}",
+                    handle_index
+                )));
+            }
+
+            let Condition::<Bytes>::SendMessage(ref send_message) = p2_output[0] else {
+                return Err(CliError::Custom(format!(
+                    "P2 output does not contain the correct send message condition for handle #{}",
+                    handle_index
+                )));
+            };
+
+            if send_message.mode != 18
+                || send_message.message[0]
+                    != XchandlesRegistryReceivedMessagePrefix::RegisterOwner as u8
+                || send_message.data.len() != 1
+                || send_message.data[0] != registry.coin.puzzle_hash.into()
+            {
+                return Err(CliError::Custom(format!(
+                    "P2 send message mode mismatch for handle #{}",
                     handle_index
                 )));
             }
