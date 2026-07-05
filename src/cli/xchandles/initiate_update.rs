@@ -85,10 +85,9 @@ pub async fn xchandles_initiate_update(
     let min_height = min_height.unwrap_or(peak_height + 1);
 
     println!("Handle: {}", handle);
-    println!(
-        "Current owner: {}",
-        Address::new(slot.info.value.owner_launcher_id, "nft".to_string()).encode()?
-    );
+    let current_owner_nft =
+        Address::new(slot.info.value.owner_launcher_id, "nft".to_string()).encode()?;
+    println!("Current owner: {}", current_owner_nft);
     println!(
         "Current resolved launcher id: {}",
         Address::new(slot.info.value.resolved_launcher_id, "nft".to_string()).encode()?
@@ -97,7 +96,7 @@ pub async fn xchandles_initiate_update(
     println!("Minimum height: {}", min_height);
     println!("NFT return address: {}", return_address);
 
-    let (nft, p2_layer) = fetch_nft_from_wallet(&mut ctx, &sage, &cli, new_nft).await?;
+    let (nft, p2_layer) = fetch_nft_from_wallet(&mut ctx, &sage, &cli, current_owner_nft).await?;
 
     println!("A one-sided offer will be created; it will consume:");
     println!("  - 1 mojo");
