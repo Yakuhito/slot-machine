@@ -454,7 +454,7 @@ enum XchandlesCliAction {
         #[arg(long)]
         handle: String,
 
-        /// NFT (nft1...) to register the handle to
+        /// NFT (nft1...) to register the handle to (must be in active wallet)
         #[arg(long)]
         nft: String,
 

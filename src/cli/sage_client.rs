@@ -2,9 +2,9 @@ use chia_protocol::CoinSpend;
 use dirs::data_dir;
 use reqwest::Identity;
 use sage_api::{
-    Amount, CoinJson, CoinSpendJson, GetDerivations, GetDerivationsResponse, MakeOffer,
-    MakeOfferResponse, OfferAmount, SendCat, SendCatResponse, SendXch, SendXchResponse,
-    SignCoinSpends, SignCoinSpendsResponse,
+    Amount, CoinJson, CoinSpendJson, GetDerivations, GetDerivationsResponse, GetNft,
+    GetNftResponse, MakeOffer, MakeOfferResponse, OfferAmount, SendCat, SendCatResponse, SendXch,
+    SendXchResponse, SignCoinSpends, SignCoinSpendsResponse,
 };
 use thiserror::Error;
 
@@ -120,6 +120,27 @@ impl SageClient {
         }
 
         let response_body = response.json::<GetDerivationsResponse>().await?;
+        Ok(response_body)
+    }
+
+    pub async fn get_nft(&self, nft_id: String) -> Result<GetNftResponse, ClientError> {
+        let url = format!("{}/get_nft", self.base_url);
+        let response = self
+            .client
+            .post(&url)
+            .json(&GetNft { nft_id })
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(ClientError::InvalidResponse(format!(
+                "Status: {}, Body: {:?}",
+                response.status(),
+                response.text().await?
+            )));
+        }
+
+        let response_body = response.json::<GetNftResponse>().await?;
         Ok(response_body)
     }
 
