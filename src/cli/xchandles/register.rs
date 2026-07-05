@@ -8,7 +8,7 @@ use chia_puzzle_types::{
     LineageProof,
 };
 use chia_wallet_sdk::{
-    coinset::ChiaRpcClient,
+    coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
         create_security_coin, decode_offer, spend_security_coin, Asset, CatLayer, DriverError,
         Layer, Nft, Offer, PrecommitCoin, PrecommitLayer, Puzzle, SingletonInfo, Slot,
@@ -20,7 +20,7 @@ use chia_wallet_sdk::{
             DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesHandleSlotValue,
             XchandlesPricingSolution, XchandlesSlotNonce,
         },
-        Mod,
+        Conditions, Mod,
     },
     utils::Address,
 };
@@ -35,6 +35,151 @@ use crate::{
     quick_sync_xchandles, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
     XchandlesApiClient,
 };
+
+pub async fn fetch_nft_from_wallet(
+    ctx: &mut SpendContext,
+    sage: &SageClient,
+    cli: &CoinsetClient,
+    nft: String,
+) -> Result<(Nft, StandardLayer), CliError> {
+    println!("Fetching your NFT's info...");
+
+    let Some(nft_info) = sage.get_nft(nft).await?.nft else {
+        return Err(CliError::Custom(
+            "Failed to fetch NFT info from your wallet - do you own the NFT?".to_string(),
+        ));
+    };
+
+    println!("Parsing on-chain NFT...");
+
+    let nft_coin_id = hex_string_to_bytes32(&nft_info.coin_id)?;
+    let nft_coin_record = cli
+        .get_coin_record_by_name(nft_coin_id)
+        .await?
+        .coin_record
+        .ok_or(CliError::CoinNotFound(nft_coin_id))?;
+    let parent_coin_spend = cli
+        .get_puzzle_and_solution(
+            nft_coin_record.coin.parent_coin_info,
+            Some(nft_coin_record.confirmed_block_index),
+        )
+        .await?
+        .coin_solution
+        .ok_or(CliError::CoinNotSpent(
+            nft_coin_record.coin.parent_coin_info,
+        ))?;
+
+    let parent_puzzle_ptr = ctx.alloc(&parent_coin_spend.puzzle_reveal)?;
+    let parent_puzzle = Puzzle::parse(ctx, parent_puzzle_ptr);
+    let parent_solution_ptr = ctx.alloc(&parent_coin_spend.solution)?;
+
+    let Some(nft) = Nft::parse_child(
+        ctx,
+        parent_coin_spend.coin,
+        parent_puzzle,
+        parent_solution_ptr,
+    )?
+    else {
+        return Err(CliError::Custom(
+            "Failed to parse NFT from on-chain data".to_string(),
+        ));
+    };
+
+    assert_eq!(
+        nft.p2_puzzle_hash(),
+        Address::decode(&nft_info.address)?.puzzle_hash
+    );
+
+    if !sage.check_address(nft_info.address.clone()).await?.valid {
+        return Err(CliError::Custom(
+            "NFT p2 is not in this wallet.".to_string(),
+        ));
+    }
+
+    let mut pubkey = None;
+    let mut offset = 0;
+    let window_size = 100;
+    loop {
+        let derivations_resp = sage.get_derivations(false, offset, window_size).await?;
+        if let Some(key) = derivations_resp
+            .derivations
+            .iter()
+            .find(|d| d.address == nft_info.address)
+        {
+            pubkey = Some(key.public_key.clone());
+            break;
+        }
+
+        if derivations_resp.total < window_size {
+            break;
+        }
+        offset += window_size;
+    }
+
+    let Some(pubkey) = pubkey else {
+        return Err(CliError::Custom(
+            "Could not find public key for NFT p2 puzzle.".to_string(),
+        ));
+    };
+
+    let pubkey = hex_string_to_pubkey(&pubkey)?;
+    let p2_layer = StandardLayer::new(pubkey);
+
+    assert_eq!(
+        StandardArgs::curry_tree_hash(pubkey),
+        nft.p2_puzzle_hash().into()
+    );
+
+    Ok((nft, p2_layer))
+}
+
+pub async fn recreate_nft_in_wallet(
+    ctx: &mut SpendContext,
+    sage: &SageClient,
+    nft: Nft,
+    p2_layer: StandardLayer,
+    extra_conditions: Conditions,
+) -> Result<Signature, CliError> {
+    let nft_p2_ph = nft.p2_puzzle_hash();
+    let extra_conditions =
+        extra_conditions.create_coin(nft.p2_puzzle_hash(), 1, ctx.hint(nft_p2_ph)?);
+
+    let nft_layers = nft.info.into_layers(p2_layer);
+
+    let delegated_puzzle = ctx.alloc(&clvm_quote!(extra_conditions))?;
+    let nft_spend = nft_layers.construct_spend(
+        ctx,
+        SingletonSolution {
+            lineage_proof: nft.proof,
+            amount: nft.coin.amount,
+            inner_solution: NftStateLayerSolution {
+                inner_solution: NftOwnershipLayerSolution {
+                    inner_solution: StandardSolution {
+                        original_public_key: None,
+                        delegated_puzzle,
+                        solution: NodePtr::NIL,
+                    },
+                },
+            },
+        },
+    )?;
+
+    let nft_spend_puzzle = ctx.serialize(&nft_spend.puzzle)?;
+    let nft_spend_solution = ctx.serialize(&nft_spend.solution)?;
+    let nft_coin_spend = CoinSpend::new(nft.coin, nft_spend_puzzle, nft_spend_solution);
+
+    ctx.insert(nft_coin_spend.clone());
+
+    let sig = hex_string_to_signature(
+        &sage
+            .sign_coin_spends(vec![nft_coin_spend], false, true)
+            .await?
+            .spend_bundle
+            .aggregated_signature,
+    )?;
+
+    Ok(sig)
+}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn xchandles_register(
@@ -266,93 +411,7 @@ pub async fn xchandles_register(
         )?;
 
         let nft_and_p2 = if !refund {
-            println!("Fetching your NFT's info...");
-
-            let Some(nft_info) = sage.get_nft(nft).await?.nft else {
-                return Err(CliError::Custom(
-                    "Failed to fetch NFT info from your wallet - do you own the NFT?".to_string(),
-                ));
-            };
-
-            println!("Parsing on-chain NFT...");
-
-            let nft_coin_id = hex_string_to_bytes32(&nft_info.coin_id)?;
-            let nft_coin_record = cli
-                .get_coin_record_by_name(nft_coin_id)
-                .await?
-                .coin_record
-                .ok_or(CliError::CoinNotFound(nft_coin_id))?;
-            let parent_coin_spend = cli
-                .get_puzzle_and_solution(
-                    nft_coin_record.coin.parent_coin_info,
-                    Some(nft_coin_record.confirmed_block_index),
-                )
-                .await?
-                .coin_solution
-                .ok_or(CliError::CoinNotSpent(
-                    nft_coin_record.coin.parent_coin_info,
-                ))?;
-
-            let parent_puzzle_ptr = ctx.alloc(&parent_coin_spend.puzzle_reveal)?;
-            let parent_puzzle = Puzzle::parse(&ctx, parent_puzzle_ptr);
-            let parent_solution_ptr = ctx.alloc(&parent_coin_spend.solution)?;
-
-            let Some(nft) = Nft::parse_child(
-                &mut ctx,
-                parent_coin_spend.coin,
-                parent_puzzle,
-                parent_solution_ptr,
-            )?
-            else {
-                return Err(CliError::Custom(
-                    "Failed to parse NFT from on-chain data".to_string(),
-                ));
-            };
-
-            assert_eq!(
-                nft.p2_puzzle_hash(),
-                Address::decode(&nft_info.address)?.puzzle_hash
-            );
-
-            if !sage.check_address(nft_info.address.clone()).await?.valid {
-                return Err(CliError::Custom(
-                    "NFT p2 is not in this wallet.".to_string(),
-                ));
-            }
-
-            let mut pubkey = None;
-            let mut offset = 0;
-            let window_size = 100;
-            loop {
-                let derivations_resp = sage.get_derivations(false, offset, window_size).await?;
-                if let Some(key) = derivations_resp
-                    .derivations
-                    .iter()
-                    .find(|d| d.address == nft_info.address)
-                {
-                    pubkey = Some(key.public_key.clone());
-                    break;
-                }
-
-                if derivations_resp.total < window_size {
-                    break;
-                }
-                offset += window_size;
-            }
-
-            let Some(pubkey) = pubkey else {
-                return Err(CliError::Custom(
-                    "Could not find public key for NFT p2 puzzle.".to_string(),
-                ));
-            };
-
-            let pubkey = hex_string_to_pubkey(&pubkey)?;
-            let p2_layer = StandardLayer::new(pubkey);
-
-            assert_eq!(
-                StandardArgs::curry_tree_hash(pubkey),
-                nft.p2_puzzle_hash().into()
-            );
+            let (nft, p2_layer) = fetch_nft_from_wallet(&mut ctx, &sage, &cli, nft).await?;
 
             Some((nft, p2_layer))
         } else {
@@ -479,42 +538,7 @@ pub async fn xchandles_register(
                 nft_conds = nft_conds.extend(resolved_message_conds);
             }
 
-            let nft_p2_ph = nft.p2_puzzle_hash();
-            nft_conds = nft_conds.create_coin(nft.p2_puzzle_hash(), 1, ctx.hint(nft_p2_ph)?);
-
-            let nft_layers = nft.info.into_layers(p2_layer);
-
-            let delegated_puzzle = ctx.alloc(&clvm_quote!(nft_conds))?;
-            let nft_spend = nft_layers.construct_spend(
-                &mut ctx,
-                SingletonSolution {
-                    lineage_proof: nft.proof,
-                    amount: nft.coin.amount,
-                    inner_solution: NftStateLayerSolution {
-                        inner_solution: NftOwnershipLayerSolution {
-                            inner_solution: StandardSolution {
-                                original_public_key: None,
-                                delegated_puzzle,
-                                solution: NodePtr::NIL,
-                            },
-                        },
-                    },
-                },
-            )?;
-
-            let nft_spend_puzzle = ctx.serialize(&nft_spend.puzzle)?;
-            let nft_spend_solution = ctx.serialize(&nft_spend.solution)?;
-            let nft_coin_spend = CoinSpend::new(nft.coin, nft_spend_puzzle, nft_spend_solution);
-
-            ctx.insert(nft_coin_spend.clone());
-
-            let sig = hex_string_to_signature(
-                &sage
-                    .sign_coin_spends(vec![nft_coin_spend], false, true)
-                    .await?
-                    .spend_bundle
-                    .aggregated_signature,
-            )?;
+            let sig = recreate_nft_in_wallet(&mut ctx, &sage, nft, p2_layer, nft_conds).await?;
 
             (register_conds, sig)
         };

@@ -30,10 +30,10 @@ use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction, encode_nft,
-    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, hex_string_to_pubkey,
-    hex_string_to_signature, load_xchandles_premine_csv, no_assets, parse_amount, sync_xchandles,
-    yes_no_prompt, CliError, Db, SageClient, XchandlesPremineRecord,
+    assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction, get_last_onchain_timestamp,
+    get_prefix, hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature,
+    load_xchandles_premine_csv, no_assets, parse_amount, sync_xchandles, yes_no_prompt, CliError,
+    Db, SageClient, XchandlesPremineRecord,
 };
 
 fn precommit_value_for_handle(
@@ -386,7 +386,7 @@ pub async fn xchandles_continue_launch(
                 println!(
                     "Handle {} will be represented by NFT {}",
                     handle_info.handle,
-                    encode_nft(launcher.coin().coin_id())?
+                    Address::new(launcher_id, "nft".to_string()).encode()?
                 );
 
                 let metadata = metadata_for_handle_nft(
