@@ -2,9 +2,9 @@ use chia_protocol::CoinSpend;
 use dirs::data_dir;
 use reqwest::Identity;
 use sage_api::{
-    Amount, CoinJson, CoinSpendJson, GetDerivations, GetDerivationsResponse, GetNft,
-    GetNftResponse, MakeOffer, MakeOfferResponse, OfferAmount, SendCat, SendCatResponse, SendXch,
-    SendXchResponse, SignCoinSpends, SignCoinSpendsResponse,
+    Amount, CheckAddress, CheckAddressResponse, CoinJson, CoinSpendJson, GetDerivations,
+    GetDerivationsResponse, GetNft, GetNftResponse, MakeOffer, MakeOfferResponse, OfferAmount,
+    SendCat, SendCatResponse, SendXch, SendXchResponse, SignCoinSpends, SignCoinSpendsResponse,
 };
 use thiserror::Error;
 
@@ -141,6 +141,30 @@ impl SageClient {
         }
 
         let response_body = response.json::<GetNftResponse>().await?;
+        Ok(response_body)
+    }
+
+    pub async fn check_address(
+        &self,
+        address: String,
+    ) -> Result<CheckAddressResponse, ClientError> {
+        let url = format!("{}/check_address", self.base_url);
+        let response = self
+            .client
+            .post(&url)
+            .json(&CheckAddress { address })
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(ClientError::InvalidResponse(format!(
+                "Status: {}, Body: {:?}",
+                response.status(),
+                response.text().await?
+            )));
+        }
+
+        let response_body = response.json::<CheckAddressResponse>().await?;
         Ok(response_body)
     }
 
