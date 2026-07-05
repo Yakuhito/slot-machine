@@ -155,7 +155,9 @@ pub async fn xchandles_initiate_update(
     let resp = cli.push_tx(sb).await?;
 
     if confirm_pushed_transaction(&cli, &resp, security_coin.coin_id(), true).await? {
-        println!("Confirmed! Finish the update after the relative block height elapses.");
+        println!(
+            "Confirmed! Finish the update by running execute-update with the same arguments :)"
+        );
     }
 
     Ok(())
