@@ -1,3 +1,4 @@
+mod broadcast_state_update;
 mod continue_launch;
 mod execute_update;
 mod expire;
@@ -7,12 +8,14 @@ mod initiate_update;
 mod listen;
 mod quick_sync;
 mod register;
+mod sign_state_update;
 mod sync;
 mod unroll_state_scheduler;
 mod verify_deployment;
 mod view;
 mod xchandles_api_client;
 
+pub use broadcast_state_update::*;
 pub use continue_launch::*;
 pub use execute_update::*;
 pub use expire::*;
@@ -22,6 +25,7 @@ pub use initiate_update::*;
 pub use listen::*;
 pub use quick_sync::*;
 pub use register::*;
+pub use sign_state_update::*;
 pub use sync::*;
 pub use unroll_state_scheduler::*;
 pub use verify_deployment::*;
