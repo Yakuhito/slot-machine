@@ -554,13 +554,9 @@ enum XchandlesCliAction {
         #[arg(long)]
         handle: String,
 
-        /// New owner NFT
+        /// New NFT the handle will point to
         #[arg(long)]
-        new_owner_nft: Option<String>,
-
-        /// New resolved NFT
-        #[arg(long)]
-        new_resolved_nft: Option<String>,
+        new_nft: String,
 
         /// Minimum block height (defaults to current peak)
         #[arg(long)]
@@ -588,13 +584,9 @@ enum XchandlesCliAction {
         #[arg(long)]
         handle: String,
 
-        /// New owner NFT
+        /// New NFT the handle will point to
         #[arg(long)]
-        new_owner_nft: Option<String>,
-
-        /// New resolved NFT
-        #[arg(long)]
-        new_resolved_nft: Option<String>,
+        new_nft: String,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1286,8 +1278,7 @@ pub async fn run_cli() {
             XchandlesCliAction::InitiateUpdate {
                 launcher_id,
                 handle,
-                new_owner_nft,
-                new_resolved_nft,
+                new_nft,
                 min_height,
                 testnet11,
                 local,
@@ -1296,8 +1287,7 @@ pub async fn run_cli() {
                 xchandles_initiate_update(
                     launcher_id,
                     handle,
-                    new_owner_nft,
-                    new_resolved_nft,
+                    new_nft,
                     min_height,
                     testnet11,
                     local,
@@ -1308,23 +1298,11 @@ pub async fn run_cli() {
             XchandlesCliAction::FinishUpdate {
                 launcher_id,
                 handle,
-                new_owner_nft,
-                new_resolved_nft,
+                new_nft,
                 testnet11,
                 local,
                 fee,
-            } => {
-                xchandles_finish_update(
-                    launcher_id,
-                    handle,
-                    new_owner_nft,
-                    new_resolved_nft,
-                    testnet11,
-                    local,
-                    fee,
-                )
-                .await
-            }
+            } => xchandles_finish_update(launcher_id, handle, new_nft, testnet11, local, fee).await,
             XchandlesCliAction::Expire {
                 launcher_id,
                 handle,

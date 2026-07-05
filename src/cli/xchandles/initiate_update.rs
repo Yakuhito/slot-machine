@@ -7,60 +7,23 @@ use chia_wallet_sdk::{
         spend_settlement_nft, Offer, SingletonInfo, Spend, SpendContext, StandardLayer,
         XchandlesInitiateUpdateAction,
     },
-    types::puzzles::{CompactCoinProof, XchandlesHandleSlotValue, XchandlesSlotNonce},
+    types::puzzles::CompactCoinProof,
     utils::Address,
 };
 use clvm_traits::clvm_quote;
-use clvm_utils::ToTreeHash;
 use clvmr::NodePtr;
 
 use crate::{
     assets_xch_and_nft, confirm_pushed_transaction, get_coinset_client, get_constants,
     hex_string_to_bytes32, no_assets, parse_amount, quick_sync_xchandles, sync_xchandles,
-    yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
+    yes_no_prompt, CliError, Db, SageClient,
 };
-
-pub(crate) fn encode_nft(nft_launcher_id: Bytes32) -> Result<String, CliError> {
-    Address::new(nft_launcher_id, "nft".to_string())
-        .encode()
-        .map_err(CliError::from)
-}
-
-pub(crate) async fn fetch_handle_slot(
-    launcher_id: Bytes32,
-    handle: &str,
-    local: bool,
-    testnet11: bool,
-    db: &mut Db,
-    ctx: &mut SpendContext,
-) -> Result<chia_wallet_sdk::driver::Slot<XchandlesHandleSlotValue>, CliError> {
-    if local {
-        let slot_value_hash = db
-            .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
-            .await?
-            .ok_or(CliError::SlotNotFound("Handle"))?;
-        db.get_slot::<XchandlesHandleSlotValue>(
-            ctx,
-            launcher_id,
-            XchandlesSlotNonce::HANDLE.to_u64(),
-            slot_value_hash,
-            0,
-        )
-            .await?
-            .ok_or(CliError::SlotNotFound("Handle"))
-    } else {
-        XchandlesApiClient::get(testnet11)
-            .get_slot_value(launcher_id, handle.tree_hash().into())
-            .await
-    }
-}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn xchandles_initiate_update(
     launcher_id_str: String,
     handle: String,
-    new_owner_nft: Option<String>,
-    new_resolved_nft: Option<String>,
+    new_nft: String,
     min_height: Option<u32>,
     testnet11: bool,
     local: bool,
