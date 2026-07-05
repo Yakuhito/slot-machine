@@ -1,8 +1,8 @@
-use chia_protocol::{Bytes, Bytes32, Coin};
+use chia_protocol::{Bytes32, Coin};
 use chia_puzzle_types::singleton::{LauncherSolution, SingletonSolution};
 use chia_puzzle_types::Memos;
 use chia_wallet_sdk::driver::{
-    Layer, Nft, Puzzle, XchandlesExpirePricingPuzzle, XchandlesRegistry,
+    HashedPtr, Layer, Nft, Puzzle, XchandlesExpirePricingPuzzle, XchandlesRegistry,
     XchandlesRegistryReceivedMessagePrefix, XchandlesRegistryState,
 };
 use chia_wallet_sdk::types::puzzles::{
@@ -14,6 +14,7 @@ use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{ActionLayer, SpendContext},
 };
+use clvm_traits::clvm_list;
 use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
@@ -277,40 +278,53 @@ pub async fn xchandles_verify_deployment(
             }
 
             // Lastly, check p2 output only contains the SEND_MESSAGE to the registry
-            //   as well as the correct re-creation condition.
+            //   as well as the correct re-creation condition (and the sig check)
             let p2_output = ctx.run(inner_puzzle.ptr(), inner_solution_ptr)?;
-            let p2_output = ctx.extract::<Conditions<Bytes>>(p2_output)?;
+            let p2_output = ctx.extract::<Conditions<HashedPtr>>(p2_output)?;
             let p2_output = p2_output.into_vec();
 
-            if p2_output.len() != 2 {
+            if p2_output.len() != 3 {
                 return Err(CliError::Custom(format!(
-                    "P2 output contains {} conditions, expected 2 for handle #{}",
+                    "P2 output contains {} conditions, expected 3 for handle #{}",
                     p2_output.len(),
                     handle_index
                 )));
             }
 
+            let (
+                Condition::<HashedPtr>::AggSigMe(ref _cond),
+                Condition::<HashedPtr>::SendMessage(ref send_message),
+                Condition::<HashedPtr>::CreateCoin(ref create_coin),
+            ) = (&p2_output[0], &p2_output[1], &p2_output[2])
+            else {
+                return Err(CliError::Custom(format!(
+                    "P2 output does not contain the correct conditions for handle #{}",
+                    handle_index
+                )));
+            };
+
             let target_ph = handles_to_launch[handle_index].recipient;
-            let target_memo = Memos::Some(target_ph.into());
-            if p2_output[1] != Condition::create_coin(target_ph, 1, target_memo) {
+            let Memos::Some(memos) = create_coin.memos else {
+                return Err(CliError::Custom(format!(
+                    "P2 output does not contain the correct memo for handle #{}",
+                    handle_index
+                )));
+            };
+            if create_coin.puzzle_hash != target_ph
+                || create_coin.amount != 1
+                || memos.tree_hash() != clvm_list!(target_ph).tree_hash()
+            {
                 return Err(CliError::Custom(format!(
                     "P2 output does not contain the correct recreation condition for handle #{}",
                     handle_index
                 )));
             }
 
-            let Condition::<Bytes>::SendMessage(ref send_message) = p2_output[0] else {
-                return Err(CliError::Custom(format!(
-                    "P2 output does not contain the correct send message condition for handle #{}",
-                    handle_index
-                )));
-            };
-
             if send_message.mode != 18
                 || send_message.message[0]
                     != XchandlesRegistryReceivedMessagePrefix::RegisterOwner as u8
                 || send_message.data.len() != 1
-                || send_message.data[0] != registry.coin.puzzle_hash.into()
+                || send_message.data[0].tree_hash() != registry.coin.puzzle_hash.tree_hash()
             {
                 return Err(CliError::Custom(format!(
                     "P2 send message mode mismatch for handle #{}",
