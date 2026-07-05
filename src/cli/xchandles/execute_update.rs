@@ -23,7 +23,7 @@
 use crate::CliError;
 
 #[allow(clippy::too_many_arguments)]
-pub async fn xchandles_finish_update(
+pub async fn xchandles_execute_update(
     _launcher_id_str: String,
     _handle: String,
     _new_nft: String,

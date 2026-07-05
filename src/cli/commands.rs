@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::{reward_distributor_stake, reward_distributor_unstake};
+use crate::{reward_distributor_stake, reward_distributor_unstake, xchandles_execute_update};
 
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
@@ -11,8 +11,8 @@ use super::{
     reward_distributor_commit_rewards, reward_distributor_initiate_payout,
     reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_refresh,
     reward_distributor_sign_entry_update, reward_distributor_sync, reward_distributor_view,
-    xchandles_continue_launch, xchandles_expire, xchandles_extend, xchandles_finish_update,
-    xchandles_initiate_launch, xchandles_initiate_update, xchandles_listen, xchandles_register,
+    xchandles_continue_launch, xchandles_expire, xchandles_extend, xchandles_initiate_launch,
+    xchandles_initiate_update, xchandles_listen, xchandles_register,
     xchandles_unroll_state_scheduler, xchandles_verify_deployment, xchandles_view,
 };
 
@@ -575,7 +575,7 @@ enum XchandlesCliAction {
         fee: String,
     },
     /// Finishes a previously initiated handle update
-    FinishUpdate {
+    ExecuteUpdate {
         /// XCHandles (sub)registry launcher id
         #[arg(long)]
         launcher_id: String,
@@ -1295,14 +1295,16 @@ pub async fn run_cli() {
                 )
                 .await
             }
-            XchandlesCliAction::FinishUpdate {
+            XchandlesCliAction::ExecuteUpdate {
                 launcher_id,
                 handle,
                 new_nft,
                 testnet11,
                 local,
                 fee,
-            } => xchandles_finish_update(launcher_id, handle, new_nft, testnet11, local, fee).await,
+            } => {
+                xchandles_execute_update(launcher_id, handle, new_nft, testnet11, local, fee).await
+            }
             XchandlesCliAction::Expire {
                 launcher_id,
                 handle,

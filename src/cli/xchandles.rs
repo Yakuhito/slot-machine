@@ -1,7 +1,7 @@
 mod continue_launch;
+mod execute_update;
 mod expire;
 mod extend;
-mod finish_update;
 mod initiate_launch;
 mod initiate_update;
 mod listen;
@@ -14,9 +14,9 @@ mod view;
 mod xchandles_api_client;
 
 pub use continue_launch::*;
+pub use execute_update::*;
 pub use expire::*;
 pub use extend::*;
-pub use finish_update::*;
 pub use initiate_launch::*;
 pub use initiate_update::*;
 pub use listen::*;
