@@ -1,11 +1,13 @@
+use chia_bls::Signature;
 use chia_protocol::{Bytes32, SpendBundle};
 use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         create_security_coin, decode_offer, spend_security_coin, CatLayer, DriverError, Layer,
-        Offer, PrecommitCoin, PrecommitLayer, Puzzle, Slot, SpendContext, XchandlesExpireAction,
-        XchandlesExpirePricingPuzzle, XchandlesPrecommitValue, XchandlesRefundAction,
+        Offer, PrecommitCoin, PrecommitLayer, Puzzle, SingletonInfo, Slot, SpendContext,
+        XchandlesExpireAction, XchandlesExpirePricingPuzzle, XchandlesPrecommitValue,
+        XchandlesRefundAction,
     },
     types::{
         puzzles::{
@@ -20,10 +22,10 @@ use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_only, confirm_pushed_transaction, get_coinset_client, get_constants,
-    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, no_assets, parse_amount,
-    quick_sync_xchandles, sync_xchandles, wait_for_coin, yes_no_prompt, CliError, Db, SageClient,
-    XchandlesApiClient,
+    assets_xch_only, confirm_pushed_transaction, fetch_nft_from_wallet, get_coinset_client,
+    get_constants, get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, no_assets,
+    parse_amount, quick_sync_xchandles, recreate_nft_in_wallet, sync_xchandles, wait_for_coin,
+    yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -295,9 +297,21 @@ pub async fn xchandles_expire(
             payment_cat_amount,
         )?;
 
+        let nft_and_p2 = if refund {
+            None
+        } else {
+            let (nft, p2_layer) = fetch_nft_from_wallet(&mut ctx, &sage, &cli, nft).await?;
+            Some((nft, p2_layer))
+        };
+
         println!("A one-sided offer will be created; it will consume:");
         println!("  - 1 mojo");
         println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
+        if !refund {
+            println!(
+                "For security, your NFT will be spent separately and re-created into your wallet."
+            );
+        }
         yes_no_prompt("Proceed?")?;
 
         let offer_resp = sage
@@ -310,7 +324,7 @@ pub async fn xchandles_expire(
         let (security_coin_sk, security_coin) =
             create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
-        let sec_conds = if refund {
+        let (sec_conds, nft_sig) = if refund {
             let factor_puzzle_hash = XchandlesFactorPricingPuzzleArgs {
                 base_price: payment_cat_base_price,
                 registration_period,
@@ -334,19 +348,26 @@ pub async fn xchandles_expire(
 
             let precommitted_pricing_puzzle = ctx.curry(pricing_puzzle)?;
             let precommitted_pricing_solution = ctx.alloc(&pricing_solution)?;
-            registry
-                .new_action::<XchandlesRefundAction>()
-                .spend(
-                    &mut ctx,
-                    &mut registry,
-                    &precommit_coin,
-                    precommitted_pricing_puzzle,
-                    precommitted_pricing_solution,
-                    slot,
-                )?
-                .reserve_fee(1)
+
+            (
+                registry
+                    .new_action::<XchandlesRefundAction>()
+                    .spend(
+                        &mut ctx,
+                        &mut registry,
+                        &precommit_coin,
+                        precommitted_pricing_puzzle,
+                        precommitted_pricing_solution,
+                        slot,
+                    )?
+                    .reserve_fee(1),
+                Signature::default(),
+            )
         } else {
-            let (expire_conds, owner_message_conds, resolved_message_conds) =
+            let (nft, p2_layer) = nft_and_p2.unwrap();
+            let nft_inner_ph = nft.info.inner_puzzle_hash().into();
+
+            let (expire_conds, mut owner_message_conds, resolved_message_conds) =
                 registry.new_action::<XchandlesExpireAction>().spend(
                     &mut ctx,
                     &mut registry,
@@ -356,14 +377,17 @@ pub async fn xchandles_expire(
                     registration_period,
                     &precommit_coin,
                     expire_time,
-                    Bytes32::default(),
-                    Bytes32::default(),
+                    nft_inner_ph,
+                    nft_inner_ph,
                 )?;
-            let mut all_conds = expire_conds.extend(owner_message_conds);
+
             if let Some(resolved_message_conds) = resolved_message_conds {
-                all_conds = all_conds.extend(resolved_message_conds);
+                owner_message_conds = owner_message_conds.extend(resolved_message_conds);
             }
-            all_conds
+            let nft_sig =
+                recreate_nft_in_wallet(&mut ctx, &sage, nft, p2_layer, owner_message_conds).await?;
+
+            (expire_conds, nft_sig)
         };
 
         let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;
@@ -378,7 +402,7 @@ pub async fn xchandles_expire(
 
         let sb = offer.take(SpendBundle::new(
             ctx.take(),
-            security_coin_sig + &pending_sig,
+            security_coin_sig + &pending_sig + &nft_sig,
         ));
 
         println!("Submitting transaction...");
