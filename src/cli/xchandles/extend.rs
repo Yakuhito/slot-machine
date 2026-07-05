@@ -3,7 +3,7 @@ use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         create_security_coin, decode_offer, spend_security_coin, spend_settlement_cats, Offer,
-        SpendContext, XchandlesExpirePricingPuzzle, XchandlesExtendAction,
+        SpendContext, XchandlesExtendAction,
     },
     types::{
         puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesSlotNonce},
@@ -49,14 +49,14 @@ pub async fn xchandles_extend(
     };
     println!("done.");
 
+    let expected_pricing_puzzle_hash = XchandlesFactorPricingPuzzleArgs {
+        base_price: payment_cat_base_price,
+        registration_period,
+    }
+    .curry_tree_hash();
     if DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into()).curry_tree_hash()
         != registry.info.state.cat_maker_puzzle_hash.into()
-        || registry.info.state.pricing_puzzle_hash
-            != XchandlesExpirePricingPuzzle::curry_tree_hash(
-                payment_cat_base_price,
-                registration_period,
-            )
-            .into()
+        || registry.info.state.pricing_puzzle_hash != expected_pricing_puzzle_hash.into()
     {
         return Err(CliError::Custom(
             "Given payment asset id & base price do not match the current registry's state."
@@ -96,7 +96,7 @@ pub async fn xchandles_extend(
     };
     println!("Current expiration: {}", slot.info.value.expiration);
 
-    let buy_time = get_last_onchain_timestamp(&cli).await?;
+    let buy_time = get_last_onchain_timestamp(&cli).await? - 1;
     println!("Extension time: {}", buy_time);
 
     let (sec_conds, notarized_payment) = registry.new_action::<XchandlesExtendAction>().spend(
