@@ -265,7 +265,7 @@ pub async fn xchandles_verify_deployment(
             // Then, check metadata.
             let expected_metadata_hash = metadata_for_handle_nft(
                 handles_to_launch[handle_index].clone(),
-                handle_index as u64,
+                (handle_index + 1) as u64,
                 handles_to_launch.len() as u64,
             )
             .tree_hash();
