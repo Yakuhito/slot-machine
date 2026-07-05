@@ -1,8 +1,9 @@
 use chia_protocol::Bytes;
 use chia_wallet_sdk::{
+    coinset::CoinsetClient,
     driver::{
-        MedievalVault, XchandlesExpirePricingPuzzle, XchandlesRegistryReceivedMessagePrefix,
-        XchandlesRegistryState,
+        MedievalVault, SpendContext, XchandlesExpirePricingPuzzle, XchandlesRegistry,
+        XchandlesRegistryReceivedMessagePrefix, XchandlesRegistryState,
     },
     types::{
         puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs},
@@ -17,19 +18,25 @@ use crate::{
 };
 
 #[allow(clippy::too_many_arguments)]
-pub async fn xchandles_sign_state_update(
+pub async fn sync_show_changes_and_compute_new_state(
+    ctx: &mut SpendContext,
+    client: &CoinsetClient,
     registry_launcher_id_str: String,
     new_payment_asset_id_str: String,
     new_payment_cat_base_price_str: String,
     new_registration_period: u64,
-    my_pubkey_str: String,
-    multisig_launcher_id_str: String,
-    testnet11: bool,
-    debug: bool,
-) -> Result<(), CliError> {
+    payment_asset_id_str: Option<String>,
+    payment_cat_base_price_str: Option<String>,
+    registration_period: Option<u64>,
+) -> Result<(XchandlesRegistryState, XchandlesRegistry), CliError> {
     let registry_launcher_id = hex_string_to_bytes32(&registry_launcher_id_str)?;
     let new_payment_asset_id = hex_string_to_bytes32(&new_payment_asset_id_str)?;
     let new_payment_cat_base_price = parse_amount(&new_payment_cat_base_price_str, true)?;
+
+    println!("\nSyncing XCHandles registry... ");
+    let mut db = Db::new(true).await?;
+    let registry = quick_sync_xchandles(&client, &mut db, ctx, registry_launcher_id).await?;
+    println!("Done!");
 
     let new_state = XchandlesRegistryState {
         cat_maker_puzzle_hash: DefaultCatMakerArgs::new(new_payment_asset_id.tree_hash().into())
@@ -47,14 +54,6 @@ pub async fn xchandles_sign_state_update(
         )
         .into(),
     };
-
-    let (my_pubkey, mut ctx, client, medieval_vault) =
-        multisig_sign_thing_start(my_pubkey_str, multisig_launcher_id_str, testnet11).await?;
-
-    println!("\nSyncing XCHandles registry... ");
-    let mut db = Db::new(true).await?;
-    let registry = quick_sync_xchandles(&client, &mut db, &mut ctx, registry_launcher_id).await?;
-    println!("Done!");
 
     println!("Current registry state:");
     println!(
@@ -92,6 +91,39 @@ pub async fn xchandles_sign_state_update(
         "  Payment asset id: {}",
         hex::encode(new_payment_asset_id.to_bytes())
     );
+
+    Ok((new_state, registry))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn xchandles_sign_state_update(
+    registry_launcher_id_str: String,
+    new_payment_asset_id_str: String,
+    new_payment_cat_base_price_str: String,
+    new_registration_period: u64,
+    payment_asset_id_str: Option<String>,
+    payment_cat_base_price_str: Option<String>,
+    registration_period: Option<u64>,
+    my_pubkey_str: String,
+    multisig_launcher_id_str: String,
+    testnet11: bool,
+    debug: bool,
+) -> Result<(), CliError> {
+    let (my_pubkey, mut ctx, client, medieval_vault) =
+        multisig_sign_thing_start(my_pubkey_str, multisig_launcher_id_str, testnet11).await?;
+
+    let (new_state, registry) = sync_show_changes_and_compute_new_state(
+        &mut ctx,
+        &client,
+        registry_launcher_id_str,
+        new_payment_asset_id_str,
+        new_payment_cat_base_price_str,
+        new_registration_period,
+        payment_asset_id_str,
+        payment_cat_base_price_str,
+        registration_period,
+    )
+    .await?;
 
     let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes>(
         &mut ctx,

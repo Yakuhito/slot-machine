@@ -1,22 +1,16 @@
 use chia_protocol::Bytes;
 use chia_wallet_sdk::{
     driver::{
-        DelegatedStateAction, MedievalVault, SingletonInfo, XchandlesExpirePricingPuzzle,
-        XchandlesRegistryReceivedMessagePrefix, XchandlesRegistryState,
+        DelegatedStateAction, MedievalVault, SingletonInfo, XchandlesRegistryReceivedMessagePrefix,
     },
-    types::{
-        puzzles::{
-            DefaultCatMakerArgs, StateSchedulerLayerSolution, XchandlesFactorPricingPuzzleArgs,
-        },
-        Mod,
-    },
+    types::puzzles::StateSchedulerLayerSolution,
 };
 use clvm_utils::ToTreeHash;
 use clvmr::NodePtr;
 
 use crate::{
-    get_constants, hex_string_to_bytes32, multisig_broadcast_thing_finish,
-    multisig_broadcast_thing_start, parse_amount, quick_sync_xchandles, CliError, Db,
+    get_constants, multisig_broadcast_thing_finish, multisig_broadcast_thing_start,
+    sync_show_changes_and_compute_new_state, CliError,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -25,76 +19,29 @@ pub async fn xchandles_broadcast_state_update(
     new_payment_asset_id_str: String,
     new_payment_cat_base_price_str: String,
     new_registration_period: u64,
+    payment_asset_id_str: Option<String>,
+    payment_cat_base_price_str: Option<String>,
+    registration_period: Option<u64>,
     multisig_launcher_id_str: String,
     signatures_str: String,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
-    let registry_launcher_id = hex_string_to_bytes32(&registry_launcher_id_str)?;
-    let new_payment_asset_id = hex_string_to_bytes32(&new_payment_asset_id_str)?;
-    let new_payment_cat_base_price = parse_amount(&new_payment_cat_base_price_str, true)?;
-
     let (signature_from_signers, pubkeys, client, mut ctx, medieval_vault) =
         multisig_broadcast_thing_start(signatures_str, multisig_launcher_id_str, testnet11).await?;
 
-    println!("\nSyncing XCHandles registry... ");
-    let mut db = Db::new(true).await?;
-    let mut registry =
-        quick_sync_xchandles(&client, &mut db, &mut ctx, registry_launcher_id).await?;
-    println!("Done!");
-
-    println!("Current registry state:");
-    println!(
-        "  CAT Maker: {}",
-        hex::encode(registry.info.state.cat_maker_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Registration pricing puzzle hash: {}",
-        hex::encode(registry.info.state.pricing_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Expired handle pricing puzzle hash: {}",
-        hex::encode(
-            registry
-                .info
-                .state
-                .expired_handle_pricing_puzzle_hash
-                .to_bytes()
-        )
-    );
-    let new_state = XchandlesRegistryState {
-        cat_maker_puzzle_hash: DefaultCatMakerArgs::new(new_payment_asset_id.tree_hash().into())
-            .curry_tree_hash()
-            .into(),
-        pricing_puzzle_hash: XchandlesFactorPricingPuzzleArgs {
-            base_price: new_payment_cat_base_price,
-            registration_period: new_registration_period,
-        }
-        .curry_tree_hash()
-        .into(),
-        expired_handle_pricing_puzzle_hash: XchandlesExpirePricingPuzzle::curry_tree_hash(
-            new_payment_cat_base_price,
-            new_registration_period,
-        )
-        .into(),
-    };
-    println!("You'll update the registry state to:");
-    println!(
-        "  CAT Maker: {}",
-        hex::encode(new_state.cat_maker_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Registration pricing puzzle hash: {}",
-        hex::encode(new_state.pricing_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Expired handle pricing puzzle hash: {}",
-        hex::encode(new_state.expired_handle_pricing_puzzle_hash.to_bytes())
-    );
-    println!(
-        "  Payment asset id: {}",
-        hex::encode(new_payment_asset_id.to_bytes())
-    );
+    let (new_state, mut registry) = sync_show_changes_and_compute_new_state(
+        &mut ctx,
+        &client,
+        registry_launcher_id_str,
+        new_payment_asset_id_str,
+        new_payment_cat_base_price_str,
+        new_registration_period,
+        payment_asset_id_str,
+        payment_cat_base_price_str,
+        registration_period,
+    )
+    .await?;
 
     let constants = get_constants(testnet11);
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
