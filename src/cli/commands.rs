@@ -8,14 +8,14 @@ use crate::{
 use super::{
     catalog_broadcast_state_update, catalog_continue_launch, catalog_initiate_launch,
     catalog_listen, catalog_register, catalog_sign_state_update, catalog_unroll_state_scheduler,
-    catalog_verify_deployment, multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey,
-    multisig_verify_signature, multisig_view, reward_distributor_add_rewards,
-    reward_distributor_broadcast_entry_update, reward_distributor_clawback_rewards,
-    reward_distributor_commit_rewards, reward_distributor_initiate_payout,
-    reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_refresh,
-    reward_distributor_sign_entry_update, reward_distributor_sync, reward_distributor_view,
-    xchandles_continue_launch, xchandles_expire, xchandles_extend, xchandles_initiate_launch,
-    xchandles_initiate_update, xchandles_listen, xchandles_register,
+    catalog_verify_deployment, datastore_launch, datastore_update, datastore_view,
+    multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey, multisig_verify_signature,
+    multisig_view, reward_distributor_add_rewards, reward_distributor_broadcast_entry_update,
+    reward_distributor_clawback_rewards, reward_distributor_commit_rewards,
+    reward_distributor_initiate_payout, reward_distributor_launch, reward_distributor_new_epoch,
+    reward_distributor_refresh, reward_distributor_sign_entry_update, reward_distributor_sync,
+    reward_distributor_view, xchandles_continue_launch, xchandles_expire, xchandles_extend,
+    xchandles_initiate_launch, xchandles_initiate_update, xchandles_listen, xchandles_register,
     xchandles_unroll_state_scheduler, xchandles_verify_deployment, xchandles_view,
 };
 
@@ -51,6 +51,11 @@ enum Commands {
     RewardDistributor {
         #[command(subcommand)]
         action: RewardDistributorCliAction,
+    },
+    /// Interact with DataStores
+    Datastore {
+        #[command(subcommand)]
+        action: DatastoreCliAction,
     },
 }
 
@@ -1101,6 +1106,72 @@ enum RewardDistributorCliAction {
     },
 }
 
+#[derive(Subcommand)]
+enum DatastoreCliAction {
+    /// Launch a new datastore
+    Launch {
+        /// CSV file with columns nft_id,weight
+        #[arg(long)]
+        csv: String,
+
+        /// Optional label (will be stored as on-chain metadata)
+        #[arg(long)]
+        label: Option<String>,
+
+        /// Optional description (will be stored as on-chain metadata)
+        #[arg(long)]
+        description: Option<String>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// Update datastore (metadata and NFT whitelist root hash)
+    Update {
+        /// Datastore singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Previous whitelist CSV
+        #[arg(long)]
+        old_csv: String,
+
+        /// Updated whitelist CSV
+        #[arg(long)]
+        new_csv: String,
+
+        /// New label (will be stored as on-chain metadata; empty = keep current)
+        #[arg(long)]
+        label: Option<String>,
+
+        /// New description (will be stored as on-chain metadata; empty = keep current)
+        #[arg(long)]
+        description: Option<String>,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
+    /// View current DataStore metadata and latest coin
+    View {
+        /// DataStore singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
+}
+
 pub async fn run_cli() {
     let args = Cli::parse();
 
@@ -1668,6 +1739,39 @@ pub async fn run_cli() {
                 testnet11,
                 fee,
             } => reward_distributor_refresh(launcher_id, testnet11, fee).await,
+        },
+        Commands::Datastore { action } => match action {
+            DatastoreCliAction::Launch {
+                csv,
+                label,
+                description,
+                testnet11,
+                fee,
+            } => datastore_launch(csv, label, description, testnet11, fee).await,
+            DatastoreCliAction::Update {
+                launcher_id,
+                old_csv,
+                new_csv,
+                label,
+                description,
+                testnet11,
+                fee,
+            } => {
+                datastore_update(
+                    launcher_id,
+                    old_csv,
+                    new_csv,
+                    label,
+                    description,
+                    testnet11,
+                    fee,
+                )
+                .await
+            }
+            DatastoreCliAction::View {
+                launcher_id,
+                testnet11,
+            } => datastore_view(launcher_id, testnet11).await,
         },
     };
 

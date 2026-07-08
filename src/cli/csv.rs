@@ -201,3 +201,48 @@ pub fn load_xchandles_premine_csv<P: AsRef<Path>>(
 
     Ok(records)
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatastoreNftRecord {
+    pub nft_id: Bytes32,
+    pub weight: u64,
+}
+
+fn decode_nft_id<'de, D>(deserializer: D) -> Result<Bytes32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: &str = Deserialize::deserialize(deserializer)?;
+    let address = Address::decode(s).map_err(serde::de::Error::custom)?;
+
+    if address.prefix != "nft" {
+        return Err(serde::de::Error::custom(
+            "Invalid bech32m prefix: expected nft",
+        ));
+    }
+
+    Ok(address.puzzle_hash)
+}
+
+#[derive(Debug, Deserialize)]
+struct DatastoreNftCsvRow {
+    #[serde(deserialize_with = "decode_nft_id")]
+    nft_id: Bytes32,
+    weight: u64,
+}
+
+pub fn load_datastore_nft_csv<P: AsRef<Path>>(path: P) -> Result<Vec<DatastoreNftRecord>, CliError> {
+    let file = File::open(path)?;
+    let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
+
+    let mut records = Vec::new();
+    for result in rdr.deserialize() {
+        let row: DatastoreNftCsvRow = result.map_err(CliError::Csv)?;
+        records.push(DatastoreNftRecord {
+            nft_id: row.nft_id,
+            weight: row.weight,
+        });
+    }
+
+    Ok(records)
+}
