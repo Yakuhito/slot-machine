@@ -20,8 +20,6 @@ pub async fn reward_distributor_launch(
     store_launcher_id_str: Option<String>,
     refreshable: bool,
     stake_asset_id_str: Option<String>,
-    hidden_puzzle_hash_str: Option<String>,
-    precision: u64,
     require_payout_approval: bool,
     fee_payout_address_str: String,
     first_epoch_start_timestamp: u64,
@@ -49,12 +47,9 @@ pub async fn reward_distributor_launch(
             refreshable,
         }
     } else if let Some(stake_asset_id_str) = stake_asset_id_str {
-        let hidden_puzzle_hash = hidden_puzzle_hash_str
-            .map(|s| hex_string_to_bytes32(&s))
-            .transpose()?;
         RewardDistributorType::Cat {
             asset_id: hex_string_to_bytes32(&stake_asset_id_str)?,
-            hidden_puzzle_hash,
+            hidden_puzzle_hash: None,
         }
     } else {
         return Err(CliError::Custom(
@@ -66,8 +61,8 @@ pub async fn reward_distributor_launch(
     let reserve_asset_id = hex_string_to_bytes32(&reserve_asset_id_str)?;
     let fee = parse_amount(&fee_str, false)?;
     let payout_threshold = parse_amount(&payout_threshold_str, true)?;
-    if fee_bps > 2500 || withdrawal_share_bps < 5000 {
-        return Err(CliError::Custom("really? that big of a fee?".to_string()));
+    if fee_bps > 2500 || withdrawal_share_bps < 7500 {
+        return Err(CliError::Custom("Really?! That big of a fee?!".to_string()));
     }
 
     println!("A one-sided offer will be needed for launch. It will contain:");
@@ -111,7 +106,7 @@ pub async fn reward_distributor_launch(
             distributor_type,
             fee_payout_puzzle_hash,
             epoch_seconds,
-            precision,
+            u64::MAX,
             max_seconds_offset,
             payout_threshold,
             require_payout_approval,

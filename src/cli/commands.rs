@@ -815,14 +815,6 @@ enum RewardDistributorCliAction {
         #[arg(long)]
         stake_asset_id: Option<String>,
 
-        /// Hidden puzzle hash for revocable stake CATs
-        #[arg(long)]
-        hidden_puzzle_hash: Option<String>,
-
-        /// Reward precision (default: 1000 for CAT mojos)
-        #[arg(long, default_value = "1000")]
-        precision: u64,
-
         /// Require manager approval for payouts (managed distributors only)
         #[arg(long, default_value_t = false)]
         require_payout_approval: bool,
@@ -852,15 +844,15 @@ enum RewardDistributorCliAction {
         max_seconds_offset: u64,
 
         /// Payout threshold (in the reward token)
-        #[arg(long, default_value = "0.1")]
+        #[arg(long, default_value = "0.001")]
         payout_threshold: String,
 
         /// Fee (in basis points)
-        #[arg(long, default_value = "700")]
+        #[arg(long, default_value = "1000")]
         fee_bps: u64,
 
         /// Withdrawal share (how much of a clawed back commitment the recipient gets back)
-        #[arg(long, default_value = "9000")]
+        #[arg(long, default_value = "8000")]
         withdrawal_share_bps: u64,
 
         /// Use testnet11
@@ -1520,8 +1512,6 @@ pub async fn run_cli() {
                 store_launcher_id,
                 refreshable,
                 stake_asset_id,
-                hidden_puzzle_hash,
-                precision,
                 require_payout_approval,
                 fee_payout_address,
                 first_epoch_start_timestamp,
@@ -1541,8 +1531,6 @@ pub async fn run_cli() {
                     store_launcher_id,
                     refreshable,
                     stake_asset_id,
-                    hidden_puzzle_hash,
-                    precision,
                     require_payout_approval,
                     fee_payout_address,
                     first_epoch_start_timestamp,
