@@ -165,13 +165,18 @@ pub fn parse_amount(amount: &str, is_cat: bool) -> Result<u64, CliError> {
     .parse::<u64>()
     .map_err(|_| CliError::InvalidAmount)?;
 
-    if is_cat {
+    let fractional_per_whole = if is_cat {
         // For CATs: 1 CAT = 1000 mojos
-        Ok(whole * 1000 + fractional)
+        1000
     } else {
         // For XCH: 1 XCH = 1_000_000_000_000 mojos
-        Ok(whole * 1_000_000_000_000 + fractional)
+        1_000_000_000_000
+    };
+
+    if fractional > fractional_per_whole {
+        return Err(CliError::InvalidAmount);
     }
+    Ok(whole * fractional_per_whole + fractional)
 }
 
 pub fn get_prefix(testnet11: bool) -> String {
