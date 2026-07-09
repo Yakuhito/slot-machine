@@ -298,6 +298,10 @@ pub async fn find_reward_slot(
                     },
                     slot_info,
                 );
+
+                if slot.coin != coin_record.coin {
+                    continue;
+                }
                 return Ok(slot);
             };
 
