@@ -301,6 +301,10 @@ pub async fn find_reward_slot(
                 return Ok(slot);
             };
 
+            if distributor.info.constants.launcher_id != constants.launcher_id {
+                continue;
+            }
+
             if let Some(slot) = distributor
                 .pending_spend
                 .created_reward_slots
@@ -363,6 +367,10 @@ pub async fn find_commitment_slots(
         else {
             continue;
         };
+
+        if distributor.info.constants.launcher_id != constants.launcher_id {
+            continue;
+        }
 
         if let Some(slot) = distributor
             .pending_spend
@@ -436,6 +444,10 @@ pub async fn find_entry_slots(
         else {
             continue;
         };
+
+        if distributor.info.constants.launcher_id != constants.launcher_id {
+            continue;
+        }
 
         if let Some(slot) = distributor
             .pending_spend
