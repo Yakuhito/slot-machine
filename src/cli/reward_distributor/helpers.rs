@@ -217,18 +217,16 @@ pub fn format_cat_mojos(mojos: u64) -> String {
 }
 
 pub fn format_precision_amount(amount: u128, precision: u64) -> String {
-    if precision == 0 || precision == u64::MAX {
-        return format!("{amount} (raw precision units)");
-    }
-    let scaled = amount / u128::from(precision);
-    format!("{scaled} CAT mojos ({amount} raw / precision {precision})")
+    let cat_mojos = amount / u128::from(precision);
+    format!(
+        "{:.3} CATs ({} CAT mojos)",
+        cat_mojos as f64 / 1000.0,
+        cat_mojos
+    )
 }
 
 pub fn payout_amount_after_precision(amount: u64, precision: u64) -> f64 {
-    if precision == 0 || precision == u64::MAX {
-        return amount as f64 / 1000.0;
-    }
-    (amount as f64) / 1000.0
+    (amount / precision) as f64 / 1000.0
 }
 
 pub fn locked_nft_p2_puzzle_hash(
