@@ -1,13 +1,13 @@
 use chia_bls::Signature;
 use chia_protocol::{Bytes32, Coin, SpendBundle};
-use chia_puzzle_types::{LineageProof, Memos};
+use chia_puzzle_types::{offer::Payment, LineageProof, Memos};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
-        create_security_coin, decode_offer, spend_security_coin, spend_settlement_cats,
-        spend_settlement_nft, HashedPtr, Layer, Offer, Puzzle, RewardDistributor,
-        RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
-        SingletonLayer, Slot, Spend, SpendContext, StandardLayer,
+        create_security_coin, decode_offer, spend_security_coin,
+        spend_settlement_cats_with_payments, spend_settlement_nft, HashedPtr, Layer, Offer, Puzzle,
+        RewardDistributor, RewardDistributorStakeAction, RewardDistributorSyncAction,
+        RewardDistributorType, SingletonLayer, Slot, Spend, SpendContext, StandardLayer,
     },
     types::{
         puzzles::{
@@ -18,7 +18,8 @@ use chia_wallet_sdk::{
     },
     utils::Address,
 };
-use clvm_traits::clvm_quote;
+use clvm_traits::{clvm_quote, clvm_tuple};
+use clvm_utils::ToTreeHash;
 use clvmr::NodePtr;
 
 use crate::{
@@ -503,12 +504,20 @@ async fn stake_cat(
         )?;
 
     let payment_puzzle_hash = notarized_payment.payments[0].puzzle_hash;
-    let (_cats, cat_assert) = spend_settlement_cats(
+    let stake_hint = ctx.hint(
+        clvm_tuple!(
+            custody_puzzle_hash,
+            RewardDistributorStakeAction::my_p2_puzzle_hash(distributor.info.constants.launcher_id)
+        )
+        .tree_hash()
+        .into(),
+    )?;
+    let (_cats, cat_assert) = spend_settlement_cats_with_payments(
         ctx,
         &offer,
         asset_id,
         notarized_payment.nonce,
-        &[(payment_puzzle_hash, stake_amount)],
+        vec![Payment::new(payment_puzzle_hash, stake_amount, stake_hint)],
     )?;
 
     let (_new_distributor, pending_sig) = distributor.finish_spend(ctx, vec![])?;
