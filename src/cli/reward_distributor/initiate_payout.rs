@@ -1,18 +1,24 @@
-use chia_protocol::SpendBundle;
+use chia_bls::Signature;
+use chia_protocol::{Coin, SpendBundle};
+use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         create_security_coin, decode_offer, spend_security_coin, Offer,
-        RewardDistributorInitiatePayoutAction, RewardDistributorSyncAction, SpendContext,
+        RewardDistributorInitiatePayoutAction, RewardDistributorSyncAction, Spend, SpendContext,
+        StandardLayer,
     },
     types::Conditions,
     utils::Address,
 };
+use clvm_traits::clvm_quote;
+use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_only, confirm_pushed_transaction, find_entry_slots, get_coinset_client,
-    get_constants, get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, no_assets,
-    parse_amount, resolve_custody, sync_distributor, yes_no_prompt, CliError, Db, SageClient,
+    assets_xch_only, confirm_pushed_transaction, find_entry_slots, get_coin_public_key,
+    get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
+    hex_string_to_bytes32, hex_string_to_signature, no_assets, parse_amount, resolve_custody,
+    spend_to_coin_spend, sync_distributor, yes_no_prompt, CliError, Db, SageClient,
 };
 
 pub async fn reward_distributor_initiate_payout(
@@ -90,13 +96,54 @@ pub async fn reward_distributor_initiate_payout(
         Conditions::new()
     };
 
+    let require_approval = distributor.info.constants.require_payout_approval;
+    let payout_puzzle_hash = slot.info.value.payout_puzzle_hash;
     let (new_conds, payout_amount) = distributor
         .new_action::<RewardDistributorInitiatePayoutAction>()
         .spend(&mut ctx, &mut distributor, slot)?;
-    sec_conds = sec_conds.extend(new_conds);
     let (_new_distributor, pending_sig) = distributor.finish_spend(&mut ctx, vec![])?;
 
     println!("Payout amount: {} CAT mojos", payout_amount);
+
+    let custody_sig = if require_approval {
+        let custody_coin = Coin::new(security_coin.coin_id(), payout_puzzle_hash, 0);
+        sec_conds = sec_conds
+            .create_coin(payout_puzzle_hash, 0, Memos::None)
+            .assert_concurrent_spend(custody_coin.coin_id());
+
+        let custody_pk = get_coin_public_key(
+            &sage,
+            &Address::new(payout_puzzle_hash, get_prefix(testnet11)).encode()?,
+            10000,
+        )
+        .await?;
+        let p2 = StandardLayer::new(custody_pk);
+        let inner_spend = Spend::new(ctx.alloc(&clvm_quote!(new_conds))?, NodePtr::NIL);
+        let spend = p2.delegated_inner_spend(&mut ctx, inner_spend)?;
+
+        if ctx.tree_hash(spend.puzzle) != payout_puzzle_hash.into() {
+            return Err(CliError::Custom(
+                "Payout puzzle hash does not match - address is using custom puzzle :(".to_string(),
+            ));
+        }
+
+        ctx.spend(custody_coin, spend)?;
+
+        hex_string_to_signature(
+            &sage
+                .sign_coin_spends(
+                    vec![spend_to_coin_spend(&mut ctx, custody_coin, spend)?],
+                    false,
+                    true,
+                )
+                .await?
+                .spend_bundle
+                .aggregated_signature,
+        )?
+    } else {
+        sec_conds = sec_conds.extend(new_conds);
+        Signature::default()
+    };
 
     let security_coin_sig = spend_security_coin(
         &mut ctx,
@@ -108,7 +155,7 @@ pub async fn reward_distributor_initiate_payout(
 
     let spend_bundle = offer.take(SpendBundle::new(
         ctx.take(),
-        security_coin_sig + &pending_sig,
+        security_coin_sig + &pending_sig + &custody_sig,
     ));
 
     println!("Submitting transaction...");

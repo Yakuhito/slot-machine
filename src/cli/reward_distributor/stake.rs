@@ -375,9 +375,11 @@ async fn stake_curated_nft(
     sec_conds = sec_conds.extend(nft_assert).reserve_fee(1);
 
     let custody_sig = if let Some(custody_ph) = payout_puzzle_hash {
-        sec_conds = sec_conds.create_coin(custody_ph, 0, Memos::None);
-
         let custody_coin = Coin::new(security_coin.coin_id(), custody_ph, 0);
+        sec_conds = sec_conds
+            .create_coin(custody_ph, 0, Memos::None)
+            .assert_concurrent_spend(custody_coin.coin_id());
+
         let custody_pk = get_coin_public_key(
             sage,
             &Address::new(custody_ph, get_prefix(testnet11)).encode()?,
@@ -516,9 +518,11 @@ async fn stake_cat(
 
     // if consolidating a slot, we need 'conds' to be outputted by a custody coin
     let custody_sig = if let Some(custody_ph) = payout_puzzle_hash {
-        sec_conds = sec_conds.create_coin(custody_ph, 0, Memos::None);
-
         let custody_coin = Coin::new(security_coin.coin_id(), custody_ph, 0);
+        sec_conds = sec_conds
+            .create_coin(custody_ph, 0, Memos::None)
+            .assert_concurrent_spend(custody_coin.coin_id());
+
         let custody_pk = get_coin_public_key(
             sage,
             &Address::new(custody_ph, get_prefix(testnet11)).encode()?,
@@ -634,9 +638,11 @@ async fn submit_nft_collection_stake(
     sec_conds = sec_conds.extend(nft_assert).reserve_fee(1);
 
     let custody_sig = if let Some(custody_ph) = payout_puzzle_hash {
-        sec_conds = sec_conds.create_coin(custody_ph, 0, Memos::None);
-
         let custody_coin = Coin::new(security_coin.coin_id(), custody_ph, 0);
+        sec_conds = sec_conds
+            .create_coin(custody_ph, 0, Memos::None)
+            .assert_concurrent_spend(custody_coin.coin_id());
+
         let custody_pk = get_coin_public_key(
             sage,
             &Address::new(custody_ph, get_prefix(testnet11)).encode()?,
