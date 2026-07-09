@@ -1,13 +1,14 @@
 use chia_bls::Signature;
 use chia_protocol::{Bytes32, Coin, SpendBundle};
-use chia_puzzle_types::{offer::Payment, LineageProof, Memos};
+use chia_puzzle_types::{LineageProof, Memos};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
         create_security_coin, decode_offer, spend_security_coin,
-        spend_settlement_cats_with_payments, spend_settlement_nft, HashedPtr, Layer, Offer, Puzzle,
-        RewardDistributor, RewardDistributorStakeAction, RewardDistributorSyncAction,
-        RewardDistributorType, SingletonLayer, Slot, Spend, SpendContext, StandardLayer,
+        spend_settlement_cats_with_payments, spend_settlement_nft_with_payment, HashedPtr, Layer,
+        Offer, Puzzle, RewardDistributor, RewardDistributorStakeAction,
+        RewardDistributorSyncAction, RewardDistributorType, SingletonLayer, Slot, Spend,
+        SpendContext, StandardLayer,
     },
     types::{
         puzzles::{
@@ -18,8 +19,7 @@ use chia_wallet_sdk::{
     },
     utils::Address,
 };
-use clvm_traits::{clvm_quote, clvm_tuple};
-use clvm_utils::ToTreeHash;
+use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
 
 use crate::{
@@ -363,12 +363,12 @@ async fn stake_curated_nft(
             dl_fields.dl_metadata_updater_hash_hash,
             dl_fields.dl_inner_puzzle_hash,
         )?;
-    let (_new_nft, nft_assert) = spend_settlement_nft(
+    let (_new_nft, nft_assert) = spend_settlement_nft_with_payment(
         ctx,
         &offer,
         nft_launcher_id,
         notarized_payments[0].nonce,
-        notarized_payments[0].payments[0].puzzle_hash,
+        notarized_payments[0].payments[0].clone(),
     )?;
 
     let (_new_distributor, pending_sig) = distributor.finish_spend(ctx, vec![])?;
@@ -503,21 +503,12 @@ async fn stake_cat(
             existing_slot,
         )?;
 
-    let payment_puzzle_hash = notarized_payment.payments[0].puzzle_hash;
-    let stake_hint = ctx.hint(
-        clvm_tuple!(
-            custody_puzzle_hash,
-            RewardDistributorStakeAction::my_p2_puzzle_hash(distributor.info.constants.launcher_id)
-        )
-        .tree_hash()
-        .into(),
-    )?;
     let (_cats, cat_assert) = spend_settlement_cats_with_payments(
         ctx,
         &offer,
         asset_id,
         notarized_payment.nonce,
-        vec![Payment::new(payment_puzzle_hash, stake_amount, stake_hint)],
+        notarized_payment.payments,
     )?;
 
     let (_new_distributor, pending_sig) = distributor.finish_spend(ctx, vec![])?;
@@ -630,12 +621,13 @@ async fn submit_nft_collection_stake(
             custody_puzzle_hash,
             existing_slot,
         )?;
-    let (_new_nft, nft_assert) = spend_settlement_nft(
+
+    let (_new_nft, nft_assert) = spend_settlement_nft_with_payment(
         ctx,
         &offer,
         nft_launcher_id,
         notarized_payments[0].nonce,
-        notarized_payments[0].payments[0].puzzle_hash,
+        notarized_payments[0].payments[0].clone(),
     )?;
 
     let (_new_distributor, pending_sig) = distributor.finish_spend(ctx, vec![])?;
