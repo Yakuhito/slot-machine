@@ -40,7 +40,7 @@ pub async fn sync_datastore(
         {
             if on_chain_datastore.info.launcher_id == launcher_id {
                 if let Some(mempool_items) = client
-                    .get_mempool_items_by_coin_name(next_spend.coin.coin_id())
+                    .get_mempool_items_by_coin_name(on_chain_datastore.coin.coin_id())
                     .await?
                     .mempool_items
                 {

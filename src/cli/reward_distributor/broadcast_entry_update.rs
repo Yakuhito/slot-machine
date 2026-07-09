@@ -129,7 +129,7 @@ pub async fn reward_distributor_broadcast_entry_update(
         .await?
         .into_iter()
         .next()
-        .ok_or(CliError::SlotNotFound("Mirror"))?;
+        .ok_or(CliError::SlotNotFound("Entry"))?;
 
         let (_conds, last_payment_amount) = reward_distributor
             .new_action::<RewardDistributorRemoveEntryAction>()
@@ -140,7 +140,7 @@ pub async fn reward_distributor_broadcast_entry_update(
                 medieval_vault_inner_ph.into(),
             )?;
         println!(
-            "Last payment ammount to entry: {} CAT mojos",
+            "Last payment amount to entry: {} CAT mojos",
             last_payment_amount
         );
     } else {

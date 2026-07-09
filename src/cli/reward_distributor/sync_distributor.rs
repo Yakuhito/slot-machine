@@ -24,6 +24,7 @@ pub async fn sync_distributor(
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
 ) -> Result<RewardDistributor, CliError> {
+    let mut constants_from_chain = false;
     let constants = if let Some(cached_constants) = db
         .get_reward_distributor_configuration(ctx, launcher_id)
         .await?
@@ -55,8 +56,14 @@ pub async fn sync_distributor(
             ));
         };
 
+        constants_from_chain = true;
         constants
     };
+
+    if constants_from_chain {
+        db.save_reward_distributor_configuration(ctx, constants.launcher_id, constants)
+            .await?;
+    }
 
     let mut records = client
         .get_coin_records_by_hint(constants.launcher_id, None, None, Some(false), None)
@@ -85,7 +92,7 @@ pub async fn sync_distributor(
             RewardDistributor::from_parent_spend(ctx, &next_spend, constants)
         {
             if let Some(mempool_items) = client
-                .get_mempool_items_by_coin_name(next_spend.coin.coin_id())
+                .get_mempool_items_by_coin_name(on_chain_distributor.coin.coin_id())
                 .await?
                 .mempool_items
             {

@@ -1012,15 +1012,27 @@ enum RewardDistributorCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
-    /// Stake an NFT
+    /// Stake an NFT or CAT into the reward distributor
     Stake {
         /// Reward distributor singleton launcher id
         #[arg(long)]
         launcher_id: String,
 
-        /// NFT id (nft1...)
+        /// NFT id (nft1...) (required for NFT collection and curated NFT distributors)
         #[arg(long)]
-        nft: String,
+        nft: Option<String>,
+
+        /// Stake amount in CAT mojos (required for CAT distributors)
+        #[arg(long)]
+        stake_amount: Option<String>,
+
+        /// Whitelist CSV (required for curated NFT distributors)
+        #[arg(long)]
+        csv: Option<String>,
+
+        /// Custody address (xch1...) for the entry slot; defaults to first wallet derivation
+        #[arg(long)]
+        custody_address: Option<String>,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1030,11 +1042,15 @@ enum RewardDistributorCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
-    /// Unstake an NFT
+    /// Unstake an NFT or CAT from the reward distributor
     Unstake {
         /// Reward distributor singleton launcher id
         #[arg(long)]
         launcher_id: String,
+
+        /// Custody address (xch1...) used when staking; defaults to first wallet derivation
+        #[arg(long)]
+        custody_address: Option<String>,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1090,11 +1106,19 @@ enum RewardDistributorCliAction {
         #[arg(long, default_value_t = false)]
         testnet11: bool,
     },
-    /// Refreshes curated NFT stakes after the whitelist changes
+    /// Refresh locked NFT share counts from an updated whitelist CSV
     Refresh {
         /// Reward distributor singleton launcher id
         #[arg(long)]
         launcher_id: String,
+
+        /// Whitelist CSV whose root must match the current on-chain datastore root
+        #[arg(long)]
+        csv: String,
+
+        /// Custody address (xch1...) used when staking; defaults to first wallet derivation
+        #[arg(long)]
+        custody_address: Option<String>,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1707,14 +1731,29 @@ pub async fn run_cli() {
             RewardDistributorCliAction::Stake {
                 launcher_id,
                 nft,
+                stake_amount,
+                csv,
+                custody_address,
                 testnet11,
                 fee,
-            } => reward_distributor_stake(launcher_id, nft, testnet11, fee).await,
+            } => {
+                reward_distributor_stake(
+                    launcher_id,
+                    nft,
+                    stake_amount,
+                    csv,
+                    custody_address,
+                    testnet11,
+                    fee,
+                )
+                .await
+            }
             RewardDistributorCliAction::Unstake {
                 launcher_id,
+                custody_address,
                 testnet11,
                 fee,
-            } => reward_distributor_unstake(launcher_id, testnet11, fee).await,
+            } => reward_distributor_unstake(launcher_id, custody_address, testnet11, fee).await,
             RewardDistributorCliAction::AddRewards {
                 launcher_id,
                 reward_amount,
@@ -1736,9 +1775,13 @@ pub async fn run_cli() {
             } => reward_distributor_view(launcher_id, testnet11).await,
             RewardDistributorCliAction::Refresh {
                 launcher_id,
+                csv,
+                custody_address,
                 testnet11,
                 fee,
-            } => reward_distributor_refresh(launcher_id, testnet11, fee).await,
+            } => {
+                reward_distributor_refresh(launcher_id, csv, custody_address, testnet11, fee).await
+            }
         },
         Commands::Datastore { action } => match action {
             DatastoreCliAction::Launch {

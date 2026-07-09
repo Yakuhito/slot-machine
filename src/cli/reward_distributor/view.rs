@@ -1,5 +1,6 @@
 use crate::{
-    get_coinset_client, get_prefix, hex_string_to_bytes32, sync_distributor, CliError, Db,
+    format_cat_mojos, format_precision_amount, get_coinset_client, get_prefix,
+    hex_string_to_bytes32, sync_distributor, CliError, Db,
 };
 use chia_wallet_sdk::{
     driver::{RewardDistributorType, SpendContext},
@@ -18,6 +19,10 @@ pub async fn reward_distributor_view(
     let mut ctx = SpendContext::new();
     let distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;
 
+    let precision = distributor.info.constants.precision;
+    let cumulative_payout = distributor.info.state.round_reward_info.cumulative_payout;
+    let remaining_rewards = distributor.info.state.round_reward_info.remaining_rewards;
+
     println!(
         "Latest coin id: {}",
         hex::encode(distributor.coin.coin_id())
@@ -25,12 +30,12 @@ pub async fn reward_distributor_view(
     println!("State:");
     println!("  Active shares: {}", distributor.info.state.active_shares);
     println!(
-        "  Cumulative payout: {} mojos per share",
-        distributor.info.state.round_reward_info.cumulative_payout
+        "  Cumulative payout: {}",
+        format_precision_amount(cumulative_payout, precision)
     );
     println!(
-        "  Remaining rewards: {} mojos",
-        distributor.info.state.round_reward_info.remaining_rewards
+        "  Remaining rewards: {}",
+        format_precision_amount(remaining_rewards, precision)
     );
     println!(
         "  Epoch end: {}",
@@ -41,8 +46,8 @@ pub async fn reward_distributor_view(
         distributor.info.state.round_time_info.last_update
     );
     println!(
-        "  Total reserves: {} CATs",
-        distributor.info.state.total_reserves as f64 / 1000.0
+        "  Total reserves: {}",
+        format_cat_mojos(distributor.info.state.total_reserves)
     );
 
     println!("Constants:");
@@ -95,15 +100,13 @@ pub async fn reward_distributor_view(
         "  Seconds per epoch: {}",
         distributor.info.constants.epoch_seconds
     );
-    println!("  Precision: {}", distributor.info.constants.precision);
+    println!("  Precision: {}", precision);
     println!(
         "  Max seconds offset: {}",
         distributor.info.constants.max_seconds_offset
     );
-    println!(
-        "  Payout threshold: {} mojos",
-        distributor.info.constants.payout_threshold
-    );
+    let threshold = distributor.info.constants.payout_threshold;
+    println!("  Payout threshold: {}", format_cat_mojos(threshold));
     println!(
         "  Require payout approval: {}",
         distributor.info.constants.require_payout_approval

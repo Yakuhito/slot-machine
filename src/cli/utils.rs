@@ -242,7 +242,12 @@ pub async fn confirm_pushed_transaction(
     );
 
     if resp.error.is_some() {
-        return Ok(false);
+        return Err(CliError::Custom(
+            resp.error
+                .as_deref()
+                .unwrap_or("Transaction rejected")
+                .to_string(),
+        ));
     }
     wait_for_coin(client, coin_id, also_wait_for_spent).await?;
 
