@@ -36,10 +36,10 @@ pub async fn reward_distributor_commit_rewards(
 
     println!("A one-sided offer will be created. It will contain:");
     println!(
-        "  {} reward CATs ({} CAT mojos) to add to the committed rewards",
+        "  - {} reward CATs ({} CAT mojos) to add to the committed rewards",
         reward_amount_str, reward_amount
     );
-    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
+    println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
 
     println!("\nWARNING: Only addresses from Sage (standard puzzle) will be able to claw back the commitments via this CLI.\n");
     yes_no_prompt("Proceed?")?;

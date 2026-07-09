@@ -66,9 +66,9 @@ pub async fn reward_distributor_launch(
     }
 
     println!("A one-sided offer will be needed for launch. It will contain:");
-    println!("  1 mojo to create the distributor");
-    println!("  1 reward CATs to create the reserve");
-    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
+    println!("  - 1 mojo to create the distributor");
+    println!("  - 1 reward CATs to create the reserve");
+    println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
 
     println!("Before continuing, please confirm the parameters above.");
     yes_no_prompt("Proceed?")?;

@@ -48,10 +48,10 @@ pub async fn reward_distributor_add_rewards(
 
     println!("A one-sided offer will be created. It will contain:");
     println!(
-        "  {} reward CATs ({} CAT mojos) to add to the rewards of the *current* epoch",
+        "  - {} reward CATs ({} CAT mojos) to add to the rewards of the *current* epoch",
         reward_amount_str, reward_amount
     );
-    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
+    println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
 
     yes_no_prompt("Proceed?")?;
 

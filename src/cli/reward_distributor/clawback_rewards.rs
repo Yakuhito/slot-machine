@@ -68,8 +68,8 @@ pub async fn reward_distributor_clawback_rewards(
     );
 
     println!("A one-sided offer will be created. It will contain:");
-    println!("  1 mojo",);
-    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
+    println!("  - 1 mojo");
+    println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
     println!("Additionally, another 1-mojo coin with the clawback puzzle will be automatically created and used.");
 
     yes_no_prompt("Proceed?")?;

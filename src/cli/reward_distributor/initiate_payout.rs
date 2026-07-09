@@ -61,8 +61,8 @@ pub async fn reward_distributor_initiate_payout(
     .ok_or(CliError::SlotNotFound("Entry"))?;
 
     println!("A one-sided offer will be created. It will contain:");
-    println!("  1 mojo",);
-    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
+    println!("  - 1 mojo");
+    println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
 
     yes_no_prompt("Proceed?")?;
 

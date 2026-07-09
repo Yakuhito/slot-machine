@@ -51,8 +51,8 @@ pub async fn reward_distributor_new_epoch(
     .await?;
 
     println!("A one-sided offer will be created. It will contain:");
-    println!("  1 mojo",);
-    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
+    println!("  - 1 mojo");
+    println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
 
     yes_no_prompt("Proceed?")?;
 
