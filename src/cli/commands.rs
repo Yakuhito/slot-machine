@@ -820,7 +820,7 @@ enum RewardDistributorCliAction {
         #[arg(long)]
         stake_asset_id: Option<String>,
 
-        /// Require manager approval for payouts (managed distributors only)
+        /// Require approval for payouts
         #[arg(long, default_value_t = false)]
         require_payout_approval: bool,
 
