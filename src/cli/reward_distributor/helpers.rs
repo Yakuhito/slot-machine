@@ -257,7 +257,7 @@ pub async fn find_locked_nfts(
 ) -> Result<Vec<(Nft, u64)>, CliError> {
     let search_shares = match distributor_type {
         RewardDistributorType::NftCollection { .. } => vec![1],
-        RewardDistributorType::CuratedNft { .. } => (1..=entry_shares.max(1)).collect(),
+        RewardDistributorType::CuratedNft { .. } => (0..=entry_shares.max(1)).collect(),
         _ => return Ok(Vec::new()),
     };
 
