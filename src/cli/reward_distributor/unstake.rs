@@ -16,15 +16,15 @@ use chia_wallet_sdk::{
 
 use crate::{
     assets_xch_only, confirm_pushed_transaction, ensure_epoch_open, find_entry_slots,
-    find_locked_cat, find_locked_nfts, format_cat_mojos, get_coinset_client,
+    find_locked_cats, find_locked_nfts, format_cat_mojos, get_coinset_client,
     get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, hex_string_to_signature,
     no_assets, parse_amount, prompt_for_value, resolve_custody, spend_to_coin_spend,
     sync_distributor, yes_no_prompt, CliError, Db, SageClient,
 };
 
-enum LockedStake {
+enum LockedAsset {
     Nft(Nft, u64),
-    Cat(Cat),
+    Cat(Cat, u64),
 }
 
 pub async fn reward_distributor_unstake(
@@ -86,20 +86,51 @@ pub async fn reward_distributor_unstake(
     .next()
     .ok_or(CliError::SlotNotFound("Entry"))?;
 
-    let locked_stake = match distributor_type {
+    let locked_asset = match distributor_type {
         RewardDistributorType::Cat { asset_id, .. } => {
             println!("Fetching locked CAT...");
-            let locked_cat = find_locked_cat(
+            let locked_cats = find_locked_cats(
                 &mut ctx,
                 &client,
                 launcher_id,
                 custody.puzzle_hash,
                 asset_id,
-                entry_slot.info.value.shares,
             )
             .await?;
-            println!("Unstaking CAT: {} mojos", locked_cat.coin.amount);
-            LockedStake::Cat(locked_cat)
+            println!(
+                "Total value found: {}",
+                format_cat_mojos(locked_cats.iter().map(|(_, shares)| shares).sum::<u64>(),)
+            );
+
+            let mut locked_cat = locked_cats[0].0;
+            let mut locked_cat_share = locked_cats[0].1;
+            if locked_cats.len() > 1 {
+                println!("Found multiple coins:");
+                for (i, (cat, shares)) in locked_cats.iter().enumerate() {
+                    println!(
+                        "  - {}: {} | {} shares",
+                        i,
+                        format_cat_mojos(cat.coin.amount),
+                        shares,
+                    );
+                }
+
+                let cat_index = prompt_for_value("CAT index to unstake: ")?;
+                let cat_index = cat_index.parse::<usize>()?;
+
+                if cat_index >= locked_cats.len() {
+                    return Err(CliError::Custom("Invalid CAT index".to_string()));
+                }
+                locked_cat = locked_cats[cat_index].0;
+                locked_cat_share = locked_cats[cat_index].1;
+            }
+
+            println!(
+                "Unstaking coin: {} | {} shares",
+                format_cat_mojos(locked_cat.coin.amount),
+                locked_cat_share
+            );
+            LockedAsset::Cat(locked_cat, locked_cat_share)
         }
         RewardDistributorType::NftCollection { .. } | RewardDistributorType::CuratedNft { .. } => {
             println!("Fetching locked NFT...");
@@ -108,7 +139,6 @@ pub async fn reward_distributor_unstake(
                 &client,
                 launcher_id,
                 custody.puzzle_hash,
-                distributor_type,
                 entry_slot.info.value.shares,
             )
             .await?;
@@ -148,7 +178,7 @@ pub async fn reward_distributor_unstake(
                 Address::new(locked_nft.info.launcher_id, "nft".to_string()).encode()?,
                 locked_nft_share
             );
-            LockedStake::Nft(locked_nft, locked_nft_share)
+            LockedAsset::Nft(locked_nft, locked_nft_share)
         }
         RewardDistributorType::Managed { .. } => unreachable!(),
     };
@@ -199,8 +229,8 @@ pub async fn reward_distributor_unstake(
         Conditions::new()
     };
 
-    let (conds, last_payment_amount) = match locked_stake {
-        LockedStake::Nft(locked_nft, locked_nft_share) => distributor
+    let (conds, last_payment_amount) = match locked_asset {
+        LockedAsset::Nft(locked_nft, locked_nft_share) => distributor
             .new_action::<RewardDistributorUnstakeAction>()
             .spend_for_locked_nfts(
                 &mut ctx,
@@ -209,7 +239,7 @@ pub async fn reward_distributor_unstake(
                 std::slice::from_ref(&locked_nft),
                 std::slice::from_ref(&locked_nft_share),
             )?,
-        LockedStake::Cat(locked_cat) => distributor
+        LockedAsset::Cat(locked_cat, _locked_cat_share) => distributor
             .new_action::<RewardDistributorUnstakeAction>()
             .spend_for_locked_cats(&mut ctx, &mut distributor, entry_slot, locked_cat)?,
     };

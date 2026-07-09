@@ -4,9 +4,8 @@ use chia_puzzle_types::standard::StandardArgs;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
-        DataStore, DataStoreMetadata, DelegatedPuzzle, Layer, Nft, OracleLayer, Puzzle,
-        RewardDistributor, RewardDistributorStakeAction, RewardDistributorType, Spend,
-        SpendContext,
+        Cat, DataStore, DataStoreMetadata, DelegatedPuzzle, Layer, Nft, OracleLayer, Puzzle,
+        RewardDistributor, RewardDistributorStakeAction, Spend, SpendContext,
     },
     types::{
         puzzles::{NonceWrapperArgs, DL_METADATA_UPDATER_PUZZLE_HASH, NONCE_WRAPPER_PUZZLE_HASH},
@@ -248,44 +247,46 @@ pub async fn find_locked_nfts(
     client: &CoinsetClient,
     launcher_id: Bytes32,
     custody_puzzle_hash: Bytes32,
-    distributor_type: RewardDistributorType,
     entry_shares: u64,
 ) -> Result<Vec<(Nft, u64)>, CliError> {
-    let search_shares = match distributor_type {
-        RewardDistributorType::NftCollection { .. } => vec![1],
-        RewardDistributorType::CuratedNft { .. } => (0..=entry_shares.max(1)).collect(),
-        _ => return Ok(Vec::new()),
-    };
-
     let mut locked_nfts = Vec::new();
-    for shares in search_shares {
-        let locked_nft_hint = locked_nft_p2_puzzle_hash(custody_puzzle_hash, launcher_id, shares);
 
-        let possible_locked_nft_coins = client
-            .get_coin_records_by_hint(locked_nft_hint, None, None, Some(false), None)
+    let locked_nft_hint: Bytes32 = clvm_tuple!(
+        custody_puzzle_hash,
+        RewardDistributorStakeAction::my_p2_puzzle_hash(launcher_id)
+    )
+    .tree_hash()
+    .into();
+    let possible_locked_nft_coins = client
+        .get_coin_records_by_hint(locked_nft_hint, None, None, Some(false), None)
+        .await?
+        .coin_records
+        .unwrap_or_default();
+
+    for coin_record in possible_locked_nft_coins {
+        let parent_coin_spend = client
+            .get_puzzle_and_solution(
+                coin_record.coin.parent_coin_info,
+                Some(coin_record.confirmed_block_index),
+            )
             .await?
-            .coin_records
-            .unwrap_or_default();
+            .coin_solution
+            .ok_or(CliError::CoinNotFound(coin_record.coin.parent_coin_info))?;
 
-        for coin_record in possible_locked_nft_coins {
-            let parent_coin_spend = client
-                .get_puzzle_and_solution(
-                    coin_record.coin.parent_coin_info,
-                    Some(coin_record.confirmed_block_index),
-                )
-                .await?
-                .coin_solution
-                .ok_or(CliError::CoinNotFound(coin_record.coin.parent_coin_info))?;
+        let parent_puzzle = ctx.alloc(&parent_coin_spend.puzzle_reveal)?;
+        let parent_puzzle = Puzzle::parse(ctx, parent_puzzle);
+        let parent_solution = ctx.alloc(&parent_coin_spend.solution)?;
 
-            let parent_puzzle = ctx.alloc(&parent_coin_spend.puzzle_reveal)?;
-            let parent_puzzle = Puzzle::parse(ctx, parent_puzzle);
-            let parent_solution = ctx.alloc(&parent_coin_spend.solution)?;
-
-            if let Ok(Some(nft)) =
-                Nft::parse_child(ctx, parent_coin_spend.coin, parent_puzzle, parent_solution)
-            {
-                if nft.info.p2_puzzle_hash == locked_nft_hint {
+        if let Ok(Some(nft)) =
+            Nft::parse_child(ctx, parent_coin_spend.coin, parent_puzzle, parent_solution)
+        {
+            // not the best but works for NFTs with low # of shares
+            for shares in 1..=entry_shares.max(1) {
+                let expected_nft_p2 =
+                    locked_nft_p2_puzzle_hash(custody_puzzle_hash, launcher_id, shares);
+                if nft.info.p2_puzzle_hash == expected_nft_p2 {
                     locked_nfts.push((nft, shares));
+                    break;
                 }
             }
         }
@@ -294,64 +295,59 @@ pub async fn find_locked_nfts(
     Ok(locked_nfts)
 }
 
-pub async fn find_locked_cat(
+pub async fn find_locked_cats(
     ctx: &mut SpendContext,
     client: &CoinsetClient,
     launcher_id: Bytes32,
     custody_puzzle_hash: Bytes32,
     asset_id: Bytes32,
-    entry_shares: u64,
-) -> Result<chia_wallet_sdk::driver::Cat, CliError> {
-    use chia_wallet_sdk::driver::Cat;
+) -> Result<Vec<(Cat, u64)>, CliError> {
+    let mut locked_cats = Vec::new();
+    let locked_cat_hint: Bytes32 = clvm_tuple!(
+        custody_puzzle_hash,
+        RewardDistributorStakeAction::my_p2_puzzle_hash(launcher_id)
+    )
+    .tree_hash()
+    .into();
 
-    for shares in (1..=entry_shares.max(1)).rev() {
-        let locked_cat_hint = locked_nft_p2_puzzle_hash(custody_puzzle_hash, launcher_id, shares);
+    let possible_locked_cat_coins = client
+        .get_coin_records_by_hint(locked_cat_hint, None, None, Some(false), None)
+        .await?
+        .coin_records
+        .unwrap_or_default();
 
-        let possible_locked_cat_coins = client
-            .get_coin_records_by_hint(locked_cat_hint, None, None, Some(false), None)
+    for coin_record in possible_locked_cat_coins {
+        let parent_coin_spend = client
+            .get_puzzle_and_solution(
+                coin_record.coin.parent_coin_info,
+                Some(coin_record.confirmed_block_index),
+            )
             .await?
-            .coin_records
-            .unwrap_or_default();
+            .coin_solution
+            .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
-        for coin_record in possible_locked_cat_coins {
-            if coin_record.coin.amount != shares {
-                continue;
-            }
+        let parent_puzzle_ptr = ctx.alloc(&parent_coin_spend.puzzle_reveal)?;
+        let parent_puzzle = Puzzle::parse(ctx, parent_puzzle_ptr);
+        let parent_solution_ptr = ctx.alloc(&parent_coin_spend.solution)?;
 
-            let parent_coin_spend = client
-                .get_puzzle_and_solution(
-                    coin_record.coin.parent_coin_info,
-                    Some(coin_record.confirmed_block_index),
-                )
-                .await?
-                .coin_solution
-                .ok_or(CliError::CoinNotFound(coin_record.coin.parent_coin_info))?;
-
-            let parent_puzzle_ptr = ctx.alloc(&parent_coin_spend.puzzle_reveal)?;
-            let parent_puzzle = Puzzle::parse(ctx, parent_puzzle_ptr);
-            let parent_solution_ptr = ctx.alloc(&parent_coin_spend.solution)?;
-
-            let Some(cats) = Cat::parse_children(
-                ctx,
-                parent_coin_spend.coin,
-                parent_puzzle,
-                parent_solution_ptr,
-            )?
-            else {
-                continue;
-            };
-            if let Some(cat) = cats
-                .into_iter()
-                .find(|cat| cat.coin == coin_record.coin && cat.info.asset_id == asset_id)
-            {
-                return Ok(cat);
-            }
+        let Some(cats) = Cat::parse_children(
+            ctx,
+            parent_coin_spend.coin,
+            parent_puzzle,
+            parent_solution_ptr,
+        )?
+        else {
+            continue;
+        };
+        if let Some(cat) = cats
+            .into_iter()
+            .find(|cat| cat.coin == coin_record.coin && cat.info.asset_id == asset_id)
+        {
+            locked_cats.push((cat, coin_record.coin.amount));
         }
     }
 
-    Err(CliError::Custom(
-        "No locked CAT found - you may be using the wrong custody address/puzzle hash".to_string(),
-    ))
+    Ok(locked_cats)
 }
 
 pub fn delegated_puzzles() -> Vec<DelegatedPuzzle> {

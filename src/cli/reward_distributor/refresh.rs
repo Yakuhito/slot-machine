@@ -94,7 +94,6 @@ pub async fn reward_distributor_refresh(
         &client,
         launcher_id,
         custody.puzzle_hash,
-        distributor.info.constants.reward_distributor_type,
         entry_slot.info.value.shares,
     )
     .await?;
