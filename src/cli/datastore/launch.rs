@@ -63,11 +63,6 @@ pub async fn datastore_launch(
     let offer = Offer::from_spend_bundle(&mut ctx, &decode_offer(&offer_resp.offer)?)?;
     let (security_coin_sk, security_coin) =
         create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
-    offer
-        .spend_bundle()
-        .coin_spends
-        .iter()
-        .for_each(|cs| ctx.insert(cs.clone()));
 
     let (launch_conditions, datastore) = Launcher::new(security_coin.coin_id(), 1)
         .mint_datastore(
