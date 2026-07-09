@@ -70,9 +70,6 @@ pub async fn reward_distributor_launch(
     println!("  - 1 reward CATs to create the reserve");
     println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
 
-    println!("Before continuing, please confirm the parameters above.");
-    yes_no_prompt("Proceed?")?;
-
     let sage = SageClient::new()?;
     let derivation_resp = sage.get_derivations(false, 0, 1).await?;
     let user_address = &derivation_resp.derivations[0].address;
@@ -82,6 +79,8 @@ pub async fn reward_distributor_launch(
         user_address
     );
 
+    println!("Before continuing, please confirm the parameters above.");
+    yes_no_prompt("Proceed?")?;
     let offer_resp = sage
         .make_offer(
             no_assets(),
