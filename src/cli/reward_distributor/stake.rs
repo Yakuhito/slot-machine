@@ -1,12 +1,13 @@
-use chia_protocol::{Bytes32, SpendBundle};
-use chia_puzzle_types::LineageProof;
+use chia_bls::Signature;
+use chia_protocol::{Bytes32, Coin, SpendBundle};
+use chia_puzzle_types::{LineageProof, Memos};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
         create_security_coin, decode_offer, spend_security_coin, spend_settlement_cats,
         spend_settlement_nft, HashedPtr, Layer, Offer, Puzzle, RewardDistributor,
         RewardDistributorStakeAction, RewardDistributorSyncAction, RewardDistributorType,
-        SingletonLayer, Slot, SpendContext,
+        SingletonLayer, Slot, Spend, SpendContext, StandardLayer,
     },
     types::{
         puzzles::{
@@ -17,12 +18,15 @@ use chia_wallet_sdk::{
     },
     utils::Address,
 };
+use clvm_traits::clvm_quote;
+use clvmr::NodePtr;
 
 use crate::{
     assets_xch_and_cat, assets_xch_and_nft, confirm_pushed_transaction, curated_datastore_fields,
-    delegated_puzzles, ensure_epoch_open, find_entry_slots, get_coinset_client, get_constants,
-    get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, load_csv_matching_root,
-    merkle_proof_for_nft, no_assets, parse_amount, resolve_custody, spend_datastore_oracle,
+    delegated_puzzles, ensure_epoch_open, find_entry_slots, get_coin_public_key,
+    get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
+    hex_string_to_bytes32, hex_string_to_signature, load_csv_matching_root, merkle_proof_for_nft,
+    no_assets, parse_amount, resolve_custody, spend_datastore_oracle, spend_to_coin_spend,
     sync_datastore, sync_distributor, yes_no_prompt, CliError, CustodyInfo, Db, SageClient,
 };
 
@@ -52,9 +56,8 @@ pub async fn reward_distributor_stake(
         ));
     }
 
-    ensure_epoch_open(&client, &distributor).await?;
-
     let latest_timestamp = get_last_onchain_timestamp(&client).await?;
+    ensure_epoch_open(&distributor, latest_timestamp)?;
     let also_sync = distributor.info.state.round_time_info.last_update + 180 < latest_timestamp;
     if also_sync {
         println!(
@@ -257,6 +260,7 @@ async fn stake_nft_collection(
 
     submit_nft_collection_stake(
         client,
+        sage,
         ctx,
         distributor,
         &offer_resp.offer,
@@ -326,7 +330,7 @@ async fn stake_curated_nft(
     let dl_spend = spend_datastore_oracle(ctx, datastore, &delegated_puzzles())?;
     ctx.insert(dl_spend);
 
-    let sec_conds = if also_sync {
+    let mut sec_conds = if also_sync {
         distributor
             .new_action::<RewardDistributorSyncAction>()
             .spend(ctx, &mut distributor, latest_timestamp)?
@@ -334,6 +338,9 @@ async fn stake_curated_nft(
         Conditions::new()
     };
 
+    let payout_puzzle_hash = existing_slot
+        .as_ref()
+        .map(|slot| slot.info.value.payout_puzzle_hash);
     let current_nft = offer
         .offered_coins()
         .nfts
@@ -364,17 +371,57 @@ async fn stake_curated_nft(
     )?;
 
     let (_new_distributor, pending_sig) = distributor.finish_spend(ctx, vec![])?;
+    sec_conds = sec_conds.extend(nft_assert).reserve_fee(1);
+
+    let custody_sig = if let Some(custody_ph) = payout_puzzle_hash {
+        sec_conds = sec_conds.create_coin(custody_ph, 0, Memos::None);
+
+        let custody_coin = Coin::new(security_coin.coin_id(), custody_ph, 0);
+        let custody_pk = get_coin_public_key(
+            sage,
+            &Address::new(custody_ph, get_prefix(testnet11)).encode()?,
+            10000,
+        )
+        .await?;
+        let p2 = StandardLayer::new(custody_pk);
+        let inner_spend = Spend::new(ctx.alloc(&clvm_quote!(conds))?, NodePtr::NIL);
+        let spend = p2.delegated_inner_spend(ctx, inner_spend)?;
+
+        if ctx.tree_hash(spend.puzzle) != custody_ph.into() {
+            return Err(CliError::Custom(
+                "Payout puzzle hash does not match - address is using custom puzzle :(".to_string(),
+            ));
+        }
+
+        ctx.spend(custody_coin, spend)?;
+
+        hex_string_to_signature(
+            &sage
+                .sign_coin_spends(
+                    vec![spend_to_coin_spend(ctx, custody_coin, spend)?],
+                    false,
+                    true,
+                )
+                .await?
+                .spend_bundle
+                .aggregated_signature,
+        )?
+    } else {
+        sec_conds = sec_conds.extend(conds);
+        Signature::default()
+    };
+
     let security_coin_sig = spend_security_coin(
         ctx,
         security_coin,
-        sec_conds.extend(conds).extend(nft_assert).reserve_fee(1),
+        sec_conds,
         &security_coin_sk,
         get_constants(testnet11),
     )?;
 
     let spend_bundle = offer.take(SpendBundle::new(
         ctx.take(),
-        security_coin_sig + &pending_sig,
+        security_coin_sig + &pending_sig + &custody_sig,
     ));
 
     println!("Submitting transaction...");
@@ -434,7 +481,7 @@ async fn stake_cat(
             "Stakeable CAT with the requested amount not found in offer".to_string(),
         ))?;
 
-    let sec_conds = if also_sync {
+    let mut sec_conds = if also_sync {
         distributor
             .new_action::<RewardDistributorSyncAction>()
             .spend(ctx, &mut distributor, latest_timestamp)?
@@ -442,6 +489,9 @@ async fn stake_cat(
         Conditions::new()
     };
 
+    let payout_puzzle_hash = existing_slot
+        .as_ref()
+        .map(|slot| slot.info.value.payout_puzzle_hash);
     let (conds, notarized_payment, _locked_cat) = distributor
         .new_action::<RewardDistributorStakeAction>()
         .spend_for_cat_mode(
@@ -462,17 +512,59 @@ async fn stake_cat(
     )?;
 
     let (_new_distributor, pending_sig) = distributor.finish_spend(ctx, vec![])?;
+    sec_conds = sec_conds.extend(cat_assert).reserve_fee(1);
+
+    // if consolidating a slot, we need 'conds' to be outputted by a custody coin
+    let custody_sig = if let Some(custody_ph) = payout_puzzle_hash {
+        sec_conds = sec_conds.create_coin(custody_ph, 0, Memos::None);
+
+        let custody_coin = Coin::new(security_coin.coin_id(), custody_ph, 0);
+        let custody_pk = get_coin_public_key(
+            sage,
+            &Address::new(custody_ph, get_prefix(testnet11)).encode()?,
+            10000,
+        )
+        .await?;
+        let p2 = StandardLayer::new(custody_pk);
+        let inner_spend = Spend::new(ctx.alloc(&clvm_quote!(conds))?, NodePtr::NIL);
+        let spend = p2.delegated_inner_spend(ctx, inner_spend)?;
+
+        if ctx.tree_hash(spend.puzzle) != custody_ph.into() {
+            return Err(CliError::Custom(
+                "Payout puzzle hash does not match - address is using custom puzzle :(".to_string(),
+            ));
+        }
+
+        ctx.spend(custody_coin, spend)?;
+
+        hex_string_to_signature(
+            &sage
+                .sign_coin_spends(
+                    vec![spend_to_coin_spend(ctx, custody_coin, spend)?],
+                    false,
+                    true,
+                )
+                .await?
+                .spend_bundle
+                .aggregated_signature,
+        )?
+    } else {
+        sec_conds = sec_conds.extend(conds);
+
+        Signature::default()
+    };
+
     let security_coin_sig = spend_security_coin(
         ctx,
         security_coin,
-        sec_conds.extend(conds).extend(cat_assert).reserve_fee(1),
+        sec_conds,
         &security_coin_sk,
         get_constants(testnet11),
     )?;
 
     let spend_bundle = offer.take(SpendBundle::new(
         ctx.take(),
-        security_coin_sig + &pending_sig,
+        security_coin_sig + &pending_sig + &custody_sig,
     ));
 
     println!("Submitting transaction...");
@@ -486,6 +578,7 @@ async fn stake_cat(
 #[allow(clippy::too_many_arguments)]
 async fn submit_nft_collection_stake(
     client: &CoinsetClient,
+    sage: &SageClient,
     ctx: &mut SpendContext,
     mut distributor: RewardDistributor,
     offer_str: &str,
@@ -501,7 +594,7 @@ async fn submit_nft_collection_stake(
     let (security_coin_sk, security_coin) =
         create_security_coin(ctx, offer.offered_coins().xch[0])?;
 
-    let sec_conds = if also_sync {
+    let mut sec_conds = if also_sync {
         distributor
             .new_action::<RewardDistributorSyncAction>()
             .spend(ctx, &mut distributor, latest_timestamp)?
@@ -509,6 +602,9 @@ async fn submit_nft_collection_stake(
         Conditions::new()
     };
 
+    let payout_puzzle_hash = existing_slot
+        .as_ref()
+        .map(|slot| slot.info.value.payout_puzzle_hash);
     let current_nft = offer
         .offered_coins()
         .nfts
@@ -534,17 +630,57 @@ async fn submit_nft_collection_stake(
     )?;
 
     let (_new_distributor, pending_sig) = distributor.finish_spend(ctx, vec![])?;
+    sec_conds = sec_conds.extend(nft_assert).reserve_fee(1);
+
+    let custody_sig = if let Some(custody_ph) = payout_puzzle_hash {
+        sec_conds = sec_conds.create_coin(custody_ph, 0, Memos::None);
+
+        let custody_coin = Coin::new(security_coin.coin_id(), custody_ph, 0);
+        let custody_pk = get_coin_public_key(
+            sage,
+            &Address::new(custody_ph, get_prefix(testnet11)).encode()?,
+            10000,
+        )
+        .await?;
+        let p2 = StandardLayer::new(custody_pk);
+        let inner_spend = Spend::new(ctx.alloc(&clvm_quote!(conds))?, NodePtr::NIL);
+        let spend = p2.delegated_inner_spend(ctx, inner_spend)?;
+
+        if ctx.tree_hash(spend.puzzle) != custody_ph.into() {
+            return Err(CliError::Custom(
+                "Payout puzzle hash does not match - address is using custom puzzle :(".to_string(),
+            ));
+        }
+
+        ctx.spend(custody_coin, spend)?;
+
+        hex_string_to_signature(
+            &sage
+                .sign_coin_spends(
+                    vec![spend_to_coin_spend(ctx, custody_coin, spend)?],
+                    false,
+                    true,
+                )
+                .await?
+                .spend_bundle
+                .aggregated_signature,
+        )?
+    } else {
+        sec_conds = sec_conds.extend(conds);
+        Signature::default()
+    };
+
     let security_coin_sig = spend_security_coin(
         ctx,
         security_coin,
-        sec_conds.extend(conds).extend(nft_assert).reserve_fee(1),
+        sec_conds,
         &security_coin_sk,
         get_constants(testnet11),
     )?;
 
     let spend_bundle = offer.take(SpendBundle::new(
         ctx.take(),
-        security_coin_sig + &pending_sig,
+        security_coin_sig + &pending_sig + &custody_sig,
     ));
 
     println!("Submitting transaction...");

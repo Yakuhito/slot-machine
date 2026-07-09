@@ -18,9 +18,8 @@ use clvm_traits::clvm_tuple;
 use clvm_utils::{CurriedProgram, ToTreeHash, TreeHash};
 
 use crate::{
-    build_merkle_tree, build_root_hash, get_last_onchain_timestamp, hex_string_to_pubkey,
-    leaf_hash, load_and_dedupe_csv, oracle_delegated_puzzles, CliError, DatastoreNftRecord,
-    SageClient,
+    build_merkle_tree, build_root_hash, hex_string_to_pubkey, leaf_hash, load_and_dedupe_csv,
+    oracle_delegated_puzzles, CliError, DatastoreNftRecord, SageClient,
 };
 
 pub struct CustodyInfo {
@@ -102,11 +101,10 @@ async fn find_public_key_for_address(
     ))
 }
 
-pub async fn ensure_epoch_open(
-    client: &CoinsetClient,
+pub fn ensure_epoch_open(
     distributor: &RewardDistributor,
+    latest_timestamp: u64,
 ) -> Result<(), CliError> {
-    let latest_timestamp = get_last_onchain_timestamp(client).await?;
     if latest_timestamp > distributor.info.state.round_time_info.epoch_end {
         return Err(CliError::Custom(
             "The current epoch has already ended - start a new epoch first".to_string(),

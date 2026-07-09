@@ -55,9 +55,8 @@ pub async fn reward_distributor_unstake(
         }
     }
 
-    ensure_epoch_open(&client, &distributor).await?;
-
     let latest_timestamp = get_last_onchain_timestamp(&client).await?;
+    ensure_epoch_open(&distributor, latest_timestamp)?;
     let also_sync = distributor.info.state.round_time_info.last_update + 180 < latest_timestamp;
     if also_sync {
         println!(
