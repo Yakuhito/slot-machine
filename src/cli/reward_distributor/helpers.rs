@@ -13,7 +13,7 @@ use chia_wallet_sdk::{
     },
     utils::Address,
 };
-use clvm_traits::clvm_tuple;
+use clvm_traits::{clvm_list, clvm_tuple};
 use clvm_utils::{CurriedProgram, ToTreeHash, TreeHash};
 
 use crate::{
@@ -160,15 +160,16 @@ pub fn curated_datastore_fields(
 ) -> Result<CuratedDatastoreFields, CliError> {
     let dl_metadata_rest_hash = datastore.info.metadata.label.as_ref().map(|label| {
         let description = datastore.info.metadata.description.as_deref().unwrap_or("");
-        clvm_tuple!(("l", label.as_str()), ("d", description))
+        clvm_list!(("l", label.as_str()), ("d", description))
             .tree_hash()
             .into()
     });
 
+    let dl_metadata_updater_hash: Bytes32 = DL_METADATA_UPDATER_PUZZLE_HASH.into();
     Ok(CuratedDatastoreFields {
         dl_root_hash: datastore.info.metadata.root_hash,
         dl_metadata_rest_hash,
-        dl_metadata_updater_hash_hash: DL_METADATA_UPDATER_PUZZLE_HASH.tree_hash().into(),
+        dl_metadata_updater_hash_hash: dl_metadata_updater_hash.tree_hash().into(),
         dl_inner_puzzle_hash: datastore
             .info
             .delegation_layer_puzzle_hash(ctx)
