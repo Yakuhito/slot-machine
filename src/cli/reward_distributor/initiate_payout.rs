@@ -6,22 +6,22 @@ use chia_wallet_sdk::{
         RewardDistributorInitiatePayoutAction, RewardDistributorSyncAction, SpendContext,
     },
     types::Conditions,
+    utils::Address,
 };
 
 use crate::{
     assets_xch_only, confirm_pushed_transaction, find_entry_slots, get_coinset_client,
-    get_constants, get_last_onchain_timestamp, hex_string_to_bytes32, no_assets, parse_amount,
-    sync_distributor, yes_no_prompt, CliError, Db, SageClient,
+    get_constants, get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, no_assets,
+    parse_amount, resolve_custody, sync_distributor, yes_no_prompt, CliError, Db, SageClient,
 };
 
 pub async fn reward_distributor_initiate_payout(
     launcher_id_str: String,
-    payout_puzzle_hash_str: String,
+    custody_address: Option<String>,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
-    let payout_puzzle_hash = hex_string_to_bytes32(&payout_puzzle_hash_str)?;
     let fee = parse_amount(&fee_str, false)?;
 
     println!("Syncing reward distributor...");
@@ -46,12 +46,19 @@ pub async fn reward_distributor_initiate_payout(
         );
     }
 
+    let sage = SageClient::new()?;
+    let custody = resolve_custody(&sage, custody_address).await?;
+    println!(
+        "Using the following address as custody: {}",
+        Address::new(custody.puzzle_hash, get_prefix(testnet11)).encode()?
+    );
+
     println!("Finding entry slot...");
     let slot = find_entry_slots(
         &mut ctx,
         &client,
         distributor.info.constants,
-        payout_puzzle_hash,
+        custody.puzzle_hash,
         None,
         None,
     )
@@ -65,8 +72,6 @@ pub async fn reward_distributor_initiate_payout(
     println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
 
     yes_no_prompt("Proceed?")?;
-
-    let sage = SageClient::new()?;
 
     let offer_resp = sage
         .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)

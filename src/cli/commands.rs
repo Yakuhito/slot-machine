@@ -1084,9 +1084,9 @@ enum RewardDistributorCliAction {
         #[arg(long)]
         launcher_id: String,
 
-        /// Entry payout puzzle hash
+        /// Custody address (xch1...) for the entry slot; defaults to first wallet derivation
         #[arg(long)]
-        payout_puzzle_hash: String,
+        custody_address: Option<String>,
 
         /// Use testnet11
         #[arg(long, default_value_t = false)]
@@ -1762,11 +1762,11 @@ pub async fn run_cli() {
             } => reward_distributor_add_rewards(launcher_id, reward_amount, testnet11, fee).await,
             RewardDistributorCliAction::InitiatePayout {
                 launcher_id,
-                payout_puzzle_hash,
+                custody_address,
                 testnet11,
                 fee,
             } => {
-                reward_distributor_initiate_payout(launcher_id, payout_puzzle_hash, testnet11, fee)
+                reward_distributor_initiate_payout(launcher_id, custody_address, testnet11, fee)
                     .await
             }
             RewardDistributorCliAction::View {
