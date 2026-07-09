@@ -282,7 +282,7 @@ pub async fn find_locked_nfts(
             Nft::parse_child(ctx, parent_coin_spend.coin, parent_puzzle, parent_solution)
         {
             // not the best but works for NFTs with low # of shares
-            for shares in 1..=entry_shares.max(1) {
+            for shares in 0..=entry_shares.max(1) {
                 let expected_nft_p2 =
                     locked_nft_p2_puzzle_hash(custody_puzzle_hash, launcher_id, shares);
                 if nft.info.p2_puzzle_hash == expected_nft_p2 {
