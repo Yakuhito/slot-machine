@@ -4,8 +4,8 @@ use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         create_security_coin, decode_offer, spend_security_coin, Cat, CatInfo, CatLayer, CatSpend,
-        Layer, Offer, Puzzle, RewardDistributor, RewardDistributorCommitIncentivesAction,
-        RewardDistributorType, Spend, SpendContext,
+        Layer, Offer, Puzzle, RewardDistributor, RewardDistributorCommitIncentivesAction, Spend,
+        SpendContext,
     },
     types::{
         puzzles::{
@@ -69,10 +69,7 @@ pub async fn reward_distributor_commit_available_rewards(
         ));
     };
     let first_epoch_start = initial_state.round_time_info.epoch_end;
-    let reward_asset_id = match constants.reward_distributor_type {
-        RewardDistributorType::Cat { asset_id, .. } => asset_id,
-        _ => constants.reserve_asset_id,
-    };
+    let reward_asset_id = constants.reserve_asset_id;
 
     let p2_args = P2NextRewardDistributorEpochArgs::new(
         clawback_inner_puzzle_hash,
