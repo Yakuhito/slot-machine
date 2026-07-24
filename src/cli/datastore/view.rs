@@ -1,4 +1,3 @@
-use chia_protocol::Bytes32;
 use chia_wallet_sdk::{
     driver::{DelegatedPuzzle, SpendContext},
     utils::Address,
@@ -38,10 +37,7 @@ pub async fn datastore_view(launcher_id_str: String, testnet11: bool) -> Result<
     let metadata = &datastore.info.metadata;
     println!("Metadata:");
     println!("  root_hash: {}", hex::encode(metadata.root_hash));
-    println!(
-        "  label: {}",
-        metadata.label.as_deref().unwrap_or("(none)")
-    );
+    println!("  label: {}", metadata.label.as_deref().unwrap_or("(none)"));
     println!(
         "  description: {}",
         metadata.description.as_deref().unwrap_or("(none)")
@@ -54,16 +50,16 @@ pub async fn datastore_view(launcher_id_str: String, testnet11: bool) -> Result<
         for puzzle in &datastore.info.delegated_puzzles {
             match puzzle {
                 DelegatedPuzzle::Admin(hash) => {
-                    println!("  Admin: {}", hex::encode(Bytes32::from(*hash)));
+                    println!("  Admin: {}", hex::encode(hash));
                 }
                 DelegatedPuzzle::Writer(hash) => {
-                    println!(
-                        "  Writer inner puzzle hash: {}",
-                        hex::encode(Bytes32::from(*hash))
-                    );
+                    println!("  Writer inner puzzle hash: {}", hex::encode(hash));
                 }
                 DelegatedPuzzle::Oracle(fee_address, fee) => {
-                    println!("  Oracle fee address puzzle hash: {}", hex::encode(fee_address));
+                    println!(
+                        "  Oracle fee address puzzle hash: {}",
+                        hex::encode(fee_address)
+                    );
                     println!("  Oracle fee: {fee} mojos");
                 }
             }

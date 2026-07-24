@@ -4,7 +4,7 @@ use chia_puzzle_types::standard::StandardArgs;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
-        Cat, DataStore, DataStoreMetadata, DelegatedPuzzle, Layer, Nft, OracleLayer, Puzzle,
+        Cat, Datastore, DatastoreMetadata, DelegatedPuzzle, Layer, Nft, OracleLayer, Puzzle,
         RewardDistributor, RewardDistributorStakeAction, Spend, SpendContext,
     },
     types::{
@@ -155,7 +155,7 @@ pub fn merkle_proof_for_nft(
 }
 
 pub fn curated_datastore_fields(
-    datastore: &DataStore<DataStoreMetadata>,
+    datastore: &Datastore<DatastoreMetadata>,
     ctx: &mut SpendContext,
 ) -> Result<CuratedDatastoreFields, CliError> {
     let dl_metadata_rest_hash = datastore.info.metadata.label.as_ref().map(|label| {
@@ -200,7 +200,7 @@ pub fn oracle_datastore_inner_spend(
 
 pub fn spend_datastore_oracle(
     ctx: &mut SpendContext,
-    datastore: DataStore<DataStoreMetadata>,
+    datastore: Datastore<DatastoreMetadata>,
     delegated_puzzles: &[DelegatedPuzzle],
 ) -> Result<CoinSpend, CliError> {
     let inner_spend = oracle_datastore_inner_spend(ctx, delegated_puzzles)?;

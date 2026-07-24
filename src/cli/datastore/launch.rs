@@ -3,7 +3,7 @@ use chia_puzzle_types::standard::StandardArgs;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
-        create_security_coin, decode_offer, spend_security_coin, DataStoreMetadata, Launcher,
+        create_security_coin, decode_offer, spend_security_coin, DatastoreMetadata, Launcher,
         Offer, SpendContext,
     },
 };
@@ -25,7 +25,7 @@ pub async fn datastore_launch(
 ) -> Result<(), CliError> {
     let records = load_and_dedupe_csv(&csv_path)?;
     let root_hash = build_root_hash(&records)?;
-    let metadata = DataStoreMetadata {
+    let metadata = DatastoreMetadata {
         root_hash,
         label,
         description,

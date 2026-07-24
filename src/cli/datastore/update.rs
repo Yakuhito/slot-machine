@@ -3,7 +3,7 @@ use chia_puzzle_types::standard::StandardArgs;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
-        create_security_coin, decode_offer, spend_security_coin, DataStore, DataStoreMetadata,
+        create_security_coin, decode_offer, spend_security_coin, Datastore, DatastoreMetadata,
         Offer, SpendContext, SpendWithConditions, StandardLayer,
     },
     types::Conditions,
@@ -58,7 +58,7 @@ pub async fn datastore_update(
         ));
     }
 
-    let new_metadata = DataStoreMetadata {
+    let new_metadata = DatastoreMetadata {
         root_hash: build_root_hash(&new_records)?,
         label: label.or(datastore.info.metadata.label.clone()),
         description: description.or(datastore.info.metadata.description.clone()),
@@ -92,7 +92,7 @@ pub async fn datastore_update(
         create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
     let owner_layer = StandardLayer::new(owner_pk);
-    let recreate = DataStore::<()>::owner_create_coin_condition(
+    let recreate = Datastore::<()>::owner_create_coin_condition(
         &mut ctx,
         datastore.info.launcher_id,
         owner_puzzle_hash.into(),
@@ -101,7 +101,7 @@ pub async fn datastore_update(
     )
     .map_err(CliError::Driver)?;
     let metadata_condition =
-        DataStore::new_metadata_condition(&mut ctx, new_metadata).map_err(CliError::Driver)?;
+        Datastore::new_metadata_condition(&mut ctx, new_metadata).map_err(CliError::Driver)?;
 
     let inner_spend = owner_layer
         .spend_with_conditions(

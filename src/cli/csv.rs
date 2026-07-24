@@ -231,7 +231,9 @@ struct DatastoreNftCsvRow {
     weight: u64,
 }
 
-pub fn load_datastore_nft_csv<P: AsRef<Path>>(path: P) -> Result<Vec<DatastoreNftRecord>, CliError> {
+pub fn load_datastore_nft_csv<P: AsRef<Path>>(
+    path: P,
+) -> Result<Vec<DatastoreNftRecord>, CliError> {
     let file = File::open(path)?;
     let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
 

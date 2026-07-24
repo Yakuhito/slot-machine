@@ -11,11 +11,12 @@ use super::{
     catalog_verify_deployment, datastore_launch, datastore_update, datastore_view,
     multisig_broadcast_rekey, multisig_launch, multisig_sign_rekey, multisig_verify_signature,
     multisig_view, reward_distributor_add_rewards, reward_distributor_broadcast_entry_update,
-    reward_distributor_clawback_rewards, reward_distributor_commit_rewards,
-    reward_distributor_initiate_payout, reward_distributor_launch, reward_distributor_new_epoch,
-    reward_distributor_refresh, reward_distributor_sign_entry_update, reward_distributor_sync,
-    reward_distributor_view, xchandles_continue_launch, xchandles_expire, xchandles_extend,
-    xchandles_initiate_launch, xchandles_initiate_update, xchandles_listen, xchandles_register,
+    reward_distributor_clawback_rewards, reward_distributor_commit_available_rewards,
+    reward_distributor_commit_rewards, reward_distributor_initiate_payout,
+    reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_refresh,
+    reward_distributor_sign_entry_update, reward_distributor_sync, reward_distributor_view,
+    xchandles_continue_launch, xchandles_expire, xchandles_extend, xchandles_initiate_launch,
+    xchandles_initiate_update, xchandles_listen, xchandles_register,
     xchandles_unroll_state_scheduler, xchandles_verify_deployment, xchandles_view,
 };
 
@@ -894,6 +895,28 @@ enum RewardDistributorCliAction {
         #[arg(long, default_value = "0.0025")]
         fee: String,
     },
+    /// Finds Reward CATs sent to the permissionless next-epoch puzzle and commits them
+    CommitAvailableRewards {
+        /// Reward distributor singleton launcher id
+        #[arg(long)]
+        launcher_id: String,
+
+        /// Address that can claw back each commitment (defaults to no clawback)
+        #[arg(long)]
+        clawback_address: Option<String>,
+
+        /// Maximum number of available coins to commit
+        #[arg(long, default_value_t = 32)]
+        max_coins: usize,
+
+        /// Use testnet11
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+
+        /// Fee to use, in XCH
+        #[arg(long, default_value = "0.0025")]
+        fee: String,
+    },
     /// Claws back a previous reward commitment
     ClawbackRewards {
         /// Reward distributor singleton launcher id
@@ -1654,6 +1677,22 @@ pub async fn run_cli() {
                     reward_amount,
                     epoch_start,
                     clawback_address,
+                    testnet11,
+                    fee,
+                )
+                .await
+            }
+            RewardDistributorCliAction::CommitAvailableRewards {
+                launcher_id,
+                clawback_address,
+                max_coins,
+                testnet11,
+                fee,
+            } => {
+                reward_distributor_commit_available_rewards(
+                    launcher_id,
+                    clawback_address,
+                    max_coins,
                     testnet11,
                     fee,
                 )

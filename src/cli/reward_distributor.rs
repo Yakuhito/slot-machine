@@ -1,6 +1,7 @@
 mod add_rewards;
 mod broadcast_entry_update;
 mod clawback_rewards;
+mod commit_available_rewards;
 mod commit_rewards;
 mod helpers;
 mod initiate_payout;
@@ -17,6 +18,7 @@ mod view;
 pub use add_rewards::*;
 pub use broadcast_entry_update::*;
 pub use clawback_rewards::*;
+pub use commit_available_rewards::*;
 pub use commit_rewards::*;
 pub use helpers::*;
 pub use initiate_payout::*;
