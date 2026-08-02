@@ -14,16 +14,19 @@ use tower_http::cors::{Any, CorsLayer};
 use super::error::ApiError;
 use super::freshness::FreshnessState;
 use super::handle_store::{HandleSlotStore, StoredHandleSlot};
+use super::registration_store::{RegistrationActionKind, RegistrationStore, StoredRegistration};
 use super::store::{FollowRecordStatus, SingletonStore, StoredSingletonState};
 use super::types::{
     hex32, is_canonical_handle, parse_launcher_id, HandleProofResponse, HandleQuery, HandleSlotJson,
-    SingletonQuery, SingletonResponse, SlotNeighborsJson,
+    RecentRegistrationItem, RecentRegistrationsQuery, RecentRegistrationsResponse,
+    RegistrationQuery, RegistrationResponse, SingletonQuery, SingletonResponse, SlotNeighborsJson,
 };
 
 #[derive(Clone)]
 pub struct ListenerApiState {
     pub store: Arc<dyn SingletonStore>,
     pub handle_slots: Arc<dyn HandleSlotStore>,
+    pub registrations: Arc<dyn RegistrationStore>,
     pub freshness: Arc<RwLock<FreshnessState>>,
     /// Configured registries in follow order; omission of `launcher_id` selects the first.
     pub registry_launcher_ids: Vec<Bytes32>,
@@ -35,12 +38,14 @@ impl ListenerApiState {
     pub fn new(
         store: Arc<dyn SingletonStore>,
         handle_slots: Arc<dyn HandleSlotStore>,
+        registrations: Arc<dyn RegistrationStore>,
         freshness: FreshnessState,
         registry_launcher_ids: Vec<Bytes32>,
     ) -> Self {
         Self {
             store,
             handle_slots,
+            registrations,
             freshness: Arc::new(RwLock::new(freshness)),
             registry_launcher_ids,
             now_unix_override: None,
@@ -66,6 +71,15 @@ pub fn listener_router(state: ListenerApiState) -> Router {
             get(get_singleton).head(head_singleton),
         )
         .route("/handle/{handle}", get(get_handle).head(head_handle))
+        // Static path before `{handle}` so the handle "recent" never shadows this feed.
+        .route(
+            "/registrations/recent",
+            get(get_registrations_recent).head(head_registrations_recent),
+        )
+        .route(
+            "/registrations/{handle}",
+            get(get_registration).head(head_registration),
+        )
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
@@ -116,6 +130,27 @@ fn slot_to_json(slot: &StoredHandleSlot) -> HandleSlotJson {
         expiration: slot.expiration,
         owner_launcher_id: hex32(slot.owner_launcher_id),
         resolved_launcher_id: hex32(slot.resolved_launcher_id),
+    }
+}
+
+fn action_kind_str(kind: RegistrationActionKind) -> &'static str {
+    match kind {
+        RegistrationActionKind::Register => "register",
+        RegistrationActionKind::Expire => "expire",
+    }
+}
+
+fn registration_to_response(
+    reg: &StoredRegistration,
+    indexed_peak_height: u32,
+) -> RegistrationResponse {
+    RegistrationResponse {
+        handle: reg.handle.clone(),
+        registration_secret: hex32(reg.registration_secret),
+        action_kind: action_kind_str(reg.action_kind).to_string(),
+        protocol_fee: reg.protocol_fee,
+        confirmation_height: reg.confirmation_height,
+        indexed_peak_height,
     }
 }
 
@@ -259,6 +294,61 @@ async fn lookup_handle_proof(
     })
 }
 
+async fn lookup_registration(
+    state: &ListenerApiState,
+    handle: &str,
+    query: &RegistrationQuery,
+) -> Result<RegistrationResponse, ApiError> {
+    if !is_canonical_handle(handle) {
+        return Err(ApiError::invalid_handle());
+    }
+
+    let registry = select_registry(state, query.launcher_id.as_deref())?;
+    let indexed_peak_height = require_fresh(state).await?;
+
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+    let record = state
+        .registrations
+        .get(registry, handle_hash)
+        .await
+        .ok_or_else(ApiError::handle_not_found)?;
+    let reg = record
+        .current
+        .as_ref()
+        .ok_or_else(ApiError::handle_not_found)?;
+
+    // Readable after Handle Expiration — no expiration safety gate here.
+    Ok(registration_to_response(reg, indexed_peak_height))
+}
+
+async fn lookup_registrations_recent(
+    state: &ListenerApiState,
+    query: &RecentRegistrationsQuery,
+) -> Result<RecentRegistrationsResponse, ApiError> {
+    let registry = select_registry(state, query.launcher_id.as_deref())?;
+    let indexed_peak_height = require_fresh(state).await?;
+
+    let limit = query.limit.unwrap_or(50).min(50) as usize;
+    let stats = state.registrations.get_stats(registry).await;
+    let items = stats
+        .events
+        .iter()
+        .rev()
+        .take(limit)
+        .map(|ev| RecentRegistrationItem {
+            handle: ev.handle.clone(),
+            action_kind: action_kind_str(ev.action_kind).to_string(),
+            confirmation_height: ev.confirmation_height,
+        })
+        .collect();
+
+    Ok(RecentRegistrationsResponse {
+        items,
+        total_registered: stats.total_registered,
+        indexed_peak_height,
+    })
+}
+
 async fn get_singleton(
     State(state): State<ListenerApiState>,
     Path(launcher_id_raw): Path<String>,
@@ -296,6 +386,40 @@ async fn head_handle(
     Query(query): Query<HandleQuery>,
 ) -> Result<StatusCode, ApiError> {
     let _ = lookup_handle_proof(&state, &handle, &query).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn get_registration(
+    State(state): State<ListenerApiState>,
+    Path(handle): Path<String>,
+    Query(query): Query<RegistrationQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let body = lookup_registration(&state, &handle, &query).await?;
+    Ok(Json(body))
+}
+
+async fn head_registration(
+    State(state): State<ListenerApiState>,
+    Path(handle): Path<String>,
+    Query(query): Query<RegistrationQuery>,
+) -> Result<StatusCode, ApiError> {
+    let _ = lookup_registration(&state, &handle, &query).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn get_registrations_recent(
+    State(state): State<ListenerApiState>,
+    Query(query): Query<RecentRegistrationsQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let body = lookup_registrations_recent(&state, &query).await?;
+    Ok(Json(body))
+}
+
+async fn head_registrations_recent(
+    State(state): State<ListenerApiState>,
+    Query(query): Query<RecentRegistrationsQuery>,
+) -> Result<StatusCode, ApiError> {
+    let _ = lookup_registrations_recent(&state, &query).await?;
     Ok(StatusCode::OK)
 }
 

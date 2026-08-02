@@ -14,6 +14,11 @@ use super::handle_store::{
     StoredHandleSlot,
 };
 use super::refs::{dereferenced_launchers, references_from_action_log, SingletonReference};
+use super::registration_store::{
+    push_registration_replacement, rollback_registration_to_before, rollback_stats_to_before,
+    RegistrationActionKind, RegistrationRecord, RegistrationStore, StoredRegistration,
+    StoredRegistrationEvent,
+};
 use super::store::{
     push_replacement, rollback_to_before, FollowRecordStatus, FollowedSingleton, SingletonStore,
     StoredSingletonState,
@@ -25,6 +30,7 @@ use chia_wallet_sdk::types::puzzles::XchandlesHandleSlotValue;
 pub struct SingletonIndexer {
     pub store: Arc<dyn SingletonStore>,
     pub handle_slots: Arc<dyn HandleSlotStore>,
+    pub registrations: Arc<dyn RegistrationStore>,
     pub freshness: Arc<RwLock<FreshnessState>>,
 }
 
@@ -32,11 +38,13 @@ impl SingletonIndexer {
     pub fn new(
         store: Arc<dyn SingletonStore>,
         handle_slots: Arc<dyn HandleSlotStore>,
+        registrations: Arc<dyn RegistrationStore>,
         freshness: Arc<RwLock<FreshnessState>>,
     ) -> Self {
         Self {
             store,
             handle_slots,
+            registrations,
             freshness,
         }
     }
@@ -126,6 +134,71 @@ impl SingletonIndexer {
             let value_hash: Bytes32 = value.tree_hash().into();
             let parent = parent_for(value_hash).unwrap_or_default();
             self.project_handle_slot(registry_launcher_id, value, parent, height)
+                .await;
+        }
+    }
+
+    /// Project register/expire registration facts and recent-event feed from action logs.
+    pub async fn project_registrations_from_logs(
+        &self,
+        registry_launcher_id: Bytes32,
+        height: u32,
+        logs: &[XchandlesActionLog],
+    ) {
+        for log in logs {
+            let (action_kind, handle, secret, protocol_fee, handle_hash) = match log {
+                XchandlesActionLog::Register(e) => (
+                    RegistrationActionKind::Register,
+                    e.precommit_value.handle.clone(),
+                    e.precommit_value.secret,
+                    e.total_price,
+                    e.created_handle_slot.handle_hash,
+                ),
+                XchandlesActionLog::Expire(e) => (
+                    RegistrationActionKind::Expire,
+                    e.precommit_value.handle.clone(),
+                    e.precommit_value.secret,
+                    e.total_price,
+                    e.created_slot.handle_hash,
+                ),
+                // Extension and other lifecycle actions never replace the registration fact
+                // and never change total_registered.
+                _ => continue,
+            };
+
+            let stored = StoredRegistration {
+                registry_launcher_id,
+                handle: handle.clone(),
+                handle_hash,
+                registration_secret: secret,
+                action_kind,
+                protocol_fee,
+                confirmation_height: height,
+            };
+            let mut record = self
+                .registrations
+                .get(registry_launcher_id, handle_hash)
+                .await
+                .unwrap_or(RegistrationRecord {
+                    registry_launcher_id,
+                    handle_hash,
+                    current: None,
+                    history: Vec::new(),
+                });
+            push_registration_replacement(&mut record, stored, height);
+            self.registrations.upsert(record).await;
+
+            let mut stats = self.registrations.get_stats(registry_launcher_id).await;
+            stats.events.push(StoredRegistrationEvent {
+                handle,
+                action_kind,
+                confirmation_height: height,
+            });
+            if action_kind == RegistrationActionKind::Register {
+                stats.total_registered = stats.total_registered.saturating_add(1);
+            }
+            self.registrations
+                .set_stats(registry_launcher_id, stats)
                 .await;
         }
     }
@@ -381,6 +454,26 @@ impl SingletonIndexer {
             } else {
                 self.handle_slots.upsert(rec).await;
             }
+        }
+
+        let mut touched_registries: std::collections::HashSet<Bytes32> =
+            self.registrations.all_stats_registry_ids().await.into_iter().collect();
+        for (registry, handle_hash) in self.registrations.all_keys().await {
+            touched_registries.insert(registry);
+            let Some(mut rec) = self.registrations.get(registry, handle_hash).await else {
+                continue;
+            };
+            rollback_registration_to_before(&mut rec, from_height);
+            if rec.current.is_none() && rec.history.is_empty() {
+                self.registrations.remove(registry, handle_hash).await;
+            } else {
+                self.registrations.upsert(rec).await;
+            }
+        }
+        for registry in touched_registries {
+            let mut stats = self.registrations.get_stats(registry).await;
+            rollback_stats_to_before(&mut stats, from_height);
+            self.registrations.set_stats(registry, stats).await;
         }
     }
 }

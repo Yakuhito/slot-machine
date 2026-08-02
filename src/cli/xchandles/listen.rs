@@ -19,8 +19,8 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::{Any, CorsLayer};
 
 use super::listener::{
-    listener_router, DbHandleSlotStore, DbSingletonStore, FreshnessState, HandleSlotStore,
-    ListenerApiState, SingletonIndexer, SingletonStore,
+    listener_router, DbHandleSlotStore, DbRegistrationStore, DbSingletonStore, FreshnessState,
+    HandleSlotStore, ListenerApiState, RegistrationStore, SingletonIndexer, SingletonStore,
 };
 use crate::{
     get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, CoinsetWebSocketMessage,
@@ -82,6 +82,7 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
 
     let singleton_store: Arc<dyn SingletonStore> = DbSingletonStore::new(Arc::clone(&db));
     let handle_slots: Arc<dyn HandleSlotStore> = DbHandleSlotStore::new(Arc::clone(&db));
+    let registrations: Arc<dyn RegistrationStore> = DbRegistrationStore::new(Arc::clone(&db));
     let freshness = Arc::new(RwLock::new(FreshnessState::fresh_at(
         0,
         FreshnessState::now_unix(),
@@ -89,6 +90,7 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
     let indexer = Arc::new(SingletonIndexer::new(
         Arc::clone(&singleton_store),
         Arc::clone(&handle_slots),
+        Arc::clone(&registrations),
         Arc::clone(&freshness),
     ));
 
@@ -99,6 +101,7 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
     let api_state = ListenerApiState {
         store: Arc::clone(&singleton_store),
         handle_slots: Arc::clone(&handle_slots),
+        registrations: Arc::clone(&registrations),
         freshness: Arc::clone(&freshness),
         registry_launcher_ids: launcher_ids.clone(),
         now_unix_override: None,
@@ -429,6 +432,13 @@ async fn connect_websocket(
                                         spent_height,
                                         &logs,
                                         |value_hash| parent_by_value_hash.get(&value_hash).copied(),
+                                    )
+                                    .await;
+                                indexer
+                                    .project_registrations_from_logs(
+                                        registry_launcher_id,
+                                        spent_height,
+                                        &logs,
                                     )
                                     .await;
                                 if let Err(e) = indexer

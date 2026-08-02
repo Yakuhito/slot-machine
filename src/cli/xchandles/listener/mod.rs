@@ -9,6 +9,7 @@ mod freshness;
 mod handle_store;
 mod index;
 mod refs;
+mod registration_store;
 mod store;
 mod types;
 
@@ -25,11 +26,19 @@ pub use handle_store::{
 };
 pub use index::SingletonIndexer;
 pub use refs::{dereferenced_launchers, references_from_action_log, SingletonReference};
+pub use registration_store::{
+    prune_registration_history, push_registration_replacement, rollback_registration_to_before,
+    rollback_stats_to_before, DbRegistrationStore, MemoryRegistrationStore, RegistrationActionKind,
+    RegistrationRecord, RegistrationStore, RegistryRegistrationStats, StoredRegistration,
+    StoredRegistrationEvent,
+};
 pub use store::{
     prune_history, push_replacement, rollback_to_before, DbSingletonStore, FollowRecordStatus,
     FollowedSingleton, MemorySingletonStore, SingletonStore, StoredSingletonState,
 };
 pub use types::{
     hex32, is_canonical_handle, parse_launcher_id, ApiErrorBody, HandleProofResponse, HandleQuery,
-    HandleSlotJson, SingletonNftDetails, SingletonQuery, SingletonResponse, SlotNeighborsJson,
+    HandleSlotJson, RecentRegistrationItem, RecentRegistrationsQuery, RecentRegistrationsResponse,
+    RegistrationQuery, RegistrationResponse, SingletonNftDetails, SingletonQuery, SingletonResponse,
+    SlotNeighborsJson,
 };

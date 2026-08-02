@@ -1,4 +1,4 @@
-//! Real-HTTP listener fixture and golden contracts for Tickets 10–11.
+//! Real-HTTP listener fixture and golden contracts for Tickets 10–12.
 //!
 //! Later tickets must extend this same server fixture and consume these goldens
 //! rather than redefining the singleton/error envelope independently.
@@ -15,11 +15,13 @@ use clvm_utils::ToTreeHash;
 use clvmr::Allocator;
 use serde_json::Value;
 use slot_machine::{
-    discover_singleton_in_block, listener_router, push_handle_replacement, push_replacement,
-    rollback_to_before, DiscoveryResult, FollowRecordStatus, FollowedSingleton, FreshnessState,
-    HandleSlotRecord, HandleSlotStore, ListenerApiState, MemoryHandleSlotStore,
-    MemorySingletonStore, ParsedNftState, SingletonIndexer, SingletonStore, StoredHandleSlot,
-    StoredSingletonState,
+    discover_singleton_in_block, listener_router, push_handle_replacement,
+    push_registration_replacement, push_replacement, rollback_to_before, DiscoveryResult,
+    FollowRecordStatus, FollowedSingleton, FreshnessState, HandleSlotRecord, HandleSlotStore,
+    ListenerApiState, MemoryHandleSlotStore, MemoryRegistrationStore, MemorySingletonStore,
+    ParsedNftState, RegistrationActionKind, RegistrationRecord, RegistrationStore,
+    RegistryRegistrationStats, SingletonIndexer, SingletonStore, StoredHandleSlot,
+    StoredRegistration, StoredRegistrationEvent, StoredSingletonState,
 };
 use tokio::sync::RwLock;
 
@@ -48,6 +50,7 @@ struct RunningListener {
     base: String,
     store: Arc<MemorySingletonStore>,
     handle_slots: Arc<MemoryHandleSlotStore>,
+    registrations: Arc<MemoryRegistrationStore>,
     freshness: Arc<RwLock<FreshnessState>>,
     _join: tokio::task::JoinHandle<()>,
 }
@@ -64,10 +67,12 @@ impl RunningListener {
     ) -> Self {
         let store = MemorySingletonStore::shared();
         let handle_slots = MemoryHandleSlotStore::shared();
+        let registrations = MemoryRegistrationStore::shared();
         let freshness = Arc::new(RwLock::new(freshness));
         let state = ListenerApiState {
             store: store.clone() as Arc<dyn SingletonStore>,
             handle_slots: handle_slots.clone() as Arc<dyn HandleSlotStore>,
+            registrations: registrations.clone() as Arc<dyn RegistrationStore>,
             freshness: Arc::clone(&freshness),
             registry_launcher_ids,
             now_unix_override,
@@ -89,6 +94,7 @@ impl RunningListener {
             base,
             store,
             handle_slots,
+            registrations,
             freshness,
             _join: join,
         }
@@ -123,6 +129,18 @@ async fn upsert_handle_slot(server: &RunningListener, slot: StoredHandleSlot) {
             history: Vec::new(),
         })
         .await;
+}
+
+async fn upsert_registration(server: &RunningListener, reg: StoredRegistration) {
+    let mut record = RegistrationRecord {
+        registry_launcher_id: reg.registry_launcher_id,
+        handle_hash: reg.handle_hash,
+        current: None,
+        history: Vec::new(),
+    };
+    let height = reg.confirmation_height;
+    push_registration_replacement(&mut record, reg, height);
+    server.registrations.upsert(record).await;
 }
 
 
@@ -411,6 +429,7 @@ async fn discovery_follow_melt_rollback_cleanup_and_rediscovery() -> anyhow::Res
     let indexer = SingletonIndexer::new(
         store.clone() as Arc<dyn SingletonStore>,
         MemoryHandleSlotStore::shared() as Arc<dyn HandleSlotStore>,
+        MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
         Arc::clone(&freshness),
     );
 
@@ -895,6 +914,7 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
     let indexer = SingletonIndexer::new(
         store.clone() as Arc<dyn SingletonStore>,
         handle_slots.clone() as Arc<dyn HandleSlotStore>,
+        MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
         Arc::clone(&freshness),
     );
 
@@ -969,6 +989,7 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
     let state = ListenerApiState {
         store: store.clone() as Arc<dyn SingletonStore>,
         handle_slots: handle_slots.clone() as Arc<dyn HandleSlotStore>,
+        registrations: MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
         freshness: Arc::clone(&freshness),
         registry_launcher_ids: vec![registry],
         now_unix_override: Some(1_700_000_000),
@@ -1026,4 +1047,621 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
         after["slot_parent_coin_id"].as_str().unwrap(),
         hex::encode(b32(0x31))
     );
+}
+
+#[tokio::test]
+async fn registration_golden_and_lifecycle_semantics() {
+    let registry = b32(0xaa);
+    let server =
+        RunningListener::spawn(FreshnessState::fresh_at(116, FreshnessState::now_unix())).await;
+    let client = reqwest::Client::new();
+    let handle = "alice";
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+    let secret = b32(0xbb);
+
+    upsert_registration(
+        &server,
+        StoredRegistration {
+            registry_launcher_id: registry,
+            handle: handle.to_string(),
+            handle_hash,
+            registration_secret: secret,
+            action_kind: RegistrationActionKind::Register,
+            protocol_fee: 1000,
+            confirmation_height: 90,
+        },
+    )
+    .await;
+
+    let resp = client
+        .get(format!("{}/registrations/{handle}", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body, load_golden("registration_success.json"));
+    // Exact public fields only — no private recovery/browser keys.
+    let mut keys: Vec<_> = body.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        [
+            "action_kind",
+            "confirmation_height",
+            "handle",
+            "indexed_peak_height",
+            "protocol_fee",
+            "registration_secret",
+        ]
+    );
+
+    // Strict Handle + freshness reuse Ticket 11 codes.
+    let bad = client
+        .get(format!("{}/registrations/ALICE", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), 400);
+    assert_eq!(
+        normalize_request_id(bad.json().await.unwrap())["code"],
+        "invalid_handle"
+    );
+
+    *server.freshness.write().await = FreshnessState {
+        indexed_peak_height: 10,
+        upstream_peak_height: 40,
+        last_successful_peak_unix: FreshnessState::now_unix(),
+        rolling_back: false,
+        resyncing: false,
+    };
+    let stale = client
+        .get(format!("{}/registrations/{handle}", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), 503);
+    assert_eq!(
+        normalize_request_id(stale.json().await.unwrap())["code"],
+        "index_stale"
+    );
+}
+
+#[tokio::test]
+async fn registration_readable_after_expiration_and_replaced_by_expire_not_extend() {
+    let registry = b32(0xaa);
+    let handle = "alice";
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+    let server = RunningListener::spawn_with_registries(
+        FreshnessState::fresh_at(200, 2_000_000_000),
+        vec![registry],
+        Some(2_000_000_000), // after any realistic expiration
+    )
+    .await;
+    let client = reqwest::Client::new();
+
+    let mut record = RegistrationRecord {
+        registry_launcher_id: registry,
+        handle_hash,
+        current: None,
+        history: Vec::new(),
+    };
+    push_registration_replacement(
+        &mut record,
+        StoredRegistration {
+            registry_launcher_id: registry,
+            handle: handle.to_string(),
+            handle_hash,
+            registration_secret: b32(0x11),
+            action_kind: RegistrationActionKind::Register,
+            protocol_fee: 1000,
+            confirmation_height: 90,
+        },
+        90,
+    );
+    // Expiry-auction purchase replaces the prior registration fact.
+    push_registration_replacement(
+        &mut record,
+        StoredRegistration {
+            registry_launcher_id: registry,
+            handle: handle.to_string(),
+            handle_hash,
+            registration_secret: b32(0x22),
+            action_kind: RegistrationActionKind::Expire,
+            protocol_fee: 2500,
+            confirmation_height: 150,
+        },
+        150,
+    );
+    server.registrations.upsert(record).await;
+
+    // Extension leaves the latest registration unchanged — we simply do not project it.
+    let body: Value = client
+        .get(format!("{}/registrations/{handle}", server.base))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(body["action_kind"], "expire");
+    assert_eq!(
+        body["registration_secret"].as_str().unwrap(),
+        hex::encode(b32(0x22))
+    );
+    assert_eq!(body["protocol_fee"].as_u64().unwrap(), 2500);
+    assert_eq!(body["confirmation_height"].as_u64().unwrap(), 150);
+}
+
+#[tokio::test]
+async fn registrations_recent_golden_limit_and_total_semantics() {
+    let registry = b32(0xaa);
+    let server =
+        RunningListener::spawn(FreshnessState::fresh_at(116, FreshnessState::now_unix())).await;
+    let client = reqwest::Client::new();
+
+    let mut stats = RegistryRegistrationStats::default();
+    for (handle, kind, height, bump) in [
+        ("alice", RegistrationActionKind::Register, 90u32, true),
+        ("bob", RegistrationActionKind::Register, 100, true),
+        ("carol", RegistrationActionKind::Expire, 110, false),
+    ] {
+        stats.events.push(StoredRegistrationEvent {
+            handle: handle.to_string(),
+            action_kind: kind,
+            confirmation_height: height,
+        });
+        if bump {
+            stats.total_registered += 1;
+        }
+    }
+    // Premine-style register already counted above; expire does not increment.
+    // Extend/transfer/expiration would also not touch this projection.
+    server.registrations.set_stats(registry, stats).await;
+
+    let resp = client
+        .get(format!("{}/registrations/recent?limit=50", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body, load_golden("registrations_recent_success.json"));
+    let mut root_keys: Vec<_> = body.as_object().unwrap().keys().cloned().collect();
+    root_keys.sort();
+    assert_eq!(
+        root_keys,
+        ["indexed_peak_height", "items", "total_registered"]
+    );
+    let mut item_keys: Vec<_> = body["items"][0]
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    item_keys.sort();
+    assert_eq!(
+        item_keys,
+        ["action_kind", "confirmation_height", "handle"]
+    );
+
+    let limited: Value = client
+        .get(format!("{}/registrations/recent?limit=1", server.base))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(limited["items"].as_array().unwrap().len(), 1);
+    assert_eq!(limited["items"][0]["handle"], "carol");
+    assert_eq!(limited["total_registered"].as_u64().unwrap(), 2);
+
+    let capped: Value = client
+        .get(format!("{}/registrations/recent?limit=999", server.base))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(capped["items"].as_array().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn registration_reorganization_restores_prior_and_reverses_total() {
+    let registry = b32(0xaa);
+    let handle = "alice";
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+    let registrations = MemoryRegistrationStore::shared();
+    let store = MemorySingletonStore::shared();
+    let handle_slots = MemoryHandleSlotStore::shared();
+    let freshness = Arc::new(RwLock::new(FreshnessState::fresh_at(
+        200,
+        FreshnessState::now_unix(),
+    )));
+    let indexer = SingletonIndexer::new(
+        store.clone() as Arc<dyn SingletonStore>,
+        handle_slots.clone() as Arc<dyn HandleSlotStore>,
+        registrations.clone() as Arc<dyn RegistrationStore>,
+        Arc::clone(&freshness),
+    );
+
+    let mut record = RegistrationRecord {
+        registry_launcher_id: registry,
+        handle_hash,
+        current: None,
+        history: Vec::new(),
+    };
+    push_registration_replacement(
+        &mut record,
+        StoredRegistration {
+            registry_launcher_id: registry,
+            handle: handle.to_string(),
+            handle_hash,
+            registration_secret: b32(0x11),
+            action_kind: RegistrationActionKind::Register,
+            protocol_fee: 1000,
+            confirmation_height: 10,
+        },
+        10,
+    );
+    push_registration_replacement(
+        &mut record,
+        StoredRegistration {
+            registry_launcher_id: registry,
+            handle: handle.to_string(),
+            handle_hash,
+            registration_secret: b32(0x22),
+            action_kind: RegistrationActionKind::Register,
+            protocol_fee: 1000,
+            confirmation_height: 20,
+        },
+        20,
+    );
+    registrations.upsert(record).await;
+    registrations
+        .set_stats(
+            registry,
+            RegistryRegistrationStats {
+                total_registered: 2,
+                events: vec![
+                    StoredRegistrationEvent {
+                        handle: handle.to_string(),
+                        action_kind: RegistrationActionKind::Register,
+                        confirmation_height: 10,
+                    },
+                    StoredRegistrationEvent {
+                        handle: handle.to_string(),
+                        action_kind: RegistrationActionKind::Register,
+                        confirmation_height: 20,
+                    },
+                ],
+            },
+        )
+        .await;
+
+    let state = ListenerApiState {
+        store: store.clone() as Arc<dyn SingletonStore>,
+        handle_slots: handle_slots.clone() as Arc<dyn HandleSlotStore>,
+        registrations: registrations.clone() as Arc<dyn RegistrationStore>,
+        freshness: Arc::clone(&freshness),
+        registry_launcher_ids: vec![registry],
+        now_unix_override: None,
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = listener_router(state);
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let base = format!("http://{addr}");
+    for _ in 0..100 {
+        if reqwest::get(format!("{base}/healthz")).await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let client = reqwest::Client::new();
+
+    let before: Value = client
+        .get(format!("{base}/registrations/{handle}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        before["registration_secret"].as_str().unwrap(),
+        hex::encode(b32(0x22))
+    );
+    let recent_before: Value = client
+        .get(format!("{base}/registrations/recent?limit=50"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(recent_before["total_registered"].as_u64().unwrap(), 2);
+    assert_eq!(recent_before["items"].as_array().unwrap().len(), 2);
+
+    indexer.rollback(20).await;
+    indexer
+        .note_peak(200, 200, FreshnessState::now_unix())
+        .await;
+
+    let after: Value = client
+        .get(format!("{base}/registrations/{handle}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        after["registration_secret"].as_str().unwrap(),
+        hex::encode(b32(0x11))
+    );
+    assert_eq!(after["confirmation_height"].as_u64().unwrap(), 10);
+
+    let recent_after: Value = client
+        .get(format!("{base}/registrations/recent?limit=50"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(recent_after["total_registered"].as_u64().unwrap(), 1);
+    assert_eq!(recent_after["items"].as_array().unwrap().len(), 1);
+    assert_eq!(recent_after["items"][0]["confirmation_height"], 10);
+}
+
+#[tokio::test]
+async fn project_registrations_from_logs_covers_register_expire_skips_extend() {
+    use chia_wallet_sdk::driver::{
+        XchandlesActionLog, XchandlesExpireActionLog, XchandlesExtendActionLog,
+        XchandlesPrecommitValue, XchandlesRegisterActionLog,
+    };
+    use chia_wallet_sdk::types::puzzles::{XchandlesHandleSlotValue, XchandlesPricingSolution};
+
+    let registry = b32(0xaa);
+    let registrations = MemoryRegistrationStore::shared();
+    let indexer = SingletonIndexer::new(
+        MemorySingletonStore::shared() as Arc<dyn SingletonStore>,
+        MemoryHandleSlotStore::shared() as Arc<dyn HandleSlotStore>,
+        registrations.clone() as Arc<dyn RegistrationStore>,
+        Arc::new(RwLock::new(FreshnessState::fresh_at(
+            50,
+            FreshnessState::now_unix(),
+        ))),
+    );
+
+    let handle_slot = |handle: &str, counter: u64| {
+        XchandlesHandleSlotValue::new(
+            counter,
+            handle.tree_hash().into(),
+            Bytes32::default(),
+            Bytes32::new([0xff; 32]),
+            4_102_444_800,
+            b32(0x11),
+            b32(0x11),
+        )
+    };
+    let precommit = |handle: &str, secret: Bytes32| {
+        XchandlesPrecommitValue::new(
+            b32(0x01),
+            (),
+            b32(0x02),
+            XchandlesPricingSolution {
+                buy_time: 1_700_000_000,
+                current_expiration: 0,
+                handle: handle.to_string(),
+                num_periods: 1,
+            },
+            handle.to_string(),
+            secret,
+            b32(0x11),
+            b32(0x11),
+        )
+    };
+
+    // Ordinary / Premine register increments total.
+    let register_log = XchandlesActionLog::Register(XchandlesRegisterActionLog {
+        spent_left_slot: handle_slot("left", 0),
+        spent_right_slot: handle_slot("right", 0),
+        created_left_slot: handle_slot("left", 1),
+        created_handle_slot: handle_slot("alice", 0),
+        created_right_slot: handle_slot("right", 1),
+        precommit_value: precommit("alice", b32(0xa1)),
+        total_price: 1000,
+        registered_time: 31_557_600,
+        owner_full_puzzle_hash: b32(0x31),
+        resolved_full_puzzle_hash: None,
+        owner_inner_puzzle_hash: b32(0x32),
+        resolved_inner_puzzle_hash: b32(0x32),
+    });
+    indexer
+        .project_registrations_from_logs(registry, 10, &[register_log])
+        .await;
+
+    // Extension must not replace the registration fact or change total.
+    let extend_log = XchandlesActionLog::Extend(XchandlesExtendActionLog {
+        spent_slot: handle_slot("alice", 0),
+        created_slot: handle_slot("alice", 1),
+        total_price: 1000,
+        registered_time: 31_557_600,
+    });
+    indexer
+        .project_registrations_from_logs(registry, 15, &[extend_log])
+        .await;
+
+    let after_extend = registrations
+        .get(registry, "alice".tree_hash().into())
+        .await
+        .unwrap()
+        .current
+        .unwrap();
+    assert_eq!(after_extend.action_kind, RegistrationActionKind::Register);
+    assert_eq!(after_extend.confirmation_height, 10);
+    assert_eq!(
+        registrations.get_stats(registry).await.total_registered,
+        1
+    );
+
+    // Expiry-auction purchase replaces the fact but does not increment total.
+    let expire_log = XchandlesActionLog::Expire(XchandlesExpireActionLog {
+        spent_slot: handle_slot("alice", 1),
+        created_slot: handle_slot("alice", 2),
+        precommit_value: precommit("alice", b32(0xa2)),
+        total_price: 2500,
+        registered_time: 31_557_600,
+        owner_full_puzzle_hash: b32(0x41),
+        resolved_full_puzzle_hash: None,
+        owner_inner_puzzle_hash: b32(0x42),
+        resolved_inner_puzzle_hash: b32(0x42),
+    });
+    indexer
+        .project_registrations_from_logs(registry, 20, &[expire_log])
+        .await;
+
+    let after_expire = registrations
+        .get(registry, "alice".tree_hash().into())
+        .await
+        .unwrap()
+        .current
+        .unwrap();
+    assert_eq!(after_expire.action_kind, RegistrationActionKind::Expire);
+    assert_eq!(after_expire.registration_secret, b32(0xa2));
+    assert_eq!(after_expire.protocol_fee, 2500);
+    let stats = registrations.get_stats(registry).await;
+    assert_eq!(stats.total_registered, 1);
+    assert_eq!(stats.events.len(), 2);
+    assert_eq!(stats.events[0].action_kind, RegistrationActionKind::Register);
+    assert_eq!(stats.events[1].action_kind, RegistrationActionKind::Expire);
+}
+
+#[tokio::test]
+async fn registration_registry_selection_matches_handle_semantics() {
+    let default_registry = b32(0xaa);
+    let other = b32(0xbb);
+    let server = RunningListener::spawn_with_registries(
+        FreshnessState::fresh_at(116, FreshnessState::now_unix()),
+        vec![default_registry, other],
+        None,
+    )
+    .await;
+    let client = reqwest::Client::new();
+    let handle = "alice";
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+
+    upsert_registration(
+        &server,
+        StoredRegistration {
+            registry_launcher_id: default_registry,
+            handle: handle.to_string(),
+            handle_hash,
+            registration_secret: b32(0x11),
+            action_kind: RegistrationActionKind::Register,
+            protocol_fee: 1000,
+            confirmation_height: 90,
+        },
+    )
+    .await;
+    upsert_registration(
+        &server,
+        StoredRegistration {
+            registry_launcher_id: other,
+            handle: handle.to_string(),
+            handle_hash,
+            registration_secret: b32(0x22),
+            action_kind: RegistrationActionKind::Register,
+            protocol_fee: 2000,
+            confirmation_height: 91,
+        },
+    )
+    .await;
+    server
+        .registrations
+        .set_stats(
+            default_registry,
+            RegistryRegistrationStats {
+                total_registered: 1,
+                events: vec![StoredRegistrationEvent {
+                    handle: handle.to_string(),
+                    action_kind: RegistrationActionKind::Register,
+                    confirmation_height: 90,
+                }],
+            },
+        )
+        .await;
+    server
+        .registrations
+        .set_stats(
+            other,
+            RegistryRegistrationStats {
+                total_registered: 7,
+                events: vec![StoredRegistrationEvent {
+                    handle: handle.to_string(),
+                    action_kind: RegistrationActionKind::Register,
+                    confirmation_height: 91,
+                }],
+            },
+        )
+        .await;
+
+    let def: Value = client
+        .get(format!("{}/registrations/{handle}", server.base))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(def["protocol_fee"].as_u64().unwrap(), 1000);
+
+    let explicit: Value = client
+        .get(format!(
+            "{}/registrations/{handle}?launcher_id={}",
+            server.base,
+            hex::encode(other)
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(explicit["protocol_fee"].as_u64().unwrap(), 2000);
+
+    let unknown = client
+        .get(format!(
+            "{}/registrations/{handle}?launcher_id={}",
+            server.base,
+            hex::encode(b32(0xcc))
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), 404);
+    assert_eq!(
+        normalize_request_id(unknown.json().await.unwrap())["code"],
+        "registry_not_followed"
+    );
+
+    let recent_other: Value = client
+        .get(format!(
+            "{}/registrations/recent?limit=50&launcher_id={}",
+            server.base,
+            hex::encode(other)
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(recent_other["total_registered"].as_u64().unwrap(), 7);
 }

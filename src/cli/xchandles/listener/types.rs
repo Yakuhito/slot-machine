@@ -83,6 +83,43 @@ pub struct ApiErrorBody {
     pub details: Option<Value>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RegistrationQuery {
+    /// Explicit registry selection; omission selects the first configured registry.
+    pub launcher_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RecentRegistrationsQuery {
+    pub launcher_id: Option<String>,
+    /// Newest-first page size; capped at 50. Omitted defaults to 50.
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistrationResponse {
+    pub handle: String,
+    pub registration_secret: String,
+    pub action_kind: String,
+    pub protocol_fee: u64,
+    pub confirmation_height: u32,
+    pub indexed_peak_height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecentRegistrationItem {
+    pub handle: String,
+    pub action_kind: String,
+    pub confirmation_height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecentRegistrationsResponse {
+    pub items: Vec<RecentRegistrationItem>,
+    pub total_registered: u64,
+    pub indexed_peak_height: u32,
+}
+
 /// Canonical Handle grammar: 3–63 lowercase ASCII alphanumeric, no normalization.
 pub fn is_canonical_handle(handle: &str) -> bool {
     let len = handle.len();

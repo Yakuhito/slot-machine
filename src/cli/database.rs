@@ -149,6 +149,30 @@ impl Db {
             )
             .execute(&pool)
             .await?;
+
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS registration_records (
+                    registry_launcher_id BLOB NOT NULL,
+                    handle_hash BLOB NOT NULL,
+                    record_json TEXT NOT NULL,
+                    PRIMARY KEY (registry_launcher_id, handle_hash)
+                )
+                ",
+            )
+            .execute(&pool)
+            .await?;
+
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS registration_registry_stats (
+                    registry_launcher_id BLOB PRIMARY KEY,
+                    state_json TEXT NOT NULL
+                )
+                ",
+            )
+            .execute(&pool)
+            .await?;
         }
 
         Ok(Self { pool })
@@ -981,6 +1005,132 @@ impl Db {
                     column_to_bytes32(r.get::<&[u8], _>("handle_hash"))?,
                 ))
             })
+            .collect()
+    }
+
+    pub async fn get_registration_record_json(
+        &self,
+        registry_launcher_id: Bytes32,
+        handle_hash: Bytes32,
+    ) -> Result<Option<String>, CliError> {
+        let row = sqlx::query(
+            "
+            SELECT record_json FROM registration_records
+            WHERE registry_launcher_id = ?1 AND handle_hash = ?2
+            ",
+        )
+        .bind(registry_launcher_id.to_vec())
+        .bind(handle_hash.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(row.map(|r| r.get::<String, _>("record_json")))
+    }
+
+    pub async fn upsert_registration_record_json(
+        &self,
+        registry_launcher_id: Bytes32,
+        handle_hash: Bytes32,
+        record_json: &str,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            INSERT INTO registration_records (registry_launcher_id, handle_hash, record_json)
+            VALUES (?1, ?2, ?3)
+            ON CONFLICT(registry_launcher_id, handle_hash) DO UPDATE SET
+                record_json = excluded.record_json
+            ",
+        )
+        .bind(registry_launcher_id.to_vec())
+        .bind(handle_hash.to_vec())
+        .bind(record_json)
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(())
+    }
+
+    pub async fn delete_registration_record(
+        &self,
+        registry_launcher_id: Bytes32,
+        handle_hash: Bytes32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM registration_records
+            WHERE registry_launcher_id = ?1 AND handle_hash = ?2
+            ",
+        )
+        .bind(registry_launcher_id.to_vec())
+        .bind(handle_hash.to_vec())
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(())
+    }
+
+    pub async fn all_registration_keys(&self) -> Result<Vec<(Bytes32, Bytes32)>, CliError> {
+        let rows = sqlx::query(
+            "SELECT registry_launcher_id, handle_hash FROM registration_records",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        rows.iter()
+            .map(|r| {
+                Ok((
+                    column_to_bytes32(r.get::<&[u8], _>("registry_launcher_id"))?,
+                    column_to_bytes32(r.get::<&[u8], _>("handle_hash"))?,
+                ))
+            })
+            .collect()
+    }
+
+    pub async fn get_registration_stats_json(
+        &self,
+        registry_launcher_id: Bytes32,
+    ) -> Result<Option<String>, CliError> {
+        let row = sqlx::query(
+            "
+            SELECT state_json FROM registration_registry_stats
+            WHERE registry_launcher_id = ?1
+            ",
+        )
+        .bind(registry_launcher_id.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(row.map(|r| r.get::<String, _>("state_json")))
+    }
+
+    pub async fn upsert_registration_stats_json(
+        &self,
+        registry_launcher_id: Bytes32,
+        state_json: &str,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            INSERT INTO registration_registry_stats (registry_launcher_id, state_json)
+            VALUES (?1, ?2)
+            ON CONFLICT(registry_launcher_id) DO UPDATE SET
+                state_json = excluded.state_json
+            ",
+        )
+        .bind(registry_launcher_id.to_vec())
+        .bind(state_json)
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(())
+    }
+
+    pub async fn all_registration_stats_registry_ids(&self) -> Result<Vec<Bytes32>, CliError> {
+        let rows = sqlx::query("SELECT registry_launcher_id FROM registration_registry_stats")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(CliError::Sqlx)?;
+        rows.iter()
+            .map(|r| column_to_bytes32(r.get::<&[u8], _>("registry_launcher_id")))
             .collect()
     }
 }
