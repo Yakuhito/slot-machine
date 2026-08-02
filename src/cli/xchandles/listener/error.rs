@@ -79,6 +79,55 @@ impl ApiError {
             "upstream_peak_height": upstream_peak_height,
         }))
     }
+
+    pub fn invalid_handle() -> Self {
+        Self::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_handle",
+            "Handle must be 3-63 lowercase ASCII letters and digits with no normalization",
+        )
+    }
+
+    pub fn handle_not_found() -> Self {
+        Self::new(
+            StatusCode::NOT_FOUND,
+            "handle_not_found",
+            "No canonical Handle slot is indexed for this Handle",
+        )
+    }
+
+    pub fn registry_not_followed() -> Self {
+        Self::new(
+            StatusCode::NOT_FOUND,
+            "registry_not_followed",
+            "Registry launcher is not in the listener's configured follow set",
+        )
+    }
+
+    pub fn resolution_incomplete() -> Self {
+        Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "resolution_incomplete",
+            "Resolved Singleton has not been reconstructed yet",
+        )
+    }
+
+    pub fn resolution_mismatch() -> Self {
+        Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "resolution_mismatch",
+            "Resolved Singleton discovery found an integrity mismatch",
+        )
+    }
+
+    pub fn handle_expired(expiration: u64) -> Self {
+        Self::new(
+            StatusCode::GONE,
+            "handle_expired",
+            "Handle registration has expired",
+        )
+        .with_details(json!({ "expiration": expiration }))
+    }
 }
 
 impl IntoResponse for ApiError {

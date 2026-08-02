@@ -136,6 +136,19 @@ impl Db {
             )
             .execute(&pool)
             .await?;
+
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS handle_slot_records (
+                    registry_launcher_id BLOB NOT NULL,
+                    handle_hash BLOB NOT NULL,
+                    record_json TEXT NOT NULL,
+                    PRIMARY KEY (registry_launcher_id, handle_hash)
+                )
+                ",
+            )
+            .execute(&pool)
+            .await?;
         }
 
         Ok(Self { pool })
@@ -478,6 +491,32 @@ impl Db {
         Ok(Some(column_to_bytes32(
             row.get::<&[u8], _>("slot_value_hash"),
         )?))
+    }
+
+    pub async fn list_xchandles_indexed_slots(
+        &self,
+        launcher_id: Bytes32,
+    ) -> Result<Vec<(Bytes32, Bytes32)>, CliError> {
+        let rows = sqlx::query(
+            "
+            SELECT handle_hash, slot_value_hash
+            FROM xchandles_indexed_slot_values
+            WHERE launcher_id = ?1
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        rows.iter()
+            .map(|r| {
+                Ok((
+                    column_to_bytes32(r.get::<&[u8], _>("handle_hash"))?,
+                    column_to_bytes32(r.get::<&[u8], _>("slot_value_hash"))?,
+                ))
+            })
+            .collect()
     }
 
     pub async fn get_catalog_neighbors<SV>(
@@ -864,6 +903,84 @@ impl Db {
             .map_err(CliError::Sqlx)?;
         rows.iter()
             .map(|r| column_to_bytes32(r.get::<&[u8], _>("launcher_id")))
+            .collect()
+    }
+
+    pub async fn get_handle_slot_record_json(
+        &self,
+        registry_launcher_id: Bytes32,
+        handle_hash: Bytes32,
+    ) -> Result<Option<String>, CliError> {
+        let row = sqlx::query(
+            "
+            SELECT record_json FROM handle_slot_records
+            WHERE registry_launcher_id = ?1 AND handle_hash = ?2
+            ",
+        )
+        .bind(registry_launcher_id.to_vec())
+        .bind(handle_hash.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(row.map(|r| r.get::<String, _>("record_json")))
+    }
+
+    pub async fn upsert_handle_slot_record_json(
+        &self,
+        registry_launcher_id: Bytes32,
+        handle_hash: Bytes32,
+        record_json: &str,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            INSERT INTO handle_slot_records (registry_launcher_id, handle_hash, record_json)
+            VALUES (?1, ?2, ?3)
+            ON CONFLICT(registry_launcher_id, handle_hash)
+            DO UPDATE SET record_json = excluded.record_json
+            ",
+        )
+        .bind(registry_launcher_id.to_vec())
+        .bind(handle_hash.to_vec())
+        .bind(record_json)
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(())
+    }
+
+    pub async fn delete_handle_slot_record(
+        &self,
+        registry_launcher_id: Bytes32,
+        handle_hash: Bytes32,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            DELETE FROM handle_slot_records
+            WHERE registry_launcher_id = ?1 AND handle_hash = ?2
+            ",
+        )
+        .bind(registry_launcher_id.to_vec())
+        .bind(handle_hash.to_vec())
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(())
+    }
+
+    pub async fn all_handle_slot_keys(&self) -> Result<Vec<(Bytes32, Bytes32)>, CliError> {
+        let rows = sqlx::query(
+            "SELECT registry_launcher_id, handle_hash FROM handle_slot_records",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        rows.iter()
+            .map(|r| {
+                Ok((
+                    column_to_bytes32(r.get::<&[u8], _>("registry_launcher_id"))?,
+                    column_to_bytes32(r.get::<&[u8], _>("handle_hash"))?,
+                ))
+            })
             .collect()
     }
 }

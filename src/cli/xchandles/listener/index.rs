@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use chia_protocol::CoinSpend;
+use chia_protocol::{Bytes32, CoinSpend};
+use clvm_utils::ToTreeHash;
 use clvmr::Allocator;
 use tokio::sync::RwLock;
 
@@ -8,6 +9,10 @@ use super::discovery::{
     discover_singleton_in_block, follow_singleton_spend, DiscoveryResult, FollowSpendResult,
 };
 use super::freshness::FreshnessState;
+use super::handle_store::{
+    push_handle_replacement, rollback_handle_to_before, HandleSlotRecord, HandleSlotStore,
+    StoredHandleSlot,
+};
 use super::refs::{dereferenced_launchers, references_from_action_log, SingletonReference};
 use super::store::{
     push_replacement, rollback_to_before, FollowRecordStatus, FollowedSingleton, SingletonStore,
@@ -19,12 +24,21 @@ use chia_wallet_sdk::types::puzzles::XchandlesHandleSlotValue;
 /// Applies registry-transition singleton discovery and subsequent lineage follows.
 pub struct SingletonIndexer {
     pub store: Arc<dyn SingletonStore>,
+    pub handle_slots: Arc<dyn HandleSlotStore>,
     pub freshness: Arc<RwLock<FreshnessState>>,
 }
 
 impl SingletonIndexer {
-    pub fn new(store: Arc<dyn SingletonStore>, freshness: Arc<RwLock<FreshnessState>>) -> Self {
-        Self { store, freshness }
+    pub fn new(
+        store: Arc<dyn SingletonStore>,
+        handle_slots: Arc<dyn HandleSlotStore>,
+        freshness: Arc<RwLock<FreshnessState>>,
+    ) -> Self {
+        Self {
+            store,
+            handle_slots,
+            freshness,
+        }
     }
 
     pub async fn note_peak(&self, indexed: u32, upstream: u32, now_unix: u64) {
@@ -60,6 +74,60 @@ impl SingletonIndexer {
             self.track_slot_reference_changes(height, log).await;
         }
         Ok(())
+    }
+
+    /// Project a created Handle slot into the unified-proof store.
+    pub async fn project_handle_slot(
+        &self,
+        registry_launcher_id: Bytes32,
+        value: XchandlesHandleSlotValue,
+        parent_coin_id: Bytes32,
+        confirmation_height: u32,
+    ) {
+        let stored = StoredHandleSlot {
+            registry_launcher_id,
+            handle_hash: value.handle_hash,
+            counter: value.counter,
+            neighbors_left: value.neighbors.left_value,
+            neighbors_right: value.neighbors.right_value,
+            expiration: value.expiration,
+            owner_launcher_id: value.owner_launcher_id,
+            resolved_launcher_id: value.resolved_launcher_id,
+            parent_coin_id,
+            confirmation_height,
+        };
+        let mut record = self
+            .handle_slots
+            .get(registry_launcher_id, value.handle_hash)
+            .await
+            .unwrap_or(HandleSlotRecord {
+                registry_launcher_id,
+                handle_hash: value.handle_hash,
+                current: None,
+                history: Vec::new(),
+            });
+        push_handle_replacement(&mut record, stored, confirmation_height);
+        self.handle_slots.upsert(record).await;
+    }
+
+    /// Project every created Handle slot from action logs.
+    pub async fn project_handle_slots_from_logs(
+        &self,
+        registry_launcher_id: Bytes32,
+        height: u32,
+        logs: &[XchandlesActionLog],
+        parent_for: impl Fn(Bytes32) -> Option<Bytes32>,
+    ) {
+        let mut created = Vec::new();
+        for log in logs {
+            log.extend_created_handle_slots(&mut created);
+        }
+        for value in created {
+            let value_hash: Bytes32 = value.tree_hash().into();
+            let parent = parent_for(value_hash).unwrap_or_default();
+            self.project_handle_slot(registry_launcher_id, value, parent, height)
+                .await;
+        }
     }
 
     async fn discover_reference(
@@ -146,6 +214,7 @@ impl SingletonIndexer {
             XchandlesActionLog::Register(e) => vec![
                 (e.spent_left_slot, e.created_left_slot),
                 (e.spent_right_slot, e.created_right_slot),
+                (e.spent_left_slot, e.created_handle_slot),
             ],
             XchandlesActionLog::DelegatedState(_) => Vec::new(),
         };
@@ -154,8 +223,6 @@ impl SingletonIndexer {
             for launcher in dereferenced_launchers(&spent, &created) {
                 self.store.drop_reference(launcher, height).await;
             }
-            // Bump for launchers that remain or newly appear is handled in discover_reference
-            // for new refs; for continuing refs, bump when created references an already-followed id.
             for launcher in [created.owner_launcher_id, created.resolved_launcher_id] {
                 if let Some(rec) = self.store.get(launcher).await {
                     if rec.reference_count == 0 || rec.dereference_height.is_some() {
@@ -281,7 +348,7 @@ impl SingletonIndexer {
         }
     }
 
-    /// Pre-final reorganization: restore lineage state confirmed before `from_height`.
+    /// Pre-final reorganization: restore lineage and Handle-slot state confirmed before `from_height`.
     pub async fn rollback(&self, from_height: u32) {
         self.begin_rollback().await;
         for launcher_id in self.store.all_launcher_ids().await {
@@ -296,14 +363,24 @@ impl SingletonIndexer {
             if let Some(deref_h) = rec.dereference_height {
                 if deref_h >= from_height {
                     rec.dereference_height = None;
-                    // Reference count restoration is approximate; callers should rebuild refs
-                    // from canonical slots after rollback.
                     if rec.reference_count == 0 {
                         rec.reference_count = 1;
                     }
                 }
             }
             self.store.upsert(rec).await;
+        }
+
+        for (registry, handle_hash) in self.handle_slots.all_keys().await {
+            let Some(mut rec) = self.handle_slots.get(registry, handle_hash).await else {
+                continue;
+            };
+            rollback_handle_to_before(&mut rec, from_height);
+            if rec.current.is_none() && rec.history.is_empty() {
+                self.handle_slots.remove(registry, handle_hash).await;
+            } else {
+                self.handle_slots.upsert(rec).await;
+            }
         }
     }
 }

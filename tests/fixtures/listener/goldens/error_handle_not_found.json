@@ -1,0 +1,5 @@
+{
+  "code": "handle_not_found",
+  "message": "No canonical Handle slot is indexed for this Handle",
+  "request_id": "FIXED_REQUEST_ID"
+}

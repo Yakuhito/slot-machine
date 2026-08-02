@@ -35,6 +35,45 @@ pub struct SingletonQuery {
     pub include_metadata: bool,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct HandleQuery {
+    #[serde(default)]
+    pub include_metadata: bool,
+    /// Explicit registry selection; omission selects the first configured registry.
+    pub launcher_id: Option<String>,
+    #[serde(default)]
+    pub bypass_expiration_safety_check: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlotNeighborsJson {
+    pub left_value: String,
+    pub right_value: String,
+}
+
+/// Complete latest Handle-slot value (protocol-fixed amount 0 remains implicit).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandleSlotJson {
+    pub counter: u64,
+    pub handle_hash: String,
+    pub neighbors: SlotNeighborsJson,
+    pub expiration: u64,
+    pub owner_launcher_id: String,
+    pub resolved_launcher_id: String,
+}
+
+/// Indivisible unified Handle proof returned by `GET /handle/{handle}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandleProofResponse {
+    pub registry_launcher_id: String,
+    pub handle: String,
+    pub slot: HandleSlotJson,
+    pub slot_parent_coin_id: String,
+    pub slot_confirmation_height: u32,
+    pub resolved_singleton: SingletonResponse,
+    pub indexed_peak_height: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApiErrorBody {
     pub code: String,
@@ -42,6 +81,15 @@ pub struct ApiErrorBody {
     pub request_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<Value>,
+}
+
+/// Canonical Handle grammar: 3–63 lowercase ASCII alphanumeric, no normalization.
+pub fn is_canonical_handle(handle: &str) -> bool {
+    let len = handle.len();
+    (3..=63).contains(&len)
+        && handle
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
 }
 
 pub fn hex32(id: Bytes32) -> String {

@@ -9,7 +9,8 @@ use axum::{http::StatusCode, routing::get, Json, Router};
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::coinset::ChiaRpcClient;
 use chia_wallet_sdk::driver::{SpendContext, XchandlesRegistry};
-use chia_wallet_sdk::types::puzzles::XchandlesHandleSlotValue;
+use chia_wallet_sdk::types::puzzles::{XchandlesHandleSlotValue, XchandlesSlotNonce};
+use clvm_utils::ToTreeHash;
 use clvmr::Allocator;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -18,8 +19,8 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::{Any, CorsLayer};
 
 use super::listener::{
-    listener_router, DbSingletonStore, FreshnessState, ListenerApiState, SingletonIndexer,
-    SingletonStore,
+    listener_router, DbHandleSlotStore, DbSingletonStore, FreshnessState, HandleSlotStore,
+    ListenerApiState, SingletonIndexer, SingletonStore,
 };
 use crate::{
     get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, CoinsetWebSocketMessage,
@@ -74,13 +75,20 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
     let db = Db::new(false).await?;
     let db = Arc::new(futures::lock::Mutex::new(db));
 
+    let launcher_ids = launcher_ids
+        .split(',')
+        .map(hex_string_to_bytes32)
+        .collect::<Result<Vec<Bytes32>, CliError>>()?;
+
     let singleton_store: Arc<dyn SingletonStore> = DbSingletonStore::new(Arc::clone(&db));
+    let handle_slots: Arc<dyn HandleSlotStore> = DbHandleSlotStore::new(Arc::clone(&db));
     let freshness = Arc::new(RwLock::new(FreshnessState::fresh_at(
         0,
         FreshnessState::now_unix(),
     )));
     let indexer = Arc::new(SingletonIndexer::new(
         Arc::clone(&singleton_store),
+        Arc::clone(&handle_slots),
         Arc::clone(&freshness),
     ));
 
@@ -90,7 +98,10 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
 
     let api_state = ListenerApiState {
         store: Arc::clone(&singleton_store),
+        handle_slots: Arc::clone(&handle_slots),
         freshness: Arc::clone(&freshness),
+        registry_launcher_ids: launcher_ids.clone(),
+        now_unix_override: None,
     };
     let neighbors_state = AppState {
         db: Arc::clone(&db),
@@ -101,11 +112,6 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
             eprintln!("API server error: {}", e);
         }
     });
-
-    let launcher_ids = launcher_ids
-        .split(',')
-        .map(hex_string_to_bytes32)
-        .collect::<Result<Vec<Bytes32>, CliError>>()?;
 
     loop {
         match connect_websocket(
@@ -219,15 +225,56 @@ async fn connect_websocket(
     let client = get_coinset_client(testnet11);
 
     let mut registries = Vec::<XchandlesRegistry>::new();
-    for launcher_id in launcher_ids {
+    for launcher_id in &launcher_ids {
         let registry = {
             let mut db = db.lock().await;
             let mut ctx = SpendContext::new();
 
-            sync_xchandles(&client, &mut db, &mut ctx, launcher_id).await?
+            sync_xchandles(&client, &mut db, &mut ctx, *launcher_id).await?
         };
 
         registries.push(registry);
+    }
+
+    // Cold start: project currently indexed Handle slots so proofs work for already-synced
+    // registries. Confirmation height is unknown for historical slots (0) — fishy for
+    // exact height, but the slot value and parent coin remain verifiable.
+    {
+        let mut allocator = Allocator::new();
+        let db_guard = db.lock().await;
+        for launcher_id in &launcher_ids {
+            if let Ok(rows) = db_guard.list_xchandles_indexed_slots(*launcher_id).await {
+                for (handle_hash, value_hash) in rows {
+                    let Ok(Some(slot)) = db_guard
+                        .get_slot::<XchandlesHandleSlotValue>(
+                            &mut allocator,
+                            *launcher_id,
+                            XchandlesSlotNonce::HANDLE.to_u64(),
+                            value_hash,
+                            0,
+                        )
+                        .await
+                    else {
+                        continue;
+                    };
+                    // Skip sentinel end markers (no real Owner/Resolved).
+                    if slot.info.value.owner_launcher_id == Bytes32::default()
+                        && slot.info.value.resolved_launcher_id == Bytes32::default()
+                    {
+                        continue;
+                    }
+                    let _ = handle_hash;
+                    indexer
+                        .project_handle_slot(
+                            *launcher_id,
+                            slot.info.value,
+                            slot.coin.parent_coin_info,
+                            0,
+                        )
+                        .await;
+                }
+            }
+        }
     }
 
     let ws_url = format!("{}/ws", client.base_url().replace("https://", "wss://"));
@@ -334,6 +381,36 @@ async fn connect_websocket(
                                 };
                                 registries[i] = registry;
 
+                                let registry_launcher_id =
+                                    registries[i].info.constants.launcher_id;
+
+                                // Build parent_coin_id map for created slots from the synced DB.
+                                let parent_by_value_hash = {
+                                    let mut allocator = Allocator::new();
+                                    let db_guard = db.lock().await;
+                                    let mut map = std::collections::HashMap::new();
+                                    let mut created = Vec::new();
+                                    for log in &logs {
+                                        log.extend_created_handle_slots(&mut created);
+                                    }
+                                    for value in &created {
+                                        let value_hash: Bytes32 = value.tree_hash().into();
+                                        if let Ok(Some(slot)) = db_guard
+                                            .get_slot::<XchandlesHandleSlotValue>(
+                                                &mut allocator,
+                                                registry_launcher_id,
+                                                XchandlesSlotNonce::HANDLE.to_u64(),
+                                                value_hash,
+                                                0,
+                                            )
+                                            .await
+                                        {
+                                            map.insert(value_hash, slot.coin.parent_coin_info);
+                                        }
+                                    }
+                                    map
+                                };
+
                                 let mut allocator = Allocator::new();
                                 if let Err(e) = indexer
                                     .on_registry_transition(
@@ -346,6 +423,14 @@ async fn connect_websocket(
                                 {
                                     eprintln!("singleton discovery error: {e}");
                                 }
+                                indexer
+                                    .project_handle_slots_from_logs(
+                                        registry_launcher_id,
+                                        spent_height,
+                                        &logs,
+                                        |value_hash| parent_by_value_hash.get(&value_hash).copied(),
+                                    )
+                                    .await;
                                 if let Err(e) = indexer
                                     .on_block(&mut allocator, spent_height, &block_spends)
                                     .await

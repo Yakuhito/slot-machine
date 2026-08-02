@@ -1,0 +1,5 @@
+{
+  "code": "resolution_incomplete",
+  "message": "Resolved Singleton has not been reconstructed yet",
+  "request_id": "FIXED_REQUEST_ID"
+}

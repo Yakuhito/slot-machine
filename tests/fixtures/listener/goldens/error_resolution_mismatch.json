@@ -1,0 +1,5 @@
+{
+  "code": "resolution_mismatch",
+  "message": "Resolved Singleton discovery found an integrity mismatch",
+  "request_id": "FIXED_REQUEST_ID"
+}

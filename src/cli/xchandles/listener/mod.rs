@@ -6,6 +6,7 @@ mod api;
 mod discovery;
 mod error;
 mod freshness;
+mod handle_store;
 mod index;
 mod refs;
 mod store;
@@ -18,6 +19,10 @@ pub use discovery::{
 };
 pub use error::ApiError;
 pub use freshness::FreshnessState;
+pub use handle_store::{
+    prune_handle_history, push_handle_replacement, rollback_handle_to_before, DbHandleSlotStore,
+    HandleSlotRecord, HandleSlotStore, MemoryHandleSlotStore, StoredHandleSlot,
+};
 pub use index::SingletonIndexer;
 pub use refs::{dereferenced_launchers, references_from_action_log, SingletonReference};
 pub use store::{
@@ -25,5 +30,6 @@ pub use store::{
     FollowedSingleton, MemorySingletonStore, SingletonStore, StoredSingletonState,
 };
 pub use types::{
-    hex32, parse_launcher_id, ApiErrorBody, SingletonNftDetails, SingletonQuery, SingletonResponse,
+    hex32, is_canonical_handle, parse_launcher_id, ApiErrorBody, HandleProofResponse, HandleQuery,
+    HandleSlotJson, SingletonNftDetails, SingletonQuery, SingletonResponse, SlotNeighborsJson,
 };
