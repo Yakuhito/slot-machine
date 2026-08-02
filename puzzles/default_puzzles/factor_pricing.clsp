@@ -35,7 +35,7 @@
                     (i (= length 5)
                         16
                         ; else length >= 6
-                        (if (> length 31) (x) 2)
+                        (if (> length 63) (x) 2)
                     )
                     ; else 2 < length < 5
                     (i (= length 3)

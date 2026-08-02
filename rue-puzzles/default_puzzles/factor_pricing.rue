@@ -21,8 +21,8 @@ inline fn get_price_factor(length: Int, number_of_numbers: Int) -> Int {
                 16
             } else {
                 // length >= 6
-                if length > 31 {
-                    raise "Handle can be at most 31 characters long";
+                if length > 63 {
+                    raise "Handle can be at most 63 characters long";
                 } else {
                     2
                 }
