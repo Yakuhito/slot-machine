@@ -35,9 +35,11 @@ axum = { version = "0.8.9", features = ["macros"]}
 tower-http = { version = "0.7.0", features = ["cors"] }
 futures = "0.3.32"
 chia-wallet-sdk = { path = "../chia-wallet-sdk", features = ["offer-compression", "action-layer", "chip-0035"] }
+xchandles-nfts = { path = "../xchandles-nfts" }
 sage-api = { version = "0.12.11", git = "https://github.com/xch-dev/sage.git" }
 chia-puzzles = "0.20.3"
 hex-literal = "1.1.0"
+sha2 = "0.10.9"
 
 [dev-dependencies]
 anyhow = "1.0.100"

@@ -19,8 +19,9 @@ use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    controller_matches_configured, get_coinset_client, get_prefix, hex_string_to_bytes32,
-    load_xchandles_premine_csv, load_xchandles_state_schedule_csv, metadata_for_handle_nft,
+    controller_matches_configured, default_mainnet_bundle_path, default_testnet11_bundle_path,
+    get_coinset_client, get_prefix, hex_string_to_bytes32, launch_handles_from_bundle,
+    load_premine_launch_bundle, load_xchandles_state_schedule_csv, metadata_for_handle_nft,
     price_singleton_public_keys, print_medieval_vault_configuration, CliError, MultisigSingleton,
     XchandlesStateScheduleRecord, PRICE_SINGLETON_M, ROYALTY_BASIS_POINTS, ROYALTY_PUZZLE_HASH,
 };
@@ -76,21 +77,22 @@ pub async fn xchandles_verify_deployment(
         "xchandles_price_schedule_mainnet.csv"
     };
 
-    let premine_csv_filename = if testnet11 {
-        "xchandles_premine_testnet11.csv"
+    let bundle_path = if testnet11 {
+        default_testnet11_bundle_path()
     } else {
-        "xchandles_premine_mainnet.csv"
+        default_mainnet_bundle_path()
     };
 
     println!("Verifying XCHandles deployment (testnet: {})...", testnet11);
 
     println!("Let's start with the XCHandles registry.");
     println!(
-        "It should also have a premine that matches the one defined in '{}'(TRUSTED SOURCE).",
-        premine_csv_filename
+        "It should also have a premine that matches the Premine Launch Bundle '{}' (TRUSTED SOURCE).",
+        bundle_path
     );
 
-    let handles_to_launch = load_xchandles_premine_csv(premine_csv_filename)?;
+    let bundle = load_premine_launch_bundle(bundle_path)?;
+    let handles_to_launch = launch_handles_from_bundle(&bundle)?;
 
     let Some(launcher_coin_record) = cli.get_coin_record_by_name(launcher_id).await?.coin_record
     else {
@@ -299,7 +301,7 @@ pub async fn xchandles_verify_deployment(
             }
 
             // Then, check metadata.
-            let expected_metadata_hash = metadata_for_handle_nft(handles_to_launch[handle_index].clone())
+            let expected_metadata_hash = metadata_for_handle_nft(&handles_to_launch[handle_index])
                 .tree_hash();
             if expected_metadata_hash != eve_nft.info.metadata.tree_hash() {
                 return Err(CliError::Custom(format!(

@@ -31,17 +31,17 @@ use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction, get_last_onchain_timestamp,
+    assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction,
     get_prefix, hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature,
-    load_xchandles_premine_csv, no_assets, parse_amount, sync_xchandles, yes_no_prompt, CliError,
-    Db, SageClient, XchandlesPremineRecord,
+    launch_handles_from_bundle, load_premine_launch_bundle, no_assets, parse_amount, sync_xchandles,
+    yes_no_prompt, CliError, Db, LaunchHandle, SageClient, default_mainnet_bundle_path,
+    default_testnet11_bundle_path,
 };
 
 fn precommit_value_for_handle(
-    handle: &XchandlesPremineRecord,
+    handle: &LaunchHandle,
     handle_nft_launcher_id: Bytes32,
     payment_asset_id: Bytes32,
-    start_time: u64,
     registration_period: u64,
 ) -> Result<XchandlesPrecommitValue, CliError> {
     Ok(XchandlesPrecommitValue::for_normal_registration(
@@ -52,7 +52,7 @@ fn precommit_value_for_handle(
         }
         .curry_tree_hash(),
         &XchandlesPricingSolution {
-            buy_time: start_time,
+            buy_time: handle.buy_time,
             current_expiration: 0,
             handle: handle.handle.clone(),
             num_periods: 1,
@@ -64,14 +64,14 @@ fn precommit_value_for_handle(
     ))
 }
 
-pub fn metadata_for_handle_nft(handle_info: XchandlesPremineRecord) -> HandleNftMetadata {
+pub fn metadata_for_handle_nft(handle_info: &LaunchHandle) -> HandleNftMetadata {
     HandleNftMetadata {
         display_name: Some(handle_info.handle.clone()),
-        image_uris: handle_info.image_uris,
+        image_uris: handle_info.image_uris.clone(),
         image_hash: Some(handle_info.image_hash),
-        metadata_uris: handle_info.metadata_uris,
+        metadata_uris: handle_info.metadata_uris.clone(),
         metadata_hash: Some(handle_info.metadata_hash),
-        license_uris: handle_info.license_uris,
+        license_uris: handle_info.license_uris.clone(),
         license_hash: Some(handle_info.license_hash),
     }
 }
@@ -81,7 +81,7 @@ async fn eve_nft_for_handle(
     ctx: &mut SpendContext,
     client: &CoinsetClient,
     registry_launcher_id: Bytes32,
-    handle: &XchandlesPremineRecord,
+    handle: &LaunchHandle,
     royalty_puzzle_hash: Bytes32,
     royalty_basis_points: u16,
     eve_nft_temp_inner_ph: Bytes32,
@@ -91,7 +91,7 @@ async fn eve_nft_for_handle(
         .tree_hash()
         .into();
 
-    let metadata = metadata_for_handle_nft(handle.clone());
+    let metadata = metadata_for_handle_nft(handle);
     let metadata = ctx.alloc_hashed(&metadata)?;
 
     let Some(mut possible_launcher_records) = client
@@ -202,14 +202,37 @@ pub async fn xchandles_continue_launch(
     }
     println!("Time to unroll an XCHandles registry! Yee-haw!");
 
-    let premine_csv_filename = if testnet11 {
-        "xchandles_premine_testnet11.csv"
+    let bundle_path = if testnet11 {
+        default_testnet11_bundle_path()
     } else {
-        "xchandles_premine_mainnet.csv"
+        default_mainnet_bundle_path()
     };
 
-    println!("Loading premine data from '{}'...", premine_csv_filename);
-    let handles_to_launch = load_xchandles_premine_csv(premine_csv_filename)?;
+    println!("Loading Premine Launch Bundle from '{}'...", bundle_path);
+    let bundle = load_premine_launch_bundle(bundle_path)?;
+    if handles_per_spend != bundle.handles_per_batch {
+        return Err(CliError::Custom(format!(
+            "handles_per_spend ({handles_per_spend}) must match bundle handles_per_batch ({})",
+            bundle.handles_per_batch
+        )));
+    }
+    if registration_period != bundle.registration_period {
+        return Err(CliError::Custom(format!(
+            "registration_period ({registration_period}) must match bundle ({})",
+            bundle.registration_period
+        )));
+    }
+    if start_time.is_some() {
+        println!(
+            "Ignoring --start-time; Premine Launch Bundle rows carry per-handle buy_time/expiration."
+        );
+    }
+    let handles_to_launch = launch_handles_from_bundle(&bundle)?;
+    println!(
+        "Loaded {} handles from launch bundle (handles_per_batch={}).",
+        handles_to_launch.len(),
+        bundle.handles_per_batch
+    );
 
     println!("Initializing Chia RPC client...");
     let client = if testnet11 {
@@ -267,14 +290,7 @@ pub async fn xchandles_continue_launch(
     let eve_nft_temp_inner_ph =
         Address::decode(&derivation_resp.derivations[0].address)?.puzzle_hash;
 
-    // Make sure this is always rounded down to a day
     let constants = registry.info.constants;
-    let start_time = if let Some(st) = start_time {
-        st
-    } else {
-        get_last_onchain_timestamp(&client).await? / 8640 * 8640
-    };
-    println!("Using start time: {}", start_time);
 
     if i == 0 {
         println!("No handles registered yet - looking for precommitment coins...");
@@ -400,7 +416,7 @@ pub async fn xchandles_continue_launch(
                     Address::new(launcher_id, "nft".to_string()).encode()?
                 );
 
-                let metadata = metadata_for_handle_nft(handle_info.clone());
+                let metadata = metadata_for_handle_nft(&handle_info);
                 let metadata = ctx.alloc_hashed(&metadata)?;
 
                 let (sec_conditions, _eve_nft) = launcher.mint_eve_nft(
@@ -422,7 +438,6 @@ pub async fn xchandles_continue_launch(
                     &handle_info,
                     launcher_id,
                     payment_asset_id,
-                    start_time,
                     registration_period,
                 )?;
                 let precommit_value_ptr = ctx.alloc(&precommit_value)?;
@@ -567,7 +582,6 @@ pub async fn xchandles_continue_launch(
                 handle,
                 eve_nft.info.launcher_id,
                 payment_asset_id,
-                start_time,
                 registration_period,
             )
         })
@@ -776,7 +790,7 @@ pub async fn xchandles_continue_launch(
                 &precommit_coin,
                 1,
                 registration_period,
-                start_time,
+                handles[i].buy_time,
                 eve_nft_inner_puzzle_hash,
                 eve_nft_inner_puzzle_hash,
             )?;

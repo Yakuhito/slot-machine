@@ -34,6 +34,19 @@ pub const ROYALTY_PUZZLE_HASH: Bytes32 = Bytes32::new(hex!(
 /// Royalty basis points for XCHandles-minted Handle NFTs.
 pub const ROYALTY_BASIS_POINTS: u16 = 420;
 
+/// Production media origin for generator-v1 URLs.
+pub const MEDIA_ORIGIN: &str = "https://nfts.xchandles.com";
+
+/// Initial license URI (CC0 1.0 Universal legal text).
+pub const LICENSE_URI: &str =
+    "https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt";
+
+/// Contribution Premine Expiration: 2027-08-20 09:00:00 UTC.
+pub const CONTRIBUTION_PREMINE_EXPIRATION: u64 = 1_818_752_400;
+
+/// Deterministic launch batch size baked into the Premine Launch Bundle.
+pub const LAUNCH_HANDLES_PER_BATCH: usize = 25;
+
 /// Post-schedule Price Singleton threshold (m of n).
 pub const PRICE_SINGLETON_M: usize = 6;
 

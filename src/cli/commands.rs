@@ -15,8 +15,8 @@ use super::{
     reward_distributor_commit_rewards, reward_distributor_initiate_payout,
     reward_distributor_launch, reward_distributor_new_epoch, reward_distributor_refresh,
     reward_distributor_sign_entry_update, reward_distributor_sync, reward_distributor_view,
-    xchandles_continue_launch, xchandles_expire, xchandles_extend, xchandles_initiate_launch,
-    xchandles_initiate_update, xchandles_listen, xchandles_register,
+    xchandles_continue_launch, xchandles_expire, xchandles_extend, xchandles_generate_launch_bundle,
+    xchandles_initiate_launch, xchandles_initiate_update, xchandles_listen, xchandles_register,
     xchandles_unroll_state_scheduler, xchandles_verify_deployment, xchandles_view,
 };
 
@@ -353,6 +353,24 @@ enum CatalogCliAction {
 
 #[derive(Subcommand)]
 enum XchandlesCliAction {
+    /// Generate the Premine Launch Bundle and pre-broadcast plan from published Premine CSV
+    GenerateLaunchBundle {
+        /// Published five-column Premine CSV path
+        #[arg(long)]
+        premine: String,
+
+        /// Output path for the versioned launch bundle JSON
+        #[arg(long)]
+        bundle: String,
+
+        /// Output path for the machine-readable pre-broadcast plan JSON
+        #[arg(long)]
+        plan: String,
+
+        /// Allow txch recipients (testnet11 local bundles only)
+        #[arg(long, default_value_t = false)]
+        testnet11: bool,
+    },
     /// Launches a new XCHandles deployment
     InitiateLaunch {
         /// Comma-separated list of price singleton pubkeys (no spaces)
@@ -409,7 +427,7 @@ enum XchandlesCliAction {
         #[arg(long)]
         handles_per_spend: usize,
 
-        /// Start timestamp for premine
+        /// Deprecated for Premine: per-row buy_time comes from the launch bundle (ignored if set)
         #[arg(long)]
         start_time: Option<u64>,
 
@@ -1364,6 +1382,12 @@ pub async fn run_cli() {
             }
         },
         Commands::Xchandles { action } => match action {
+            XchandlesCliAction::GenerateLaunchBundle {
+                premine,
+                bundle,
+                plan,
+                testnet11,
+            } => xchandles_generate_launch_bundle(premine, bundle, plan, testnet11),
             XchandlesCliAction::InitiateLaunch {
                 pubkeys,
                 m,

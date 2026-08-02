@@ -4,8 +4,9 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    confirm_pushed_transaction, controller_matches_configured, get_coinset_client, get_prefix,
-    load_xchandles_premine_csv, load_xchandles_state_schedule_csv, no_assets, parse_amount,
+    confirm_pushed_transaction, controller_matches_configured, default_mainnet_bundle_path,
+    default_testnet11_bundle_path, get_coinset_client, get_prefix, launch_handles_from_bundle,
+    load_premine_launch_bundle, load_xchandles_state_schedule_csv, no_assets, parse_amount,
     print_medieval_vault_configuration, schedule_records_match_configured, SageClient,
     REGISTRATION_PERIOD,
 };
@@ -176,24 +177,27 @@ pub async fn xchandles_initiate_launch(
         );
     }
 
-    let premine_csv_filename = if testnet11 {
-        "xchandles_premine_testnet11.csv"
+    let bundle_path = if testnet11 {
+        default_testnet11_bundle_path()
     } else {
-        "xchandles_premine_mainnet.csv"
+        default_mainnet_bundle_path()
     };
 
-    println!("Loading premine data from '{}'...", premine_csv_filename);
-    let handles_to_launch = load_xchandles_premine_csv(premine_csv_filename)?;
+    println!("Loading Premine Launch Bundle from '{}'...", bundle_path);
+    let bundle = load_premine_launch_bundle(bundle_path)?;
+    let handles_to_launch = launch_handles_from_bundle(&bundle)?;
     println!(
-        "Loaded {} handles to be premined. First few records:",
-        handles_to_launch.len()
+        "Loaded {} handles to be premined (batch size {}). First few records:",
+        handles_to_launch.len(),
+        bundle.handles_per_batch
     );
     for record in handles_to_launch.iter().take(7) {
         println!(
-            "  handle: {:}, recipient: {:}, image_uris: {:?}",
+            "  handle: {}, recipient: {}, expiration: {}, image: {}",
             record.handle,
             Address::new(record.recipient, get_prefix(testnet11)).encode()?,
-            record.image_uris.join("|")
+            record.expiration,
+            record.image_uris.first().cloned().unwrap_or_default()
         );
     }
 
