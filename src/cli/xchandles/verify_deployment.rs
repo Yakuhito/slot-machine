@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use chia_protocol::{Bytes32, Coin};
 use chia_puzzle_types::singleton::{LauncherSolution, SingletonSolution};
 use chia_puzzle_types::Memos;
@@ -6,12 +8,12 @@ use chia_wallet_sdk::driver::{
     XchandlesRegistry, XchandlesRegistryReceivedMessagePrefix, XchandlesRegistryState,
 };
 use chia_wallet_sdk::types::puzzles::{
-    DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesRegisterActionSolution,
+    DefaultCatMakerArgs, HandleNftMetadata, XchandlesFactorPricingPuzzleArgs,
+    XchandlesPricingSolution, XchandlesRegisterActionSolution,
 };
 use chia_wallet_sdk::types::{Condition, Conditions, Mod};
-use chia_wallet_sdk::utils::Address;
 use chia_wallet_sdk::{
-    coinset::ChiaRpcClient,
+    coinset::{ChiaRpcClient, CoinsetClient},
     driver::{ActionLayer, SpendContext},
 };
 use clvm_traits::clvm_list;
@@ -19,11 +21,14 @@ use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    controller_matches_configured, default_mainnet_bundle_path, default_testnet11_bundle_path,
-    get_coinset_client, get_prefix, hex_string_to_bytes32, launch_handles_from_bundle,
-    load_premine_launch_bundle, load_xchandles_state_schedule_csv, metadata_for_handle_nft,
+    compare_premine_set, controller_matches_configured, default_mainnet_bundle_path,
+    default_testnet11_bundle_path, expected_observations_from_bundle_rows, finality_reached,
+    get_coinset_client, handle_nft_metadata_clvm_hex, hex_string_to_bytes32,
+    launch_handles_from_bundle, load_premine_launch_bundle, load_xchandles_state_schedule_csv,
     price_singleton_public_keys, print_medieval_vault_configuration, CliError, MultisigSingleton,
-    XchandlesStateScheduleRecord, PRICE_SINGLETON_M, ROYALTY_BASIS_POINTS, ROYALTY_PUZZLE_HASH,
+    ObservedPremineHandle, PremineLaunchBundle, PremineVerificationReport, VerificationPhase,
+    XchandlesStateScheduleRecord, OWNER_RESOLVED_RELATIONSHIP, PREMINE_FINALITY_DEPTH,
+    PRICE_SINGLETON_M, ROYALTY_BASIS_POINTS, ROYALTY_PUZZLE_HASH,
 };
 
 use crate::sync_multisig_singleton;
@@ -60,6 +65,307 @@ pub fn xchandles_trusted_schedule_matches(
     }
 
     true
+}
+
+/// Reconstruct registered Premine Handles from the registry spend chain and
+/// compare complete set equality against the launch bundle (through optional
+/// batch ceiling). Read-only Coinset RPC — does not broadcast.
+pub async fn verify_premine_set_against_bundle(
+    cli: &CoinsetClient,
+    ctx: &mut SpendContext,
+    launcher_id: Bytes32,
+    bundle: &PremineLaunchBundle,
+    through_batch_id: Option<u32>,
+    phase: VerificationPhase,
+) -> Result<(PremineVerificationReport, Option<u32>), CliError> {
+    let rows: Vec<_> = match through_batch_id {
+        Some(max_batch) => bundle
+            .rows
+            .iter()
+            .filter(|r| r.batch_id <= max_batch)
+            .cloned()
+            .collect(),
+        None => bundle.rows.clone(),
+    };
+    let handles_by_hash: BTreeMap<Bytes32, &crate::PremineLaunchBundleRow> = rows
+        .iter()
+        .map(|r| (r.handle.tree_hash().into(), r))
+        .collect();
+
+    let Some(launcher_coin_record) = cli.get_coin_record_by_name(launcher_id).await?.coin_record
+    else {
+        return Err(CliError::CoinNotFound(launcher_id));
+    };
+
+    let Some(launcher_coin_solution) = cli
+        .get_puzzle_and_solution(launcher_id, Some(launcher_coin_record.spent_block_index))
+        .await?
+        .coin_solution
+    else {
+        return Err(CliError::CoinNotSpent(launcher_id));
+    };
+
+    let launcher_solution_ptr = node_from_bytes(ctx, &launcher_coin_solution.solution)?;
+    let Some((mut registry, _initial_slots, _asset_id, _base_price)) =
+        XchandlesRegistry::from_launcher_solution(
+            ctx,
+            launcher_coin_record.coin,
+            launcher_solution_ptr,
+        )?
+    else {
+        return Err(CliError::Custom(
+            "XCHandles registry was not launched correctly.".to_string(),
+        ));
+    };
+
+    let mut observed: Vec<ObservedPremineHandle> = Vec::new();
+    let mut nft_launcher_ids: BTreeMap<String, String> = BTreeMap::new();
+    let mut last_confirmation_height: Option<u32> = None;
+
+    loop {
+        let Some(coin_record) = cli
+            .get_coin_record_by_name(registry.coin.coin_id())
+            .await?
+            .coin_record
+        else {
+            return Err(CliError::CoinNotFound(registry.coin.coin_id()));
+        };
+
+        let Some(coin_spend) = cli
+            .get_puzzle_and_solution(registry.coin.coin_id(), Some(coin_record.spent_block_index))
+            .await?
+            .coin_solution
+        else {
+            break;
+        };
+
+        last_confirmation_height = Some(coin_record.spent_block_index);
+
+        let solution = node_from_bytes(ctx, &coin_spend.solution)?;
+        let parsed_solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
+        let inner_solution = ActionLayer::<XchandlesRegistryState, NodePtr>::parse_solution(
+            ctx,
+            parsed_solution.inner_solution,
+        )?;
+
+        for action_spend in inner_solution.action_spends {
+            let action_solution = ctx.extract::<XchandlesRegisterActionSolution<
+                NodePtr,
+                NodePtr,
+                NodePtr,
+                NodePtr,
+                NodePtr,
+            >>(action_spend.solution)?;
+
+            let Some(bundle_row) = handles_by_hash.get(&action_solution.handle_hash) else {
+                observed.push(ObservedPremineHandle {
+                    handle: format!("unknown_hash_{}", hex::encode(action_solution.handle_hash)),
+                    recipient_puzzle_hash: String::new(),
+                    expiration: 0,
+                    owner_resolved_relationship: String::new(),
+                    owner_launcher_id: hex::encode(
+                        action_solution
+                            .other_precommit_data
+                            .launcher_ids
+                            .owner_launcher_id,
+                    ),
+                    resolved_launcher_id: hex::encode(
+                        action_solution
+                            .other_precommit_data
+                            .launcher_ids
+                            .resolved_launcher_id,
+                    ),
+                    nft_launcher_id: hex::encode(
+                        action_solution
+                            .other_precommit_data
+                            .launcher_ids
+                            .owner_launcher_id,
+                    ),
+                    display_name: String::new(),
+                    image_uri: String::new(),
+                    image_hash: String::new(),
+                    metadata_uri: String::new(),
+                    metadata_hash: String::new(),
+                    license_uri: String::new(),
+                    license_hash: String::new(),
+                    handle_nft_metadata_clvm_hex: String::new(),
+                    updater_hash: String::new(),
+                    royalty_puzzle_hash: String::new(),
+                    royalty_basis_points: 0,
+                    batch_id: u32::MAX,
+                    row_index: u32::MAX,
+                });
+                continue;
+            };
+
+            let nft_launcher_id = action_solution
+                .other_precommit_data
+                .launcher_ids
+                .owner_launcher_id;
+            let resolved_launcher_id = action_solution
+                .other_precommit_data
+                .launcher_ids
+                .resolved_launcher_id;
+
+            let pricing = ctx.extract::<XchandlesPricingSolution>(
+                action_solution.pricing_puzzle_and_solution.solution,
+            )?;
+            let expiration = pricing.buy_time + bundle.registration_period * pricing.num_periods;
+
+            let Some(launcher_coin_record) = cli
+                .get_coin_record_by_name(nft_launcher_id)
+                .await?
+                .coin_record
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not fetch record for launcher coin {}",
+                    hex::encode(nft_launcher_id)
+                )));
+            };
+
+            let Some(launcher_spend) = cli
+                .get_puzzle_and_solution(
+                    nft_launcher_id,
+                    Some(launcher_coin_record.spent_block_index),
+                )
+                .await?
+                .coin_solution
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not fetch coin spend for launcher coin {}",
+                    hex::encode(nft_launcher_id)
+                )));
+            };
+
+            let launcher_solution = ctx.alloc(&launcher_spend.solution)?;
+            let launcher_solution = ctx.extract::<LauncherSolution<NodePtr>>(launcher_solution)?;
+            let eve_nft_coin =
+                Coin::new(nft_launcher_id, launcher_solution.singleton_puzzle_hash, 1);
+
+            let Some(eve_nft_record) = cli
+                .get_coin_record_by_name(eve_nft_coin.coin_id())
+                .await?
+                .coin_record
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not fetch record for eve nft coin {}",
+                    hex::encode(eve_nft_coin.coin_id())
+                )));
+            };
+
+            let Some(eve_nft_spend) = cli
+                .get_puzzle_and_solution(
+                    eve_nft_coin.coin_id(),
+                    Some(eve_nft_record.spent_block_index),
+                )
+                .await?
+                .coin_solution
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not fetch coin spend for eve nft coin {}",
+                    hex::encode(eve_nft_coin.coin_id())
+                )));
+            };
+
+            let puzzle_ptr = ctx.alloc(&eve_nft_spend.puzzle_reveal)?;
+            let puzzle = Puzzle::parse(ctx, puzzle_ptr);
+            let solution_ptr = ctx.alloc(&eve_nft_spend.solution)?;
+            let Some((eve_nft, inner_puzzle, inner_solution_ptr)) =
+                Nft::parse(ctx, eve_nft_coin, puzzle, solution_ptr)?
+            else {
+                return Err(CliError::Custom(format!(
+                    "Could not parse eve nft coin {}",
+                    hex::encode(eve_nft_coin.coin_id())
+                )));
+            };
+
+            let metadata: HandleNftMetadata = ctx.extract(eve_nft.info.metadata.ptr())?;
+            let metadata_clvm_hex = handle_nft_metadata_clvm_hex(&metadata)?;
+
+            let p2_output = ctx.run(inner_puzzle.ptr(), inner_solution_ptr)?;
+            let p2_output = ctx.extract::<Conditions<HashedPtr>>(p2_output)?;
+            let p2_output = p2_output.into_vec();
+            if p2_output.len() != 3 {
+                return Err(CliError::Custom(format!(
+                    "P2 output contains {} conditions, expected 3 for handle {}",
+                    p2_output.len(),
+                    bundle_row.handle
+                )));
+            }
+            let (
+                Condition::<HashedPtr>::AggSigMe(ref _cond),
+                Condition::<HashedPtr>::SendMessage(ref send_message),
+                Condition::<HashedPtr>::CreateCoin(ref create_coin),
+            ) = (&p2_output[0], &p2_output[1], &p2_output[2])
+            else {
+                return Err(CliError::Custom(format!(
+                    "P2 output does not contain the correct conditions for handle {}",
+                    bundle_row.handle
+                )));
+            };
+
+            let Memos::Some(memos) = create_coin.memos else {
+                return Err(CliError::Custom(format!(
+                    "P2 output missing memo for handle {}",
+                    bundle_row.handle
+                )));
+            };
+            if create_coin.amount != 1
+                || memos.tree_hash() != clvm_list!(create_coin.puzzle_hash).tree_hash()
+            {
+                return Err(CliError::Custom(format!(
+                    "P2 recreation condition invalid for handle {}",
+                    bundle_row.handle
+                )));
+            }
+            if send_message.mode != 18
+                || send_message.message[0]
+                    != XchandlesRegistryReceivedMessagePrefix::RegisterOwner as u8
+            {
+                return Err(CliError::Custom(format!(
+                    "P2 send message invalid for handle {}",
+                    bundle_row.handle
+                )));
+            }
+
+            let relationship = if nft_launcher_id == resolved_launcher_id {
+                OWNER_RESOLVED_RELATIONSHIP.to_string()
+            } else {
+                "distinct_singletons".to_string()
+            };
+
+            nft_launcher_ids.insert(bundle_row.handle.clone(), hex::encode(nft_launcher_id));
+
+            observed.push(ObservedPremineHandle {
+                handle: bundle_row.handle.clone(),
+                recipient_puzzle_hash: hex::encode(create_coin.puzzle_hash),
+                expiration,
+                owner_resolved_relationship: relationship,
+                owner_launcher_id: hex::encode(nft_launcher_id),
+                resolved_launcher_id: hex::encode(resolved_launcher_id),
+                nft_launcher_id: hex::encode(nft_launcher_id),
+                display_name: metadata.display_name.clone().unwrap_or_default(),
+                image_uri: metadata.image_uris.first().cloned().unwrap_or_default(),
+                image_hash: metadata.image_hash.map(hex::encode).unwrap_or_default(),
+                metadata_uri: metadata.metadata_uris.first().cloned().unwrap_or_default(),
+                metadata_hash: metadata.metadata_hash.map(hex::encode).unwrap_or_default(),
+                license_uri: metadata.license_uris.first().cloned().unwrap_or_default(),
+                license_hash: metadata.license_hash.map(hex::encode).unwrap_or_default(),
+                handle_nft_metadata_clvm_hex: metadata_clvm_hex,
+                updater_hash: hex::encode(eve_nft.info.metadata_updater_puzzle_hash),
+                royalty_puzzle_hash: hex::encode(eve_nft.info.royalty_puzzle_hash),
+                royalty_basis_points: eve_nft.info.royalty_basis_points,
+                batch_id: bundle_row.batch_id,
+                row_index: bundle_row.row_index,
+            });
+        }
+
+        registry = registry.child(registry.pending_spend.latest_state.1);
+    }
+
+    let expected = expected_observations_from_bundle_rows(&rows, &nft_launcher_ids)?;
+    let report = compare_premine_set(&expected, &observed, phase);
+    Ok((report, last_confirmation_height))
 }
 
 pub async fn xchandles_verify_deployment(
@@ -109,7 +415,7 @@ pub async fn xchandles_verify_deployment(
 
     let launcher_solution_ptr = node_from_bytes(&mut ctx, &launcher_coin_solution.solution)?;
 
-    let Some((mut registry, _initial_slots, initial_registration_asset_id, initial_base_price)) =
+    let Some((registry, _initial_slots, initial_registration_asset_id, initial_base_price)) =
         XchandlesRegistry::from_launcher_solution(
             &mut ctx,
             launcher_coin_record.coin,
@@ -133,250 +439,74 @@ pub async fn xchandles_verify_deployment(
         hex::encode(initial_registration_asset_id)
     );
 
-    let mut handle_index = 0;
-    let mut royalty_puzzle_hash: Option<Bytes32> = None;
-    let mut royalty_basis_points: Option<u16> = None;
-    let mut eve_nft_temp_inner_ph: Option<Bytes32> = None;
+    println!(
+        "Running canonical Premine set-equality verification over {} bundle rows...",
+        handles_to_launch.len()
+    );
+    let (canonical_report, last_height) = verify_premine_set_against_bundle(
+        &cli,
+        &mut ctx,
+        launcher_id,
+        &bundle,
+        None,
+        VerificationPhase::Canonical,
+    )
+    .await?;
+    println!("{}", canonical_report.to_machine_readable_json()?);
+    canonical_report.gate_later_batches()?;
+    println!("Canonical Premine set equality OK.");
 
-    while handle_index < handles_to_launch.len() {
-        let Some(coin_record) = cli
-            .get_coin_record_by_name(registry.coin.coin_id())
-            .await?
-            .coin_record
-        else {
-            return Err(CliError::CoinNotFound(registry.coin.coin_id()));
+    let Some(confirm_height) = last_height else {
+        return Err(CliError::Custom(
+            "Could not determine last Premine registration confirmation height".to_string(),
+        ));
+    };
+
+    println!(
+        "Waiting for {PREMINE_FINALITY_DEPTH}-block finality above confirmation height {confirm_height}..."
+    );
+    loop {
+        let resp = cli.get_blockchain_state().await?;
+        let Some(state) = resp.blockchain_state else {
+            return Err(CliError::Custom(
+                "Failed to get blockchain state while waiting for Premine finality".to_string(),
+            ));
         };
-
-        let Some(coin_spend) = cli
-            .get_puzzle_and_solution(registry.coin.coin_id(), Some(coin_record.spent_block_index))
-            .await?
-            .coin_solution
-        else {
+        if finality_reached(confirm_height, state.peak.height) {
+            println!(
+                "Peak height {} reaches finality over confirmation {}.",
+                state.peak.height, confirm_height
+            );
             break;
-        };
-
-        let solution = node_from_bytes(&mut ctx, &coin_spend.solution)?;
-        let parsed_solution = ctx.extract::<SingletonSolution<NodePtr>>(solution)?;
-        let inner_solution = ActionLayer::<XchandlesRegistryState, NodePtr>::parse_solution(
-            &ctx,
-            parsed_solution.inner_solution,
-        )?;
-        for action_spend in inner_solution.action_spends {
-            let action_solution = ctx.extract::<XchandlesRegisterActionSolution<
-                NodePtr,
-                NodePtr,
-                NodePtr,
-                NodePtr,
-                NodePtr,
-            >>(action_spend.solution)?;
-
-            let nft_launcher_id = action_solution
-                .other_precommit_data
-                .launcher_ids
-                .owner_launcher_id;
-            if action_solution.handle_hash
-                != handles_to_launch[handle_index].handle.tree_hash().into()
-                || action_solution
-                    .other_precommit_data
-                    .launcher_ids
-                    .resolved_launcher_id
-                    != nft_launcher_id
-            {
-                return Err(CliError::Custom(format!(
-                    "Wrong handle registered at index {}",
-                    handle_index
-                )));
-            }
-
-            let Some(launcher_coin_record) = cli
-                .get_coin_record_by_name(nft_launcher_id)
-                .await?
-                .coin_record
-            else {
-                return Err(CliError::Custom(format!(
-                    "Could not fetch record for launcher coin {}",
-                    hex::encode(nft_launcher_id)
-                )));
-            };
-
-            let Some(launcher_spend) = cli
-                .get_puzzle_and_solution(
-                    nft_launcher_id,
-                    Some(launcher_coin_record.spent_block_index),
-                )
-                .await?
-                .coin_solution
-            else {
-                return Err(CliError::Custom(format!(
-                    "Could not fetch coin spend for launcher coin {}",
-                    hex::encode(nft_launcher_id)
-                )));
-            };
-
-            let launcher_solution = ctx.alloc(&launcher_spend.solution)?;
-            let launcher_solution = ctx.extract::<LauncherSolution<NodePtr>>(launcher_solution)?;
-
-            let eve_nft_coin =
-                Coin::new(nft_launcher_id, launcher_solution.singleton_puzzle_hash, 1);
-
-            let Some(eve_nft_record) = cli
-                .get_coin_record_by_name(eve_nft_coin.coin_id())
-                .await?
-                .coin_record
-            else {
-                return Err(CliError::Custom(format!(
-                    "Could not fetch record for eve nft coin {}",
-                    hex::encode(eve_nft_coin.coin_id())
-                )));
-            };
-
-            let Some(eve_nft_spend) = cli
-                .get_puzzle_and_solution(
-                    eve_nft_coin.coin_id(),
-                    Some(eve_nft_record.spent_block_index),
-                )
-                .await?
-                .coin_solution
-            else {
-                return Err(CliError::Custom(format!(
-                    "Could not fetch coin spend for eve nft coin {}",
-                    hex::encode(eve_nft_coin.coin_id())
-                )));
-            };
-
-            let puzzle_ptr = ctx.alloc(&eve_nft_spend.puzzle_reveal)?;
-            let puzzle = Puzzle::parse(&ctx, puzzle_ptr);
-            let solution_ptr = ctx.alloc(&eve_nft_spend.solution)?;
-
-            let Some((eve_nft, inner_puzzle, inner_solution_ptr)) =
-                Nft::parse(&ctx, eve_nft_coin, puzzle, solution_ptr)?
-            else {
-                return Err(CliError::Custom(format!(
-                    "Could not parse eve nft coin {}",
-                    hex::encode(eve_nft_coin.coin_id())
-                )));
-            };
-
-            // First, verify NFT info, starting from constants 'deduced' from the first NFT.
-
-            if royalty_puzzle_hash.is_none() {
-                println!(
-                    " Royalty address: {}",
-                    Address::new(eve_nft.info.royalty_puzzle_hash, get_prefix(testnet11))
-                        .encode()?
-                );
-                royalty_puzzle_hash = Some(eve_nft.info.royalty_puzzle_hash);
-            } else if royalty_puzzle_hash != Some(eve_nft.info.royalty_puzzle_hash) {
-                return Err(CliError::Custom(format!(
-                    "Royalty puzzle hash mismatch for handle #{}",
-                    handle_index
-                )));
-            }
-
-            if royalty_basis_points.is_none() {
-                println!(
-                    " Royalty basis points: {} BPS",
-                    eve_nft.info.royalty_basis_points
-                );
-                royalty_basis_points = Some(eve_nft.info.royalty_basis_points);
-            } else if royalty_basis_points != Some(eve_nft.info.royalty_basis_points) {
-                return Err(CliError::Custom(format!(
-                    "Royalty basis points mismatch for handle #{}",
-                    handle_index
-                )));
-            }
-
-            let inner_puzzle_hash: Bytes32 = inner_puzzle.tree_hash().into();
-            if eve_nft_temp_inner_ph.is_none() {
-                println!(
-                    " Temporary eve NFT address: {}",
-                    Address::new(inner_puzzle_hash, get_prefix(testnet11)).encode()?
-                );
-                eve_nft_temp_inner_ph = Some(inner_puzzle_hash);
-            } else if eve_nft_temp_inner_ph != Some(inner_puzzle_hash) {
-                return Err(CliError::Custom(format!(
-                    "Inner puzzle hash mismatch for handle #{}",
-                    handle_index
-                )));
-            }
-
-            // Then, check metadata.
-            let expected_metadata_hash = metadata_for_handle_nft(&handles_to_launch[handle_index])
-                .tree_hash();
-            if expected_metadata_hash != eve_nft.info.metadata.tree_hash() {
-                return Err(CliError::Custom(format!(
-                    "Metadata hash mismatch for handle #{}",
-                    handle_index
-                )));
-            }
-
-            // Lastly, check p2 output only contains the SEND_MESSAGE to the registry
-            //   as well as the correct re-creation condition (and the sig check)
-            let p2_output = ctx.run(inner_puzzle.ptr(), inner_solution_ptr)?;
-            let p2_output = ctx.extract::<Conditions<HashedPtr>>(p2_output)?;
-            let p2_output = p2_output.into_vec();
-
-            if p2_output.len() != 3 {
-                return Err(CliError::Custom(format!(
-                    "P2 output contains {} conditions, expected 3 for handle #{}",
-                    p2_output.len(),
-                    handle_index
-                )));
-            }
-
-            let (
-                Condition::<HashedPtr>::AggSigMe(ref _cond),
-                Condition::<HashedPtr>::SendMessage(ref send_message),
-                Condition::<HashedPtr>::CreateCoin(ref create_coin),
-            ) = (&p2_output[0], &p2_output[1], &p2_output[2])
-            else {
-                return Err(CliError::Custom(format!(
-                    "P2 output does not contain the correct conditions for handle #{}",
-                    handle_index
-                )));
-            };
-
-            let target_ph = handles_to_launch[handle_index].recipient;
-            let Memos::Some(memos) = create_coin.memos else {
-                return Err(CliError::Custom(format!(
-                    "P2 output does not contain the correct memo for handle #{}",
-                    handle_index
-                )));
-            };
-            if create_coin.puzzle_hash != target_ph
-                || create_coin.amount != 1
-                || memos.tree_hash() != clvm_list!(target_ph).tree_hash()
-            {
-                return Err(CliError::Custom(format!(
-                    "P2 output does not contain the correct recreation condition for handle #{}",
-                    handle_index
-                )));
-            }
-
-            if send_message.mode != 18
-                || send_message.message[0]
-                    != XchandlesRegistryReceivedMessagePrefix::RegisterOwner as u8
-                || send_message.data.len() != 1
-                || send_message.data[0].tree_hash() != registry.coin.puzzle_hash.tree_hash()
-            {
-                return Err(CliError::Custom(format!(
-                    "P2 send message mode mismatch for handle #{}",
-                    handle_index
-                )));
-            }
-
-            handle_index += 1;
         }
-
-        registry = registry.child(registry.pending_spend.latest_state.1);
+        println!(
+            "Peak #{}; need {} more blocks for finality...",
+            state.peak.height,
+            PREMINE_FINALITY_DEPTH.saturating_sub(state.peak.height.saturating_sub(confirm_height))
+        );
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
     }
 
-    if handle_index < handles_to_launch.len() {
-        return Err(CliError::Custom(
-            "XCHandles registry not completely unrolled".to_string(),
-        ));
-    } else {
-        println!("All premined handles were registered correctly.");
+    println!("Re-running Premine set-equality verification at finality...");
+    let (final_report, _) = verify_premine_set_against_bundle(
+        &cli,
+        &mut ctx,
+        launcher_id,
+        &bundle,
+        None,
+        VerificationPhase::Final,
+    )
+    .await?;
+    println!("{}", final_report.to_machine_readable_json()?);
+    final_report.gate_later_batches()?;
+    println!("Final Premine set equality OK.");
+
+    if !testnet11 {
+        println!(
+            "Mainnet royalty constants are enforced via set equality (expected ph={} bps={}).",
+            hex::encode(ROYALTY_PUZZLE_HASH),
+            ROYALTY_BASIS_POINTS
+        );
     }
 
     println!("Now let's analyze the price singleton.");
@@ -400,10 +530,8 @@ pub async fn xchandles_verify_deployment(
     );
 
     let price_schedule = load_xchandles_state_schedule_csv(price_schedule_csv_filename)?;
-    let price_schedule_ok = xchandles_trusted_schedule_matches(
-        &price_schedule,
-        &state_scheduler_info.state_schedule,
-    );
+    let price_schedule_ok =
+        xchandles_trusted_schedule_matches(&price_schedule, &state_scheduler_info.state_schedule);
 
     if price_schedule_ok {
         println!("OK");
@@ -412,32 +540,6 @@ pub async fn xchandles_verify_deployment(
         return Err(CliError::Custom(
             "Price schedule does not match the one defined in the csv.".to_string(),
         ));
-    }
-
-    if !testnet11 {
-        let Some(royalty_ph) = royalty_puzzle_hash else {
-            return Err(CliError::Custom(
-                "Could not determine royalty puzzle hash from premine NFTs".to_string(),
-            ));
-        };
-        let Some(royalty_bps) = royalty_basis_points else {
-            return Err(CliError::Custom(
-                "Could not determine royalty basis points from premine NFTs".to_string(),
-            ));
-        };
-        if royalty_ph != ROYALTY_PUZZLE_HASH || royalty_bps != ROYALTY_BASIS_POINTS {
-            return Err(CliError::Custom(format!(
-                "Mainnet royalty mismatch: expected ph={} bps={}, got ph={} bps={}",
-                hex::encode(ROYALTY_PUZZLE_HASH),
-                ROYALTY_BASIS_POINTS,
-                hex::encode(royalty_ph),
-                royalty_bps
-            )));
-        }
-        println!(
-            "Mainnet royalty constants match typed launch configuration ({} BPS).",
-            ROYALTY_BASIS_POINTS
-        );
     }
 
     if !testnet11 {

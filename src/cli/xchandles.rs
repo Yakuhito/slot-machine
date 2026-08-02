@@ -1,3 +1,4 @@
+mod batch_verify;
 mod broadcast_state_update;
 mod continue_launch;
 mod execute_update;
@@ -17,6 +18,7 @@ mod verify_deployment;
 mod view;
 mod xchandles_api_client;
 
+pub use batch_verify::*;
 pub use broadcast_state_update::*;
 pub use continue_launch::*;
 pub use execute_update::*;

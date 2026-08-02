@@ -150,7 +150,7 @@ fn is_absolute_http_url(s: &str) -> bool {
     (lower.starts_with("https://") || lower.starts_with("http://")) && !s.contains(char::is_whitespace)
 }
 
-fn handle_nft_metadata_clvm_hex(metadata: &HandleNftMetadata) -> Result<String, CliError> {
+pub fn handle_nft_metadata_clvm_hex(metadata: &HandleNftMetadata) -> Result<String, CliError> {
     let mut allocator = Allocator::new();
     let ptr = metadata
         .to_clvm(&mut allocator)
@@ -435,6 +435,8 @@ pub fn launch_handles_from_bundle(bundle: &PremineLaunchBundle) -> Result<Vec<La
 
 pub fn load_premine_launch_bundle<P: AsRef<Path>>(path: P) -> Result<PremineLaunchBundle, CliError> {
     let bytes = fs::read(path.as_ref())?;
+    // Fail closed on legacy Premine CSV / media-column shapes before JSON parse.
+    crate::reject_legacy_premine_bytes(&bytes)?;
     let bundle: PremineLaunchBundle = serde_json::from_slice(&bytes)
         .map_err(|e| CliError::Custom(format!("failed to parse launch bundle: {e}")))?;
     if bundle.format != BUNDLE_FORMAT {
@@ -507,6 +509,10 @@ pub fn default_mainnet_plan_path() -> &'static str {
 
 pub fn default_testnet11_bundle_path() -> &'static str {
     "xchandles_premine_launch_bundle_testnet11.json"
+}
+
+pub fn default_testnet11_plan_path() -> &'static str {
+    "xchandles_premine_pre_broadcast_plan_testnet11.json"
 }
 
 pub fn xchandles_generate_launch_bundle(

@@ -5,11 +5,12 @@ use crate::{
         Db,
     },
     confirm_pushed_transaction, controller_matches_configured, default_mainnet_bundle_path,
-    default_testnet11_bundle_path, get_coinset_client, get_prefix, launch_handles_from_bundle,
-    load_premine_launch_bundle, load_xchandles_state_schedule_csv, no_assets, parse_amount,
-    print_medieval_vault_configuration, schedule_records_match_configured, SageClient,
-    REGISTRATION_PERIOD,
+    default_mainnet_plan_path, default_testnet11_bundle_path, emit_pre_broadcast_plan,
+    get_coinset_client, get_prefix, launch_handles_from_bundle, load_premine_launch_bundle,
+    load_xchandles_state_schedule_csv, no_assets, parse_amount, print_medieval_vault_configuration,
+    schedule_records_match_configured, SageClient, REGISTRATION_PERIOD,
 };
+use std::path::Path;
 use chia_bls::PublicKey;
 use chia_protocol::{Bytes32, Coin, SpendBundle};
 use chia_puzzle_types::cat::GenesisByCoinIdTailArgs;
@@ -200,6 +201,20 @@ pub async fn xchandles_initiate_launch(
             record.image_uris.first().cloned().unwrap_or_default()
         );
     }
+
+    // Emit the complete pre-broadcast plan before constructing any irreversible spend.
+    let plan_path = if testnet11 {
+        Some(Path::new(crate::default_testnet11_plan_path()))
+    } else {
+        Some(Path::new(default_mainnet_plan_path()))
+    };
+    let plan = emit_pre_broadcast_plan(&bundle, plan_path)?;
+    println!(
+        "Pre-broadcast plan covers {} rows in {} batches (handles_per_batch={}).",
+        plan.total_rows,
+        plan.batches.len(),
+        plan.handles_per_batch
+    );
 
     yes_no_prompt("Is all the data above correct?")?;
 
