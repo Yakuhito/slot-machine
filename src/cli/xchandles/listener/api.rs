@@ -14,12 +14,14 @@ use tower_http::cors::{Any, CorsLayer};
 use super::error::ApiError;
 use super::freshness::FreshnessState;
 use super::handle_store::{HandleSlotStore, StoredHandleSlot};
+use super::pending_store::PendingUpdateStore;
 use super::registration_store::{RegistrationActionKind, RegistrationStore, StoredRegistration};
 use super::store::{FollowRecordStatus, SingletonStore, StoredSingletonState};
 use super::types::{
-    hex32, is_canonical_handle, parse_launcher_id, HandleProofResponse, HandleQuery, HandleSlotJson,
-    RecentRegistrationItem, RecentRegistrationsQuery, RecentRegistrationsResponse,
-    RegistrationQuery, RegistrationResponse, SingletonQuery, SingletonResponse, SlotNeighborsJson,
+    HandleProofResponse, HandleQuery, HandleSlotJson, PendingTransferQuery,
+    PendingTransferResponse, RecentRegistrationItem, RecentRegistrationsQuery,
+    RecentRegistrationsResponse, RegistrationQuery, RegistrationResponse, SingletonQuery,
+    SingletonResponse, SlotNeighborsJson, hex32, is_canonical_handle, parse_launcher_id,
 };
 
 #[derive(Clone)]
@@ -27,6 +29,7 @@ pub struct ListenerApiState {
     pub store: Arc<dyn SingletonStore>,
     pub handle_slots: Arc<dyn HandleSlotStore>,
     pub registrations: Arc<dyn RegistrationStore>,
+    pub pending_updates: Arc<dyn PendingUpdateStore>,
     pub freshness: Arc<RwLock<FreshnessState>>,
     /// Configured registries in follow order; omission of `launcher_id` selects the first.
     pub registry_launcher_ids: Vec<Bytes32>,
@@ -39,6 +42,7 @@ impl ListenerApiState {
         store: Arc<dyn SingletonStore>,
         handle_slots: Arc<dyn HandleSlotStore>,
         registrations: Arc<dyn RegistrationStore>,
+        pending_updates: Arc<dyn PendingUpdateStore>,
         freshness: FreshnessState,
         registry_launcher_ids: Vec<Bytes32>,
     ) -> Self {
@@ -46,6 +50,7 @@ impl ListenerApiState {
             store,
             handle_slots,
             registrations,
+            pending_updates,
             freshness: Arc::new(RwLock::new(freshness)),
             registry_launcher_ids,
             now_unix_override: None,
@@ -69,6 +74,10 @@ pub fn listener_router(state: ListenerApiState) -> Router {
         .route(
             "/singletons/{launcher_id}",
             get(get_singleton).head(head_singleton),
+        )
+        .route(
+            "/handle/{handle}/pending-transfer",
+            get(get_pending_transfer).head(head_pending_transfer),
         )
         .route("/handle/{handle}", get(get_handle).head(head_handle))
         // Static path before `{handle}` so the handle "recent" never shadows this feed.
@@ -349,6 +358,69 @@ async fn lookup_registrations_recent(
     })
 }
 
+/// Returns `Ok(Some(_))` when performable, `Ok(None)` for 204, or an API error.
+async fn lookup_pending_transfer(
+    state: &ListenerApiState,
+    handle: &str,
+    query: &PendingTransferQuery,
+) -> Result<Option<PendingTransferResponse>, ApiError> {
+    if !is_canonical_handle(handle) {
+        return Err(ApiError::invalid_handle());
+    }
+
+    let registry = select_registry(state, query.launcher_id.as_deref())?;
+    let _indexed_peak_height = require_fresh(state).await?;
+
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+    let handle_record = state
+        .handle_slots
+        .get(registry, handle_hash)
+        .await
+        .ok_or_else(ApiError::handle_not_found)?;
+    let slot = handle_record
+        .current
+        .as_ref()
+        .ok_or_else(ApiError::handle_not_found)?;
+
+    // Expired Handles are not performable — distinct from unified proof's 410.
+    if state.now_unix() >= slot.expiration {
+        return Ok(None);
+    }
+
+    let pending_record = state.pending_updates.get(registry, handle_hash).await;
+    let Some(pending) = pending_record.as_ref().and_then(|r| r.current.as_ref()) else {
+        return Ok(None);
+    };
+
+    // Executor must be the live Owner Singleton coin whose parent is the initiator.
+    let Some(owner_rec) = state.store.get(slot.owner_launcher_id).await else {
+        return Ok(None);
+    };
+    if owner_rec.status != FollowRecordStatus::Active {
+        return Ok(None);
+    }
+    let Some(owner) = owner_rec.current.as_ref() else {
+        return Ok(None);
+    };
+    if owner.melted {
+        return Ok(None);
+    }
+    // Separately spent lineage: current coin is no longer the post-initiate executor.
+    if owner.parent_coin_id != pending.update_initiator_coin_id {
+        return Ok(None);
+    }
+
+    Ok(Some(PendingTransferResponse {
+        handle_hash: hex32(pending.handle_hash),
+        new_owner_launcher_id: hex32(pending.new_owner_launcher_id),
+        new_resolved_launcher_id: hex32(pending.new_resolved_launcher_id),
+        update_confirmation_height: pending.update_confirmation_height,
+        minimum_execution_height: pending.minimum_execution_height,
+        update_initiator_coin_id: hex32(pending.update_initiator_coin_id),
+        current_executor_coin_id: hex32(owner.coin_id),
+    }))
+}
+
 async fn get_singleton(
     State(state): State<ListenerApiState>,
     Path(launcher_id_raw): Path<String>,
@@ -421,6 +493,28 @@ async fn head_registrations_recent(
 ) -> Result<StatusCode, ApiError> {
     let _ = lookup_registrations_recent(&state, &query).await?;
     Ok(StatusCode::OK)
+}
+
+async fn get_pending_transfer(
+    State(state): State<ListenerApiState>,
+    Path(handle): Path<String>,
+    Query(query): Query<PendingTransferQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    match lookup_pending_transfer(&state, &handle, &query).await? {
+        Some(body) => Ok((StatusCode::OK, Json(body)).into_response()),
+        None => Ok(StatusCode::NO_CONTENT.into_response()),
+    }
+}
+
+async fn head_pending_transfer(
+    State(state): State<ListenerApiState>,
+    Path(handle): Path<String>,
+    Query(query): Query<PendingTransferQuery>,
+) -> Result<StatusCode, ApiError> {
+    match lookup_pending_transfer(&state, &handle, &query).await? {
+        Some(_) => Ok(StatusCode::OK),
+        None => Ok(StatusCode::NO_CONTENT),
+    }
 }
 
 /// Bind + serve helper used by production listen and the real-HTTP test fixture.

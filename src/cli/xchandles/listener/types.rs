@@ -120,6 +120,24 @@ pub struct RecentRegistrationsResponse {
     pub indexed_peak_height: u32,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PendingTransferQuery {
+    /// Explicit registry selection; omission selects the first configured registry.
+    pub launcher_id: Option<String>,
+}
+
+/// Performable pending transfer returned by `GET /handle/{handle}/pending-transfer`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingTransferResponse {
+    pub handle_hash: String,
+    pub new_owner_launcher_id: String,
+    pub new_resolved_launcher_id: String,
+    pub update_confirmation_height: u32,
+    pub minimum_execution_height: u32,
+    pub update_initiator_coin_id: String,
+    pub current_executor_coin_id: String,
+}
+
 /// Canonical Handle grammar: 3–63 lowercase ASCII alphanumeric, no normalization.
 pub fn is_canonical_handle(handle: &str) -> bool {
     let len = handle.len();

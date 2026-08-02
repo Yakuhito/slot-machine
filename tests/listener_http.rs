@@ -1,7 +1,11 @@
-//! Real-HTTP listener fixture and golden contracts for Tickets 10–12.
+//! Real-HTTP listener fixture and golden contracts for Tickets 10–13.
 //!
 //! Later tickets must extend this same server fixture and consume these goldens
 //! rather than redefining the singleton/error envelope independently.
+//!
+//! Seams under test for Ticket 13:
+//! - `GET /handle/{handle}/pending-transfer` HTTP contract (success, 204, errors)
+//! - Pending-update projection + rollback through `SingletonIndexer`
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,13 +19,14 @@ use clvm_utils::ToTreeHash;
 use clvmr::Allocator;
 use serde_json::Value;
 use slot_machine::{
-    discover_singleton_in_block, listener_router, push_handle_replacement,
-    push_registration_replacement, push_replacement, rollback_to_before, DiscoveryResult,
-    FollowRecordStatus, FollowedSingleton, FreshnessState, HandleSlotRecord, HandleSlotStore,
-    ListenerApiState, MemoryHandleSlotStore, MemoryRegistrationStore, MemorySingletonStore,
-    ParsedNftState, RegistrationActionKind, RegistrationRecord, RegistrationStore,
+    DiscoveryResult, FollowRecordStatus, FollowedSingleton, FreshnessState, HandleSlotRecord,
+    HandleSlotStore, ListenerApiState, MemoryHandleSlotStore, MemoryPendingUpdateStore,
+    MemoryRegistrationStore, MemorySingletonStore, ParsedNftState, PendingUpdateRecord,
+    PendingUpdateStore, RegistrationActionKind, RegistrationRecord, RegistrationStore,
     RegistryRegistrationStats, SingletonIndexer, SingletonStore, StoredHandleSlot,
-    StoredRegistration, StoredRegistrationEvent, StoredSingletonState,
+    StoredPendingUpdate, StoredRegistration, StoredRegistrationEvent, StoredSingletonState,
+    discover_singleton_in_block, listener_router, push_handle_replacement,
+    push_pending_replacement, push_registration_replacement, push_replacement, rollback_to_before,
 };
 use tokio::sync::RwLock;
 
@@ -51,6 +56,7 @@ struct RunningListener {
     store: Arc<MemorySingletonStore>,
     handle_slots: Arc<MemoryHandleSlotStore>,
     registrations: Arc<MemoryRegistrationStore>,
+    pending_updates: Arc<MemoryPendingUpdateStore>,
     freshness: Arc<RwLock<FreshnessState>>,
     _join: tokio::task::JoinHandle<()>,
 }
@@ -68,11 +74,13 @@ impl RunningListener {
         let store = MemorySingletonStore::shared();
         let handle_slots = MemoryHandleSlotStore::shared();
         let registrations = MemoryRegistrationStore::shared();
+        let pending_updates = MemoryPendingUpdateStore::shared();
         let freshness = Arc::new(RwLock::new(freshness));
         let state = ListenerApiState {
             store: store.clone() as Arc<dyn SingletonStore>,
             handle_slots: handle_slots.clone() as Arc<dyn HandleSlotStore>,
             registrations: registrations.clone() as Arc<dyn RegistrationStore>,
+            pending_updates: pending_updates.clone() as Arc<dyn PendingUpdateStore>,
             freshness: Arc::clone(&freshness),
             registry_launcher_ids,
             now_unix_override,
@@ -95,6 +103,7 @@ impl RunningListener {
             store,
             handle_slots,
             registrations,
+            pending_updates,
             freshness,
             _join: join,
         }
@@ -143,7 +152,6 @@ async fn upsert_registration(server: &RunningListener, reg: StoredRegistration) 
     server.registrations.upsert(record).await;
 }
 
-
 #[tokio::test]
 async fn real_http_golden_singleton_shapes_and_errors() {
     let server =
@@ -170,7 +178,10 @@ async fn real_http_golden_singleton_shapes_and_errors() {
         }),
         coin_id: b32(0x88),
     };
-    server.store.upsert(active_record(launcher, nft_state)).await;
+    server
+        .store
+        .upsert(active_record(launcher, nft_state))
+        .await;
 
     let resp = client
         .get(format!(
@@ -396,8 +407,7 @@ async fn discovery_follow_melt_rollback_cleanup_and_rediscovery() -> anyhow::Res
     assert_eq!(did.coin.puzzle_hash, full);
 
     let mut ctx = SpendContext::new();
-    let new_did = did
-        .update(&mut ctx, &p2, Conditions::new())?;
+    let new_did = did.update(&mut ctx, &p2, Conditions::new())?;
     let spends = ctx.take();
     let discovery_spend = spends
         .iter()
@@ -430,6 +440,7 @@ async fn discovery_follow_melt_rollback_cleanup_and_rediscovery() -> anyhow::Res
         store.clone() as Arc<dyn SingletonStore>,
         MemoryHandleSlotStore::shared() as Arc<dyn HandleSlotStore>,
         MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+        MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
         Arc::clone(&freshness),
     );
 
@@ -616,7 +627,10 @@ async fn real_http_golden_handle_proofs_and_errors() {
         }),
         coin_id: b32(0x88),
     };
-    server.store.upsert(active_record(resolved, nft_state)).await;
+    server
+        .store
+        .upsert(active_record(resolved, nft_state))
+        .await;
 
     // Distinct incomplete Owner must not break Resolved proof.
     server
@@ -664,11 +678,13 @@ async fn real_http_golden_handle_proofs_and_errors() {
     );
     let body: Value = resp.json().await.unwrap();
     assert_eq!(body, load_golden("handle_nft_success.json"));
-    assert!(body["resolved_singleton"]["nft"]
-        .as_object()
-        .unwrap()
-        .get("metadata")
-        .is_none());
+    assert!(
+        body["resolved_singleton"]["nft"]
+            .as_object()
+            .unwrap()
+            .get("metadata")
+            .is_none()
+    );
 
     let with_meta: Value = client
         .get(format!(
@@ -915,6 +931,7 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
         store.clone() as Arc<dyn SingletonStore>,
         handle_slots.clone() as Arc<dyn HandleSlotStore>,
         MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+        MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
         Arc::clone(&freshness),
     );
 
@@ -990,6 +1007,7 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
         store: store.clone() as Arc<dyn SingletonStore>,
         handle_slots: handle_slots.clone() as Arc<dyn HandleSlotStore>,
         registrations: MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+        pending_updates: MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
         freshness: Arc::clone(&freshness),
         registry_launcher_ids: vec![registry],
         now_unix_override: Some(1_700_000_000),
@@ -1026,9 +1044,7 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
     // Reorganization orphans height 20; prior slot restored.
     indexer.rollback(20).await;
     // Clear rolling_back so reads succeed; production would note_peak after recovery.
-    indexer
-        .note_peak(50, 50, FreshnessState::now_unix())
-        .await;
+    indexer.note_peak(50, 50, FreshnessState::now_unix()).await;
 
     let after: Value = client
         .get(format!("{base}/handle/{handle}"))
@@ -1240,10 +1256,7 @@ async fn registrations_recent_golden_limit_and_total_semantics() {
         .cloned()
         .collect();
     item_keys.sort();
-    assert_eq!(
-        item_keys,
-        ["action_kind", "confirmation_height", "handle"]
-    );
+    assert_eq!(item_keys, ["action_kind", "confirmation_height", "handle"]);
 
     let limited: Value = client
         .get(format!("{}/registrations/recent?limit=1", server.base))
@@ -1284,6 +1297,7 @@ async fn registration_reorganization_restores_prior_and_reverses_total() {
         store.clone() as Arc<dyn SingletonStore>,
         handle_slots.clone() as Arc<dyn HandleSlotStore>,
         registrations.clone() as Arc<dyn RegistrationStore>,
+        MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
         Arc::clone(&freshness),
     );
 
@@ -1345,6 +1359,7 @@ async fn registration_reorganization_restores_prior_and_reverses_total() {
         store: store.clone() as Arc<dyn SingletonStore>,
         handle_slots: handle_slots.clone() as Arc<dyn HandleSlotStore>,
         registrations: registrations.clone() as Arc<dyn RegistrationStore>,
+        pending_updates: MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
         freshness: Arc::clone(&freshness),
         registry_launcher_ids: vec![registry],
         now_unix_override: None,
@@ -1433,6 +1448,7 @@ async fn project_registrations_from_logs_covers_register_expire_skips_extend() {
         MemorySingletonStore::shared() as Arc<dyn SingletonStore>,
         MemoryHandleSlotStore::shared() as Arc<dyn HandleSlotStore>,
         registrations.clone() as Arc<dyn RegistrationStore>,
+        MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
         Arc::new(RwLock::new(FreshnessState::fresh_at(
             50,
             FreshnessState::now_unix(),
@@ -1506,10 +1522,7 @@ async fn project_registrations_from_logs_covers_register_expire_skips_extend() {
         .unwrap();
     assert_eq!(after_extend.action_kind, RegistrationActionKind::Register);
     assert_eq!(after_extend.confirmation_height, 10);
-    assert_eq!(
-        registrations.get_stats(registry).await.total_registered,
-        1
-    );
+    assert_eq!(registrations.get_stats(registry).await.total_registered, 1);
 
     // Expiry-auction purchase replaces the fact but does not increment total.
     let expire_log = XchandlesActionLog::Expire(XchandlesExpireActionLog {
@@ -1539,7 +1552,10 @@ async fn project_registrations_from_logs_covers_register_expire_skips_extend() {
     let stats = registrations.get_stats(registry).await;
     assert_eq!(stats.total_registered, 1);
     assert_eq!(stats.events.len(), 2);
-    assert_eq!(stats.events[0].action_kind, RegistrationActionKind::Register);
+    assert_eq!(
+        stats.events[0].action_kind,
+        RegistrationActionKind::Register
+    );
     assert_eq!(stats.events[1].action_kind, RegistrationActionKind::Expire);
 }
 
@@ -1664,4 +1680,641 @@ async fn registration_registry_selection_matches_handle_semantics() {
         .await
         .unwrap();
     assert_eq!(recent_other["total_registered"].as_u64().unwrap(), 7);
+}
+
+async fn upsert_pending(server: &RunningListener, pending: StoredPendingUpdate) {
+    let mut record = PendingUpdateRecord {
+        registry_launcher_id: pending.registry_launcher_id,
+        handle_hash: pending.handle_hash,
+        current: None,
+        history: Vec::new(),
+    };
+    let height = pending.update_confirmation_height;
+    push_pending_replacement(&mut record, pending, height);
+    server.pending_updates.upsert(record).await;
+}
+
+fn unexpired_slot(registry: Bytes32, handle_hash: Bytes32, owner: Bytes32) -> StoredHandleSlot {
+    StoredHandleSlot {
+        registry_launcher_id: registry,
+        handle_hash,
+        counter: 1,
+        neighbors_left: Bytes32::default(),
+        neighbors_right: Bytes32::new([0xff; 32]),
+        expiration: 4_102_444_800,
+        owner_launcher_id: owner,
+        resolved_launcher_id: owner,
+        parent_coin_id: b32(0x31),
+        confirmation_height: 90,
+    }
+}
+
+fn owner_executor(owner: Bytes32, initiator: Bytes32, coin_id: Bytes32) -> StoredSingletonState {
+    StoredSingletonState {
+        launcher_id: owner,
+        parent_coin_id: initiator,
+        amount: 1,
+        inner_puzzle_hash: b32(0x33),
+        confirmation_height: 100,
+        melted: false,
+        melt_height: None,
+        nft: None,
+        coin_id,
+    }
+}
+
+#[tokio::test]
+async fn pending_transfer_golden_future_ready_and_exact_fields() {
+    let registry = b32(0xaa);
+    let owner = b32(0x11);
+    let handle = "alice";
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+    let initiator = b32(0x55);
+    let executor = b32(0x66);
+    let server =
+        RunningListener::spawn(FreshnessState::fresh_at(116, FreshnessState::now_unix())).await;
+    let client = reqwest::Client::new();
+
+    upsert_handle_slot(&server, unexpired_slot(registry, handle_hash, owner)).await;
+    server
+        .store
+        .upsert(active_record(
+            owner,
+            owner_executor(owner, initiator, executor),
+        ))
+        .await;
+    upsert_pending(
+        &server,
+        StoredPendingUpdate {
+            registry_launcher_id: registry,
+            handle_hash,
+            new_owner_launcher_id: b32(0x33),
+            new_resolved_launcher_id: b32(0x44),
+            update_confirmation_height: 100,
+            // Future minimum height remains performable.
+            minimum_execution_height: 150,
+            update_initiator_coin_id: initiator,
+        },
+    )
+    .await;
+
+    let resp = client
+        .get(format!("{}/handle/{handle}/pending-transfer", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body, load_golden("pending_transfer_success.json"));
+    let mut keys: Vec<_> = body.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        [
+            "current_executor_coin_id",
+            "handle_hash",
+            "minimum_execution_height",
+            "new_owner_launcher_id",
+            "new_resolved_launcher_id",
+            "update_confirmation_height",
+            "update_initiator_coin_id",
+        ]
+    );
+
+    // Ready (min height already reached) is still 200 with the same shape.
+    upsert_pending(
+        &server,
+        StoredPendingUpdate {
+            registry_launcher_id: registry,
+            handle_hash,
+            new_owner_launcher_id: b32(0x33),
+            new_resolved_launcher_id: b32(0x44),
+            update_confirmation_height: 100,
+            minimum_execution_height: 50,
+            update_initiator_coin_id: initiator,
+        },
+    )
+    .await;
+    let ready: Value = client
+        .get(format!("{}/handle/{handle}/pending-transfer", server.base))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ready["minimum_execution_height"], 50);
+    assert_eq!(
+        ready["current_executor_coin_id"].as_str().unwrap(),
+        hex::encode(executor)
+    );
+}
+
+#[tokio::test]
+async fn pending_transfer_returns_204_for_non_performable_cases() {
+    let registry = b32(0xaa);
+    let owner = b32(0x11);
+    let handle = "alice";
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+    let initiator = b32(0x55);
+    let executor = b32(0x66);
+    let server = RunningListener::spawn_with_registries(
+        FreshnessState::fresh_at(116, 1_700_000_000),
+        vec![registry],
+        Some(1_700_000_000),
+    )
+    .await;
+    let client = reqwest::Client::new();
+
+    // Handle exists, no pending → 204.
+    upsert_handle_slot(&server, unexpired_slot(registry, handle_hash, owner)).await;
+    server
+        .store
+        .upsert(active_record(
+            owner,
+            owner_executor(owner, initiator, executor),
+        ))
+        .await;
+    let none = client
+        .get(format!("{}/handle/{handle}/pending-transfer", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(none.status(), 204);
+
+    upsert_pending(
+        &server,
+        StoredPendingUpdate {
+            registry_launcher_id: registry,
+            handle_hash,
+            new_owner_launcher_id: b32(0x33),
+            new_resolved_launcher_id: b32(0x44),
+            update_confirmation_height: 100,
+            minimum_execution_height: 150,
+            update_initiator_coin_id: initiator,
+        },
+    )
+    .await;
+
+    // Executed / cleared pending → 204.
+    let mut cleared = server
+        .pending_updates
+        .get(registry, handle_hash)
+        .await
+        .unwrap();
+    cleared.current = None;
+    server.pending_updates.upsert(cleared).await;
+    assert_eq!(
+        client
+            .get(format!("{}/handle/{handle}/pending-transfer", server.base))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+
+    // Restore pending, then separately spent executor (parent ≠ initiator) → 204.
+    upsert_pending(
+        &server,
+        StoredPendingUpdate {
+            registry_launcher_id: registry,
+            handle_hash,
+            new_owner_launcher_id: b32(0x33),
+            new_resolved_launcher_id: b32(0x44),
+            update_confirmation_height: 100,
+            minimum_execution_height: 150,
+            update_initiator_coin_id: initiator,
+        },
+    )
+    .await;
+    let mut spent = owner_executor(owner, b32(0x99), b32(0xaa));
+    spent.parent_coin_id = b32(0x99); // not initiator
+    server.store.upsert(active_record(owner, spent)).await;
+    assert_eq!(
+        client
+            .get(format!("{}/handle/{handle}/pending-transfer", server.base))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+
+    // Melted owner → 204.
+    server
+        .store
+        .upsert(active_record(
+            owner,
+            StoredSingletonState {
+                launcher_id: owner,
+                parent_coin_id: initiator,
+                amount: 1,
+                inner_puzzle_hash: b32(0x33),
+                confirmation_height: 100,
+                melted: true,
+                melt_height: Some(110),
+                nft: None,
+                coin_id: executor,
+            },
+        ))
+        .await;
+    assert_eq!(
+        client
+            .get(format!("{}/handle/{handle}/pending-transfer", server.base))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+
+    // Expired Handle → 204 (not 410).
+    server
+        .store
+        .upsert(active_record(
+            owner,
+            owner_executor(owner, initiator, executor),
+        ))
+        .await;
+    let mut expired = unexpired_slot(registry, handle_hash, owner);
+    expired.expiration = 1_000_000_000;
+    upsert_handle_slot(&server, expired).await;
+    assert_eq!(
+        client
+            .get(format!("{}/handle/{handle}/pending-transfer", server.base))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+}
+
+#[tokio::test]
+async fn pending_transfer_stale_invalid_unknown_and_registry_semantics() {
+    let registry = b32(0xaa);
+    let other = b32(0xbb);
+    let owner = b32(0x11);
+    let handle = "alice";
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+    let initiator = b32(0x55);
+    let executor = b32(0x66);
+    let server = RunningListener::spawn_with_registries(
+        FreshnessState::fresh_at(116, FreshnessState::now_unix()),
+        vec![registry, other],
+        None,
+    )
+    .await;
+    let client = reqwest::Client::new();
+
+    upsert_handle_slot(&server, unexpired_slot(registry, handle_hash, owner)).await;
+    server
+        .store
+        .upsert(active_record(
+            owner,
+            owner_executor(owner, initiator, executor),
+        ))
+        .await;
+    upsert_pending(
+        &server,
+        StoredPendingUpdate {
+            registry_launcher_id: registry,
+            handle_hash,
+            new_owner_launcher_id: b32(0x33),
+            new_resolved_launcher_id: b32(0x44),
+            update_confirmation_height: 100,
+            minimum_execution_height: 150,
+            update_initiator_coin_id: initiator,
+        },
+    )
+    .await;
+
+    let bad = client
+        .get(format!("{}/handle/ALICE/pending-transfer", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), 400);
+    assert_eq!(
+        normalize_request_id(bad.json().await.unwrap()),
+        load_golden("error_invalid_handle.json")
+    );
+
+    let unknown = client
+        .get(format!("{}/handle/zzz/pending-transfer", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), 404);
+    assert_eq!(
+        normalize_request_id(unknown.json().await.unwrap()),
+        load_golden("error_handle_not_found.json")
+    );
+
+    *server.freshness.write().await = FreshnessState {
+        indexed_peak_height: 100,
+        upstream_peak_height: 200,
+        last_successful_peak_unix: FreshnessState::now_unix(),
+        rolling_back: false,
+        resyncing: false,
+    };
+    let stale = client
+        .get(format!("{}/handle/{handle}/pending-transfer", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), 503);
+    assert_eq!(
+        normalize_request_id(stale.json().await.unwrap()),
+        load_golden("error_index_stale.json")
+    );
+
+    // Restore freshness; explicit untracked registry does not fall back.
+    *server.freshness.write().await = FreshnessState::fresh_at(116, FreshnessState::now_unix());
+    let untracked = client
+        .get(format!(
+            "{}/handle/{handle}/pending-transfer?launcher_id={}",
+            server.base,
+            hex::encode(b32(0xcc))
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(untracked.status(), 404);
+    assert_eq!(
+        normalize_request_id(untracked.json().await.unwrap())["code"],
+        "registry_not_followed"
+    );
+
+    // Alternate followed registry with no pending for this handle → 404 (no slot there).
+    let other_reg = client
+        .get(format!(
+            "{}/handle/{handle}/pending-transfer?launcher_id={}",
+            server.base,
+            hex::encode(other)
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(other_reg.status(), 404);
+}
+
+#[tokio::test]
+async fn pending_transfer_reorganization_restores_or_removes() {
+    let registry = b32(0xaa);
+    let owner = b32(0x11);
+    let handle = "alice";
+    let handle_hash: Bytes32 = handle.tree_hash().into();
+    let initiator = b32(0x55);
+    let executor = b32(0x66);
+
+    let pending_updates = MemoryPendingUpdateStore::shared();
+    let handle_slots = MemoryHandleSlotStore::shared();
+    let store = MemorySingletonStore::shared();
+    let freshness = Arc::new(RwLock::new(FreshnessState::fresh_at(
+        200,
+        FreshnessState::now_unix(),
+    )));
+    let indexer = SingletonIndexer::new(
+        store.clone() as Arc<dyn SingletonStore>,
+        handle_slots.clone() as Arc<dyn HandleSlotStore>,
+        MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+        pending_updates.clone() as Arc<dyn PendingUpdateStore>,
+        Arc::clone(&freshness),
+    );
+
+    handle_slots
+        .upsert(HandleSlotRecord {
+            registry_launcher_id: registry,
+            handle_hash,
+            current: Some(unexpired_slot(registry, handle_hash, owner)),
+            history: Vec::new(),
+        })
+        .await;
+    store
+        .upsert(active_record(
+            owner,
+            owner_executor(owner, initiator, executor),
+        ))
+        .await;
+
+    let mut record = PendingUpdateRecord {
+        registry_launcher_id: registry,
+        handle_hash,
+        current: None,
+        history: Vec::new(),
+    };
+    push_pending_replacement(
+        &mut record,
+        StoredPendingUpdate {
+            registry_launcher_id: registry,
+            handle_hash,
+            new_owner_launcher_id: b32(0x33),
+            new_resolved_launcher_id: b32(0x44),
+            update_confirmation_height: 100,
+            minimum_execution_height: 150,
+            update_initiator_coin_id: initiator,
+        },
+        100,
+    );
+    // Later initiate replaces pending.
+    push_pending_replacement(
+        &mut record,
+        StoredPendingUpdate {
+            registry_launcher_id: registry,
+            handle_hash,
+            new_owner_launcher_id: b32(0x77),
+            new_resolved_launcher_id: b32(0x88),
+            update_confirmation_height: 120,
+            minimum_execution_height: 170,
+            update_initiator_coin_id: initiator,
+        },
+        120,
+    );
+    pending_updates.upsert(record).await;
+
+    let state = ListenerApiState {
+        store: store.clone() as Arc<dyn SingletonStore>,
+        handle_slots: handle_slots.clone() as Arc<dyn HandleSlotStore>,
+        registrations: MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+        pending_updates: pending_updates.clone() as Arc<dyn PendingUpdateStore>,
+        freshness: Arc::clone(&freshness),
+        registry_launcher_ids: vec![registry],
+        now_unix_override: Some(1_700_000_000),
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = listener_router(state);
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let base = format!("http://{addr}");
+    for _ in 0..100 {
+        if reqwest::get(format!("{base}/healthz")).await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let client = reqwest::Client::new();
+
+    let before: Value = client
+        .get(format!("{base}/handle/{handle}/pending-transfer"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(before["update_confirmation_height"], 120);
+    assert_eq!(
+        before["new_owner_launcher_id"].as_str().unwrap(),
+        hex::encode(b32(0x77))
+    );
+
+    // Roll back the later initiate — prior pending is restored.
+    indexer.rollback(120).await;
+    *freshness.write().await = FreshnessState::fresh_at(200, FreshnessState::now_unix());
+
+    let restored: Value = client
+        .get(format!("{base}/handle/{handle}/pending-transfer"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(restored["update_confirmation_height"], 100);
+    assert_eq!(
+        restored["new_owner_launcher_id"].as_str().unwrap(),
+        hex::encode(b32(0x33))
+    );
+
+    // Roll back the original initiate — pending removed → 204.
+    indexer.rollback(100).await;
+    *freshness.write().await = FreshnessState::fresh_at(200, FreshnessState::now_unix());
+    assert_eq!(
+        client
+            .get(format!("{base}/handle/{handle}/pending-transfer"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+}
+
+#[tokio::test]
+async fn project_pending_updates_from_logs_covers_initiate_execute_invalidate() {
+    use chia_wallet_sdk::driver::{
+        XchandlesActionLog, XchandlesExecuteUpdateActionLog, XchandlesExtendActionLog,
+        XchandlesInitiateUpdateActionLog,
+    };
+    use chia_wallet_sdk::types::puzzles::{XchandlesHandleSlotValue, XchandlesUpdateSlotValue};
+
+    let registry = b32(0xaa);
+    let pending_updates = MemoryPendingUpdateStore::shared();
+    let indexer = SingletonIndexer::new(
+        MemorySingletonStore::shared() as Arc<dyn SingletonStore>,
+        MemoryHandleSlotStore::shared() as Arc<dyn HandleSlotStore>,
+        MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+        pending_updates.clone() as Arc<dyn PendingUpdateStore>,
+        Arc::new(RwLock::new(FreshnessState::fresh_at(
+            50,
+            FreshnessState::now_unix(),
+        ))),
+    );
+
+    let handle_hash: Bytes32 = "alice".tree_hash().into();
+    let handle_slot = |counter: u64| {
+        XchandlesHandleSlotValue::new(
+            counter,
+            handle_hash,
+            Bytes32::default(),
+            Bytes32::new([0xff; 32]),
+            4_102_444_800,
+            b32(0x11),
+            b32(0x11),
+        )
+    };
+    let update_slot =
+        XchandlesUpdateSlotValue::new(b32(0x55), 150, handle_hash, b32(0x33), b32(0x44));
+
+    let initiate = XchandlesActionLog::InitiateUpdate(XchandlesInitiateUpdateActionLog {
+        spent_slot: handle_slot(0),
+        created_handle_slot: handle_slot(1),
+        created_update_slot: update_slot,
+        initiator_coin_id: b32(0x55),
+    });
+    indexer
+        .project_pending_updates_from_logs(registry, 100, &[initiate])
+        .await;
+    let after_init = pending_updates
+        .get(registry, handle_hash)
+        .await
+        .unwrap()
+        .current
+        .unwrap();
+    assert_eq!(after_init.minimum_execution_height, 150);
+    assert_eq!(after_init.update_initiator_coin_id, b32(0x55));
+
+    // Extend invalidates pending.
+    let extend = XchandlesActionLog::Extend(XchandlesExtendActionLog {
+        spent_slot: handle_slot(1),
+        created_slot: handle_slot(2),
+        total_price: 1000,
+        registered_time: 31_557_600,
+    });
+    indexer
+        .project_pending_updates_from_logs(registry, 110, &[extend])
+        .await;
+    assert!(
+        pending_updates
+            .get(registry, handle_hash)
+            .await
+            .unwrap()
+            .current
+            .is_none()
+    );
+
+    // Re-initiate then execute clears.
+    let initiate2 = XchandlesActionLog::InitiateUpdate(XchandlesInitiateUpdateActionLog {
+        spent_slot: handle_slot(2),
+        created_handle_slot: handle_slot(3),
+        created_update_slot: update_slot,
+        initiator_coin_id: b32(0x55),
+    });
+    indexer
+        .project_pending_updates_from_logs(registry, 120, &[initiate2])
+        .await;
+    assert!(
+        pending_updates
+            .get(registry, handle_hash)
+            .await
+            .unwrap()
+            .current
+            .is_some()
+    );
+
+    let execute = XchandlesActionLog::ExecuteUpdate(XchandlesExecuteUpdateActionLog {
+        spent_handle_slot: handle_slot(3),
+        spent_update_slot: update_slot,
+        created_slot: handle_slot(4),
+        owner_coin_id: b32(0x66),
+        owner_full_puzzle_hash: b32(0x71),
+        resolved_full_puzzle_hash: None,
+        owner_inner_puzzle_hash: b32(0x72),
+        resolved_inner_puzzle_hash: b32(0x72),
+    });
+    indexer
+        .project_pending_updates_from_logs(registry, 130, &[execute])
+        .await;
+    assert!(
+        pending_updates
+            .get(registry, handle_hash)
+            .await
+            .unwrap()
+            .current
+            .is_none()
+    );
 }

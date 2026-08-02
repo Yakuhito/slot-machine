@@ -6,22 +6,26 @@ use clvmr::Allocator;
 use tokio::sync::RwLock;
 
 use super::discovery::{
-    discover_singleton_in_block, follow_singleton_spend, DiscoveryResult, FollowSpendResult,
+    DiscoveryResult, FollowSpendResult, discover_singleton_in_block, follow_singleton_spend,
 };
 use super::freshness::FreshnessState;
 use super::handle_store::{
-    push_handle_replacement, rollback_handle_to_before, HandleSlotRecord, HandleSlotStore,
-    StoredHandleSlot,
+    HandleSlotRecord, HandleSlotStore, StoredHandleSlot, push_handle_replacement,
+    rollback_handle_to_before,
 };
-use super::refs::{dereferenced_launchers, references_from_action_log, SingletonReference};
+use super::pending_store::{
+    PendingUpdateRecord, PendingUpdateStore, StoredPendingUpdate, clear_pending_current,
+    push_pending_replacement, rollback_pending_to_before,
+};
+use super::refs::{SingletonReference, dereferenced_launchers, references_from_action_log};
 use super::registration_store::{
-    push_registration_replacement, rollback_registration_to_before, rollback_stats_to_before,
     RegistrationActionKind, RegistrationRecord, RegistrationStore, StoredRegistration,
-    StoredRegistrationEvent,
+    StoredRegistrationEvent, push_registration_replacement, rollback_registration_to_before,
+    rollback_stats_to_before,
 };
 use super::store::{
-    push_replacement, rollback_to_before, FollowRecordStatus, FollowedSingleton, SingletonStore,
-    StoredSingletonState,
+    FollowRecordStatus, FollowedSingleton, SingletonStore, StoredSingletonState, push_replacement,
+    rollback_to_before,
 };
 use chia_wallet_sdk::driver::XchandlesActionLog;
 use chia_wallet_sdk::types::puzzles::XchandlesHandleSlotValue;
@@ -31,6 +35,7 @@ pub struct SingletonIndexer {
     pub store: Arc<dyn SingletonStore>,
     pub handle_slots: Arc<dyn HandleSlotStore>,
     pub registrations: Arc<dyn RegistrationStore>,
+    pub pending_updates: Arc<dyn PendingUpdateStore>,
     pub freshness: Arc<RwLock<FreshnessState>>,
 }
 
@@ -39,12 +44,14 @@ impl SingletonIndexer {
         store: Arc<dyn SingletonStore>,
         handle_slots: Arc<dyn HandleSlotStore>,
         registrations: Arc<dyn RegistrationStore>,
+        pending_updates: Arc<dyn PendingUpdateStore>,
         freshness: Arc<RwLock<FreshnessState>>,
     ) -> Self {
         Self {
             store,
             handle_slots,
             registrations,
+            pending_updates,
             freshness,
         }
     }
@@ -200,6 +207,114 @@ impl SingletonIndexer {
             self.registrations
                 .set_stats(registry_launcher_id, stats)
                 .await;
+        }
+    }
+
+    /// Project InitiateUpdate creations and clear pending on execute/invalidate.
+    pub async fn project_pending_updates_from_logs(
+        &self,
+        registry_launcher_id: Bytes32,
+        height: u32,
+        logs: &[XchandlesActionLog],
+    ) {
+        for log in logs {
+            match log {
+                XchandlesActionLog::InitiateUpdate(e) => {
+                    let value = e.created_update_slot;
+                    let stored = StoredPendingUpdate {
+                        registry_launcher_id,
+                        handle_hash: value.handle_hash,
+                        new_owner_launcher_id: value.new_owner_launcher_id,
+                        new_resolved_launcher_id: value.new_resolved_launcher_id,
+                        update_confirmation_height: height,
+                        minimum_execution_height: value.min_height,
+                        update_initiator_coin_id: value.update_initiator_coin_id,
+                    };
+                    let mut record = self
+                        .pending_updates
+                        .get(registry_launcher_id, value.handle_hash)
+                        .await
+                        .unwrap_or(PendingUpdateRecord {
+                            registry_launcher_id,
+                            handle_hash: value.handle_hash,
+                            current: None,
+                            history: Vec::new(),
+                        });
+                    push_pending_replacement(&mut record, stored, height);
+                    self.pending_updates.upsert(record).await;
+                }
+                XchandlesActionLog::ExecuteUpdate(e) => {
+                    self.clear_pending_for_handle(
+                        registry_launcher_id,
+                        e.spent_update_slot.handle_hash,
+                        height,
+                    )
+                    .await;
+                }
+                // Any other action that spends this Handle slot without creating a
+                // replacement update invalidates the pending executor path.
+                XchandlesActionLog::Extend(e) => {
+                    self.clear_pending_for_handle(
+                        registry_launcher_id,
+                        e.spent_slot.handle_hash,
+                        height,
+                    )
+                    .await;
+                }
+                XchandlesActionLog::Oracle(e) => {
+                    self.clear_pending_for_handle(
+                        registry_launcher_id,
+                        e.spent_slot.handle_hash,
+                        height,
+                    )
+                    .await;
+                }
+                XchandlesActionLog::Expire(e) => {
+                    self.clear_pending_for_handle(
+                        registry_launcher_id,
+                        e.spent_slot.handle_hash,
+                        height,
+                    )
+                    .await;
+                }
+                XchandlesActionLog::Refund(e) => {
+                    if let Some(spent) = e.spent_slot {
+                        self.clear_pending_for_handle(
+                            registry_launcher_id,
+                            spent.handle_hash,
+                            height,
+                        )
+                        .await;
+                    }
+                }
+                XchandlesActionLog::Register(_) | XchandlesActionLog::DelegatedState(_) => {}
+            }
+        }
+    }
+
+    async fn clear_pending_for_handle(
+        &self,
+        registry_launcher_id: Bytes32,
+        handle_hash: Bytes32,
+        height: u32,
+    ) {
+        let Some(mut record) = self
+            .pending_updates
+            .get(registry_launcher_id, handle_hash)
+            .await
+        else {
+            return;
+        };
+        if record.current.is_none() {
+            return;
+        }
+        clear_pending_current(&mut record, height);
+        if record.current.is_none() && record.history.is_empty() {
+            self.pending_updates
+                .remove(registry_launcher_id, handle_hash)
+                .await;
+        } else {
+            self.pending_updates.upsert(record).await;
         }
     }
 
@@ -362,12 +477,15 @@ impl SingletonIndexer {
                 continue;
             }
 
-            let Some(spend) = block_spends.iter().find(|s| s.coin.coin_id() == current.coin_id)
+            let Some(spend) = block_spends
+                .iter()
+                .find(|s| s.coin.coin_id() == current.coin_id)
             else {
                 continue;
             };
 
-            match follow_singleton_spend(allocator, spend, launcher_id).map_err(|e| e.to_string())?
+            match follow_singleton_spend(allocator, spend, launcher_id)
+                .map_err(|e| e.to_string())?
             {
                 FollowSpendResult::Next(next) => {
                     let new_state = StoredSingletonState::from_coin(
@@ -456,8 +574,12 @@ impl SingletonIndexer {
             }
         }
 
-        let mut touched_registries: std::collections::HashSet<Bytes32> =
-            self.registrations.all_stats_registry_ids().await.into_iter().collect();
+        let mut touched_registries: std::collections::HashSet<Bytes32> = self
+            .registrations
+            .all_stats_registry_ids()
+            .await
+            .into_iter()
+            .collect();
         for (registry, handle_hash) in self.registrations.all_keys().await {
             touched_registries.insert(registry);
             let Some(mut rec) = self.registrations.get(registry, handle_hash).await else {
@@ -474,6 +596,18 @@ impl SingletonIndexer {
             let mut stats = self.registrations.get_stats(registry).await;
             rollback_stats_to_before(&mut stats, from_height);
             self.registrations.set_stats(registry, stats).await;
+        }
+
+        for (registry, handle_hash) in self.pending_updates.all_keys().await {
+            let Some(mut rec) = self.pending_updates.get(registry, handle_hash).await else {
+                continue;
+            };
+            rollback_pending_to_before(&mut rec, from_height);
+            if rec.current.is_none() && rec.history.is_empty() {
+                self.pending_updates.remove(registry, handle_hash).await;
+            } else {
+                self.pending_updates.upsert(rec).await;
+            }
         }
     }
 }

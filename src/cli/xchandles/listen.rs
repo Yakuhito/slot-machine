@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::debug_handler;
 use axum::extract::{Query, State};
 use axum::http::Method;
-use axum::{http::StatusCode, routing::get, Json, Router};
+use axum::{Json, Router, http::StatusCode, routing::get};
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::coinset::ChiaRpcClient;
 use chia_wallet_sdk::driver::{SpendContext, XchandlesRegistry};
@@ -19,12 +19,13 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::{Any, CorsLayer};
 
 use super::listener::{
-    listener_router, DbHandleSlotStore, DbRegistrationStore, DbSingletonStore, FreshnessState,
-    HandleSlotStore, ListenerApiState, RegistrationStore, SingletonIndexer, SingletonStore,
+    DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore, DbSingletonStore, FreshnessState,
+    HandleSlotStore, ListenerApiState, PendingUpdateStore, RegistrationStore, SingletonIndexer,
+    SingletonStore, listener_router,
 };
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, CoinsetWebSocketMessage,
-    Db,
+    CliError, CoinsetWebSocketMessage, Db, get_coinset_client, hex_string_to_bytes32,
+    sync_xchandles,
 };
 
 #[derive(Debug, Deserialize)]
@@ -83,6 +84,7 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
     let singleton_store: Arc<dyn SingletonStore> = DbSingletonStore::new(Arc::clone(&db));
     let handle_slots: Arc<dyn HandleSlotStore> = DbHandleSlotStore::new(Arc::clone(&db));
     let registrations: Arc<dyn RegistrationStore> = DbRegistrationStore::new(Arc::clone(&db));
+    let pending_updates: Arc<dyn PendingUpdateStore> = DbPendingUpdateStore::new(Arc::clone(&db));
     let freshness = Arc::new(RwLock::new(FreshnessState::fresh_at(
         0,
         FreshnessState::now_unix(),
@@ -91,6 +93,7 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
         Arc::clone(&singleton_store),
         Arc::clone(&handle_slots),
         Arc::clone(&registrations),
+        Arc::clone(&pending_updates),
         Arc::clone(&freshness),
     ));
 
@@ -102,6 +105,7 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
         store: Arc::clone(&singleton_store),
         handle_slots: Arc::clone(&handle_slots),
         registrations: Arc::clone(&registrations),
+        pending_updates: Arc::clone(&pending_updates),
         freshness: Arc::clone(&freshness),
         registry_launcher_ids: launcher_ids.clone(),
         now_unix_override: None,
@@ -144,14 +148,12 @@ async fn start_api_server(
         .route("/neighbors", get(get_neighbors))
         .with_state(neighbors_state);
 
-    let app = listener_router(listener_state)
-        .merge(neighbors)
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods([Method::GET, Method::HEAD, Method::OPTIONS])
-                .allow_headers(Any),
-        );
+    let app = listener_router(listener_state).merge(neighbors).layer(
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods([Method::GET, Method::HEAD, Method::OPTIONS])
+            .allow_headers(Any),
+    );
 
     let addr = bind_addr();
     println!("API server listening on {}", addr);
@@ -368,9 +370,9 @@ async fn connect_websocket(
                                         registries[i].info.constants,
                                         chia_bls::Signature::default(),
                                     )?
-                                    .ok_or(CliError::Custom(
-                                        "Could not parse registry spend".into(),
-                                    ))?;
+                                    .ok_or(
+                                        CliError::Custom("Could not parse registry spend".into()),
+                                    )?;
                                     let logs = parsed.pending_spend.logs.clone();
 
                                     let registry = sync_xchandles(
@@ -384,8 +386,7 @@ async fn connect_websocket(
                                 };
                                 registries[i] = registry;
 
-                                let registry_launcher_id =
-                                    registries[i].info.constants.launcher_id;
+                                let registry_launcher_id = registries[i].info.constants.launcher_id;
 
                                 // Build parent_coin_id map for created slots from the synced DB.
                                 let parent_by_value_hash = {
@@ -441,6 +442,13 @@ async fn connect_websocket(
                                         &logs,
                                     )
                                     .await;
+                                indexer
+                                    .project_pending_updates_from_logs(
+                                        registry_launcher_id,
+                                        spent_height,
+                                        &logs,
+                                    )
+                                    .await;
                                 if let Err(e) = indexer
                                     .on_block(&mut allocator, spent_height, &block_spends)
                                     .await
@@ -455,10 +463,8 @@ async fn connect_websocket(
                         // Follow singleton spends in the new tip block as well.
                         if let Some(state) = client.get_blockchain_state().await?.blockchain_state {
                             let tip = state.peak.height;
-                            if let Some(rec) = client
-                                .get_block_record_by_height(tip)
-                                .await?
-                                .block_record
+                            if let Some(rec) =
+                                client.get_block_record_by_height(tip).await?.block_record
                             {
                                 let tip_spends = client
                                     .get_block_spends(rec.header_hash)
@@ -468,7 +474,9 @@ async fn connect_websocket(
                                 let mut allocator = Allocator::new();
                                 let _ = indexer.on_block(&mut allocator, tip, &tip_spends).await;
                             }
-                            indexer.note_peak(tip, upstream_peak.max(tip), now_unix).await;
+                            indexer
+                                .note_peak(tip, upstream_peak.max(tip), now_unix)
+                                .await;
                         }
 
                         if last_clear_time.elapsed().unwrap().as_secs() > 60 * 30 {
