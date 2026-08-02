@@ -2,8 +2,8 @@ use chia_protocol::{Bytes32, Coin};
 use chia_puzzle_types::singleton::{LauncherSolution, SingletonSolution};
 use chia_puzzle_types::Memos;
 use chia_wallet_sdk::driver::{
-    HashedPtr, Layer, Nft, Puzzle, XchandlesExpirePricingPuzzle, XchandlesRegistry,
-    XchandlesRegistryReceivedMessagePrefix, XchandlesRegistryState,
+    HashedPtr, Layer, MedievalVaultInfo, Nft, Puzzle, SingletonInfo, XchandlesExpirePricingPuzzle,
+    XchandlesRegistry, XchandlesRegistryReceivedMessagePrefix, XchandlesRegistryState,
 };
 use chia_wallet_sdk::types::puzzles::{
     DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesRegisterActionSolution,
@@ -19,12 +19,47 @@ use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    get_coinset_client, get_prefix, hex_string_to_bytes32, load_xchandles_premine_csv,
-    load_xchandles_state_schedule_csv, metadata_for_handle_nft, print_medieval_vault_configuration,
-    CliError, MultisigSingleton,
+    controller_matches_configured, get_coinset_client, get_prefix, hex_string_to_bytes32,
+    load_xchandles_premine_csv, load_xchandles_state_schedule_csv, metadata_for_handle_nft,
+    price_singleton_public_keys, print_medieval_vault_configuration, CliError, MultisigSingleton,
+    XchandlesStateScheduleRecord, PRICE_SINGLETON_M, ROYALTY_BASIS_POINTS, ROYALTY_PUZZLE_HASH,
 };
 
 use crate::sync_multisig_singleton;
+
+/// Compares a trusted CSV schedule to the on-chain scheduler schedule end-to-end.
+pub fn xchandles_trusted_schedule_matches(
+    trusted: &[XchandlesStateScheduleRecord],
+    on_chain: &[(u64, XchandlesRegistryState)],
+) -> bool {
+    if trusted.len() != on_chain.len() {
+        return false;
+    }
+
+    for (record, (timestamp, state)) in trusted.iter().zip(on_chain.iter()) {
+        let pricing_puzzle_hash = XchandlesFactorPricingPuzzleArgs {
+            base_price: record.registration_price,
+            registration_period: record.registration_period,
+        }
+        .curry_tree_hash();
+        let expired_handle_pricing_puzzle_hash = XchandlesExpirePricingPuzzle::curry_tree_hash(
+            record.registration_price,
+            record.registration_period,
+        );
+        let cat_maker_puzzle_hash =
+            DefaultCatMakerArgs::new(record.asset_id.tree_hash().into()).curry_tree_hash();
+
+        if record.timestamp != *timestamp
+            || state.pricing_puzzle_hash != pricing_puzzle_hash.into()
+            || state.expired_handle_pricing_puzzle_hash != expired_handle_pricing_puzzle_hash.into()
+            || state.cat_maker_puzzle_hash != cat_maker_puzzle_hash.into()
+        {
+            return false;
+        }
+    }
+
+    true
+}
 
 pub async fn xchandles_verify_deployment(
     launcher_id_str: String,
@@ -363,32 +398,10 @@ pub async fn xchandles_verify_deployment(
     );
 
     let price_schedule = load_xchandles_state_schedule_csv(price_schedule_csv_filename)?;
-    let mut price_schedule_ok = true;
-    for (i, record) in price_schedule.iter().enumerate() {
-        let (block, state) = state_scheduler_info.state_schedule[i];
-
-        let fph = XchandlesFactorPricingPuzzleArgs {
-            base_price: record.registration_price,
-            registration_period: record.registration_period,
-        }
-        .curry_tree_hash();
-        if u64::from(record.block_height) != block
-            || state.pricing_puzzle_hash != fph.into()
-            || state.expired_handle_pricing_puzzle_hash
-                != XchandlesExpirePricingPuzzle::curry_tree_hash(
-                    record.registration_price,
-                    record.registration_period,
-                )
-                .into()
-            || state.cat_maker_puzzle_hash
-                != DefaultCatMakerArgs::new(record.asset_id.tree_hash().into())
-                    .curry_tree_hash()
-                    .into()
-        {
-            price_schedule_ok = false;
-            break;
-        }
-    }
+    let price_schedule_ok = xchandles_trusted_schedule_matches(
+        &price_schedule,
+        &state_scheduler_info.state_schedule,
+    );
 
     if price_schedule_ok {
         println!("OK");
@@ -399,10 +412,65 @@ pub async fn xchandles_verify_deployment(
         ));
     }
 
+    if !testnet11 {
+        let Some(royalty_ph) = royalty_puzzle_hash else {
+            return Err(CliError::Custom(
+                "Could not determine royalty puzzle hash from premine NFTs".to_string(),
+            ));
+        };
+        let Some(royalty_bps) = royalty_basis_points else {
+            return Err(CliError::Custom(
+                "Could not determine royalty basis points from premine NFTs".to_string(),
+            ));
+        };
+        if royalty_ph != ROYALTY_PUZZLE_HASH || royalty_bps != ROYALTY_BASIS_POINTS {
+            return Err(CliError::Custom(format!(
+                "Mainnet royalty mismatch: expected ph={} bps={}, got ph={} bps={}",
+                hex::encode(ROYALTY_PUZZLE_HASH),
+                ROYALTY_BASIS_POINTS,
+                hex::encode(royalty_ph),
+                royalty_bps
+            )));
+        }
+        println!(
+            "Mainnet royalty constants match typed launch configuration ({} BPS).",
+            ROYALTY_BASIS_POINTS
+        );
+    }
+
+    if !testnet11 {
+        let expected_controller = MedievalVaultInfo::new(
+            registry.info.constants.price_singleton_launcher_id,
+            PRICE_SINGLETON_M,
+            price_singleton_public_keys()?,
+        );
+        if Bytes32::from(expected_controller.inner_puzzle_hash())
+            != state_scheduler_info.final_puzzle_hash
+        {
+            return Err(CliError::Custom(
+                "Price singleton final controller puzzle hash does not match the ordered configured 6-of-10 validator key set"
+                    .to_string(),
+            ));
+        }
+        println!(
+            "Committed post-schedule controller matches typed launch configuration ({}-of-{}).",
+            PRICE_SINGLETON_M,
+            price_singleton_public_keys()?.len()
+        );
+    }
+
     match multisig_singleton {
         MultisigSingleton::Vault(vault) => {
             println!("Current (latest unspent) vault info:");
             print_medieval_vault_configuration(vault.info.m, &vault.info.public_key_list)?;
+            if !testnet11
+                && !controller_matches_configured(vault.info.m, &vault.info.public_key_list)?
+            {
+                return Err(CliError::Custom(
+                    "Live Price Singleton vault controller does not match the ordered configured 6-of-10 validator key set"
+                        .to_string(),
+                ));
+            }
         }
         MultisigSingleton::StateScheduler(state_scheduler) => {
             if state_scheduler.info.generation != 0 {
@@ -421,4 +489,58 @@ pub async fn xchandles_verify_deployment(
     println!("\nEverything seems OK");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chia_protocol::Bytes32;
+    use hex_literal::hex;
+
+    fn sample_asset_id() -> Bytes32 {
+        Bytes32::new(hex!(
+            "d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad"
+        ))
+    }
+
+    fn record(timestamp: u64, price: u64) -> XchandlesStateScheduleRecord {
+        XchandlesStateScheduleRecord {
+            timestamp,
+            asset_id: sample_asset_id(),
+            registration_price: price,
+            registration_period: 31_557_600,
+        }
+    }
+
+    fn state(price: u64) -> XchandlesRegistryState {
+        XchandlesRegistryState::from(sample_asset_id().tree_hash().into(), price, 31_557_600)
+    }
+
+    #[test]
+    fn trusted_schedule_matches_full_length_timestamps_and_states() {
+        let trusted = vec![record(1, 3), record(2, 2), record(3, 1)];
+        let on_chain = vec![(1, state(3)), (2, state(2)), (3, state(1))];
+        assert!(xchandles_trusted_schedule_matches(&trusted, &on_chain));
+    }
+
+    #[test]
+    fn trusted_schedule_rejects_length_mismatch() {
+        let trusted = vec![record(1, 3), record(2, 2)];
+        let on_chain = vec![(1, state(3)), (2, state(2)), (3, state(1))];
+        assert!(!xchandles_trusted_schedule_matches(&trusted, &on_chain));
+    }
+
+    #[test]
+    fn trusted_schedule_rejects_timestamp_mismatch() {
+        let trusted = vec![record(1, 3), record(2, 2), record(3, 1)];
+        let on_chain = vec![(1, state(3)), (9, state(2)), (3, state(1))];
+        assert!(!xchandles_trusted_schedule_matches(&trusted, &on_chain));
+    }
+
+    #[test]
+    fn trusted_schedule_rejects_state_mismatch() {
+        let trusted = vec![record(1, 3), record(2, 2), record(3, 1)];
+        let on_chain = vec![(1, state(3)), (2, state(99)), (3, state(1))];
+        assert!(!xchandles_trusted_schedule_matches(&trusted, &on_chain));
+    }
 }

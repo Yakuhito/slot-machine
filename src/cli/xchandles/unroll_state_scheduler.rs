@@ -13,11 +13,16 @@ use chia_wallet_sdk::{
 use clvm_utils::ToTreeHash;
 
 use crate::{
-    assets_xch_only, confirm_pushed_transaction, get_coinset_client, hex_string_to_bytes32,
-    load_xchandles_state_schedule_csv, no_assets, parse_amount, quick_sync_xchandles,
-    sync_multisig_singleton, sync_xchandles, yes_no_prompt, CliError, Db, MultisigSingleton,
-    SageClient,
+    assets_xch_only, confirm_pushed_transaction, get_coinset_client, get_last_onchain_timestamp,
+    hex_string_to_bytes32, load_xchandles_state_schedule_csv, no_assets, parse_amount,
+    quick_sync_xchandles, sync_multisig_singleton, sync_xchandles, yes_no_prompt, CliError, Db,
+    MultisigSingleton, SageClient,
 };
+
+/// True when the latest confirmed transaction-block timestamp has reached activation.
+fn scheduler_activation_reached(latest_onchain_timestamp: u64, required_timestamp: u64) -> bool {
+    latest_onchain_timestamp >= required_timestamp
+}
 
 pub async fn xchandles_unroll_state_scheduler(
     launcher_id_str: String,
@@ -57,18 +62,12 @@ pub async fn xchandles_unroll_state_scheduler(
     let (required_timestamp, new_state) =
         state_scheduler.info.state_schedule[state_scheduler.info.generation];
 
-    // Ticket 05 owns XCHandles schedule/unroll migration; keep height gate compiling for now.
-    if let Some(blockchain_state) = cli.get_blockchain_state().await?.blockchain_state {
-        if u64::from(blockchain_state.peak.height) < required_timestamp {
-            return Err(CliError::Custom(format!(
-                "Current blockchain height is {}, but required height for new state is {}",
-                blockchain_state.peak.height, required_timestamp
-            )));
-        }
-    } else {
-        println!(
-            "Couldn't check current blockchain height; will assume needed height was acheived"
-        );
+    let latest_onchain_timestamp = get_last_onchain_timestamp(&cli).await?;
+    if !scheduler_activation_reached(latest_onchain_timestamp, required_timestamp) {
+        return Err(CliError::Custom(format!(
+            "Latest confirmed transaction-block timestamp is {}, but required timestamp for new state is {}",
+            latest_onchain_timestamp, required_timestamp
+        )));
     }
 
     println!(
@@ -101,9 +100,10 @@ pub async fn xchandles_unroll_state_scheduler(
             && eph == new_state.expired_handle_pricing_puzzle_hash.into()
         {
             println!(
-                "These hashes correspond to a base price of {} mojos of the CAT with asset_id={}",
+                "These hashes correspond to a base price of {} mojos of the CAT with asset_id={} (activation timestamp {})",
                 record.registration_price,
-                hex::encode(record.asset_id)
+                hex::encode(record.asset_id),
+                record.timestamp
             );
             found = true;
         }
@@ -118,7 +118,7 @@ pub async fn xchandles_unroll_state_scheduler(
     println!(" - {} XCH ({} mojos) as fee", fee_str, fee);
     yes_no_prompt("The state scheduler and the XCHandles registry have been synced. This is the last check - do you wish to continue?")?;
 
-    // spend state scheduler & CATalog
+    // spend state scheduler & XCHandles registry
 
     // no need to include security conditions as we assert the state scheduler is spent
     // which means the right message is consumed
@@ -175,4 +175,17 @@ pub async fn xchandles_unroll_state_scheduler(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn activation_uses_onchain_timestamp_not_height() {
+        assert!(!scheduler_activation_reached(0, 1));
+        assert!(scheduler_activation_reached(1, 1));
+        assert!(scheduler_activation_reached(2, 1));
+        assert!(!scheduler_activation_reached(2, 3));
+    }
 }

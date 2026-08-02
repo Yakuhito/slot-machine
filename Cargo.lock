@@ -603,7 +603,7 @@ dependencies = [
  "clvm-utils",
  "clvmr",
  "hex",
- "hex-literal",
+ "hex-literal 0.4.1",
  "thiserror 1.0.69",
 ]
 
@@ -639,7 +639,7 @@ dependencies = [
  "clvm-traits 0.36.1",
  "clvm-utils",
  "clvmr",
- "hex-literal",
+ "hex-literal 0.4.1",
  "num-bigint",
 ]
 
@@ -650,7 +650,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "553363ce9550cfde0ae1306a0a79bf9afd36ea09e0222b874b6287b44ad9d178"
 dependencies = [
  "hex",
- "hex-literal",
+ "hex-literal 0.4.1",
 ]
 
 [[package]]
@@ -696,7 +696,7 @@ version = "0.33.0"
 dependencies = [
  "chia-protocol",
  "hex",
- "hex-literal",
+ "hex-literal 0.4.1",
  "reqwest",
  "serde",
  "serde_json",
@@ -710,7 +710,7 @@ checksum = "3b893b1e6bad18ac210daddf70b53a172618810e54206617cca1d37faa7ad7bf"
 dependencies = [
  "chia-protocol",
  "hex",
- "hex-literal",
+ "hex-literal 0.4.1",
  "reqwest",
  "serde",
  "serde_json",
@@ -776,7 +776,7 @@ dependencies = [
  "flate2",
  "getrandom 0.3.4",
  "hex",
- "hex-literal",
+ "hex-literal 0.4.1",
  "indexmap 2.11.4",
  "num-bigint",
  "rand 0.9.4",
@@ -811,7 +811,7 @@ dependencies = [
  "flate2",
  "getrandom 0.3.4",
  "hex",
- "hex-literal",
+ "hex-literal 0.4.1",
  "indexmap 2.11.4",
  "num-bigint",
  "rand 0.9.4",
@@ -938,7 +938,7 @@ dependencies = [
  "clvm-traits 0.36.1",
  "clvm-utils",
  "clvmr",
- "hex-literal",
+ "hex-literal 0.4.1",
  "rue-compiler",
  "rue-lir",
  "rue-options",
@@ -964,7 +964,7 @@ dependencies = [
  "clvm-traits 0.36.1",
  "clvm-utils",
  "clvmr",
- "hex-literal",
+ "hex-literal 0.4.1",
  "rue-compiler",
  "rue-lir",
  "rue-options",
@@ -1315,7 +1315,7 @@ dependencies = [
  "clvm-traits 0.36.1",
  "clvmr",
  "hex",
- "hex-literal",
+ "hex-literal 0.4.1",
 ]
 
 [[package]]
@@ -1329,7 +1329,7 @@ dependencies = [
  "chia-bls 0.28.2",
  "chia-sha2 0.34.0",
  "hex",
- "hex-literal",
+ "hex-literal 0.4.1",
  "k256",
  "lazy_static",
  "num-bigint",
@@ -1369,7 +1369,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1752,7 +1752,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.0",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2246,6 +2246,12 @@ name = "hex-literal"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
+
+[[package]]
+name = "hex-literal"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e712f64ec3850b98572bffac52e2c6f282b29fe6c5fa6d42334b30be438d95c1"
 
 [[package]]
 name = "hkdf"
@@ -3984,7 +3990,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4401,6 +4407,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.3.4",
  "hex",
+ "hex-literal 1.1.0",
  "openssl",
  "openssl-sys",
  "prettytable-rs",
@@ -4772,7 +4779,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

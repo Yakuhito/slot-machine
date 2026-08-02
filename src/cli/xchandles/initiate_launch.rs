@@ -4,9 +4,10 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    confirm_pushed_transaction, get_coinset_client, get_prefix, load_xchandles_premine_csv,
-    load_xchandles_state_schedule_csv, no_assets, parse_amount, print_medieval_vault_configuration,
-    SageClient,
+    confirm_pushed_transaction, controller_matches_configured, get_coinset_client, get_prefix,
+    load_xchandles_premine_csv, load_xchandles_state_schedule_csv, no_assets, parse_amount,
+    print_medieval_vault_configuration, schedule_records_match_configured, SageClient,
+    REGISTRATION_PERIOD,
 };
 use chia_bls::PublicKey;
 use chia_protocol::{Bytes32, Coin, SpendBundle};
@@ -132,6 +133,19 @@ pub async fn xchandles_initiate_launch(
         pubkeys.push(pubkey);
     }
 
+    if !testnet11 && !controller_matches_configured(m, &pubkeys)? {
+        return Err(CliError::Custom(
+            "Mainnet post-schedule controller must be the ordered configured 6-of-10 validator key set"
+                .to_string(),
+        ));
+    }
+
+    if !testnet11 && registration_period != REGISTRATION_PERIOD {
+        return Err(CliError::Custom(format!(
+            "Mainnet registration period must be exactly {REGISTRATION_PERIOD} seconds"
+        )));
+    }
+
     let fee = parse_amount(&fee_str, false)?;
 
     println!("First things first, this multisig will have control over the price singleton once the state schedule is over:");
@@ -149,11 +163,16 @@ pub async fn xchandles_initiate_launch(
     );
 
     let price_schedule = load_xchandles_state_schedule_csv(price_schedule_csv_filename)?;
+    if !testnet11 && !schedule_records_match_configured(&price_schedule) {
+        return Err(CliError::Custom(
+            "Mainnet price schedule CSV does not match typed launch configuration".to_string(),
+        ));
+    }
     println!("Price schedule:");
     for record in price_schedule.iter() {
         println!(
-            "  After block height {}, the base registration price will be {} CAT mojos (asset id: {}).",
-            record.block_height, record.registration_price, record.asset_id
+            "  After timestamp {}, the base registration price will be {} CAT mojos (asset id: {}).",
+            record.timestamp, record.registration_price, record.asset_id
         );
     }
 
@@ -272,7 +291,7 @@ pub async fn xchandles_initiate_launch(
                 .into_iter()
                 .map(|ps| {
                     (
-                        u64::from(ps.block_height),
+                        ps.timestamp,
                         XchandlesRegistryState::from(
                             ps.asset_id.tree_hash().into(),
                             ps.registration_price,

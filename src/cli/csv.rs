@@ -144,9 +144,9 @@ pub fn load_catalog_state_schedule_csv<P: AsRef<Path>>(
     Ok(records)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct XchandlesStateScheduleRecord {
-    pub block_height: u32,
+    pub timestamp: u64,
     #[serde(deserialize_with = "hex_string_to_bytes32")]
     pub asset_id: Bytes32,
     pub registration_price: u64,
@@ -293,6 +293,39 @@ mod tests {
         );
 
         let err = load_catalog_state_schedule_csv(&path);
+        let _ = fs::remove_file(&path);
+
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn xchandles_schedule_csv_uses_timestamp_u64() {
+        let path = write_temp_csv(
+            "timestamp,asset_id,registration_price,registration_period\n\
+             1,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",3,31557600\n\
+             2,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",2,31557600\n\
+             3,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",1,31557600\n",
+        );
+
+        let records = load_xchandles_state_schedule_csv(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].timestamp, 1);
+        assert_eq!(records[1].timestamp, 2);
+        assert_eq!(records[2].timestamp, 3);
+        assert_eq!(records[0].registration_price, 3);
+        assert_eq!(records[0].registration_period, 31557600);
+    }
+
+    #[test]
+    fn xchandles_schedule_csv_rejects_block_height_header() {
+        let path = write_temp_csv(
+            "block_height,asset_id,registration_price,registration_period\n\
+             1,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",3,31557600\n",
+        );
+
+        let err = load_xchandles_state_schedule_csv(&path);
         let _ = fs::remove_file(&path);
 
         assert!(err.is_err());

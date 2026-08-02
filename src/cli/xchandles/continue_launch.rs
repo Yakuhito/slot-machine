@@ -181,6 +181,25 @@ pub async fn xchandles_continue_launch(
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
     let royalty_puzzle_hash = Address::decode(&royalty_address)?.puzzle_hash;
+    if !testnet11 {
+        if royalty_puzzle_hash != crate::ROYALTY_PUZZLE_HASH
+            || royalty_basis_points != crate::ROYALTY_BASIS_POINTS
+            || royalty_address != crate::ROYALTY_ADDRESS
+        {
+            return Err(CliError::Custom(format!(
+                "Mainnet royalty must be {} at {} BPS (puzzle hash {})",
+                crate::ROYALTY_ADDRESS,
+                crate::ROYALTY_BASIS_POINTS,
+                hex::encode(crate::ROYALTY_PUZZLE_HASH)
+            )));
+        }
+        if registration_period != crate::REGISTRATION_PERIOD {
+            return Err(CliError::Custom(format!(
+                "Mainnet registration period must be exactly {} seconds",
+                crate::REGISTRATION_PERIOD
+            )));
+        }
+    }
     println!("Time to unroll an XCHandles registry! Yee-haw!");
 
     let premine_csv_filename = if testnet11 {
