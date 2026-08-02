@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use chia_protocol::{Bytes32, Coin, CoinSpend, SpendBundle};
 use chia_puzzle_types::{
     cat::CatArgs,
-    nft::{NftMetadata, NftOwnershipLayerSolution, NftStateLayerSolution},
+    nft::{NftOwnershipLayerSolution, NftStateLayerSolution},
     singleton::{SingletonSolution, SingletonStruct},
     standard::StandardSolution,
     CoinProof, EveProof, LineageProof, Proof,
@@ -19,7 +19,8 @@ use chia_wallet_sdk::{
     },
     types::{
         puzzles::{
-            XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution, ANY_METADATA_UPDATER_HASH,
+            HandleNftMetadata, XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution,
+            ANY_METADATA_UPDATER_HASH,
         },
         Conditions, Mod, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
     },
@@ -63,16 +64,11 @@ fn precommit_value_for_handle(
     ))
 }
 
-pub fn metadata_for_handle_nft(
-    handle_info: XchandlesPremineRecord,
-    edition_number: u64,
-    edition_total: u64,
-) -> NftMetadata {
-    NftMetadata {
-        edition_number,
-        edition_total,
-        data_uris: handle_info.image_uris,
-        data_hash: Some(handle_info.image_hash),
+pub fn metadata_for_handle_nft(handle_info: XchandlesPremineRecord) -> HandleNftMetadata {
+    HandleNftMetadata {
+        display_name: Some(handle_info.handle.clone()),
+        image_uris: handle_info.image_uris,
+        image_hash: Some(handle_info.image_hash),
         metadata_uris: handle_info.metadata_uris,
         metadata_hash: Some(handle_info.metadata_hash),
         license_uris: handle_info.license_uris,
@@ -86,8 +82,6 @@ async fn eve_nft_for_handle(
     client: &CoinsetClient,
     registry_launcher_id: Bytes32,
     handle: &XchandlesPremineRecord,
-    handle_index: u64,
-    total_handles: u64,
     royalty_puzzle_hash: Bytes32,
     royalty_basis_points: u16,
     eve_nft_temp_inner_ph: Bytes32,
@@ -97,7 +91,7 @@ async fn eve_nft_for_handle(
         .tree_hash()
         .into();
 
-    let metadata = metadata_for_handle_nft(handle.clone(), handle_index + 1, total_handles);
+    let metadata = metadata_for_handle_nft(handle.clone());
     let metadata = ctx.alloc_hashed(&metadata)?;
 
     let Some(mut possible_launcher_records) = client
@@ -273,8 +267,6 @@ pub async fn xchandles_continue_launch(
                 &client,
                 registry.info.constants.launcher_id,
                 &handles_to_launch[i],
-                i as u64,
-                handles_to_launch.len() as u64,
                 royalty_puzzle_hash,
                 royalty_basis_points,
                 eve_nft_temp_inner_ph,
@@ -389,11 +381,7 @@ pub async fn xchandles_continue_launch(
                     Address::new(launcher_id, "nft".to_string()).encode()?
                 );
 
-                let metadata = metadata_for_handle_nft(
-                    handle_info.clone(),
-                    (i + index + 1) as u64,
-                    handles_to_launch.len() as u64,
-                );
+                let metadata = metadata_for_handle_nft(handle_info.clone());
                 let metadata = ctx.alloc_hashed(&metadata)?;
 
                 let (sec_conditions, _eve_nft) = launcher.mint_eve_nft(
@@ -501,7 +489,7 @@ pub async fn xchandles_continue_launch(
         }
     }
 
-    let i_offset = i; // used to map indices from 'handles' to 'handles_to_launch'
+    let _i_offset = i; // used to map indices from 'handles' to 'handles_to_launch'
 
     let mut handles = Vec::with_capacity(handles_per_spend);
     while i < handles_to_launch.len() && handles.len() < handles_per_spend {
@@ -527,14 +515,12 @@ pub async fn xchandles_continue_launch(
     let mut eve_nfts = Vec::with_capacity(handles.len());
     let mut destination_puzzle_hashes = Vec::with_capacity(handles.len());
 
-    for (index, handle) in handles.iter().enumerate() {
+    for (_index, handle) in handles.iter().enumerate() {
         let Some(eve_nft) = eve_nft_for_handle(
             &mut ctx,
             &client,
             registry.info.constants.launcher_id,
             handle,
-            (i_offset + index) as u64,
-            handles_to_launch.len() as u64,
             royalty_puzzle_hash,
             royalty_basis_points,
             eve_nft_temp_inner_ph,

@@ -264,12 +264,8 @@ pub async fn xchandles_verify_deployment(
             }
 
             // Then, check metadata.
-            let expected_metadata_hash = metadata_for_handle_nft(
-                handles_to_launch[handle_index].clone(),
-                (handle_index + 1) as u64,
-                handles_to_launch.len() as u64,
-            )
-            .tree_hash();
+            let expected_metadata_hash = metadata_for_handle_nft(handles_to_launch[handle_index].clone())
+                .tree_hash();
             if expected_metadata_hash != eve_nft.info.metadata.tree_hash() {
                 return Err(CliError::Custom(format!(
                     "Metadata hash mismatch for handle #{}",
