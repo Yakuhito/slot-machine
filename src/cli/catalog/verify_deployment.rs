@@ -25,11 +25,35 @@ use clvmr::NodePtr;
 
 use crate::{
     get_coinset_client, initial_cat_inner_puzzle_ptr, load_catalog_premine_csv,
-    load_catalog_state_schedule_csv, print_medieval_vault_configuration, CliError,
-    MultisigSingleton,
+    load_catalog_state_schedule_csv, print_medieval_vault_configuration, CatalogStateScheduleRecord,
+    CliError, MultisigSingleton,
 };
 
 use crate::sync_multisig_singleton;
+
+/// Compares a trusted CSV schedule to the on-chain scheduler schedule end-to-end.
+pub fn catalog_trusted_schedule_matches(
+    trusted: &[CatalogStateScheduleRecord],
+    on_chain: &[(u64, CatalogRegistryState)],
+) -> bool {
+    if trusted.len() != on_chain.len() {
+        return false;
+    }
+
+    for (record, (timestamp, state)) in trusted.iter().zip(on_chain.iter()) {
+        if record.timestamp != *timestamp
+            || record.registration_price != state.registration_price
+            || state.cat_maker_puzzle_hash
+                != DefaultCatMakerArgs::new(record.asset_id.tree_hash().into())
+                    .curry_tree_hash()
+                    .into()
+        {
+            return false;
+        }
+    }
+
+    true
+}
 
 pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> {
     let mut ctx = SpendContext::new();
@@ -323,20 +347,8 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
     );
 
     let price_schedule = load_catalog_state_schedule_csv(price_schedule_csv_filename)?;
-    let mut price_schedule_ok = true;
-    for (i, record) in price_schedule.iter().enumerate() {
-        let (block, state) = state_scheduler_info.state_schedule[i];
-        if record.block_height != block
-            || record.registration_price != state.registration_price
-            || state.cat_maker_puzzle_hash
-                != DefaultCatMakerArgs::new(record.asset_id.tree_hash().into())
-                    .curry_tree_hash()
-                    .into()
-        {
-            price_schedule_ok = false;
-            break;
-        }
-    }
+    let price_schedule_ok =
+        catalog_trusted_schedule_matches(&price_schedule, &state_scheduler_info.state_schedule);
 
     if price_schedule_ok {
         println!("OK");
@@ -353,4 +365,66 @@ pub async fn catalog_verify_deployment(testnet11: bool) -> Result<(), CliError> 
     println!("\nEverything seems OK");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chia_protocol::Bytes32;
+    use chia_wallet_sdk::types::Mod;
+    use clvm_utils::ToTreeHash;
+
+    fn sample_asset_id() -> Bytes32 {
+        Bytes32::new(
+            hex::decode("d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        )
+    }
+
+    fn record(timestamp: u64, price: u64) -> CatalogStateScheduleRecord {
+        CatalogStateScheduleRecord {
+            timestamp,
+            asset_id: sample_asset_id(),
+            registration_price: price,
+        }
+    }
+
+    fn state(price: u64) -> CatalogRegistryState {
+        CatalogRegistryState {
+            cat_maker_puzzle_hash: DefaultCatMakerArgs::new(sample_asset_id().tree_hash().into())
+                .curry_tree_hash()
+                .into(),
+            registration_price: price,
+        }
+    }
+
+    #[test]
+    fn trusted_schedule_matches_full_length_timestamps_and_states() {
+        let trusted = vec![record(1, 3), record(2, 2), record(3, 1)];
+        let on_chain = vec![(1, state(3)), (2, state(2)), (3, state(1))];
+        assert!(catalog_trusted_schedule_matches(&trusted, &on_chain));
+    }
+
+    #[test]
+    fn trusted_schedule_rejects_length_mismatch() {
+        let trusted = vec![record(1, 3), record(2, 2)];
+        let on_chain = vec![(1, state(3)), (2, state(2)), (3, state(1))];
+        assert!(!catalog_trusted_schedule_matches(&trusted, &on_chain));
+    }
+
+    #[test]
+    fn trusted_schedule_rejects_timestamp_mismatch() {
+        let trusted = vec![record(1, 3), record(2, 2), record(3, 1)];
+        let on_chain = vec![(1, state(3)), (9, state(2)), (3, state(1))];
+        assert!(!catalog_trusted_schedule_matches(&trusted, &on_chain));
+    }
+
+    #[test]
+    fn trusted_schedule_rejects_state_mismatch() {
+        let trusted = vec![record(1, 3), record(2, 2), record(3, 1)];
+        let on_chain = vec![(1, state(3)), (2, state(99)), (3, state(1))];
+        assert!(!catalog_trusted_schedule_matches(&trusted, &on_chain));
+    }
 }

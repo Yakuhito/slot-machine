@@ -51,7 +51,7 @@ pub async fn sync_multisig_singleton<S>(
     client: &CoinsetClient,
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
-    print_state_info: Option<fn(u32, &S) -> Result<(), CliError>>,
+    print_state_info: Option<fn(u64, &S) -> Result<(), CliError>>,
 ) -> Result<(MultisigSingleton<S>, Option<StateSchedulerInfo<S>>), CliError>
 where
     S: Clone + ToClvm<Allocator> + FromClvm<Allocator> + ToTreeHash,
@@ -93,8 +93,8 @@ where
 
         if let Some(print_state_info) = print_state_info {
             println!("Vault launched as a state scheduler first. Schedule: ");
-            for (block, state) in state_scheduler_info.state_schedule.clone() {
-                print_state_info(block, &state)?;
+            for (timestamp, state) in state_scheduler_info.state_schedule.clone() {
+                print_state_info(timestamp, &state)?;
             }
 
             println!("\nInitial medieval vault configuration: ");
@@ -133,7 +133,7 @@ where
                 state_scheduler = child;
                 if print_sync {
                     println!(
-                        "State scheduler spent to update state to one after block {}.",
+                        "State scheduler spent to update state to one after timestamp {}.",
                         state_scheduler.info.state_schedule[state_scheduler.info.generation - 1].0
                     );
                 }

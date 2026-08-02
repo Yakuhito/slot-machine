@@ -34,7 +34,7 @@ fn get_additional_info_for_launch(
     security_coin: Coin,
     (xchandles_constants, state_schedule, pubkeys, m, cat_amount, cat_destination_puzzle_hash): (
         XchandlesConstants,
-        Vec<(u32, XchandlesRegistryState)>,
+        Vec<(u64, XchandlesRegistryState)>,
         Vec<PublicKey>,
         usize,
         u64,
@@ -66,7 +66,7 @@ fn get_additional_info_for_launch(
         state_schedule,
         0,
         multisig_info.inner_puzzle_hash().into(),
-    );
+    )?;
     let (price_singleton_launch_conds, _coin) = price_singleton_launcher.spend(
         ctx,
         state_scheduler_info.inner_puzzle_hash().into(),
@@ -272,7 +272,7 @@ pub async fn xchandles_initiate_launch(
                 .into_iter()
                 .map(|ps| {
                     (
-                        ps.block_height,
+                        u64::from(ps.block_height),
                         XchandlesRegistryState::from(
                             ps.asset_id.tree_hash().into(),
                             ps.registration_price,

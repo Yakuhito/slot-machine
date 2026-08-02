@@ -123,7 +123,7 @@ pub fn get_alias_map() -> Result<HashMap<PublicKey, String>, CliError> {
 
 #[derive(Debug, Deserialize)]
 pub struct CatalogStateScheduleRecord {
-    pub block_height: u32,
+    pub timestamp: u64,
     #[serde(deserialize_with = "hex_string_to_bytes32")]
     pub asset_id: Bytes32,
     pub registration_price: u64,
@@ -247,4 +247,54 @@ pub fn load_datastore_nft_csv<P: AsRef<Path>>(
     }
 
     Ok(records)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn write_temp_csv(contents: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("catalog_schedule_{nanos}.csv"));
+        fs::write(&path, contents).unwrap();
+        path
+    }
+
+    #[test]
+    fn catalog_schedule_csv_uses_timestamp_u64() {
+        let path = write_temp_csv(
+            "timestamp,asset_id,registration_price\n\
+             1,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",3\n\
+             2,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",2\n\
+             3,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",1\n",
+        );
+
+        let records = load_catalog_state_schedule_csv(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].timestamp, 1);
+        assert_eq!(records[1].timestamp, 2);
+        assert_eq!(records[2].timestamp, 3);
+        assert_eq!(records[0].registration_price, 3);
+    }
+
+    #[test]
+    fn catalog_schedule_csv_rejects_block_height_header() {
+        let path = write_temp_csv(
+            "block_height,asset_id,registration_price\n\
+             1,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",3\n",
+        );
+
+        let err = load_catalog_state_schedule_csv(&path);
+        let _ = fs::remove_file(&path);
+
+        assert!(err.is_err());
+    }
 }

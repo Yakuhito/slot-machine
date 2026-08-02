@@ -24,20 +24,20 @@ pub async fn multisig_view(launcher_id_str: String, testnet11: bool) -> Result<(
         &cli,
         &mut ctx,
         launcher_id,
-        Some(|block, state| {
+        Some(|timestamp, state| {
             match state {
                 StateSchedulerHintedState::Catalog(catalog_state) => {
                     println!(
-                    "  After block {}, price will be {} mojos with a CAT maker puzzle hash of {}.",
-                    block,
+                    "  After timestamp {}, price will be {} mojos with a CAT maker puzzle hash of {}.",
+                    timestamp,
                     catalog_state.registration_price,
                     hex::encode(catalog_state.cat_maker_puzzle_hash),
                 );
                 }
                 StateSchedulerHintedState::Xchandles(xchandles_state) => {
                     println!(
-                    "  After block {}, the CAT maker puzzle hash will be {}, the pricing puzzle hash will be {}, and the expired handle pricing puzzle hash will be {}.",
-                    block,
+                    "  After timestamp {}, the CAT maker puzzle hash will be {}, the pricing puzzle hash will be {}, and the expired handle pricing puzzle hash will be {}.",
+                    timestamp,
                     hex::encode(xchandles_state.cat_maker_puzzle_hash),
                     hex::encode(xchandles_state.pricing_puzzle_hash),
                     hex::encode(xchandles_state.expired_handle_pricing_puzzle_hash),

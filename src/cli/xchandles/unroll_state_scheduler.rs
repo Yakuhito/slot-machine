@@ -54,14 +54,15 @@ pub async fn xchandles_unroll_state_scheduler(
     let sage = SageClient::new()?;
     let fee = parse_amount(&fee_str, false)?;
 
-    let (required_height, new_state) =
+    let (required_timestamp, new_state) =
         state_scheduler.info.state_schedule[state_scheduler.info.generation];
 
+    // Ticket 05 owns XCHandles schedule/unroll migration; keep height gate compiling for now.
     if let Some(blockchain_state) = cli.get_blockchain_state().await?.blockchain_state {
-        if blockchain_state.peak.height < required_height {
+        if u64::from(blockchain_state.peak.height) < required_timestamp {
             return Err(CliError::Custom(format!(
                 "Current blockchain height is {}, but required height for new state is {}",
-                blockchain_state.peak.height, required_height
+                blockchain_state.peak.height, required_timestamp
             )));
         }
     } else {

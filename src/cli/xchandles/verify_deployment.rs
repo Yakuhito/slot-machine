@@ -372,7 +372,7 @@ pub async fn xchandles_verify_deployment(
             registration_period: record.registration_period,
         }
         .curry_tree_hash();
-        if record.block_height != block
+        if u64::from(record.block_height) != block
             || state.pricing_puzzle_hash != fph.into()
             || state.expired_handle_pricing_puzzle_hash
                 != XchandlesExpirePricingPuzzle::curry_tree_hash(

@@ -9,12 +9,20 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_only, confirm_pushed_transaction, get_coinset_client, no_assets, parse_amount,
-    print_spend_bundle_to_file, sync_multisig_singleton, yes_no_prompt, CliError, Db,
-    MultisigSingleton, SageClient,
+    assets_xch_only, confirm_pushed_transaction, get_coinset_client, get_last_onchain_timestamp,
+    no_assets, parse_amount, print_spend_bundle_to_file, sync_multisig_singleton, yes_no_prompt,
+    CliError, Db, MultisigSingleton, SageClient,
 };
 
 use super::sync_catalog;
+
+/// True when the latest confirmed transaction-block timestamp has reached activation.
+pub fn scheduler_activation_reached(
+    latest_onchain_timestamp: u64,
+    required_timestamp: u64,
+) -> bool {
+    latest_onchain_timestamp >= required_timestamp
+}
 
 pub async fn catalog_unroll_state_scheduler(
     testnet11: bool,
@@ -52,20 +60,15 @@ pub async fn catalog_unroll_state_scheduler(
     let sage = SageClient::new()?;
     let fee = parse_amount(&fee_str, false)?;
 
-    let (required_height, new_state) =
+    let (required_timestamp, new_state) =
         state_scheduler.info.state_schedule[state_scheduler.info.generation];
 
-    if let Some(blockchain_state) = cli.get_blockchain_state().await?.blockchain_state {
-        if blockchain_state.peak.height < required_height {
-            return Err(CliError::Custom(format!(
-                "Current blockchain height is {}, but required height for new state is {}",
-                blockchain_state.peak.height, required_height
-            )));
-        }
-    } else {
-        println!(
-            "Couldn't check current blockchain height; will assume needed height was acheived"
-        );
+    let latest_onchain_timestamp = get_last_onchain_timestamp(&cli).await?;
+    if !scheduler_activation_reached(latest_onchain_timestamp, required_timestamp) {
+        return Err(CliError::Custom(format!(
+            "Latest confirmed transaction-block timestamp is {}, but required timestamp for new state is {}",
+            latest_onchain_timestamp, required_timestamp
+        )));
     }
 
     println!(
@@ -137,4 +140,17 @@ pub async fn catalog_unroll_state_scheduler(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn activation_uses_onchain_timestamp_not_height() {
+        assert!(!scheduler_activation_reached(0, 1));
+        assert!(scheduler_activation_reached(1, 1));
+        assert!(scheduler_activation_reached(2, 1));
+        assert!(!scheduler_activation_reached(2, 3));
+    }
 }

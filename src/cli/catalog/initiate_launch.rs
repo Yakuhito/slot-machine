@@ -34,7 +34,7 @@ fn get_additional_info_for_launch(
     security_coin: Coin,
     (catalog_constants, state_schedule, pubkeys, m, cat_amount, cat_destination_puzzle_hash): (
         CatalogRegistryConstants,
-        Vec<(u32, CatalogRegistryState)>,
+        Vec<(u64, CatalogRegistryState)>,
         Vec<PublicKey>,
         usize,
         u64,
@@ -66,7 +66,7 @@ fn get_additional_info_for_launch(
         state_schedule,
         0,
         multisig_info.inner_puzzle_hash().into(),
-    );
+    )?;
     let (price_singleton_launch_conds, _coin) = price_singleton_launcher.spend(
         ctx,
         state_scheduler_info.inner_puzzle_hash().into(),
@@ -147,8 +147,8 @@ pub async fn catalog_initiate_launch(
     println!("Price schedule:");
     for record in price_schedule.iter() {
         println!(
-            "  After block height {}, a registration will cost {} CAT mojos (asset id: {}).",
-            record.block_height, record.registration_price, record.asset_id
+            "  After timestamp {}, a registration will cost {} CAT mojos (asset id: {}).",
+            record.timestamp, record.registration_price, record.asset_id
         );
     }
 
@@ -258,7 +258,7 @@ pub async fn catalog_initiate_launch(
                 .into_iter()
                 .map(|ps| {
                     (
-                        ps.block_height,
+                        ps.timestamp,
                         CatalogRegistryState {
                             cat_maker_puzzle_hash: DefaultCatMakerArgs::new(
                                 ps.asset_id.tree_hash().into(),
