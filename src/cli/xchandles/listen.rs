@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::debug_handler;
 use axum::extract::{Query, State};
-use axum::http::{HeaderValue, Method};
+use axum::http::Method;
 use axum::{http::StatusCode, routing::get, Json, Router};
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::coinset::ChiaRpcClient;
@@ -13,9 +13,14 @@ use chia_wallet_sdk::types::puzzles::XchandlesHandleSlotValue;
 use clvmr::Allocator;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 
+use super::listener::{
+    listener_router, DbSingletonStore, FreshnessState, ListenerApiState, SingletonIndexer,
+    SingletonStore,
+};
 use crate::{
     get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, CoinsetWebSocketMessage,
     Db,
@@ -58,22 +63,41 @@ struct AppState {
     db: Arc<futures::lock::Mutex<Db>>,
 }
 
+fn bind_addr() -> SocketAddr {
+    std::env::var("BIND_ADDR")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 8080)))
+}
+
 pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(), CliError> {
-    let db = Db::new(true).await?;
+    let db = Db::new(false).await?;
     let db = Arc::new(futures::lock::Mutex::new(db));
 
-    let state = AppState {
-        db: Arc::clone(&db),
-    };
+    let singleton_store: Arc<dyn SingletonStore> = DbSingletonStore::new(Arc::clone(&db));
+    let freshness = Arc::new(RwLock::new(FreshnessState::fresh_at(
+        0,
+        FreshnessState::now_unix(),
+    )));
+    let indexer = Arc::new(SingletonIndexer::new(
+        Arc::clone(&singleton_store),
+        Arc::clone(&freshness),
+    ));
 
     rustls::crypto::ring::default_provider()
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    // API
-    let api_state = state.clone();
+    let api_state = ListenerApiState {
+        store: Arc::clone(&singleton_store),
+        freshness: Arc::clone(&freshness),
+    };
+    let neighbors_state = AppState {
+        db: Arc::clone(&db),
+    };
+
     tokio::spawn(async move {
-        if let Err(e) = start_api_server(api_state).await {
+        if let Err(e) = start_api_server(api_state, neighbors_state).await {
             eprintln!("API server error: {}", e);
         }
     });
@@ -83,9 +107,15 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
         .map(hex_string_to_bytes32)
         .collect::<Result<Vec<Bytes32>, CliError>>()?;
 
-    // Updates
     loop {
-        match connect_websocket(testnet11, Arc::clone(&db), launcher_ids.clone()).await {
+        match connect_websocket(
+            testnet11,
+            Arc::clone(&db),
+            launcher_ids.clone(),
+            Arc::clone(&indexer),
+        )
+        .await
+        {
             Ok(_resp) => (),
             Err(e) => {
                 println!("WebSocket error: {}", e);
@@ -96,22 +126,28 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
     }
 }
 
-async fn start_api_server(state: AppState) -> Result<(), CliError> {
-    // API routes
-    let app = Router::new()
+async fn start_api_server(
+    listener_state: ListenerApiState,
+    neighbors_state: AppState,
+) -> Result<(), CliError> {
+    let neighbors = Router::new()
         .route("/", get(health_check))
         .route("/neighbors", get(get_neighbors))
+        .with_state(neighbors_state);
+
+    let app = listener_router(listener_state)
+        .merge(neighbors)
         .layer(
             CorsLayer::new()
-                .allow_origin("*".parse::<HeaderValue>().unwrap())
-                .allow_methods([Method::GET, Method::OPTIONS, Method::POST]),
-        )
-        .with_state(state);
+                .allow_origin(Any)
+                .allow_methods([Method::GET, Method::HEAD, Method::OPTIONS])
+                .allow_headers(Any),
+        );
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let addr = bind_addr();
     println!("API server listening on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 
     Ok(())
@@ -177,8 +213,9 @@ async fn connect_websocket(
     testnet11: bool,
     db: Arc<futures::lock::Mutex<Db>>,
     launcher_ids: Vec<Bytes32>,
+    indexer: Arc<SingletonIndexer>,
 ) -> Result<(), CliError> {
-    println!("Syncing XCHanldes registries (initial)...");
+    println!("Syncing XCHandles registries (initial)...");
     let client = get_coinset_client(testnet11);
 
     let mut registries = Vec::<XchandlesRegistry>::new();
@@ -212,10 +249,16 @@ async fn connect_websocket(
                 Ok(msg) => {
                     if msg.message_type() == "peak" {
                         let now = SystemTime::now();
-                        println!(
-                            "[{}] Received new peak",
-                            now.duration_since(UNIX_EPOCH).unwrap().as_secs()
-                        );
+                        let now_unix = now.duration_since(UNIX_EPOCH).unwrap().as_secs();
+                        println!("[{}] Received new peak", now_unix);
+
+                        let upstream_peak = client
+                            .get_blockchain_state()
+                            .await?
+                            .blockchain_state
+                            .as_ref()
+                            .map(|s| s.peak.height)
+                            .unwrap_or(0);
 
                         let coin_resp = client
                             .get_coin_records_by_names(
@@ -227,35 +270,113 @@ async fn connect_websocket(
                             )
                             .await?;
 
-                        let coin_recorss = coin_resp.coin_records.ok_or(CliError::Custom(
+                        let coin_records = coin_resp.coin_records.ok_or(CliError::Custom(
                             "Weird - coin records not found after peak update.".to_string(),
                         ))?;
-                        for (i, coin_record) in coin_recorss.iter().enumerate() {
+                        for (i, coin_record) in coin_records.iter().enumerate() {
                             if coin_record.spent {
                                 print!(
                                     "Latest registry #{} coin was spent at height {}... ",
                                     i, coin_record.spent_block_index
                                 );
 
-                                let registry = {
+                                let spent_height = coin_record.spent_block_index;
+                                let header_hash = client
+                                    .get_block_record_by_height(spent_height)
+                                    .await?
+                                    .block_record
+                                    .map(|r| r.header_hash);
+
+                                let block_spends = if let Some(hh) = header_hash {
+                                    client
+                                        .get_block_spends(hh)
+                                        .await?
+                                        .block_spends
+                                        .unwrap_or_default()
+                                } else {
+                                    Vec::new()
+                                };
+
+                                let (registry, logs) = {
                                     let mut ctx = SpendContext::new();
                                     let mut db = db.lock().await;
 
-                                    sync_xchandles(
+                                    let parent_spend = client
+                                        .get_puzzle_and_solution(
+                                            coin_record.coin.coin_id(),
+                                            Some(spent_height),
+                                        )
+                                        .await?
+                                        .coin_solution
+                                        .ok_or(CliError::CoinNotSpent(
+                                            coin_record.coin.coin_id(),
+                                        ))?;
+
+                                    let parsed = XchandlesRegistry::from_spend(
+                                        &mut ctx,
+                                        &parent_spend,
+                                        registries[i].info.constants,
+                                        chia_bls::Signature::default(),
+                                    )?
+                                    .ok_or(CliError::Custom(
+                                        "Could not parse registry spend".into(),
+                                    ))?;
+                                    let logs = parsed.pending_spend.logs.clone();
+
+                                    let registry = sync_xchandles(
                                         &client,
                                         &mut db,
                                         &mut ctx,
                                         registries[i].info.constants.launcher_id,
                                     )
-                                    .await?
+                                    .await?;
+                                    (registry, logs)
                                 };
                                 registries[i] = registry;
+
+                                let mut allocator = Allocator::new();
+                                if let Err(e) = indexer
+                                    .on_registry_transition(
+                                        &mut allocator,
+                                        spent_height,
+                                        &block_spends,
+                                        &logs,
+                                    )
+                                    .await
+                                {
+                                    eprintln!("singleton discovery error: {e}");
+                                }
+                                if let Err(e) = indexer
+                                    .on_block(&mut allocator, spent_height, &block_spends)
+                                    .await
+                                {
+                                    eprintln!("singleton follow error: {e}");
+                                }
+
                                 println!("synced :)")
                             }
                         }
 
+                        // Follow singleton spends in the new tip block as well.
+                        if let Some(state) = client.get_blockchain_state().await?.blockchain_state {
+                            let tip = state.peak.height;
+                            if let Some(rec) = client
+                                .get_block_record_by_height(tip)
+                                .await?
+                                .block_record
+                            {
+                                let tip_spends = client
+                                    .get_block_spends(rec.header_hash)
+                                    .await?
+                                    .block_spends
+                                    .unwrap_or_default();
+                                let mut allocator = Allocator::new();
+                                let _ = indexer.on_block(&mut allocator, tip, &tip_spends).await;
+                            }
+                            indexer.note_peak(tip, upstream_peak.max(tip), now_unix).await;
+                        }
+
                         if last_clear_time.elapsed().unwrap().as_secs() > 60 * 30 {
-                            // 30 minutes in seconds
                             if let Some(current_blockchain_state) =
                                 client.get_blockchain_state().await?.blockchain_state
                             {

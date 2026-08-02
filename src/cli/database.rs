@@ -125,6 +125,17 @@ impl Db {
             )
             .execute(&pool)
             .await?;
+
+            sqlx::query(
+                "
+                CREATE TABLE IF NOT EXISTS followed_singletons (
+                    launcher_id BLOB PRIMARY KEY,
+                    record_json TEXT NOT NULL
+                )
+                ",
+            )
+            .execute(&pool)
+            .await?;
         }
 
         Ok(Self { pool })
@@ -801,6 +812,59 @@ impl Db {
             XchandlesConstants::from_clvm(allocator, constants).map_err(DriverError::FromClvm)?;
 
         Ok(Some(constants))
+    }
+
+    pub async fn get_followed_singleton_json(
+        &self,
+        launcher_id: Bytes32,
+    ) -> Result<Option<String>, CliError> {
+        let row = sqlx::query(
+            "SELECT record_json FROM followed_singletons WHERE launcher_id = ?1",
+        )
+        .bind(launcher_id.to_vec())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(row.map(|r| r.get::<String, _>("record_json")))
+    }
+
+    pub async fn upsert_followed_singleton_json(
+        &self,
+        launcher_id: Bytes32,
+        record_json: &str,
+    ) -> Result<(), CliError> {
+        sqlx::query(
+            "
+            INSERT INTO followed_singletons (launcher_id, record_json)
+            VALUES (?1, ?2)
+            ON CONFLICT(launcher_id) DO UPDATE SET record_json = excluded.record_json
+            ",
+        )
+        .bind(launcher_id.to_vec())
+        .bind(record_json)
+        .execute(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+        Ok(())
+    }
+
+    pub async fn delete_followed_singleton(&self, launcher_id: Bytes32) -> Result<(), CliError> {
+        sqlx::query("DELETE FROM followed_singletons WHERE launcher_id = ?1")
+            .bind(launcher_id.to_vec())
+            .execute(&self.pool)
+            .await
+            .map_err(CliError::Sqlx)?;
+        Ok(())
+    }
+
+    pub async fn all_followed_singleton_ids(&self) -> Result<Vec<Bytes32>, CliError> {
+        let rows = sqlx::query("SELECT launcher_id FROM followed_singletons")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(CliError::Sqlx)?;
+        rows.iter()
+            .map(|r| column_to_bytes32(r.get::<&[u8], _>("launcher_id")))
+            .collect()
     }
 }
 

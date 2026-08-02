@@ -32,8 +32,7 @@ impl XchandlesApiClient {
     }
 
     pub fn testnet() -> Self {
-        // Self::new("https://testnet11-api.xchandles.com")
-        Self::new("http://localhost:3000")
+        Self::new("http://localhost:8080")
     }
 
     pub fn get(testnet11: bool) -> Self {
@@ -173,5 +172,27 @@ impl XchandlesApiClient {
             .get_neighbors(launcher_id, handle_hash_minus_one)
             .await?
             .1)
+    }
+
+    pub async fn get_singleton(
+        &self,
+        launcher_id: Bytes32,
+        include_metadata: bool,
+    ) -> Result<crate::SingletonResponse, CliError> {
+        let url = format!(
+            "{}/singletons/{}?include_metadata={}",
+            self.base_url,
+            hex::encode(launcher_id),
+            include_metadata
+        );
+        let response = self.client.get(&url).send().await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(CliError::Custom(format!(
+                "get_singleton failed ({status}): {body}"
+            )));
+        }
+        Ok(response.json().await?)
     }
 }

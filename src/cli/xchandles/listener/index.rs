@@ -1,0 +1,309 @@
+use std::sync::Arc;
+
+use chia_protocol::CoinSpend;
+use clvmr::Allocator;
+use tokio::sync::RwLock;
+
+use super::discovery::{
+    discover_singleton_in_block, follow_singleton_spend, DiscoveryResult, FollowSpendResult,
+};
+use super::freshness::FreshnessState;
+use super::refs::{dereferenced_launchers, references_from_action_log, SingletonReference};
+use super::store::{
+    push_replacement, rollback_to_before, FollowRecordStatus, FollowedSingleton, SingletonStore,
+    StoredSingletonState,
+};
+use chia_wallet_sdk::driver::XchandlesActionLog;
+use chia_wallet_sdk::types::puzzles::XchandlesHandleSlotValue;
+
+/// Applies registry-transition singleton discovery and subsequent lineage follows.
+pub struct SingletonIndexer {
+    pub store: Arc<dyn SingletonStore>,
+    pub freshness: Arc<RwLock<FreshnessState>>,
+}
+
+impl SingletonIndexer {
+    pub fn new(store: Arc<dyn SingletonStore>, freshness: Arc<RwLock<FreshnessState>>) -> Self {
+        Self { store, freshness }
+    }
+
+    pub async fn note_peak(&self, indexed: u32, upstream: u32, now_unix: u64) {
+        let mut f = self.freshness.write().await;
+        f.indexed_peak_height = indexed;
+        f.upstream_peak_height = upstream;
+        f.last_successful_peak_unix = now_unix;
+        f.rolling_back = false;
+        f.resyncing = false;
+    }
+
+    pub async fn begin_rollback(&self) {
+        self.freshness.write().await.rolling_back = true;
+    }
+
+    pub async fn begin_resync(&self) {
+        self.freshness.write().await.resyncing = true;
+    }
+
+    /// Process a registry spend's action logs against the block's coin spends.
+    pub async fn on_registry_transition(
+        &self,
+        allocator: &mut Allocator,
+        height: u32,
+        block_spends: &[CoinSpend],
+        logs: &[XchandlesActionLog],
+    ) -> Result<(), String> {
+        for log in logs {
+            for reference in references_from_action_log(log) {
+                self.discover_reference(allocator, height, block_spends, reference)
+                    .await?;
+            }
+            self.track_slot_reference_changes(height, log).await;
+        }
+        Ok(())
+    }
+
+    async fn discover_reference(
+        &self,
+        allocator: &mut Allocator,
+        height: u32,
+        block_spends: &[CoinSpend],
+        reference: SingletonReference,
+    ) -> Result<(), String> {
+        // Re-reference after cleanup: rediscover from this block.
+        let existing = self.store.get(reference.launcher_id).await;
+        if let Some(rec) = &existing {
+            if rec.status == FollowRecordStatus::Active && rec.current.is_some() {
+                self.store.bump_reference(reference.launcher_id).await;
+                return Ok(());
+            }
+        }
+
+        let result = discover_singleton_in_block(
+            allocator,
+            block_spends,
+            reference.launcher_id,
+            reference.expected_full_puzzle_hash,
+            reference.expected_inner_puzzle_hash,
+        )
+        .map_err(|e| e.to_string())?;
+
+        let (status, current) = match result {
+            DiscoveryResult::Incomplete => (FollowRecordStatus::Incomplete, None),
+            DiscoveryResult::Mismatch => (FollowRecordStatus::Mismatch, None),
+            DiscoveryResult::Found(found) => {
+                let melted = found.melted;
+                let state = StoredSingletonState::from_coin(
+                    reference.launcher_id,
+                    found.coin,
+                    found.inner_puzzle_hash,
+                    height,
+                    melted,
+                    if melted { Some(height) } else { None },
+                    found.nft,
+                );
+                (FollowRecordStatus::Active, Some(state))
+            }
+        };
+
+        let mut reference_count = 1;
+        let mut history = Vec::new();
+        if let Some(prev) = existing {
+            reference_count = prev.reference_count.max(1);
+            history = prev.history;
+        }
+
+        self.store
+            .upsert(FollowedSingleton {
+                launcher_id: reference.launcher_id,
+                expected_full_puzzle_hash: reference.expected_full_puzzle_hash,
+                expected_inner_puzzle_hash: reference.expected_inner_puzzle_hash,
+                discovery_height: height,
+                status,
+                current,
+                history,
+                reference_count,
+                dereference_height: None,
+            })
+            .await;
+        Ok(())
+    }
+
+    async fn track_slot_reference_changes(&self, height: u32, log: &XchandlesActionLog) {
+        let pairs: Vec<(XchandlesHandleSlotValue, XchandlesHandleSlotValue)> = match log {
+            XchandlesActionLog::Extend(e) => vec![(e.spent_slot, e.created_slot)],
+            XchandlesActionLog::Oracle(e) => vec![(e.spent_slot, e.created_slot)],
+            XchandlesActionLog::Expire(e) => vec![(e.spent_slot, e.created_slot)],
+            XchandlesActionLog::ExecuteUpdate(e) => {
+                vec![(e.spent_handle_slot, e.created_slot)]
+            }
+            XchandlesActionLog::InitiateUpdate(e) => {
+                vec![(e.spent_slot, e.created_handle_slot)]
+            }
+            XchandlesActionLog::Refund(e) => match (e.spent_slot, e.created_slot) {
+                (Some(s), Some(c)) => vec![(s, c)],
+                _ => Vec::new(),
+            },
+            XchandlesActionLog::Register(e) => vec![
+                (e.spent_left_slot, e.created_left_slot),
+                (e.spent_right_slot, e.created_right_slot),
+            ],
+            XchandlesActionLog::DelegatedState(_) => Vec::new(),
+        };
+
+        for (spent, created) in pairs {
+            for launcher in dereferenced_launchers(&spent, &created) {
+                self.store.drop_reference(launcher, height).await;
+            }
+            // Bump for launchers that remain or newly appear is handled in discover_reference
+            // for new refs; for continuing refs, bump when created references an already-followed id.
+            for launcher in [created.owner_launcher_id, created.resolved_launcher_id] {
+                if let Some(rec) = self.store.get(launcher).await {
+                    if rec.reference_count == 0 || rec.dereference_height.is_some() {
+                        self.store.bump_reference(launcher).await;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Retry incomplete discoveries and follow live coins that spent in this block.
+    pub async fn on_block(
+        &self,
+        allocator: &mut Allocator,
+        height: u32,
+        block_spends: &[CoinSpend],
+    ) -> Result<(), String> {
+        let ids = self.store.all_launcher_ids().await;
+        for launcher_id in ids {
+            let Some(mut record) = self.store.get(launcher_id).await else {
+                continue;
+            };
+
+            if record.status == FollowRecordStatus::Incomplete {
+                let result = discover_singleton_in_block(
+                    allocator,
+                    block_spends,
+                    record.launcher_id,
+                    record.expected_full_puzzle_hash,
+                    record.expected_inner_puzzle_hash,
+                )
+                .map_err(|e| e.to_string())?;
+                match result {
+                    DiscoveryResult::Found(found) => {
+                        let melted = found.melted;
+                        record.status = FollowRecordStatus::Active;
+                        record.current = Some(StoredSingletonState::from_coin(
+                            record.launcher_id,
+                            found.coin,
+                            found.inner_puzzle_hash,
+                            height,
+                            melted,
+                            if melted { Some(height) } else { None },
+                            found.nft,
+                        ));
+                        self.store.upsert(record).await;
+                    }
+                    DiscoveryResult::Mismatch => {
+                        record.status = FollowRecordStatus::Mismatch;
+                        self.store.upsert(record).await;
+                    }
+                    DiscoveryResult::Incomplete => {}
+                }
+                continue;
+            }
+
+            if record.status != FollowRecordStatus::Active {
+                continue;
+            }
+            let Some(current) = record.current.clone() else {
+                continue;
+            };
+            if current.melted {
+                continue;
+            }
+
+            let Some(spend) = block_spends.iter().find(|s| s.coin.coin_id() == current.coin_id)
+            else {
+                continue;
+            };
+
+            match follow_singleton_spend(allocator, spend, launcher_id).map_err(|e| e.to_string())?
+            {
+                FollowSpendResult::Next(next) => {
+                    let new_state = StoredSingletonState::from_coin(
+                        launcher_id,
+                        next.coin,
+                        next.inner_puzzle_hash,
+                        height,
+                        false,
+                        None,
+                        next.nft,
+                    );
+                    push_replacement(&mut record, new_state, height);
+                    self.store.upsert(record).await;
+                }
+                FollowSpendResult::Melted {
+                    last_coin,
+                    inner_puzzle_hash,
+                    nft,
+                } => {
+                    let new_state = StoredSingletonState::from_coin(
+                        launcher_id,
+                        last_coin,
+                        inner_puzzle_hash,
+                        height,
+                        true,
+                        Some(height),
+                        nft,
+                    );
+                    push_replacement(&mut record, new_state, height);
+                    self.store.upsert(record).await;
+                }
+            }
+        }
+
+        self.cleanup_finalized(height).await;
+        Ok(())
+    }
+
+    async fn cleanup_finalized(&self, peak: u32) {
+        for launcher_id in self.store.all_launcher_ids().await {
+            let Some(rec) = self.store.get(launcher_id).await else {
+                continue;
+            };
+            if rec.reference_count == 0 {
+                if let Some(deref_h) = rec.dereference_height {
+                    if peak >= deref_h.saturating_add(32) {
+                        self.store.remove(launcher_id).await;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Pre-final reorganization: restore lineage state confirmed before `from_height`.
+    pub async fn rollback(&self, from_height: u32) {
+        self.begin_rollback().await;
+        for launcher_id in self.store.all_launcher_ids().await {
+            let Some(mut rec) = self.store.get(launcher_id).await else {
+                continue;
+            };
+            if rec.discovery_height >= from_height {
+                self.store.remove(launcher_id).await;
+                continue;
+            }
+            rollback_to_before(&mut rec, from_height);
+            if let Some(deref_h) = rec.dereference_height {
+                if deref_h >= from_height {
+                    rec.dereference_height = None;
+                    // Reference count restoration is approximate; callers should rebuild refs
+                    // from canonical slots after rollback.
+                    if rec.reference_count == 0 {
+                        rec.reference_count = 1;
+                    }
+                }
+            }
+            self.store.upsert(rec).await;
+        }
+    }
+}
