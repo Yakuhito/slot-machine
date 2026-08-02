@@ -6,6 +6,8 @@ pub struct FreshnessState {
     pub indexed_peak_height: u32,
     pub upstream_peak_height: u32,
     pub last_successful_peak_unix: u64,
+    /// Latest confirmed transaction-block timestamp used for auction pricing.
+    pub confirmed_timestamp: u64,
     pub rolling_back: bool,
     pub resyncing: bool,
 }
@@ -16,9 +18,16 @@ impl FreshnessState {
             indexed_peak_height: peak,
             upstream_peak_height: peak,
             last_successful_peak_unix: now_unix,
+            // Tests that need pricing override this; production updates on each peak.
+            confirmed_timestamp: now_unix,
             rolling_back: false,
             resyncing: false,
         }
+    }
+
+    pub fn with_confirmed_timestamp(mut self, confirmed_timestamp: u64) -> Self {
+        self.confirmed_timestamp = confirmed_timestamp;
+        self
     }
 
     pub fn now_unix() -> u64 {

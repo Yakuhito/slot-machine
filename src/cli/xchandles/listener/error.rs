@@ -128,6 +128,14 @@ impl ApiError {
         )
         .with_details(json!({ "expiration": expiration }))
     }
+
+    pub fn invalid_view() -> Self {
+        Self::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_view",
+            "Expiring view must be exactly active or soon",
+        )
+    }
 }
 
 impl IntoResponse for ApiError {

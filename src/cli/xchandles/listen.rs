@@ -20,13 +20,44 @@ use tower_http::cors::{Any, CorsLayer};
 
 use super::listener::{
     DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore, DbSingletonStore, FreshnessState,
-    HandleSlotStore, ListenerApiState, PendingUpdateStore, RegistrationStore, SingletonIndexer,
-    SingletonStore, listener_router,
+    HandleSlotStore, ListenerApiState, PendingUpdateStore, RegistrationStore, RegistryPricing,
+    SingletonIndexer, SingletonStore, listener_router,
 };
 use crate::{
-    CliError, CoinsetWebSocketMessage, Db, get_coinset_client, hex_string_to_bytes32,
-    sync_xchandles,
+    BASE_PRICE_AT_FACTOR_ONE, CliError, CoinsetWebSocketMessage, Db, PRICE_SCHEDULE,
+    REGISTRATION_PERIOD, get_coinset_client, hex_string_to_bytes32, sync_xchandles,
 };
+use chia_wallet_sdk::driver::XchandlesExpirePricingPuzzle;
+use chia_wallet_sdk::types::{Mod, puzzles::XchandlesFactorPricingPuzzleArgs};
+
+fn pricing_from_registry_state(
+    pricing_puzzle_hash: Bytes32,
+    expired_handle_pricing_puzzle_hash: Bytes32,
+) -> Option<RegistryPricing> {
+    let candidates: Vec<u64> = PRICE_SCHEDULE
+        .iter()
+        .map(|(_, _, price)| *price)
+        .chain(std::iter::once(BASE_PRICE_AT_FACTOR_ONE))
+        .collect();
+    for base_price in candidates {
+        let factor = XchandlesFactorPricingPuzzleArgs {
+            base_price,
+            registration_period: REGISTRATION_PERIOD,
+        }
+        .curry_tree_hash();
+        let expired =
+            XchandlesExpirePricingPuzzle::curry_tree_hash(base_price, REGISTRATION_PERIOD);
+        if factor == pricing_puzzle_hash.into()
+            && expired == expired_handle_pricing_puzzle_hash.into()
+        {
+            return Some(RegistryPricing {
+                base_price,
+                registration_period: REGISTRATION_PERIOD,
+            });
+        }
+    }
+    None
+}
 
 #[derive(Debug, Deserialize)]
 struct XchandlesNeighborsQuery {
@@ -101,12 +132,19 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
+    let mut initial_pricing = std::collections::HashMap::new();
+    for id in &launcher_ids {
+        initial_pricing.insert(*id, RegistryPricing::default());
+    }
+    let registry_pricing = Arc::new(RwLock::new(initial_pricing));
+
     let api_state = ListenerApiState {
         store: Arc::clone(&singleton_store),
         handle_slots: Arc::clone(&handle_slots),
         registrations: Arc::clone(&registrations),
         pending_updates: Arc::clone(&pending_updates),
         freshness: Arc::clone(&freshness),
+        registry_pricing: Arc::clone(&registry_pricing),
         registry_launcher_ids: launcher_ids.clone(),
         now_unix_override: None,
     };
@@ -126,6 +164,7 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
             Arc::clone(&db),
             launcher_ids.clone(),
             Arc::clone(&indexer),
+            Arc::clone(&registry_pricing),
         )
         .await
         {
@@ -225,6 +264,7 @@ async fn connect_websocket(
     db: Arc<futures::lock::Mutex<Db>>,
     launcher_ids: Vec<Bytes32>,
     indexer: Arc<SingletonIndexer>,
+    registry_pricing: Arc<RwLock<std::collections::HashMap<Bytes32, RegistryPricing>>>,
 ) -> Result<(), CliError> {
     println!("Syncing XCHandles registries (initial)...");
     let client = get_coinset_client(testnet11);
@@ -239,6 +279,20 @@ async fn connect_websocket(
         };
 
         registries.push(registry);
+    }
+
+    // Seed confirmed pricing from the currently synced registry states.
+    {
+        let mut pricing = registry_pricing.write().await;
+        for registry in &registries {
+            let launcher_id = registry.info.constants.launcher_id;
+            if let Some(p) = pricing_from_registry_state(
+                registry.info.state.pricing_puzzle_hash,
+                registry.info.state.expired_handle_pricing_puzzle_hash,
+            ) {
+                pricing.insert(launcher_id, p);
+            }
+        }
     }
 
     // Cold start: project currently indexed Handle slots so proofs work for already-synced
@@ -387,6 +441,12 @@ async fn connect_websocket(
                                 registries[i] = registry;
 
                                 let registry_launcher_id = registries[i].info.constants.launcher_id;
+                                if let Some(p) = pricing_from_registry_state(
+                                    registries[i].info.state.pricing_puzzle_hash,
+                                    registries[i].info.state.expired_handle_pricing_puzzle_hash,
+                                ) {
+                                    registry_pricing.write().await.insert(registry_launcher_id, p);
+                                }
 
                                 // Build parent_coin_id map for created slots from the synced DB.
                                 let parent_by_value_hash = {
@@ -463,9 +523,29 @@ async fn connect_websocket(
                         // Follow singleton spends in the new tip block as well.
                         if let Some(state) = client.get_blockchain_state().await?.blockchain_state {
                             let tip = state.peak.height;
+                            let mut confirmed_timestamp = state.peak.timestamp.unwrap_or(0);
                             if let Some(rec) =
                                 client.get_block_record_by_height(tip).await?.block_record
                             {
+                                if let Some(ts) = rec.timestamp {
+                                    confirmed_timestamp = ts;
+                                } else if confirmed_timestamp == 0 {
+                                    // Walk back like get_last_onchain_timestamp when tip is non-tx.
+                                    let mut height = tip.saturating_sub(1);
+                                    while height > 0 && confirmed_timestamp == 0 {
+                                        if let Some(br) = client
+                                            .get_block_record_by_height(height)
+                                            .await?
+                                            .block_record
+                                        {
+                                            if let Some(ts) = br.timestamp {
+                                                confirmed_timestamp = ts;
+                                                break;
+                                            }
+                                        }
+                                        height = height.saturating_sub(1);
+                                    }
+                                }
                                 let tip_spends = client
                                     .get_block_spends(rec.header_hash)
                                     .await?
@@ -475,7 +555,12 @@ async fn connect_websocket(
                                 let _ = indexer.on_block(&mut allocator, tip, &tip_spends).await;
                             }
                             indexer
-                                .note_peak(tip, upstream_peak.max(tip), now_unix)
+                                .note_peak(
+                                    tip,
+                                    upstream_peak.max(tip),
+                                    now_unix,
+                                    confirmed_timestamp,
+                                )
                                 .await;
                         }
 

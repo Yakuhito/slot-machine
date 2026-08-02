@@ -138,6 +138,73 @@ pub struct PendingTransferResponse {
     pub current_executor_coin_id: String,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ExpiringQuery {
+    pub view: Option<String>,
+    pub cursor: Option<String>,
+    /// Page size; capped at 50. Omitted defaults to 50.
+    pub limit: Option<u32>,
+    /// Explicit registry selection; omission selects the first configured registry.
+    pub launcher_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExpiringView {
+    Active,
+    Soon,
+}
+
+impl ExpiringView {
+    pub fn parse(raw: Option<&str>) -> Option<Self> {
+        match raw {
+            Some("active") => Some(Self::Active),
+            Some("soon") => Some(Self::Soon),
+            _ => None,
+        }
+    }
+}
+
+/// Active expiration-auction row for `GET /expiring?view=active`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpiringActiveItem {
+    pub handle: String,
+    pub expiration: u64,
+    pub projected_pricing_timestamp: u64,
+    pub current_premium: u64,
+    pub total_registration_fee: u64,
+    pub base_registration_fee: u64,
+    pub reaches_base_at: u64,
+}
+
+/// Expiring-soon row for `GET /expiring?view=soon`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpiringSoonItem {
+    pub handle: String,
+    pub expiration: u64,
+    pub base_registration_fee: u64,
+}
+
+/// Cursor-paginated active-auction directory response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpiringActiveResponse {
+    pub items: Vec<ExpiringActiveItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    pub indexed_peak_height: u32,
+    /// Latest confirmed transaction-block timestamp used for pricing.
+    pub confirmed_timestamp: u64,
+}
+
+/// Cursor-paginated expiring-soon directory response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpiringSoonResponse {
+    pub items: Vec<ExpiringSoonItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    pub indexed_peak_height: u32,
+    pub confirmed_timestamp: u64,
+}
+
 /// Canonical Handle grammar: 3–63 lowercase ASCII alphanumeric, no normalization.
 pub fn is_canonical_handle(handle: &str) -> bool {
     let len = handle.len();

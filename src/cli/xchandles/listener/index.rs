@@ -56,11 +56,18 @@ impl SingletonIndexer {
         }
     }
 
-    pub async fn note_peak(&self, indexed: u32, upstream: u32, now_unix: u64) {
+    pub async fn note_peak(
+        &self,
+        indexed: u32,
+        upstream: u32,
+        now_unix: u64,
+        confirmed_timestamp: u64,
+    ) {
         let mut f = self.freshness.write().await;
         f.indexed_peak_height = indexed;
         f.upstream_peak_height = upstream;
         f.last_successful_peak_unix = now_unix;
+        f.confirmed_timestamp = confirmed_timestamp;
         f.rolling_back = false;
         f.resyncing = false;
     }

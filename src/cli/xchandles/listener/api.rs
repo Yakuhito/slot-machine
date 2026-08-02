@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -11,6 +12,10 @@ use clvm_utils::ToTreeHash;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 
+use super::auction_pricing::{
+    SOON_WINDOW_SECONDS, auction_premium, base_registration_fee, projected_pricing_timestamp,
+    reaches_base_at,
+};
 use super::error::ApiError;
 use super::freshness::FreshnessState;
 use super::handle_store::{HandleSlotStore, StoredHandleSlot};
@@ -18,11 +23,31 @@ use super::pending_store::PendingUpdateStore;
 use super::registration_store::{RegistrationActionKind, RegistrationStore, StoredRegistration};
 use super::store::{FollowRecordStatus, SingletonStore, StoredSingletonState};
 use super::types::{
-    HandleProofResponse, HandleQuery, HandleSlotJson, PendingTransferQuery,
-    PendingTransferResponse, RecentRegistrationItem, RecentRegistrationsQuery,
-    RecentRegistrationsResponse, RegistrationQuery, RegistrationResponse, SingletonQuery,
-    SingletonResponse, SlotNeighborsJson, hex32, is_canonical_handle, parse_launcher_id,
+    ExpiringActiveItem, ExpiringActiveResponse, ExpiringQuery, ExpiringSoonItem,
+    ExpiringSoonResponse, ExpiringView, HandleProofResponse, HandleQuery, HandleSlotJson,
+    PendingTransferQuery, PendingTransferResponse, RecentRegistrationItem,
+    RecentRegistrationsQuery, RecentRegistrationsResponse, RegistrationQuery, RegistrationResponse,
+    SingletonQuery, SingletonResponse, SlotNeighborsJson, hex32, is_canonical_handle,
+    parse_launcher_id,
 };
+use crate::{BASE_PRICE_AT_FACTOR_ONE, REGISTRATION_PERIOD};
+
+/// Confirmed pricing inputs for one followed registry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RegistryPricing {
+    pub base_price: u64,
+    pub registration_period: u64,
+}
+
+impl Default for RegistryPricing {
+    fn default() -> Self {
+        Self {
+            // Settled post-schedule mainnet base (factor 1).
+            base_price: BASE_PRICE_AT_FACTOR_ONE,
+            registration_period: REGISTRATION_PERIOD,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct ListenerApiState {
@@ -31,6 +56,8 @@ pub struct ListenerApiState {
     pub registrations: Arc<dyn RegistrationStore>,
     pub pending_updates: Arc<dyn PendingUpdateStore>,
     pub freshness: Arc<RwLock<FreshnessState>>,
+    /// Per-registry confirmed base price / registration period.
+    pub registry_pricing: Arc<RwLock<HashMap<Bytes32, RegistryPricing>>>,
     /// Configured registries in follow order; omission of `launcher_id` selects the first.
     pub registry_launcher_ids: Vec<Bytes32>,
     /// Optional clock override for tests (unix seconds).
@@ -46,12 +73,17 @@ impl ListenerApiState {
         freshness: FreshnessState,
         registry_launcher_ids: Vec<Bytes32>,
     ) -> Self {
+        let mut pricing = HashMap::new();
+        for id in &registry_launcher_ids {
+            pricing.insert(*id, RegistryPricing::default());
+        }
         Self {
             store,
             handle_slots,
             registrations,
             pending_updates,
             freshness: Arc::new(RwLock::new(freshness)),
+            registry_pricing: Arc::new(RwLock::new(pricing)),
             registry_launcher_ids,
             now_unix_override: None,
         }
@@ -89,6 +121,7 @@ pub fn listener_router(state: ListenerApiState) -> Router {
             "/registrations/{handle}",
             get(get_registration).head(head_registration),
         )
+        .route("/expiring", get(get_expiring).head(head_expiring))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
@@ -98,7 +131,7 @@ pub fn listener_router(state: ListenerApiState) -> Router {
         .with_state(state)
 }
 
-async fn require_fresh(state: &ListenerApiState) -> Result<u32, ApiError> {
+async fn require_fresh(state: &ListenerApiState) -> Result<(u32, u64), ApiError> {
     let freshness = state.freshness.read().await;
     let now = state.now_unix();
     if !freshness.is_fresh(now) {
@@ -107,7 +140,40 @@ async fn require_fresh(state: &ListenerApiState) -> Result<u32, ApiError> {
             freshness.upstream_peak_height,
         ));
     }
-    Ok(freshness.indexed_peak_height)
+    Ok((
+        freshness.indexed_peak_height,
+        freshness.confirmed_timestamp,
+    ))
+}
+
+/// Opaque cursor: `v1.{expiration}.{handle}` — stable for the canonical projection order.
+fn encode_cursor(expiration: u64, handle: &str) -> String {
+    format!("v1.{expiration}.{handle}")
+}
+
+fn decode_cursor(cursor: &str) -> Option<(u64, String)> {
+    let rest = cursor.strip_prefix("v1.")?;
+    let (expiration_raw, handle) = rest.split_once('.')?;
+    let expiration = expiration_raw.parse().ok()?;
+    if !is_canonical_handle(handle) {
+        return None;
+    }
+    Some((expiration, handle.to_string()))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct ExpiringKey {
+    expiration: u64,
+    handle: String,
+}
+
+fn after_cursor(key: &ExpiringKey, cursor: Option<&(u64, String)>) -> bool {
+    match cursor {
+        None => true,
+        Some((exp, handle)) => {
+            key.expiration > *exp || (key.expiration == *exp && key.handle.as_str() > handle.as_str())
+        }
+    }
 }
 
 fn state_to_response(
@@ -168,7 +234,7 @@ async fn lookup_singleton(
     launcher_id: Bytes32,
     include_metadata: bool,
 ) -> Result<SingletonResponse, ApiError> {
-    let indexed_peak_height = require_fresh(state).await?;
+    let (indexed_peak_height, _confirmed_timestamp) = require_fresh(state).await?;
     let record = state
         .store
         .get(launcher_id)
@@ -261,7 +327,7 @@ async fn lookup_handle_proof(
     }
 
     let registry = select_registry(state, query.launcher_id.as_deref())?;
-    let indexed_peak_height = require_fresh(state).await?;
+    let (indexed_peak_height, _confirmed_timestamp) = require_fresh(state).await?;
 
     let handle_hash: Bytes32 = handle.tree_hash().into();
     let record = state
@@ -313,7 +379,7 @@ async fn lookup_registration(
     }
 
     let registry = select_registry(state, query.launcher_id.as_deref())?;
-    let indexed_peak_height = require_fresh(state).await?;
+    let (indexed_peak_height, _confirmed_timestamp) = require_fresh(state).await?;
 
     let handle_hash: Bytes32 = handle.tree_hash().into();
     let record = state
@@ -335,7 +401,7 @@ async fn lookup_registrations_recent(
     query: &RecentRegistrationsQuery,
 ) -> Result<RecentRegistrationsResponse, ApiError> {
     let registry = select_registry(state, query.launcher_id.as_deref())?;
-    let indexed_peak_height = require_fresh(state).await?;
+    let (indexed_peak_height, _confirmed_timestamp) = require_fresh(state).await?;
 
     let limit = query.limit.unwrap_or(50).min(50) as usize;
     let stats = state.registrations.get_stats(registry).await;
@@ -369,7 +435,7 @@ async fn lookup_pending_transfer(
     }
 
     let registry = select_registry(state, query.launcher_id.as_deref())?;
-    let _indexed_peak_height = require_fresh(state).await?;
+    let (_indexed_peak_height, _confirmed_timestamp) = require_fresh(state).await?;
 
     let handle_hash: Bytes32 = handle.tree_hash().into();
     let handle_record = state
@@ -419,6 +485,195 @@ async fn lookup_pending_transfer(
         update_initiator_coin_id: hex32(pending.update_initiator_coin_id),
         current_executor_coin_id: hex32(owner.coin_id),
     }))
+}
+
+async fn collect_named_slots(
+    state: &ListenerApiState,
+    registry: Bytes32,
+) -> Vec<(String, StoredHandleSlot)> {
+    let mut out = Vec::new();
+    for (reg, handle_hash) in state.handle_slots.all_keys().await {
+        if reg != registry {
+            continue;
+        }
+        let Some(record) = state.handle_slots.get(reg, handle_hash).await else {
+            continue;
+        };
+        let Some(slot) = record.current else {
+            continue;
+        };
+        // Cold-backfill slots without a registration fact lack a Handle string — skip.
+        let Some(reg_rec) = state.registrations.get(reg, handle_hash).await else {
+            continue;
+        };
+        let Some(reg_cur) = reg_rec.current else {
+            continue;
+        };
+        out.push((reg_cur.handle, slot));
+    }
+    out
+}
+
+async fn lookup_expiring_active(
+    state: &ListenerApiState,
+    query: &ExpiringQuery,
+) -> Result<ExpiringActiveResponse, ApiError> {
+    let registry = select_registry(state, query.launcher_id.as_deref())?;
+    let (indexed_peak_height, confirmed_timestamp) = require_fresh(state).await?;
+    let now = state.now_unix();
+    let projected = projected_pricing_timestamp(confirmed_timestamp);
+    let pricing = state
+        .registry_pricing
+        .read()
+        .await
+        .get(&registry)
+        .copied()
+        .unwrap_or_default();
+
+    let cursor = query.cursor.as_deref().and_then(decode_cursor);
+    // Malformed cursors restart from the beginning rather than inventing a new error code.
+
+    let limit = query.limit.unwrap_or(50).min(50) as usize;
+    let mut rows: Vec<(ExpiringKey, ExpiringActiveItem)> = Vec::new();
+    for (handle, slot) in collect_named_slots(state, registry).await {
+        // Fail-closed at/after expiry (Ticket 11 alignment).
+        if now < slot.expiration {
+            continue;
+        }
+        let premium = auction_premium(slot.expiration, projected);
+        if premium == 0 {
+            continue;
+        }
+        let key = ExpiringKey {
+            expiration: slot.expiration,
+            handle: handle.clone(),
+        };
+        if !after_cursor(&key, cursor.as_ref()) {
+            continue;
+        }
+        let base = base_registration_fee(pricing.base_price, &handle);
+        rows.push((
+            key,
+            ExpiringActiveItem {
+                handle,
+                expiration: slot.expiration,
+                projected_pricing_timestamp: projected,
+                current_premium: premium,
+                total_registration_fee: base.saturating_add(premium),
+                base_registration_fee: base,
+                reaches_base_at: reaches_base_at(slot.expiration),
+            },
+        ));
+    }
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let next_cursor = if rows.len() > limit {
+        let last = &rows[limit - 1].0;
+        Some(encode_cursor(last.expiration, &last.handle))
+    } else {
+        None
+    };
+    let items = rows.into_iter().take(limit).map(|(_, item)| item).collect();
+
+    Ok(ExpiringActiveResponse {
+        items,
+        next_cursor,
+        indexed_peak_height,
+        confirmed_timestamp,
+    })
+}
+
+async fn lookup_expiring_soon(
+    state: &ListenerApiState,
+    query: &ExpiringQuery,
+) -> Result<ExpiringSoonResponse, ApiError> {
+    let registry = select_registry(state, query.launcher_id.as_deref())?;
+    let (indexed_peak_height, confirmed_timestamp) = require_fresh(state).await?;
+    let now = state.now_unix();
+    let pricing = state
+        .registry_pricing
+        .read()
+        .await
+        .get(&registry)
+        .copied()
+        .unwrap_or_default();
+
+    let cursor = query.cursor.as_deref().and_then(decode_cursor);
+
+    let limit = query.limit.unwrap_or(50).min(50) as usize;
+    let soon_deadline = now.saturating_add(SOON_WINDOW_SECONDS);
+    let mut rows: Vec<(ExpiringKey, ExpiringSoonItem)> = Vec::new();
+    for (handle, slot) in collect_named_slots(state, registry).await {
+        // Active (not yet expired) and within the inclusive 30-day window.
+        if slot.expiration <= now || slot.expiration > soon_deadline {
+            continue;
+        }
+        let key = ExpiringKey {
+            expiration: slot.expiration,
+            handle: handle.clone(),
+        };
+        if !after_cursor(&key, cursor.as_ref()) {
+            continue;
+        }
+        rows.push((
+            key,
+            ExpiringSoonItem {
+                handle: handle.clone(),
+                expiration: slot.expiration,
+                base_registration_fee: base_registration_fee(pricing.base_price, &handle),
+            },
+        ));
+    }
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let next_cursor = if rows.len() > limit {
+        let last = &rows[limit - 1].0;
+        Some(encode_cursor(last.expiration, &last.handle))
+    } else {
+        None
+    };
+    let items = rows.into_iter().take(limit).map(|(_, item)| item).collect();
+
+    Ok(ExpiringSoonResponse {
+        items,
+        next_cursor,
+        indexed_peak_height,
+        confirmed_timestamp,
+    })
+}
+
+async fn get_expiring(
+    State(state): State<ListenerApiState>,
+    Query(query): Query<ExpiringQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    match ExpiringView::parse(query.view.as_deref()) {
+        Some(ExpiringView::Active) => {
+            let body = lookup_expiring_active(&state, &query).await?;
+            Ok(Json(body).into_response())
+        }
+        Some(ExpiringView::Soon) => {
+            let body = lookup_expiring_soon(&state, &query).await?;
+            Ok(Json(body).into_response())
+        }
+        None => Err(ApiError::invalid_view()),
+    }
+}
+
+async fn head_expiring(
+    State(state): State<ListenerApiState>,
+    Query(query): Query<ExpiringQuery>,
+) -> Result<StatusCode, ApiError> {
+    match ExpiringView::parse(query.view.as_deref()) {
+        Some(ExpiringView::Active) => {
+            let _ = lookup_expiring_active(&state, &query).await?;
+            Ok(StatusCode::OK)
+        }
+        Some(ExpiringView::Soon) => {
+            let _ = lookup_expiring_soon(&state, &query).await?;
+            Ok(StatusCode::OK)
+        }
+        None => Err(ApiError::invalid_view()),
+    }
 }
 
 async fn get_singleton(

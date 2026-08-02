@@ -1,0 +1,5 @@
+{
+  "code": "invalid_view",
+  "message": "Expiring view must be exactly active or soon",
+  "request_id": "FIXED_REQUEST_ID"
+}
