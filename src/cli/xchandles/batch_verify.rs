@@ -167,10 +167,10 @@ pub fn expected_observations_from_bundle_rows(
 
 /// Index observations by Handle while recording duplicate keys that would
 /// otherwise be silently collapsed by a map.
-fn index_unique_by_handle<'a, T, F>(
-    rows: &'a [T],
+fn index_unique_by_handle<T, F>(
+    rows: &[T],
     handle_of: F,
-) -> (BTreeMap<&'a str, &'a T>, Vec<String>)
+) -> (BTreeMap<&str, &T>, Vec<String>)
 where
     F: Fn(&T) -> &str,
 {
@@ -612,7 +612,7 @@ pub fn new_pending_batch_spend(
         batch_id,
         phase: phase.to_string(),
         handles,
-        input_coin_ids: input_coin_ids.into_iter().map(|id| hex::encode(id)).collect(),
+        input_coin_ids: input_coin_ids.into_iter().map(hex::encode).collect(),
         spend_bundle,
     }
 }

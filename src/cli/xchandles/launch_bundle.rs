@@ -11,6 +11,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::{Datelike, TimeZone, Utc};
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::{
     types::puzzles::{HandleNftMetadata, ANY_METADATA_UPDATER_HASH},
@@ -47,53 +48,32 @@ fn unix_now_secs() -> Result<u64, CliError> {
         .map_err(|e| CliError::Custom(format!("system clock before unix epoch: {e}")))
 }
 
-/// UTC `(year, month, day)` for a Unix timestamp (Howard Hinnant's civil-from-days).
-fn civil_ymd_from_unix(secs: u64) -> (i32, u32, u32) {
-    let z = (secs / 86_400) as i64 + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y = (yoe as i64) + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32;
-    let y = (y + if m <= 2 { 1 } else { 0 }) as i32;
-    (y, m, d)
-}
-
-fn unix_from_civil_ymd(year: i32, month: u32, day: u32) -> u64 {
-    let y = year as i64 - if month <= 2 { 1 } else { 0 };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = (y - era * 400) as u64;
-    let mp = (month as u64) + if month > 2 { 0 } else { 12 } - 3;
-    let doy = (153 * mp + 2) / 5 + (day as u64) - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let z = (era * 146_097 + doe as i64) - 719_468;
-    (z as u64).saturating_mul(86_400)
-}
-
 /// Buffered "past" reference for premine `buy_time`: UTC midnight on the 1st of the
 /// month containing `now_secs`, except when `now` falls on the 1st — then use the
 /// previous month's 1st so precommit vs deploy within that day cannot flip `n`.
 pub fn buy_time_past_reference(now_secs: u64) -> u64 {
-    let (y, m, d) = civil_ymd_from_unix(now_secs);
-    let (y, m) = if d == 1 {
-        if m == 1 {
-            (y - 1, 12)
-        } else {
-            (y, m - 1)
-        }
+    let now = Utc
+        .timestamp_opt(now_secs as i64, 0)
+        .single()
+        .expect("unix seconds fit chrono DateTime");
+    let (y, m) = if now.day() == 1 {
+        let prev = now - chrono::Months::new(1);
+        (prev.year(), prev.month())
     } else {
-        (y, m)
+        (now.year(), now.month())
     };
-    unix_from_civil_ymd(y, m, 1)
+    Utc.with_ymd_and_hms(y, m, 1, 0, 0, 0)
+        .single()
+        .expect("first of month is a valid UTC datetime")
+        .timestamp() as u64
 }
 
 /// Lowest `n >= 1` such that `expiration - n * REGISTRATION_PERIOD` is strictly
 /// before [`buy_time_past_reference`]. Handles that expire far ahead (e.g. ~2030)
 /// therefore use `n > 1`.
-pub fn premine_buy_time(expiration: u64, now_secs: u64) -> Result<u64, CliError> {
+///
+/// After choosing `n`, asserts `buy_time + n * REGISTRATION_PERIOD == expiration`.
+pub fn premine_buy_time(expiration: u64, now_secs: u64) -> Result<(u64, u64), CliError> {
     let reference = buy_time_past_reference(now_secs);
     if expiration < REGISTRATION_PERIOD {
         return Err(CliError::Custom(format!(
@@ -113,7 +93,15 @@ pub fn premine_buy_time(expiration: u64, now_secs: u64) -> Result<u64, CliError>
             )));
         };
         if buy_time < reference {
-            return Ok(buy_time);
+            let reconstituted = buy_time
+                .checked_add(span)
+                .ok_or_else(|| CliError::Custom("buy_time + n*period overflow".into()))?;
+            if reconstituted != expiration {
+                return Err(CliError::Custom(format!(
+                    "buy_time invariant failed: {buy_time} + {n}*{REGISTRATION_PERIOD} = {reconstituted}, expected {expiration}"
+                )));
+            }
+            return Ok((buy_time, n));
         }
         n = n.checked_add(1).ok_or_else(|| {
             CliError::Custom(format!(
@@ -366,7 +354,7 @@ pub fn generate_premine_launch_bundle_at(
         }
         let recipient_ph = address.puzzle_hash;
 
-        let buy_time = premine_buy_time(row.expiration, now_secs).map_err(|e| {
+        let (buy_time, _num_periods) = premine_buy_time(row.expiration, now_secs).map_err(|e| {
             CliError::Custom(format!("buy_time for {handle}: {e}"))
         })?;
 
@@ -670,21 +658,24 @@ mod tests {
     #[test]
     fn premine_buy_time_picks_lowest_n_in_the_past() {
         // Contributor expiry needs n=2 against the Aug-2026 buffer.
+        let (buy, n) = premine_buy_time(CONTRIBUTION_PREMINE_EXPIRATION, GEN_NOW).unwrap();
+        assert_eq!(n, 2);
         assert_eq!(
-            premine_buy_time(CONTRIBUTION_PREMINE_EXPIRATION, GEN_NOW).unwrap(),
+            buy,
             CONTRIBUTION_PREMINE_EXPIRATION - 2 * REGISTRATION_PERIOD
         );
+        assert_eq!(buy + n * REGISTRATION_PERIOD, CONTRIBUTION_PREMINE_EXPIRATION);
         // Nearer expiries still use n=1.
-        assert_eq!(
-            premine_buy_time(1_797_757_200, GEN_NOW).unwrap(),
-            1_797_757_200 - REGISTRATION_PERIOD
-        );
+        let (buy, n) = premine_buy_time(1_797_757_200, GEN_NOW).unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(buy, 1_797_757_200 - REGISTRATION_PERIOD);
+        assert_eq!(buy + n * REGISTRATION_PERIOD, 1_797_757_200);
         // Far ~2030 expiry needs n>1.
         let far = 1_893_456_000u64;
-        let buy = premine_buy_time(far, GEN_NOW).unwrap();
+        let (buy, n) = premine_buy_time(far, GEN_NOW).unwrap();
         assert!(buy < buy_time_past_reference(GEN_NOW));
-        assert_eq!((far - buy) % REGISTRATION_PERIOD, 0);
-        assert!((far - buy) / REGISTRATION_PERIOD >= 2);
+        assert!(n >= 2);
+        assert_eq!(buy + n * REGISTRATION_PERIOD, far);
     }
 
     #[test]
@@ -822,10 +813,8 @@ mod tests {
                 .contains("invalid Handle")
         );
 
-        let txch = format!(
-            "handle,recipient,expiration,allocation_type,allocation_explanation\n\
-             alice,txch1we8f6e6d97jyru8klr79uay6zlw7x30tuj3n2d4060h5z73l3jgqg5g78p,1818752400,contributor,https://example.com/a\n"
-        );
+        let txch = "handle,recipient,expiration,allocation_type,allocation_explanation\n\
+             alice,txch1we8f6e6d97jyru8klr79uay6zlw7x30tuj3n2d4060h5z73l3jgqg5g78p,1818752400,contributor,https://example.com/a\n".to_string();
         assert!(
             generate_premine_launch_bundle_at(txch.as_bytes(), true, GEN_NOW)
                 .unwrap_err()

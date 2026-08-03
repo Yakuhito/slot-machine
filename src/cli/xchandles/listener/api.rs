@@ -278,8 +278,8 @@ fn select_registry(
             .copied()
             .ok_or_else(ApiError::registry_not_followed),
         Some(raw) => {
-            let id = parse_launcher_id(raw).map_err(|_| ApiError::invalid_launcher_id())?;
-            if state.registry_launcher_ids.iter().any(|r| *r == id) {
+            let id = parse_launcher_id(raw).ok_or_else(ApiError::invalid_launcher_id)?;
+            if state.registry_launcher_ids.contains(&id) {
                 Ok(id)
             } else {
                 Err(ApiError::registry_not_followed())
@@ -682,7 +682,7 @@ async fn get_singleton(
     Query(query): Query<SingletonQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let launcher_id =
-        parse_launcher_id(&launcher_id_raw).map_err(|_| ApiError::invalid_launcher_id())?;
+        parse_launcher_id(&launcher_id_raw).ok_or_else(ApiError::invalid_launcher_id)?;
     let body = lookup_singleton(&state, launcher_id, query.include_metadata).await?;
     Ok(Json(body))
 }
@@ -693,7 +693,7 @@ async fn head_singleton(
     Query(query): Query<SingletonQuery>,
 ) -> Result<StatusCode, ApiError> {
     let launcher_id =
-        parse_launcher_id(&launcher_id_raw).map_err(|_| ApiError::invalid_launcher_id())?;
+        parse_launcher_id(&launcher_id_raw).ok_or_else(ApiError::invalid_launcher_id)?;
     let _ = lookup_singleton(&state, launcher_id, query.include_metadata).await?;
     Ok(StatusCode::OK)
 }

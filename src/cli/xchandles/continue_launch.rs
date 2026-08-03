@@ -51,6 +51,34 @@ fn precommit_value_for_handle(
     payment_asset_id: Bytes32,
     registration_period: u64,
 ) -> Result<XchandlesPrecommitValue, CliError> {
+    let span = handle
+        .expiration
+        .checked_sub(handle.buy_time)
+        .ok_or_else(|| {
+            CliError::Custom(format!(
+                "handle {} expiration {} before buy_time {}",
+                handle.handle, handle.expiration, handle.buy_time
+            ))
+        })?;
+    if span % registration_period != 0 {
+        return Err(CliError::Custom(format!(
+            "handle {} expiration-buy_time {} not divisible by registration_period {}",
+            handle.handle, span, registration_period
+        )));
+    }
+    let num_periods = span / registration_period;
+    if num_periods == 0 {
+        return Err(CliError::Custom(format!(
+            "handle {} num_periods resolved to 0",
+            handle.handle
+        )));
+    }
+    if handle.buy_time + num_periods * registration_period != handle.expiration {
+        return Err(CliError::Custom(format!(
+            "handle {} buy_time + n*period != expiration",
+            handle.handle
+        )));
+    }
     Ok(XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
         XchandlesFactorPricingPuzzleArgs {
@@ -62,7 +90,7 @@ fn precommit_value_for_handle(
             buy_time: handle.buy_time,
             current_expiration: 0,
             handle: handle.handle.clone(),
-            num_periods: 1,
+            num_periods,
         },
         handle.handle.clone(),
         Bytes32::default(),
@@ -164,14 +192,17 @@ async fn maybe_reuse_pending_batch_spend(
 
 async fn persist_and_push_batch_spend(
     client: &CoinsetClient,
-    registry_launcher_id: Bytes32,
-    batch_id: u32,
-    phase: &str,
-    handles: &[LaunchHandle],
-    input_coin_ids: Vec<Bytes32>,
-    sb: SpendBundle,
-    confirm_coin_id: Bytes32,
+    args: PersistBatchSpendArgs<'_>,
 ) -> Result<(), CliError> {
+    let PersistBatchSpendArgs {
+        registry_launcher_id,
+        batch_id,
+        phase,
+        handles,
+        input_coin_ids,
+        sb,
+        confirm_coin_id,
+    } = args;
     let path = default_pending_batch_spend_path(batch_id, phase);
     let record = new_pending_batch_spend(
         registry_launcher_id,
@@ -192,6 +223,16 @@ async fn persist_and_push_batch_spend(
         clear_pending_batch_spend(&path)?;
     }
     Ok(())
+}
+
+struct PersistBatchSpendArgs<'a> {
+    registry_launcher_id: Bytes32,
+    batch_id: u32,
+    phase: &'a str,
+    handles: &'a [LaunchHandle],
+    input_coin_ids: Vec<Bytes32>,
+    sb: SpendBundle,
+    confirm_coin_id: Bytes32,
 }
 
 async fn verify_registered_batches_or_stop(
@@ -799,13 +840,15 @@ pub async fn xchandles_continue_launch(
             let input_coin_ids = spend_bundle_input_coin_ids(&sb);
             persist_and_push_batch_spend(
                 &client,
-                registry.info.constants.launcher_id,
-                current_batch_id,
-                "mint_precommit",
-                mint_handles,
-                input_coin_ids,
-                sb,
-                confirm_coin,
+                PersistBatchSpendArgs {
+                    registry_launcher_id: registry.info.constants.launcher_id,
+                    batch_id: current_batch_id,
+                    phase: "mint_precommit",
+                    handles: mint_handles,
+                    input_coin_ids,
+                    sb,
+                    confirm_coin_id: confirm_coin,
+                },
             )
             .await?;
 
@@ -841,7 +884,7 @@ pub async fn xchandles_continue_launch(
     let mut eve_nfts = Vec::with_capacity(handles.len());
     let mut destination_puzzle_hashes = Vec::with_capacity(handles.len());
 
-    for (_index, handle) in handles.iter().enumerate() {
+    for handle in handles.iter() {
         let Some(eve_nft) = eve_nft_for_handle(
             &mut ctx,
             &client,
@@ -1165,13 +1208,15 @@ pub async fn xchandles_continue_launch(
     let input_coin_ids = spend_bundle_input_coin_ids(&sb);
     persist_and_push_batch_spend(
         &client,
-        launcher_id,
-        register_batch_id,
-        "register",
-        &handles,
-        input_coin_ids,
-        sb,
-        confirm_coin,
+        PersistBatchSpendArgs {
+            registry_launcher_id: launcher_id,
+            batch_id: register_batch_id,
+            phase: "register",
+            handles: &handles,
+            input_coin_ids,
+            sb,
+            confirm_coin_id: confirm_coin,
+        },
     )
     .await?;
 

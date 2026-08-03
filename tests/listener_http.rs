@@ -437,7 +437,7 @@ async fn discovery_follow_melt_rollback_cleanup_and_rediscovery() -> anyhow::Res
     let mut allocator = Allocator::new();
     let found = discover_singleton_in_block(
         &mut allocator,
-        &[discovery_spend.clone()],
+        std::slice::from_ref(&discovery_spend),
         launcher_id,
         full,
         inner,
@@ -478,7 +478,7 @@ async fn discovery_follow_melt_rollback_cleanup_and_rediscovery() -> anyhow::Res
 
     let mut allocator = Allocator::new();
     indexer
-        .on_block(&mut allocator, 5, &[discovery_spend.clone()])
+        .on_block(&mut allocator, 5, std::slice::from_ref(&discovery_spend))
         .await
         .unwrap();
     let rec = store.get(launcher_id).await.unwrap();
@@ -536,7 +536,7 @@ async fn discovery_follow_melt_rollback_cleanup_and_rediscovery() -> anyhow::Res
     let mut allocator = Allocator::new();
     let again = discover_singleton_in_block(
         &mut allocator,
-        &[discovery_spend.clone()],
+        std::slice::from_ref(&discovery_spend),
         launcher_id,
         full,
         inner,

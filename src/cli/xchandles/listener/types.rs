@@ -218,16 +218,16 @@ pub fn hex32(id: Bytes32) -> String {
     hex::encode(id.to_bytes())
 }
 
-pub fn parse_launcher_id(raw: &str) -> Result<Bytes32, ()> {
+pub fn parse_launcher_id(raw: &str) -> Option<Bytes32> {
     let raw = raw.strip_prefix("0x").unwrap_or(raw);
     if raw.len() != 64 {
-        return Err(());
+        return None;
     }
-    let bytes = hex::decode(raw).map_err(|_| ())?;
+    let bytes = hex::decode(raw).ok()?;
     if bytes.len() != 32 {
-        return Err(());
+        return None;
     }
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&bytes);
-    Ok(Bytes32::new(arr))
+    Some(Bytes32::new(arr))
 }

@@ -74,11 +74,7 @@ fn premium_after_elapsed(elapsed: u64) -> u64 {
         }
     }
 
-    if premium > end_value {
-        premium - end_value
-    } else {
-        0
-    }
+    premium.saturating_sub(end_value)
 }
 
 /// Total registration fee = one-year base + current auction premium.

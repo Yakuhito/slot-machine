@@ -67,7 +67,7 @@ pub enum DiscoveryResult {
     /// Zero matching odd singleton children — retryable incomplete state.
     Incomplete,
     /// Exactly one match.
-    Found(DiscoveredSingleton),
+    Found(Box<DiscoveredSingleton>),
     /// Multiple matches — integrity failure.
     Mismatch,
 }
@@ -100,7 +100,7 @@ pub fn discover_singleton_in_block(
 
     Ok(match matches.len() {
         0 => DiscoveryResult::Incomplete,
-        1 => DiscoveryResult::Found(matches.remove(0)),
+        1 => DiscoveryResult::Found(Box::new(matches.remove(0))),
         _ => DiscoveryResult::Mismatch,
     })
 }
