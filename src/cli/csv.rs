@@ -168,11 +168,16 @@ pub fn load_xchandles_state_schedule_csv<P: AsRef<Path>>(
     Ok(records)
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct XchandlesPremineRecord {
+/// Enriched launch CSV row produced by `xchandles-nfts enrich-premine`.
+///
+/// Columns:
+/// `handle,recipient,expiration,image_uris,image_hash,metadata_uris,metadata_hash,license_uris,license_hash`
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+pub struct XchandlesLaunchRecord {
     pub handle: String,
     #[serde(deserialize_with = "decode_bech32m")]
     pub recipient: Bytes32,
+    pub expiration: u64,
     #[serde(deserialize_with = "deserialize_string_array")]
     pub image_uris: Vec<String>,
     #[serde(deserialize_with = "hex_string_to_bytes32")]
@@ -187,15 +192,16 @@ pub struct XchandlesPremineRecord {
     pub license_hash: Bytes32,
 }
 
-pub fn load_xchandles_premine_csv<P: AsRef<Path>>(
+/// Load a trusted enriched launch CSV (with per-row `expiration`).
+pub fn load_xchandles_launch_csv<P: AsRef<Path>>(
     path: P,
-) -> Result<Vec<XchandlesPremineRecord>, CliError> {
+) -> Result<Vec<XchandlesLaunchRecord>, CliError> {
     let file = File::open(path)?;
     let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
 
     let mut records = Vec::new();
     for result in rdr.deserialize() {
-        let record: XchandlesPremineRecord = result.map_err(CliError::Csv)?;
+        let record: XchandlesLaunchRecord = result.map_err(CliError::Csv)?;
         records.push(record);
     }
 
@@ -328,6 +334,38 @@ mod tests {
         let err = load_xchandles_state_schedule_csv(&path);
         let _ = fs::remove_file(&path);
 
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn launch_csv_loads_expiration_and_media_columns() {
+        let path = write_temp_csv(
+            "handle,recipient,expiration,image_uris,image_hash,metadata_uris,metadata_hash,license_uris,license_hash\n\
+             \"alice\",\"txch1we8f6e6d97jyru8klr79uay6zlw7x30tuj3n2d4060h5z73l3jgqg5g78p\",1818752400,\"['https://example.com/a.png']\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"['https://example.com/a.json']\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"['https://example.com/l.pdf']\",\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"\n\
+             \"bob\",\"txch1we8f6e6d97jyru8klr79uay6zlw7x30tuj3n2d4060h5z73l3jgqg5g78p\",1797757200,\"['https://example.com/b.png']\",\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"['https://example.com/b.json']\",\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"['https://example.com/l.pdf']\",\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"\n",
+        );
+
+        let records = load_xchandles_launch_csv(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].handle, "alice");
+        assert_eq!(records[0].expiration, 1_818_752_400);
+        assert_eq!(records[0].image_uris, vec!["https://example.com/a.png"]);
+        assert_eq!(records[1].handle, "bob");
+        assert_eq!(records[1].expiration, 1_797_757_200);
+        assert_eq!(records[1].metadata_uris, vec!["https://example.com/b.json"]);
+    }
+
+    #[test]
+    fn launch_csv_rejects_missing_expiration_column() {
+        let path = write_temp_csv(
+            "handle,recipient,image_uris,image_hash,metadata_uris,metadata_hash,license_uris,license_hash\n\
+             \"alice\",\"txch1we8f6e6d97jyru8klr79uay6zlw7x30tuj3n2d4060h5z73l3jgqg5g78p\",\"['https://example.com/a.png']\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"['https://example.com/a.json']\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"['https://example.com/l.pdf']\",\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"\n",
+        );
+
+        let err = load_xchandles_launch_csv(&path);
+        let _ = fs::remove_file(&path);
         assert!(err.is_err());
     }
 }

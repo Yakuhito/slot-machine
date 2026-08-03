@@ -31,54 +31,20 @@ use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, classify_pending_input_state, clear_pending_batch_spend,
-    confirm_pushed_transaction, decide_batch_retry, default_mainnet_bundle_path,
-    default_mainnet_plan_path, default_pending_batch_spend_path, default_testnet11_bundle_path,
-    default_testnet11_plan_path, emit_pre_broadcast_plan, finality_reached, get_prefix,
-    hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature,
-    launch_handles_from_bundle, load_pending_batch_spend, load_premine_launch_bundle,
-    new_pending_batch_spend, no_assets, parse_amount, reorganization_invalidates_finality,
-    spend_bundle_input_coin_ids, sync_xchandles, verify_premine_set_against_bundle,
-    write_pending_batch_spend, yes_no_prompt, BatchRetryDecision, CliError, Db, InputCoinState,
-    LaunchHandle, SageClient, VerificationPhase, PREMINE_FINALITY_DEPTH,
+    assert_batch_csv_expirations, assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction,
+    get_prefix, hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature,
+    load_xchandles_launch_csv, no_assets, parse_amount, sync_xchandles, unix_now_secs,
+    yes_no_prompt, CliError, Db, SageClient, XchandlesLaunchRecord,
 };
-use std::collections::BTreeMap;
-use std::path::Path;
 
 fn precommit_value_for_handle(
-    handle: &LaunchHandle,
+    handle: &XchandlesLaunchRecord,
     handle_nft_launcher_id: Bytes32,
     payment_asset_id: Bytes32,
+    buy_time: u64,
+    num_periods: u64,
     registration_period: u64,
 ) -> Result<XchandlesPrecommitValue, CliError> {
-    let span = handle
-        .expiration
-        .checked_sub(handle.buy_time)
-        .ok_or_else(|| {
-            CliError::Custom(format!(
-                "handle {} expiration {} before buy_time {}",
-                handle.handle, handle.expiration, handle.buy_time
-            ))
-        })?;
-    if span % registration_period != 0 {
-        return Err(CliError::Custom(format!(
-            "handle {} expiration-buy_time {} not divisible by registration_period {}",
-            handle.handle, span, registration_period
-        )));
-    }
-    let num_periods = span / registration_period;
-    if num_periods == 0 {
-        return Err(CliError::Custom(format!(
-            "handle {} num_periods resolved to 0",
-            handle.handle
-        )));
-    }
-    if handle.buy_time + num_periods * registration_period != handle.expiration {
-        return Err(CliError::Custom(format!(
-            "handle {} buy_time + n*period != expiration",
-            handle.handle
-        )));
-    }
     Ok(XchandlesPrecommitValue::for_normal_registration(
         payment_asset_id.tree_hash(),
         XchandlesFactorPricingPuzzleArgs {
@@ -87,7 +53,7 @@ fn precommit_value_for_handle(
         }
         .curry_tree_hash(),
         &XchandlesPricingSolution {
-            buy_time: handle.buy_time,
+            buy_time,
             current_expiration: 0,
             handle: handle.handle.clone(),
             num_periods,
@@ -99,7 +65,7 @@ fn precommit_value_for_handle(
     ))
 }
 
-pub fn metadata_for_handle_nft(handle_info: &LaunchHandle) -> HandleNftMetadata {
+pub fn metadata_for_handle_nft(handle_info: &XchandlesLaunchRecord) -> HandleNftMetadata {
     HandleNftMetadata {
         display_name: Some(handle_info.handle.clone()),
         image_uris: handle_info.image_uris.clone(),
@@ -111,228 +77,12 @@ pub fn metadata_for_handle_nft(handle_info: &LaunchHandle) -> HandleNftMetadata 
     }
 }
 
-async fn input_coin_states_for_pending(
-    client: &CoinsetClient,
-    pending: &crate::PendingBatchSpendRecord,
-) -> Result<BTreeMap<String, InputCoinState>, CliError> {
-    let mut states = BTreeMap::new();
-
-    for coin_hex in &pending.input_coin_ids {
-        let coin_id = hex_string_to_bytes32(coin_hex)?;
-        let pending_cs = pending
-            .spend_bundle
-            .coin_spends
-            .iter()
-            .find(|cs| cs.coin.coin_id() == coin_id);
-
-        let Some(record) = client.get_coin_record_by_name(coin_id).await?.coin_record else {
-            states.insert(
-                coin_hex.clone(),
-                classify_pending_input_state(false, true, pending_cs, None),
-            );
-            continue;
-        };
-        if !record.spent {
-            states.insert(
-                coin_hex.clone(),
-                classify_pending_input_state(true, false, pending_cs, None),
-            );
-            continue;
-        }
-
-        let on_chain = client
-            .get_puzzle_and_solution(coin_id, Some(record.spent_block_index))
-            .await?
-            .coin_solution;
-        states.insert(
-            coin_hex.clone(),
-            classify_pending_input_state(true, true, pending_cs, on_chain.as_ref()),
-        );
-    }
-    Ok(states)
-}
-
-async fn maybe_reuse_pending_batch_spend(
-    client: &CoinsetClient,
-    batch_id: u32,
-    phase: &str,
-) -> Result<Option<chia_protocol::SpendBundle>, CliError> {
-    let path = default_pending_batch_spend_path(batch_id, phase);
-    let Some(pending) = load_pending_batch_spend(&path)? else {
-        return Ok(None);
-    };
-    let states = input_coin_states_for_pending(client, &pending).await?;
-    match decide_batch_retry(Some(&pending), &states) {
-        BatchRetryDecision::ReuseIdentical(record) => {
-            println!(
-                "Reusing identical pending {} spend for batch {} (inputs still unspent).",
-                phase, batch_id
-            );
-            Ok(Some(record.spend_bundle))
-        }
-        BatchRetryDecision::AlreadyApplied(_) => {
-            println!(
-                "Pending {} spend for batch {} already applied; clearing pending record.",
-                phase, batch_id
-            );
-            clear_pending_batch_spend(&path)?;
-            Ok(None)
-        }
-        BatchRetryDecision::Conflict(report) => {
-            let json = serde_json::to_string_pretty(&report).map_err(|e| {
-                CliError::Custom(format!("conflict report serialize failed: {e}"))
-            })?;
-            Err(CliError::Custom(format!(
-                "spent/conflicting input stops blind retry for batch {batch_id} phase {phase}:\n{json}"
-            )))
-        }
-        BatchRetryDecision::ConstructFresh => Ok(None),
-    }
-}
-
-async fn persist_and_push_batch_spend(
-    client: &CoinsetClient,
-    args: PersistBatchSpendArgs<'_>,
-) -> Result<(), CliError> {
-    let PersistBatchSpendArgs {
-        registry_launcher_id,
-        batch_id,
-        phase,
-        handles,
-        input_coin_ids,
-        sb,
-        confirm_coin_id,
-    } = args;
-    let path = default_pending_batch_spend_path(batch_id, phase);
-    let record = new_pending_batch_spend(
-        registry_launcher_id,
-        batch_id,
-        phase,
-        handles.iter().map(|h| h.handle.clone()).collect(),
-        input_coin_ids,
-        sb.clone(),
-    );
-    write_pending_batch_spend(&path, &record)?;
-    println!("Persisted identical-retry spend to {path}");
-
-    println!("Submitting transaction...");
-    let resp = client.push_tx(sb).await?;
-
-    if confirm_pushed_transaction(client, &resp, confirm_coin_id, true).await? {
-        println!("Confirmed!");
-        clear_pending_batch_spend(&path)?;
-    }
-    Ok(())
-}
-
-struct PersistBatchSpendArgs<'a> {
-    registry_launcher_id: Bytes32,
-    batch_id: u32,
-    phase: &'a str,
-    handles: &'a [LaunchHandle],
-    input_coin_ids: Vec<Bytes32>,
-    sb: SpendBundle,
-    confirm_coin_id: Bytes32,
-}
-
-async fn verify_registered_batches_or_stop(
-    client: &CoinsetClient,
-    ctx: &mut SpendContext,
-    launcher_id: Bytes32,
-    bundle: &crate::PremineLaunchBundle,
-    through_batch_id: u32,
-) -> Result<(), CliError> {
-    println!(
-        "Running canonical Premine verification through batch {through_batch_id}..."
-    );
-    let (canonical, confirm_height) = verify_premine_set_against_bundle(
-        client,
-        ctx,
-        launcher_id,
-        bundle,
-        Some(through_batch_id),
-        VerificationPhase::Canonical,
-    )
-    .await?;
-    println!("{}", canonical.to_machine_readable_json()?);
-    canonical.gate_later_batches()?;
-
-    let Some(mut anchor_height) = confirm_height else {
-        return Err(CliError::Custom(
-            "canonical verification succeeded but confirmation height is unknown".to_string(),
-        ));
-    };
-
-    loop {
-        println!(
-            "Waiting for {PREMINE_FINALITY_DEPTH}-block finality above height {anchor_height} before allowing later batches..."
-        );
-        loop {
-            let resp = client.get_blockchain_state().await?;
-            let Some(state) = resp.blockchain_state else {
-                return Err(CliError::Custom(
-                    "Failed to get blockchain state while waiting for batch finality".to_string(),
-                ));
-            };
-            if finality_reached(anchor_height, state.peak.height) {
-                break;
-            }
-            println!(
-                "Peak #{}; need {} more blocks...",
-                state.peak.height,
-                PREMINE_FINALITY_DEPTH
-                    .saturating_sub(state.peak.height.saturating_sub(anchor_height))
-            );
-            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-        }
-
-        println!("Re-running final Premine verification through batch {through_batch_id}...");
-        let (final_report, current_confirm_height) = verify_premine_set_against_bundle(
-            client,
-            ctx,
-            launcher_id,
-            bundle,
-            Some(through_batch_id),
-            VerificationPhase::Final,
-        )
-        .await?;
-        println!("{}", final_report.to_machine_readable_json()?);
-        final_report.gate_later_batches()?;
-
-        let resp = client.get_blockchain_state().await?;
-        let Some(state) = resp.blockchain_state else {
-            return Err(CliError::Custom(
-                "Failed to get blockchain state after final Premine verification".to_string(),
-            ));
-        };
-        if !reorganization_invalidates_finality(
-            anchor_height,
-            current_confirm_height,
-            state.peak.height,
-        ) {
-            println!("Batch {through_batch_id} final verification OK; later batches may proceed.");
-            return Ok(());
-        }
-
-        let Some(reanchored) = current_confirm_height else {
-            return Err(CliError::Custom(format!(
-                "reorganization orphaned Premine batch {through_batch_id} before finality"
-            )));
-        };
-        println!(
-            "Reorganization invalidated finality (anchor={anchor_height}, current={reanchored}, peak={}); re-anchoring.",
-            state.peak.height
-        );
-        anchor_height = reanchored;
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn eve_nft_for_handle(
     ctx: &mut SpendContext,
     client: &CoinsetClient,
     registry_launcher_id: Bytes32,
-    handle: &LaunchHandle,
+    handle: &XchandlesLaunchRecord,
     royalty_puzzle_hash: Bytes32,
     royalty_basis_points: u16,
     eve_nft_temp_inner_ph: Bytes32,
@@ -425,7 +175,7 @@ pub async fn xchandles_continue_launch(
     royalty_address: String,
     royalty_basis_points: u16,
     handles_per_spend: usize,
-    start_time: Option<u64>,
+    premine: String,
     registration_period: u64,
     testnet11: bool,
     fee_str: String,
@@ -453,49 +203,9 @@ pub async fn xchandles_continue_launch(
     }
     println!("Time to unroll an XCHandles registry! Yee-haw!");
 
-    let bundle_path = if testnet11 {
-        default_testnet11_bundle_path()
-    } else {
-        default_mainnet_bundle_path()
-    };
-
-    println!("Loading Premine Launch Bundle from '{}'...", bundle_path);
-    let bundle = load_premine_launch_bundle(bundle_path)?;
-    if handles_per_spend != bundle.handles_per_batch {
-        return Err(CliError::Custom(format!(
-            "handles_per_spend ({handles_per_spend}) must match bundle handles_per_batch ({})",
-            bundle.handles_per_batch
-        )));
-    }
-    if registration_period != bundle.registration_period {
-        return Err(CliError::Custom(format!(
-            "registration_period ({registration_period}) must match bundle ({})",
-            bundle.registration_period
-        )));
-    }
-    if start_time.is_some() {
-        println!(
-            "Ignoring --start-time; Premine Launch Bundle rows carry per-handle buy_time/expiration."
-        );
-    }
-    let handles_to_launch = launch_handles_from_bundle(&bundle)?;
-    println!(
-        "Loaded {} handles from launch bundle (handles_per_batch={}).",
-        handles_to_launch.len(),
-        bundle.handles_per_batch
-    );
-
-    let plan_path = if testnet11 {
-        Path::new(default_testnet11_plan_path())
-    } else {
-        Path::new(default_mainnet_plan_path())
-    };
-    let plan = emit_pre_broadcast_plan(&bundle, Some(plan_path))?;
-    println!(
-        "Pre-broadcast plan ready: {} rows in {} batches.",
-        plan.total_rows,
-        plan.batches.len()
-    );
+    println!("Loading enriched launch CSV from '{}'...", premine);
+    let handles_to_launch = load_xchandles_launch_csv(&premine)?;
+    println!("Loaded {} handles from launch CSV.", handles_to_launch.len());
 
     println!("Initializing Chia RPC client...");
     let client = if testnet11 {
@@ -539,69 +249,6 @@ pub async fn xchandles_continue_launch(
         return Ok(());
     }
 
-    let current_batch_id = handles_to_launch[i].batch_id;
-    if current_batch_id > 0 {
-        // Prior batches must pass final verification before constructing the next.
-        verify_registered_batches_or_stop(
-            &client,
-            &mut ctx,
-            launcher_id,
-            &bundle,
-            current_batch_id - 1,
-        )
-        .await?;
-    }
-
-    // Prefer identical pending spend for this batch before constructing a fresh one.
-    if let Some(sb) = maybe_reuse_pending_batch_spend(&client, current_batch_id, "mint_precommit")
-        .await?
-    {
-        let confirm_coin = sb
-            .coin_spends
-            .first()
-            .map(|cs| cs.coin.coin_id())
-            .ok_or_else(|| CliError::Custom("pending mint spend has no coin spends".to_string()))?;
-        println!("Submitting reused mint_precommit spend for batch {current_batch_id}...");
-        let resp = client.push_tx(sb).await?;
-        if confirm_pushed_transaction(&client, &resp, confirm_coin, true).await? {
-            println!("Confirmed reused mint_precommit!");
-            clear_pending_batch_spend(default_pending_batch_spend_path(
-                current_batch_id,
-                "mint_precommit",
-            ))?;
-        }
-        return Ok(());
-    }
-    if let Some(sb) =
-        maybe_reuse_pending_batch_spend(&client, current_batch_id, "register").await?
-    {
-        let confirm_coin = sb
-            .coin_spends
-            .first()
-            .map(|cs| cs.coin.coin_id())
-            .ok_or_else(|| {
-                CliError::Custom("pending register spend has no coin spends".to_string())
-            })?;
-        println!("Submitting reused register spend for batch {current_batch_id}...");
-        let resp = client.push_tx(sb).await?;
-        if confirm_pushed_transaction(&client, &resp, confirm_coin, true).await? {
-            println!("Confirmed reused register!");
-            clear_pending_batch_spend(default_pending_batch_spend_path(
-                current_batch_id,
-                "register",
-            ))?;
-            verify_registered_batches_or_stop(
-                &client,
-                &mut ctx,
-                launcher_id,
-                &bundle,
-                current_batch_id,
-            )
-            .await?;
-        }
-        return Ok(());
-    }
-
     let payment_asset_id = Bytes32::new(hex_string_to_bytes32(&payment_asset_id_str)?.into());
 
     let sage = SageClient::new()?;
@@ -617,6 +264,8 @@ pub async fn xchandles_continue_launch(
         Address::decode(&derivation_resp.derivations[0].address)?.puzzle_hash;
 
     let constants = registry.info.constants;
+    let now_secs = unix_now_secs()?;
+    println!("Using premine timing clock (unix now): {}", now_secs);
 
     if i == 0 {
         println!("No handles registered yet - looking for precommitment coins...");
@@ -652,29 +301,32 @@ pub async fn xchandles_continue_launch(
                 "Some precommitment coins were not launched yet - they correspond to these handles:"
             );
 
+            // Collect this batch and fail-closed on expiration reconstitution before any spend.
+            let mut handle_infos = Vec::with_capacity(handles_per_spend);
             let mut j = i;
             while j < handles_to_launch.len() && j - i < handles_per_spend {
                 println!(
-                    "  handle: {:}, recipient: {:}, image_uris: {:?}",
+                    "  handle: {:}, recipient: {:}, expiration: {}, image_uris: {:?}",
                     handles_to_launch[j].handle,
                     Address::new(handles_to_launch[j].recipient, get_prefix(testnet11)).encode()?,
+                    handles_to_launch[j].expiration,
                     handles_to_launch[j].image_uris.join("|")
                 );
+                handle_infos.push(handles_to_launch[j].clone());
                 j += 1;
             }
 
-            // (inner puzzle hash, amount)
-            let mut handles_payment_total = 0;
-            let mut handle_infos = Vec::with_capacity(handles_per_spend);
-            j = i;
-            while j < handles_to_launch.len() && j - i < handles_per_spend {
-                let handle_reg_price =
-                    XchandlesFactorPricingPuzzleArgs::get_price(1, &handles_to_launch[j].handle, 1);
+            let batch_rows: Vec<(String, u64)> = handle_infos
+                .iter()
+                .map(|h| (h.handle.clone(), h.expiration))
+                .collect();
+            let batch_timings =
+                assert_batch_csv_expirations(&batch_rows, now_secs, registration_period)?;
 
-                handles_payment_total += handle_reg_price;
-                handle_infos.push(handles_to_launch[j].clone());
-
-                j += 1;
+            let mut handles_payment_total = 0u64;
+            for (handle_info, &(_buy_time, n)) in handle_infos.iter().zip(batch_timings.iter()) {
+                handles_payment_total +=
+                    XchandlesFactorPricingPuzzleArgs::get_price(1, &handle_info.handle, n);
             }
 
             println!(
@@ -720,7 +372,9 @@ pub async fn xchandles_continue_launch(
             let mut security_coin_conditions = Conditions::new();
             let mut cat_creator_conds = Conditions::new();
 
-            for (index, handle_info) in handle_infos.into_iter().enumerate() {
+            for (index, (handle_info, (buy_time, n))) in
+                handle_infos.into_iter().zip(batch_timings.iter().copied()).enumerate()
+            {
                 // unique hint per deployment to minimize confusions
                 let hint: Bytes32 = (
                     registry.info.constants.launcher_id,
@@ -737,9 +391,11 @@ pub async fn xchandles_continue_launch(
                 let launcher_id = launcher.coin().coin_id();
 
                 println!(
-                    "Handle {} will be represented by NFT {}",
+                    "Handle {} will be represented by NFT {} (buy_time={}, n={})",
                     handle_info.handle,
-                    Address::new(launcher_id, "nft".to_string()).encode()?
+                    Address::new(launcher_id, "nft".to_string()).encode()?,
+                    buy_time,
+                    n
                 );
 
                 let metadata = metadata_for_handle_nft(&handle_info);
@@ -758,12 +414,14 @@ pub async fn xchandles_continue_launch(
 
                 // Create precommitment coin
                 let handle_reg_price =
-                    XchandlesFactorPricingPuzzleArgs::get_price(1, &handle_info.handle, 1);
+                    XchandlesFactorPricingPuzzleArgs::get_price(1, &handle_info.handle, n);
 
                 let precommit_value = precommit_value_for_handle(
                     &handle_info,
                     launcher_id,
                     payment_asset_id,
+                    buy_time,
+                    n,
                     registration_period,
                 )?;
                 let precommit_value_ptr = ctx.alloc(&precommit_value)?;
@@ -835,22 +493,13 @@ pub async fn xchandles_continue_launch(
 
             // Build spend bundle
             let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
-            let mint_handles = &handles_to_launch[i..j];
-            let confirm_coin = security_coin.coin_id();
-            let input_coin_ids = spend_bundle_input_coin_ids(&sb);
-            persist_and_push_batch_spend(
-                &client,
-                PersistBatchSpendArgs {
-                    registry_launcher_id: registry.info.constants.launcher_id,
-                    batch_id: current_batch_id,
-                    phase: "mint_precommit",
-                    handles: mint_handles,
-                    input_coin_ids,
-                    sb,
-                    confirm_coin_id: confirm_coin,
-                },
-            )
-            .await?;
+
+            println!("Submitting transaction...");
+            let resp = client.push_tx(sb).await?;
+
+            if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+                println!("Confirmed!");
+            }
 
             return Ok(());
         } else {
@@ -866,15 +515,24 @@ pub async fn xchandles_continue_launch(
         i += 1;
     }
 
+    let batch_rows: Vec<(String, u64)> = handles
+        .iter()
+        .map(|h| (h.handle.clone(), h.expiration))
+        .collect();
+    let batch_timings = assert_batch_csv_expirations(&batch_rows, now_secs, registration_period)?;
+
     println!(
         "These handles will be launched (total number={}):",
         handles.len()
     );
-    for handle in &handles {
+    for (handle, &(buy_time, n)) in handles.iter().zip(batch_timings.iter()) {
         println!(
-            "  handle: {:}, recipient: {:}, image_uris: {:?}",
+            "  handle: {:}, recipient: {:}, expiration: {}, buy_time: {}, n: {}, image_uris: {:?}",
             handle.handle,
             Address::new(handle.recipient, get_prefix(testnet11)).encode()?,
+            handle.expiration,
+            buy_time,
+            n,
             handle.image_uris.join("|")
         );
     }
@@ -912,15 +570,26 @@ pub async fn xchandles_continue_launch(
     let precommit_values = handles
         .iter()
         .zip(eve_nfts.iter())
-        .map(|(handle, eve_nft)| {
+        .zip(batch_timings.iter())
+        .map(|((handle, eve_nft), &(buy_time, n))| {
             precommit_value_for_handle(
                 handle,
                 eve_nft.info.launcher_id,
                 payment_asset_id,
+                buy_time,
+                n,
                 registration_period,
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
+
+    let precommit_amounts: Vec<u64> = handles
+        .iter()
+        .zip(batch_timings.iter())
+        .map(|(handle, &(_buy_time, n))| {
+            XchandlesFactorPricingPuzzleArgs::get_price(1, &handle.handle, n)
+        })
+        .collect();
 
     let precommit_puzzle_hashes = precommit_values
         .iter()
@@ -1103,7 +772,7 @@ pub async fn xchandles_continue_launch(
             constants.precommit_payout_puzzle_hash,
             Bytes32::default(),
             precommit_value.clone(),
-            XchandlesFactorPricingPuzzleArgs::get_price(1, &precommit_value.handle, 1),
+            precommit_amounts[i],
         )?;
 
         let (left_slot, right_slot) = db
@@ -1116,6 +785,7 @@ pub async fn xchandles_continue_launch(
 
         let (left_slot, right_slot) = registry.actual_neigbors(handle_hash, left_slot, right_slot);
 
+        let (buy_time, _n) = batch_timings[i];
         let (register_conds, owner_message_conds, resolved_message_conds) =
             registry.new_action::<XchandlesRegisterAction>().spend(
                 &mut ctx,
@@ -1125,7 +795,7 @@ pub async fn xchandles_continue_launch(
                 &precommit_coin,
                 1,
                 registration_period,
-                handles[i].buy_time,
+                buy_time,
                 eve_nft_inner_puzzle_hash,
                 eve_nft_inner_puzzle_hash,
             )?;
@@ -1200,34 +870,12 @@ pub async fn xchandles_continue_launch(
         security_coin_sig + &pending_sig + &nft_sig,
     ));
 
-    let register_batch_id = handles
-        .first()
-        .map(|h| h.batch_id)
-        .unwrap_or(current_batch_id);
-    let confirm_coin = security_coin.coin_id();
-    let input_coin_ids = spend_bundle_input_coin_ids(&sb);
-    persist_and_push_batch_spend(
-        &client,
-        PersistBatchSpendArgs {
-            registry_launcher_id: launcher_id,
-            batch_id: register_batch_id,
-            phase: "register",
-            handles: &handles,
-            input_coin_ids,
-            sb,
-            confirm_coin_id: confirm_coin,
-        },
-    )
-    .await?;
+    println!("Submitting transaction...");
+    let resp = client.push_tx(sb).await?;
 
-    verify_registered_batches_or_stop(
-        &client,
-        &mut ctx,
-        launcher_id,
-        &bundle,
-        register_batch_id,
-    )
-    .await?;
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

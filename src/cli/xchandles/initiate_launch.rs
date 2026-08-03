@@ -4,13 +4,11 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    confirm_pushed_transaction, controller_matches_configured, default_mainnet_bundle_path,
-    default_mainnet_plan_path, default_testnet11_bundle_path, emit_pre_broadcast_plan,
-    get_coinset_client, get_prefix, launch_handles_from_bundle, load_premine_launch_bundle,
-    load_xchandles_state_schedule_csv, no_assets, parse_amount, print_medieval_vault_configuration,
-    schedule_records_match_configured, SageClient, REGISTRATION_PERIOD,
+    confirm_pushed_transaction, controller_matches_configured, get_coinset_client, get_prefix,
+    load_xchandles_launch_csv, load_xchandles_state_schedule_csv, no_assets, parse_amount,
+    premine_buy_time, print_medieval_vault_configuration, schedule_records_match_configured,
+    unix_now_secs, SageClient, REGISTRATION_PERIOD,
 };
-use std::path::Path;
 use chia_bls::PublicKey;
 use chia_protocol::{Bytes32, Coin, SpendBundle};
 use chia_puzzle_types::cat::GenesisByCoinIdTailArgs;
@@ -110,12 +108,14 @@ fn get_additional_info_for_launch(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn xchandles_initiate_launch(
     pubkeys_str: String,
     m: usize,
     payout_address: String,
     relative_block_height: u32,
     registration_period: u64,
+    premine: String,
     testnet11: bool,
     fee_str: String,
 ) -> Result<(), CliError> {
@@ -178,43 +178,26 @@ pub async fn xchandles_initiate_launch(
         );
     }
 
-    let bundle_path = if testnet11 {
-        default_testnet11_bundle_path()
-    } else {
-        default_mainnet_bundle_path()
-    };
-
-    println!("Loading Premine Launch Bundle from '{}'...", bundle_path);
-    let bundle = load_premine_launch_bundle(bundle_path)?;
-    let handles_to_launch = launch_handles_from_bundle(&bundle)?;
+    println!("Loading enriched launch CSV from '{}'...", premine);
+    let handles_to_launch = load_xchandles_launch_csv(&premine)?;
+    let now_secs = unix_now_secs()?;
     println!(
-        "Loaded {} handles to be premined (batch size {}). First few records:",
+        "Loaded {} handles to be premined (timing clock {}). First few records:",
         handles_to_launch.len(),
-        bundle.handles_per_batch
+        now_secs
     );
     for record in handles_to_launch.iter().take(7) {
+        let (buy_time, n) = premine_buy_time(record.expiration, now_secs)?;
         println!(
-            "  handle: {}, recipient: {}, expiration: {}, image: {}",
+            "  handle: {:}, recipient: {:}, expiration: {}, buy_time: {}, n: {}, image_uris: {:?}",
             record.handle,
             Address::new(record.recipient, get_prefix(testnet11)).encode()?,
             record.expiration,
-            record.image_uris.first().cloned().unwrap_or_default()
+            buy_time,
+            n,
+            record.image_uris.join("|")
         );
     }
-
-    // Emit the complete pre-broadcast plan before constructing any irreversible spend.
-    let plan_path = if testnet11 {
-        Some(Path::new(crate::default_testnet11_plan_path()))
-    } else {
-        Some(Path::new(default_mainnet_plan_path()))
-    };
-    let plan = emit_pre_broadcast_plan(&bundle, plan_path)?;
-    println!(
-        "Pre-broadcast plan covers {} rows in {} batches (handles_per_batch={}).",
-        plan.total_rows,
-        plan.batches.len(),
-        plan.handles_per_batch
-    );
 
     yes_no_prompt("Is all the data above correct?")?;
 
@@ -252,8 +235,9 @@ pub async fn xchandles_initiate_launch(
 
     let mut value_needed_for_registration = 0;
     for handle_record in handles_to_launch.iter() {
+        let (_buy_time, n) = premine_buy_time(handle_record.expiration, now_secs)?;
         value_needed_for_registration +=
-            XchandlesFactorPricingPuzzleArgs::get_price(1, &handle_record.handle, 1);
+            XchandlesFactorPricingPuzzleArgs::get_price(1, &handle_record.handle, n);
     }
 
     println!("A one-sided offer ({} mojos) will be needed for launch. The value will be distributed as follows:", 2 + value_needed_for_registration);
