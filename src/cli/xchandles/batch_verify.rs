@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use chia_protocol::{Bytes32, SpendBundle};
+use chia_protocol::{Bytes32, CoinSpend, SpendBundle};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -100,6 +100,10 @@ pub struct PremineVerificationReport {
     pub observed_count: usize,
     pub missing_handles: Vec<String>,
     pub extra_handles: Vec<String>,
+    /// Handles that appeared more than once in `expected` (map collapse risk).
+    pub duplicate_expected_handles: Vec<String>,
+    /// Handles that appeared more than once in `observed` (map collapse risk).
+    pub duplicate_observed_handles: Vec<String>,
     pub field_diffs: Vec<PremineFieldDiff>,
 }
 
@@ -161,20 +165,39 @@ pub fn expected_observations_from_bundle_rows(
     Ok(out)
 }
 
+/// Index observations by Handle while recording duplicate keys that would
+/// otherwise be silently collapsed by a map.
+fn index_unique_by_handle<'a, T, F>(
+    rows: &'a [T],
+    handle_of: F,
+) -> (BTreeMap<&'a str, &'a T>, Vec<String>)
+where
+    F: Fn(&T) -> &str,
+{
+    let mut by_handle = BTreeMap::new();
+    let mut duplicates = BTreeSet::new();
+    for row in rows {
+        let handle = handle_of(row);
+        if by_handle.insert(handle, row).is_some() {
+            duplicates.insert(handle.to_string());
+        }
+    }
+    (by_handle, duplicates.into_iter().collect())
+}
+
 /// Compare complete set equality of security-relevant Premine fields.
+///
+/// Enforces cardinality: duplicate Handles in either side fail closed, so a
+/// later matching row cannot hide an earlier modified observation.
 pub fn compare_premine_set(
     expected: &[ExpectedPremineObservation],
     observed: &[ObservedPremineHandle],
     phase: VerificationPhase,
 ) -> PremineVerificationReport {
-    let expected_by_handle: BTreeMap<&str, &ExpectedPremineObservation> = expected
-        .iter()
-        .map(|e| (e.handle.as_str(), e))
-        .collect();
-    let observed_by_handle: BTreeMap<&str, &ObservedPremineHandle> = observed
-        .iter()
-        .map(|o| (o.handle.as_str(), o))
-        .collect();
+    let (expected_by_handle, duplicate_expected_handles) =
+        index_unique_by_handle(expected, |e| e.handle.as_str());
+    let (observed_by_handle, duplicate_observed_handles) =
+        index_unique_by_handle(observed, |o| o.handle.as_str());
 
     let expected_handles: BTreeSet<&str> = expected_by_handle.keys().copied().collect();
     let observed_handles: BTreeSet<&str> = observed_by_handle.keys().copied().collect();
@@ -353,7 +376,16 @@ pub fn compare_premine_set(
     field_diffs.sort_by(|a, b| (&a.handle, &a.field).cmp(&(&b.handle, &b.field)));
     field_diffs.dedup();
 
-    let ok = missing_handles.is_empty() && extra_handles.is_empty() && field_diffs.is_empty();
+    let cardinality_ok = duplicate_expected_handles.is_empty()
+        && duplicate_observed_handles.is_empty()
+        && expected.len() == observed.len()
+        && expected.len() == expected_by_handle.len()
+        && observed.len() == observed_by_handle.len();
+
+    let ok = cardinality_ok
+        && missing_handles.is_empty()
+        && extra_handles.is_empty()
+        && field_diffs.is_empty();
     PremineVerificationReport {
         ok,
         phase,
@@ -361,6 +393,8 @@ pub fn compare_premine_set(
         observed_count: observed.len(),
         missing_handles,
         extra_handles,
+        duplicate_expected_handles,
+        duplicate_observed_handles,
         field_diffs,
     }
 }
@@ -410,6 +444,32 @@ pub enum InputCoinState {
     SpentByPending,
     /// Spent by a conflicting or unknown spend.
     SpentConflicting,
+}
+
+/// Classify one pending-spend input from its on-chain spent flag and the
+/// optional on-chain [`CoinSpend`]. A spent coin is [`SpentByPending`] only when
+/// the on-chain puzzle+solution equal the pending bundle's spend for that coin.
+pub fn classify_pending_input_state(
+    record_present: bool,
+    spent: bool,
+    pending_coin_spend: Option<&CoinSpend>,
+    on_chain_coin_spend: Option<&CoinSpend>,
+) -> InputCoinState {
+    if !record_present {
+        return InputCoinState::SpentConflicting;
+    }
+    if !spent {
+        return InputCoinState::Unspent;
+    }
+    match (pending_coin_spend, on_chain_coin_spend) {
+        (Some(pending), Some(on_chain)) if pending == on_chain => InputCoinState::SpentByPending,
+        _ => InputCoinState::SpentConflicting,
+    }
+}
+
+/// Every coin spent by `sb` — the complete identical-retry input set.
+pub fn spend_bundle_input_coin_ids(sb: &SpendBundle) -> Vec<Bytes32> {
+    sb.coin_spends.iter().map(|cs| cs.coin.coin_id()).collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -758,6 +818,37 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_modified_observation_cannot_pass_via_map_collapse() {
+        let (expected, mut observed) = full_set_fixture();
+        let mut modified = observed[0].clone();
+        modified.recipient_puzzle_hash = "00".repeat(32);
+        // Earlier modified duplicate + later matching row: map would keep the match.
+        observed.insert(0, modified);
+        assert_eq!(observed.iter().filter(|o| o.handle == observed[1].handle).count(), 2);
+        let report = compare_premine_set(&expected, &observed, VerificationPhase::Canonical);
+        assert!(!report.ok, "duplicate observations must fail closed");
+        assert!(
+            report
+                .duplicate_observed_handles
+                .contains(&observed[1].handle),
+            "report={report:?}"
+        );
+        assert!(report.observed_count > report.expected_count);
+        assert!(report.gate_later_batches().is_err());
+    }
+
+    #[test]
+    fn duplicate_expected_handles_fail_closed() {
+        let (mut expected, observed) = full_set_fixture();
+        expected.push(expected[0].clone());
+        let report = compare_premine_set(&expected, &observed, VerificationPhase::Final);
+        assert!(!report.ok);
+        assert!(report
+            .duplicate_expected_handles
+            .contains(&expected[0].handle));
+    }
+
+    #[test]
     fn wrong_recipient_fails() {
         let (expected, mut observed) = full_set_fixture();
         observed[0].recipient_puzzle_hash = "00".repeat(32);
@@ -838,6 +929,22 @@ mod tests {
         assert!(!reorganization_invalidates_finality(100, Some(100), 132));
     }
 
+    #[test]
+    fn reassigned_confirmation_is_not_final_even_if_peak_deep_over_old_anchor() {
+        // Peak advanced 32+ over the original confirmation, but a reorg reassigned
+        // the spend to a recent height — finality must not be claimed yet.
+        let original = 100u32;
+        let reassigned = 180u32;
+        let peak = 200u32;
+        assert!(finality_reached(original, peak));
+        assert!(!finality_reached(reassigned, peak));
+        assert!(reorganization_invalidates_finality(
+            original,
+            Some(reassigned),
+            peak
+        ));
+    }
+
     fn empty_sb() -> SpendBundle {
         SpendBundle::new(vec![], Signature::default())
     }
@@ -886,6 +993,83 @@ mod tests {
             }
             other => panic!("expected Conflict, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn all_inputs_spent_by_conflict_are_not_already_applied() {
+        let pending = sample_pending(2);
+        let mut states = BTreeMap::new();
+        states.insert("01".repeat(32), InputCoinState::SpentConflicting);
+        states.insert("02".repeat(32), InputCoinState::SpentConflicting);
+        match decide_batch_retry(Some(&pending), &states) {
+            BatchRetryDecision::Conflict(report) => {
+                assert_eq!(report.conflicting_input_coin_ids.len(), 2);
+            }
+            other => panic!("expected Conflict when all spent conflicting, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_spent_requires_matching_pending_coin_spend() {
+        use chia_protocol::{Bytes, Coin, Program};
+
+        let coin = Coin::new(Bytes32::new([9u8; 32]), Bytes32::new([8u8; 32]), 1);
+        let pending_cs = CoinSpend::new(
+            coin,
+            Program::new(Bytes::new(vec![1, 2, 3])),
+            Program::new(Bytes::new(vec![4, 5, 6])),
+        );
+        let conflicting_cs = CoinSpend::new(
+            coin,
+            Program::new(Bytes::new(vec![1, 2, 3])),
+            Program::new(Bytes::new(vec![9, 9, 9])),
+        );
+
+        assert_eq!(
+            classify_pending_input_state(true, false, Some(&pending_cs), None),
+            InputCoinState::Unspent
+        );
+        assert_eq!(
+            classify_pending_input_state(true, true, Some(&pending_cs), Some(&pending_cs)),
+            InputCoinState::SpentByPending
+        );
+        assert_eq!(
+            classify_pending_input_state(true, true, Some(&pending_cs), Some(&conflicting_cs)),
+            InputCoinState::SpentConflicting
+        );
+        assert_eq!(
+            classify_pending_input_state(true, true, Some(&pending_cs), None),
+            InputCoinState::SpentConflicting
+        );
+        assert_eq!(
+            classify_pending_input_state(false, true, Some(&pending_cs), None),
+            InputCoinState::SpentConflicting
+        );
+    }
+
+    #[test]
+    fn spend_bundle_input_coin_ids_lists_every_spend() {
+        use chia_protocol::{Bytes, Coin, Program};
+
+        let c1 = Coin::new(Bytes32::new([1u8; 32]), Bytes32::new([2u8; 32]), 1);
+        let c2 = Coin::new(Bytes32::new([3u8; 32]), Bytes32::new([4u8; 32]), 1);
+        let sb = SpendBundle::new(
+            vec![
+                CoinSpend::new(
+                    c1,
+                    Program::new(Bytes::new(vec![1])),
+                    Program::new(Bytes::new(vec![2])),
+                ),
+                CoinSpend::new(
+                    c2,
+                    Program::new(Bytes::new(vec![3])),
+                    Program::new(Bytes::new(vec![4])),
+                ),
+            ],
+            Signature::default(),
+        );
+        let ids = spend_bundle_input_coin_ids(&sb);
+        assert_eq!(ids, vec![c1.coin_id(), c2.coin_id()]);
     }
 
     #[test]

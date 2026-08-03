@@ -25,8 +25,9 @@ use crate::{
     default_testnet11_bundle_path, expected_observations_from_bundle_rows, finality_reached,
     get_coinset_client, handle_nft_metadata_clvm_hex, hex_string_to_bytes32,
     launch_handles_from_bundle, load_premine_launch_bundle, load_xchandles_state_schedule_csv,
-    price_singleton_public_keys, print_medieval_vault_configuration, CliError, MultisigSingleton,
-    ObservedPremineHandle, PremineLaunchBundle, PremineVerificationReport, VerificationPhase,
+    price_singleton_public_keys, print_medieval_vault_configuration,
+    reorganization_invalidates_finality, CliError, MultisigSingleton, ObservedPremineHandle,
+    PremineLaunchBundle, PremineVerificationReport, VerificationPhase,
     XchandlesStateScheduleRecord, OWNER_RESOLVED_RELATIONSHIP, PREMINE_FINALITY_DEPTH,
     PRICE_SINGLETON_M, ROYALTY_BASIS_POINTS, ROYALTY_PUZZLE_HASH,
 };
@@ -456,50 +457,78 @@ pub async fn xchandles_verify_deployment(
     canonical_report.gate_later_batches()?;
     println!("Canonical Premine set equality OK.");
 
-    let Some(confirm_height) = last_height else {
+    let Some(mut anchor_height) = last_height else {
         return Err(CliError::Custom(
             "Could not determine last Premine registration confirmation height".to_string(),
         ));
     };
 
-    println!(
-        "Waiting for {PREMINE_FINALITY_DEPTH}-block finality above confirmation height {confirm_height}..."
-    );
     loop {
+        println!(
+            "Waiting for {PREMINE_FINALITY_DEPTH}-block finality above confirmation height {anchor_height}..."
+        );
+        loop {
+            let resp = cli.get_blockchain_state().await?;
+            let Some(state) = resp.blockchain_state else {
+                return Err(CliError::Custom(
+                    "Failed to get blockchain state while waiting for Premine finality".to_string(),
+                ));
+            };
+            if finality_reached(anchor_height, state.peak.height) {
+                println!(
+                    "Peak height {} reaches finality over confirmation {}.",
+                    state.peak.height, anchor_height
+                );
+                break;
+            }
+            println!(
+                "Peak #{}; need {} more blocks for finality...",
+                state.peak.height,
+                PREMINE_FINALITY_DEPTH
+                    .saturating_sub(state.peak.height.saturating_sub(anchor_height))
+            );
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        }
+
+        println!("Re-running Premine set-equality verification at finality...");
+        let (final_report, current_confirm_height) = verify_premine_set_against_bundle(
+            &cli,
+            &mut ctx,
+            launcher_id,
+            &bundle,
+            None,
+            VerificationPhase::Final,
+        )
+        .await?;
+        println!("{}", final_report.to_machine_readable_json()?);
+        final_report.gate_later_batches()?;
+
         let resp = cli.get_blockchain_state().await?;
         let Some(state) = resp.blockchain_state else {
             return Err(CliError::Custom(
-                "Failed to get blockchain state while waiting for Premine finality".to_string(),
+                "Failed to get blockchain state after final Premine verification".to_string(),
             ));
         };
-        if finality_reached(confirm_height, state.peak.height) {
-            println!(
-                "Peak height {} reaches finality over confirmation {}.",
-                state.peak.height, confirm_height
-            );
+        if !reorganization_invalidates_finality(
+            anchor_height,
+            current_confirm_height,
+            state.peak.height,
+        ) {
+            println!("Final Premine set equality OK.");
             break;
         }
-        println!(
-            "Peak #{}; need {} more blocks for finality...",
-            state.peak.height,
-            PREMINE_FINALITY_DEPTH.saturating_sub(state.peak.height.saturating_sub(confirm_height))
-        );
-        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-    }
 
-    println!("Re-running Premine set-equality verification at finality...");
-    let (final_report, _) = verify_premine_set_against_bundle(
-        &cli,
-        &mut ctx,
-        launcher_id,
-        &bundle,
-        None,
-        VerificationPhase::Final,
-    )
-    .await?;
-    println!("{}", final_report.to_machine_readable_json()?);
-    final_report.gate_later_batches()?;
-    println!("Final Premine set equality OK.");
+        let Some(reanchored) = current_confirm_height else {
+            return Err(CliError::Custom(
+                "reorganization orphaned Premine registrations before finality".to_string(),
+            ));
+        };
+        println!(
+            "Reorganization invalidated finality (anchor={anchor_height}, current={reanchored}, peak={}); re-anchoring.",
+            state.peak.height
+        );
+        anchor_height = reanchored;
+    }
 
     if !testnet11 {
         println!(

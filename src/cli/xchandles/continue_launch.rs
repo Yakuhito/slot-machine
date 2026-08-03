@@ -31,15 +31,16 @@ use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, clear_pending_batch_spend, confirm_pushed_transaction,
-    decide_batch_retry, default_mainnet_bundle_path, default_mainnet_plan_path,
-    default_pending_batch_spend_path, default_testnet11_bundle_path, default_testnet11_plan_path,
-    emit_pre_broadcast_plan, finality_reached, get_prefix, hex_string_to_bytes32,
-    hex_string_to_pubkey, hex_string_to_signature, launch_handles_from_bundle,
-    load_pending_batch_spend, load_premine_launch_bundle, new_pending_batch_spend, no_assets,
-    parse_amount, sync_xchandles, verify_premine_set_against_bundle, write_pending_batch_spend,
-    yes_no_prompt, BatchRetryDecision, CliError, Db, InputCoinState, LaunchHandle, SageClient,
-    VerificationPhase, PREMINE_FINALITY_DEPTH,
+    assets_xch_and_cat, assets_xch_only, classify_pending_input_state, clear_pending_batch_spend,
+    confirm_pushed_transaction, decide_batch_retry, default_mainnet_bundle_path,
+    default_mainnet_plan_path, default_pending_batch_spend_path, default_testnet11_bundle_path,
+    default_testnet11_plan_path, emit_pre_broadcast_plan, finality_reached, get_prefix,
+    hex_string_to_bytes32, hex_string_to_pubkey, hex_string_to_signature,
+    launch_handles_from_bundle, load_pending_batch_spend, load_premine_launch_bundle,
+    new_pending_batch_spend, no_assets, parse_amount, reorganization_invalidates_finality,
+    spend_bundle_input_coin_ids, sync_xchandles, verify_premine_set_against_bundle,
+    write_pending_batch_spend, yes_no_prompt, BatchRetryDecision, CliError, Db, InputCoinState,
+    LaunchHandle, SageClient, VerificationPhase, PREMINE_FINALITY_DEPTH,
 };
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -90,18 +91,35 @@ async fn input_coin_states_for_pending(
 
     for coin_hex in &pending.input_coin_ids {
         let coin_id = hex_string_to_bytes32(coin_hex)?;
+        let pending_cs = pending
+            .spend_bundle
+            .coin_spends
+            .iter()
+            .find(|cs| cs.coin.coin_id() == coin_id);
+
         let Some(record) = client.get_coin_record_by_name(coin_id).await?.coin_record else {
-            // Missing record — treat as conflicting so we do not blind-retry.
-            states.insert(coin_hex.clone(), InputCoinState::SpentConflicting);
+            states.insert(
+                coin_hex.clone(),
+                classify_pending_input_state(false, true, pending_cs, None),
+            );
             continue;
         };
         if !record.spent {
-            states.insert(coin_hex.clone(), InputCoinState::Unspent);
-        } else {
-            // Input of our pending spend is spent: treat as applied by that pending.
-            // A mixed unspent+spent set still conflicts via decide_batch_retry.
-            states.insert(coin_hex.clone(), InputCoinState::SpentByPending);
+            states.insert(
+                coin_hex.clone(),
+                classify_pending_input_state(true, false, pending_cs, None),
+            );
+            continue;
         }
+
+        let on_chain = client
+            .get_puzzle_and_solution(coin_id, Some(record.spent_block_index))
+            .await?
+            .coin_solution;
+        states.insert(
+            coin_hex.clone(),
+            classify_pending_input_state(true, true, pending_cs, on_chain.as_ref()),
+        );
     }
     Ok(states)
 }
@@ -198,47 +216,74 @@ async fn verify_registered_batches_or_stop(
     println!("{}", canonical.to_machine_readable_json()?);
     canonical.gate_later_batches()?;
 
-    let Some(confirm_height) = confirm_height else {
+    let Some(mut anchor_height) = confirm_height else {
         return Err(CliError::Custom(
             "canonical verification succeeded but confirmation height is unknown".to_string(),
         ));
     };
 
-    println!(
-        "Waiting for {PREMINE_FINALITY_DEPTH}-block finality above height {confirm_height} before allowing later batches..."
-    );
     loop {
+        println!(
+            "Waiting for {PREMINE_FINALITY_DEPTH}-block finality above height {anchor_height} before allowing later batches..."
+        );
+        loop {
+            let resp = client.get_blockchain_state().await?;
+            let Some(state) = resp.blockchain_state else {
+                return Err(CliError::Custom(
+                    "Failed to get blockchain state while waiting for batch finality".to_string(),
+                ));
+            };
+            if finality_reached(anchor_height, state.peak.height) {
+                break;
+            }
+            println!(
+                "Peak #{}; need {} more blocks...",
+                state.peak.height,
+                PREMINE_FINALITY_DEPTH
+                    .saturating_sub(state.peak.height.saturating_sub(anchor_height))
+            );
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        }
+
+        println!("Re-running final Premine verification through batch {through_batch_id}...");
+        let (final_report, current_confirm_height) = verify_premine_set_against_bundle(
+            client,
+            ctx,
+            launcher_id,
+            bundle,
+            Some(through_batch_id),
+            VerificationPhase::Final,
+        )
+        .await?;
+        println!("{}", final_report.to_machine_readable_json()?);
+        final_report.gate_later_batches()?;
+
         let resp = client.get_blockchain_state().await?;
         let Some(state) = resp.blockchain_state else {
             return Err(CliError::Custom(
-                "Failed to get blockchain state while waiting for batch finality".to_string(),
+                "Failed to get blockchain state after final Premine verification".to_string(),
             ));
         };
-        if finality_reached(confirm_height, state.peak.height) {
-            break;
-        }
-        println!(
-            "Peak #{}; need {} more blocks...",
+        if !reorganization_invalidates_finality(
+            anchor_height,
+            current_confirm_height,
             state.peak.height,
-            PREMINE_FINALITY_DEPTH.saturating_sub(state.peak.height.saturating_sub(confirm_height))
-        );
-        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-    }
+        ) {
+            println!("Batch {through_batch_id} final verification OK; later batches may proceed.");
+            return Ok(());
+        }
 
-    println!("Re-running final Premine verification through batch {through_batch_id}...");
-    let (final_report, _) = verify_premine_set_against_bundle(
-        client,
-        ctx,
-        launcher_id,
-        bundle,
-        Some(through_batch_id),
-        VerificationPhase::Final,
-    )
-    .await?;
-    println!("{}", final_report.to_machine_readable_json()?);
-    final_report.gate_later_batches()?;
-    println!("Batch {through_batch_id} final verification OK; later batches may proceed.");
-    Ok(())
+        let Some(reanchored) = current_confirm_height else {
+            return Err(CliError::Custom(format!(
+                "reorganization orphaned Premine batch {through_batch_id} before finality"
+            )));
+        };
+        println!(
+            "Reorganization invalidated finality (anchor={anchor_height}, current={reanchored}, peak={}); re-anchoring.",
+            state.peak.height
+        );
+        anchor_height = reanchored;
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -750,15 +795,17 @@ pub async fn xchandles_continue_launch(
             // Build spend bundle
             let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
             let mint_handles = &handles_to_launch[i..j];
+            let confirm_coin = security_coin.coin_id();
+            let input_coin_ids = spend_bundle_input_coin_ids(&sb);
             persist_and_push_batch_spend(
                 &client,
                 registry.info.constants.launcher_id,
                 current_batch_id,
                 "mint_precommit",
                 mint_handles,
-                vec![security_coin.coin_id()],
+                input_coin_ids,
                 sb,
-                security_coin.coin_id(),
+                confirm_coin,
             )
             .await?;
 
@@ -1091,7 +1138,6 @@ pub async fn xchandles_continue_launch(
             .aggregated_signature,
     )?;
 
-    let registry_input_coin_id = registry.coin.coin_id();
     let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;
 
     let security_coin_sig = spend_security_coin(
@@ -1115,15 +1161,17 @@ pub async fn xchandles_continue_launch(
         .first()
         .map(|h| h.batch_id)
         .unwrap_or(current_batch_id);
+    let confirm_coin = security_coin.coin_id();
+    let input_coin_ids = spend_bundle_input_coin_ids(&sb);
     persist_and_push_batch_spend(
         &client,
         launcher_id,
         register_batch_id,
         "register",
         &handles,
-        vec![security_coin.coin_id(), registry_input_coin_id],
+        input_coin_ids,
         sb,
-        security_coin.coin_id(),
+        confirm_coin,
     )
     .await?;
 
