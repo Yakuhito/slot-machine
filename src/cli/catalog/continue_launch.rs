@@ -1,10 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use chia::{
-    clvm_utils::{ToTreeHash, TreeHash},
-    protocol::{Bytes32, SpendBundle},
-    puzzles::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof},
-};
+use chia_protocol::{Bytes32, SpendBundle};
+use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, CoinProof, LineageProof};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
@@ -15,12 +12,13 @@ use chia_wallet_sdk::{
     types::{Conditions, MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
 };
 use clvm_traits::clvm_quote;
+use clvm_utils::{ToTreeHash, TreeHash};
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_and_cat, assets_xch_only, hex_string_to_bytes32, load_catalog_premine_csv,
-    no_assets, parse_amount, sync_catalog, wait_for_coin, yes_no_prompt, CatalogPremineRecord,
-    CliError, Db, SageClient,
+    assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction, hex_string_to_bytes32,
+    load_catalog_premine_csv, no_assets, parse_amount, sync_catalog, yes_no_prompt,
+    CatalogPremineRecord, CliError, Db, SageClient,
 };
 use chia_wallet_sdk::driver::CatalogPrecommitValue;
 use chia_wallet_sdk::types::puzzles::CatNftMetadata;
@@ -161,7 +159,13 @@ pub async fn catalog_continue_launch(
                 CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle);
 
             let records_resp = client
-                .get_coin_records_by_puzzle_hash(precommit_puzzle.into(), None, None, Some(true))
+                .get_coin_records_by_puzzle_hash(
+                    precommit_puzzle.into(),
+                    None,
+                    None,
+                    Some(true),
+                    None,
+                )
                 .await?;
             let Some(records) = records_resp.coin_records else {
                 break;
@@ -283,10 +287,9 @@ pub async fn catalog_continue_launch(
             println!("Submitting transaction...");
             let resp = client.push_tx(sb).await?;
 
-            println!("Transaction submitted; status='{}'", resp.status);
-
-            wait_for_coin(&client, security_coin.coin_id(), true).await?;
-            println!("Confirmed!");
+            if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+                println!("Confirmed!");
+            }
 
             return Ok(());
         } else {
@@ -333,7 +336,13 @@ pub async fn catalog_continue_launch(
 
     let expected_records = precommit_puzzle_hashes.len();
     let phes_resp = client
-        .get_coin_records_by_puzzle_hashes(precommit_puzzle_hashes.clone(), None, None, Some(false))
+        .get_coin_records_by_puzzle_hashes(
+            precommit_puzzle_hashes.clone(),
+            None,
+            None,
+            Some(false),
+            None,
+        )
         .await?;
     let Some(precommit_coin_records) = phes_resp.coin_records else {
         eprintln!("Failed to get precommitment coin records - aborting...");
@@ -386,7 +395,13 @@ pub async fn catalog_continue_launch(
 
     let expected_records = parent_ids.len();
     let parent_records_resp = client
-        .get_coin_records_by_names(parent_ids.into_iter().collect(), None, None, Some(true))
+        .get_coin_records_by_names(
+            parent_ids.into_iter().collect(),
+            None,
+            None,
+            Some(true),
+            None,
+        )
         .await?;
     let Some(parent_records) = parent_records_resp.coin_records else {
         eprintln!("Failed to get parent records - aborting...");
@@ -530,9 +545,9 @@ pub async fn catalog_continue_launch(
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

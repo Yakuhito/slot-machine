@@ -1,21 +1,46 @@
 use super::{ClientError, SageClient};
-use chia::{
-    bls::{self, PublicKey, SecretKey, Signature},
-    consensus::consensus_constants::ConsensusConstants,
-    protocol::{Bytes, Bytes32, Coin, CoinSpend, Program},
-};
+use chia_bls::{self, PublicKey, SecretKey, Signature};
+use chia_consensus::consensus_constants::ConsensusConstants;
+use chia_protocol::{Bytes, Bytes32, Coin, CoinSpend, Program, SpendBundle};
 use chia_wallet_sdk::{
-    coinset::{ChiaRpcClient, CoinsetClient},
+    coinset::{ChiaRpcClient, CoinsetClient, PushTxResponse},
     driver::{DriverError, Spend, SpendContext},
     types::{MAINNET_CONSTANTS, TESTNET11_CONSTANTS},
-    utils::AddressError,
+    utils::Bech32Error,
 };
+use clvmr::error::EvalErr;
 use hex::FromHex;
+use serde::Deserialize;
 use std::{
+    fs,
     io::{self, Write},
     num::ParseIntError,
 };
 use thiserror::Error;
+
+#[derive(Debug, Deserialize)]
+pub struct CoinsetWebSocketMessageBody {
+    #[serde(rename = "type")]
+    message_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum CoinsetWebSocketMessage {
+    Envelope {
+        message: CoinsetWebSocketMessageBody,
+    },
+    Legacy(CoinsetWebSocketMessageBody),
+}
+
+impl CoinsetWebSocketMessage {
+    pub fn message_type(&self) -> &str {
+        match self {
+            CoinsetWebSocketMessage::Envelope { message } => &message.message_type,
+            CoinsetWebSocketMessage::Legacy(body) => &body.message_type,
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum CliError {
@@ -38,7 +63,7 @@ pub enum CliError {
     Bech32(#[from] bech32::Error),
 
     #[error("address: {0}")]
-    Address(#[from] AddressError),
+    Address(#[from] Bech32Error),
 
     #[error("that's not a clear 'yes'")]
     YesNoPromptRejected,
@@ -47,7 +72,7 @@ pub enum CliError {
     ParseHex(#[from] hex::FromHexError),
 
     #[error("invalid public key (or other BLS object): {0}")]
-    InvalidPublicKey(#[from] bls::Error),
+    InvalidPublicKey(#[from] chia_bls::Error),
 
     #[error("invalid amount: must contain '.'")]
     InvalidAmount,
@@ -63,6 +88,9 @@ pub enum CliError {
 
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
+
+    #[error("json: {0}")]
+    Json(#[from] serde_json::Error),
 
     #[error("Data directory could not be found")]
     DataDirNotFound,
@@ -85,8 +113,11 @@ pub enum CliError {
     #[error("constants not set (launcher id or price singletong launcher id)")]
     ConstantsNotSet,
 
-    #[error("{0} slot not found")]
+    #[error("slot not found: {0}")]
     SlotNotFound(&'static str),
+
+    #[error("clvm eval: {0}")]
+    ClvmEval(#[from] EvalErr),
 }
 
 pub fn yes_no_prompt(prompt: &str) -> Result<(), CliError> {
@@ -134,13 +165,18 @@ pub fn parse_amount(amount: &str, is_cat: bool) -> Result<u64, CliError> {
     .parse::<u64>()
     .map_err(|_| CliError::InvalidAmount)?;
 
-    if is_cat {
+    let fractional_per_whole = if is_cat {
         // For CATs: 1 CAT = 1000 mojos
-        Ok(whole * 1000 + fractional)
+        1000
     } else {
         // For XCH: 1 XCH = 1_000_000_000_000 mojos
-        Ok(whole * 1_000_000_000_000 + fractional)
+        1_000_000_000_000
+    };
+
+    if fractional > fractional_per_whole {
+        return Err(CliError::InvalidAmount);
     }
+    Ok(whole * fractional_per_whole + fractional)
 }
 
 pub fn get_prefix(testnet11: bool) -> String {
@@ -190,6 +226,37 @@ pub fn hex_string_to_signature(hex: &str) -> Result<Signature, CliError> {
 pub fn hex_string_to_bytes(hex: &str) -> Result<Bytes, CliError> {
     let bytes = hex::decode(hex.replace("0x", "")).map_err(CliError::ParseHex)?;
     Ok(Bytes::from(bytes))
+}
+
+pub fn print_spend_bundle_to_file(spend_bundle: &SpendBundle, path: &str) -> Result<(), CliError> {
+    let contents = serde_json::to_string_pretty(spend_bundle)?;
+    fs::write(path, contents)?;
+    Ok(())
+}
+
+pub async fn confirm_pushed_transaction(
+    client: &CoinsetClient,
+    resp: &PushTxResponse,
+    coin_id: Bytes32,
+    also_wait_for_spent: bool,
+) -> Result<bool, CliError> {
+    println!(
+        "Transaction submitted; status='{}', error='{}'",
+        resp.status.as_deref().unwrap_or_default(),
+        resp.error.as_deref().unwrap_or_default()
+    );
+
+    if resp.error.is_some() {
+        return Err(CliError::Custom(
+            resp.error
+                .as_deref()
+                .unwrap_or("Transaction rejected")
+                .to_string(),
+        ));
+    }
+    wait_for_coin(client, coin_id, also_wait_for_spent).await?;
+
+    Ok(true)
 }
 
 #[allow(clippy::nonminimal_bool)]

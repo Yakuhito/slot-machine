@@ -1,8 +1,5 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, SpendBundle},
-    puzzles::{cat::CatArgs, singleton::SingletonStruct, LineageProof},
-};
+use chia_protocol::{Bytes32, SpendBundle};
+use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -10,19 +7,20 @@ use chia_wallet_sdk::{
         CatalogRefundAction, CatalogRegisterAction, CatalogRegistryConstants, Layer, Offer,
         PrecommitCoin, PrecommitLayer, Puzzle, Slot, Spend, SpendContext,
     },
-    test::print_spend_bundle_to_file,
     types::{
         puzzles::{CatNftMetadata, CatalogSlotValue, DefaultCatMakerArgs},
         Mod,
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_only, get_coinset_client, get_constants, get_prefix, hex_string_to_bytes,
-    hex_string_to_bytes32, no_assets, parse_amount, quick_sync_catalog, sync_catalog,
-    wait_for_coin, yes_no_prompt, CatalogApiClient, CliError, Db, SageClient,
+    assets_xch_only, confirm_pushed_transaction, get_coinset_client, get_constants, get_prefix,
+    hex_string_to_bytes, hex_string_to_bytes32, no_assets, parse_amount,
+    print_spend_bundle_to_file, quick_sync_catalog, sync_catalog, wait_for_coin, yes_no_prompt,
+    CatalogApiClient, CliError, Db, SageClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -182,7 +180,13 @@ pub async fn catalog_register(
         CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle_hash);
 
     let Some(potential_precommit_coin_records) = cli
-        .get_coin_records_by_hint(precommit_inner_puzzle_hash.into(), None, None, Some(false))
+        .get_coin_records_by_hint(
+            precommit_inner_puzzle_hash.into(),
+            None,
+            None,
+            Some(false),
+            None,
+        )
         .await?
         .coin_records
     else {
@@ -403,17 +407,13 @@ pub async fn catalog_register(
 
         println!("Submitting transaction...");
         if log {
-            print_spend_bundle_to_file(
-                sb.coin_spends.clone(),
-                sb.aggregated_signature.clone(),
-                "sb.debug",
-            );
+            let _ = print_spend_bundle_to_file(&sb, "sb.debug");
         }
         let resp = cli.push_tx(sb).await?;
 
-        println!("Transaction submitted; status='{}'", resp.status);
-        wait_for_coin(&cli, security_coin.coin_id(), true).await?;
-        println!("Confirmed!");
+        if confirm_pushed_transaction(&cli, &resp, security_coin.coin_id(), true).await? {
+            println!("Confirmed!");
+        }
 
         return Ok(());
     }

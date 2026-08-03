@@ -9,7 +9,7 @@
 
 (mod (
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
-    SLOT_1ST_CURRY_HASH ; after 1st curry
+    HANDLE_SLOT_1ST_CURRY_HASH ; after 1st curry
     (@ Truth
         (
             Ephemeral_State .
@@ -19,21 +19,24 @@
             )
         )
     )
+    ; solution
     (
-        precommited_cat_maker_reveal
-        precommited_cat_maker_reveal_hash
-        precommited_cat_maker_solution
-        precommited_pricing_puzzle_reveal
         precommited_pricing_puzzle_reveal_hash
+        precommited_pricing_puzzle_reveal .
         precommited_pricing_puzzle_solution
-        handle
-        secret
-        precommited_owner_launcher_id
-        precommited_resolved_data
-        refund_puzzle_hash_hash
-        precommit_amount . ; amount of the pre-commit coin
-        (@ slot_value ((handle_hash . rest1) . (expiration .rest2)))
     )
+    (
+        precommited_cat_maker_reveal_hash
+        precommited_cat_maker_reveal .
+        precommited_cat_maker_solution
+    )
+    handle
+    precommit_amount ; amount of the pre-commit coin
+    (@ slot_value (counter . ((handle_hash . rest1) . (expiration .rest2)))) .
+    (
+        (precommited_owner_launcher_id . precommited_resolved_launcher_id) .
+        (refund_puzzle_hash_hash . secret)
+    ) ; other_precommit_data
 )
     (include condition_codes.clib)
     (include sha256tree.clib)
@@ -42,8 +45,8 @@
     (include slots.clib)
 
     (defun main (
-        SLOT_1ST_CURRY_HASH
-        slot_value_hash
+        HANDLE_SLOT_1ST_CURRY_HASH
+        (@ slot_value (counter . slot_value_part))
         expiration ; () if slot spend is not needed
         precommit_puzzle_hash
         precommit_amount
@@ -66,8 +69,14 @@
                 (if expiration
                     (list
                         (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
-                        (spend_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
-                        (create_slot_inline SLOT_1ST_CURRY_HASH slot_value_hash)
+                        (spend_slot_inline
+                            HANDLE_SLOT_1ST_CURRY_HASH
+                            (sha256tree slot_value)
+                        )
+                        (create_slot_inline
+                            HANDLE_SLOT_1ST_CURRY_HASH
+                            (sha256tree (c (+ counter 1) slot_value_part))
+                        )
                     )
                     ; else
                     ()
@@ -84,8 +93,8 @@
         (c
             Truth
             (main
-                SLOT_1ST_CURRY_HASH
-                (sha256tree slot_value)
+                HANDLE_SLOT_1ST_CURRY_HASH
+                slot_value
                 (if (all
                         ; not (a)
                         (= precommited_cat_maker_reveal_hash Cat_Maker_Puzzle_Hash)
@@ -99,7 +108,11 @@
                         (= precommit_amount (f (a precommited_pricing_puzzle_reveal precommited_pricing_puzzle_solution)))
                     ) ; if the precommit coin looks valid after checking (a), (b), (c) & it could be used for registration,
                       ; we must check for (d)
-                  expiration
+                  (if expiration
+                    expiration ; not null
+                    ; else
+                    (x)
+                  )
                   ; else
                   () ; no slot spend needed
                 )
@@ -116,7 +129,7 @@
                                 handle
                                 secret
                                 precommited_owner_launcher_id
-                                precommited_resolved_data
+                                precommited_resolved_launcher_id
                             )) ; hash of precommit value, which is itself a hash :)
                         ) ; Inner_Puzzle_Hash
                         precommited_cat_maker_solution

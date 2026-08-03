@@ -1,11 +1,8 @@
 use std::collections::HashSet;
 
-use chia::{
-    clvm_utils::{tree_hash, ToTreeHash},
-    protocol::{Bytes32, Coin},
-    puzzles::{singleton::LauncherSolution, LineageProof, Proof},
-};
+use chia_protocol::{Bytes32, Coin};
 use chia_puzzle_types::Memos;
+use chia_puzzle_types::{singleton::LauncherSolution, LineageProof, Proof};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
@@ -17,6 +14,7 @@ use chia_wallet_sdk::{
         Condition, Conditions,
     },
 };
+use clvm_utils::{tree_hash, ToTreeHash};
 use clvmr::NodePtr;
 
 use crate::{CliError, Db};
@@ -218,9 +216,15 @@ pub async fn sync_catalog(
             .coin_solution
             .ok_or(CliError::CoinNotSpent(coin_record.coin.coin_id()))?;
 
-        catalog = CatalogRegistry::from_spend(ctx, &coin_spend, constants)?.ok_or(
-            CliError::Custom("Could not parse new CATalog registry spend".to_string()),
-        )?;
+        catalog = CatalogRegistry::from_spend(
+            ctx,
+            &coin_spend,
+            constants,
+            chia_bls::Signature::default(),
+        )?
+        .ok_or(CliError::Custom(
+            "Could not parse new CATalog registry spend".to_string(),
+        ))?;
 
         for slot_value in catalog.pending_spend.spent_slots.iter() {
             let asset_id = slot_value.asset_id;
@@ -270,57 +274,21 @@ pub async fn sync_catalog(
         catalog = catalog.child(catalog.pending_spend.latest_state.1);
     }
 
-    mempool_catalog_maybe(ctx, catalog, client).await
-}
-
-pub async fn mempool_catalog_maybe(
-    ctx: &mut SpendContext,
-    on_chain_catalog: CatalogRegistry,
-    client: &CoinsetClient,
-) -> Result<CatalogRegistry, CliError> {
-    let Some(mut mempool_items) = client
-        .get_mempool_items_by_coin_name(on_chain_catalog.coin.coin_id())
+    if let Some(mempool_items) = client
+        .get_mempool_items_by_coin_name(catalog.coin.coin_id())
         .await?
         .mempool_items
-    else {
-        return Ok(on_chain_catalog);
-    };
-
-    if mempool_items.is_empty() {
-        return Ok(on_chain_catalog);
-    }
-
-    let mempool_item = mempool_items.remove(0);
-    let mut catalog = on_chain_catalog;
-    let mut parent_id_to_look_for = catalog.coin.parent_coin_info;
-    loop {
-        let Some(catalog_spend) = mempool_item
-            .spend_bundle
-            .coin_spends
-            .iter()
-            .find(|c| c.coin.parent_coin_info == parent_id_to_look_for)
-        else {
-            break;
-        };
-
-        let Some(new_catalog) =
-            CatalogRegistry::from_spend(ctx, catalog_spend, catalog.info.constants)?
-        else {
-            break;
-        };
-        catalog = new_catalog;
-        parent_id_to_look_for = catalog.coin.coin_id();
-    }
-
-    mempool_item
-        .spend_bundle
-        .coin_spends
-        .into_iter()
-        .for_each(|coin_spend| {
-            if coin_spend.coin != catalog.coin {
-                ctx.insert(coin_spend);
+    {
+        if !mempool_items.is_empty() {
+            if let Some(new_catalog) = CatalogRegistry::from_mempool_item(
+                ctx,
+                mempool_items[0].spend_bundle.clone(),
+                constants,
+            )? {
+                return Ok(new_catalog);
             }
-        });
-    catalog.set_pending_signature(mempool_item.spend_bundle.aggregated_signature);
+        }
+    }
+
     Ok(catalog)
 }

@@ -1,20 +1,22 @@
-use chia::{clvm_utils::ToTreeHash, protocol::SpendBundle};
+use chia_protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         create_security_coin, decode_offer, spend_security_coin, spend_settlement_cats, Offer,
-        SpendContext, XchandlesExpirePricingPuzzle, XchandlesExtendAction,
+        SpendContext, XchandlesExtendAction,
     },
     types::{
-        puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs},
+        puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesSlotNonce},
         Mod,
     },
 };
+use clvm_utils::ToTreeHash;
 
 use crate::{
-    assets_xch_and_cat, get_coinset_client, get_constants, get_last_onchain_timestamp,
-    hex_string_to_bytes32, no_assets, parse_amount, quick_sync_xchandles, sync_xchandles,
-    wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
+    assets_xch_and_cat, confirm_pushed_transaction, get_coinset_client, get_constants,
+    get_last_onchain_timestamp, hex_string_to_bytes32, no_assets, parse_amount,
+    quick_sync_xchandles, sync_xchandles, yes_no_prompt, CliError, Db, SageClient,
+    XchandlesApiClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -47,14 +49,14 @@ pub async fn xchandles_extend(
     };
     println!("done.");
 
+    let expected_pricing_puzzle_hash = XchandlesFactorPricingPuzzleArgs {
+        base_price: payment_cat_base_price,
+        registration_period,
+    }
+    .curry_tree_hash();
     if DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into()).curry_tree_hash()
         != registry.info.state.cat_maker_puzzle_hash.into()
-        || registry.info.state.pricing_puzzle_hash
-            != XchandlesExpirePricingPuzzle::curry_tree_hash(
-                payment_cat_base_price,
-                registration_period,
-            )
-            .into()
+        || registry.info.state.pricing_puzzle_hash != expected_pricing_puzzle_hash.into()
     {
         return Err(CliError::Custom(
             "Given payment asset id & base price do not match the current registry's state."
@@ -77,9 +79,15 @@ pub async fn xchandles_extend(
             .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
             .await?
             .ok_or(CliError::SlotNotFound("Handle"))?;
-        db.get_slot(&mut ctx, launcher_id, 0, slot_value_hash, 0)
-            .await?
-            .ok_or(CliError::SlotNotFound("Handle"))?
+        db.get_slot(
+            &mut ctx,
+            launcher_id,
+            XchandlesSlotNonce::HANDLE.to_u64(),
+            slot_value_hash,
+            0,
+        )
+        .await?
+        .ok_or(CliError::SlotNotFound("Handle"))?
     } else {
         let xchandles_api_client = XchandlesApiClient::get(testnet11);
         xchandles_api_client
@@ -88,19 +96,19 @@ pub async fn xchandles_extend(
     };
     println!("Current expiration: {}", slot.info.value.expiration);
 
-    let start_time = get_last_onchain_timestamp(&cli).await? - 1;
-    println!("Extension time: {}", start_time);
+    let buy_time = get_last_onchain_timestamp(&cli).await? - 1;
+    println!("Extension time: {}", buy_time);
 
     let (sec_conds, notarized_payment) = registry.new_action::<XchandlesExtendAction>().spend(
         &mut ctx,
         &mut registry,
-        handle,
+        &handle,
         slot,
         payment_asset_id,
         payment_cat_base_price,
         registration_period,
         num_periods,
-        start_time,
+        buy_time,
     )?;
 
     yes_no_prompt("Continue with extension?")?;
@@ -150,9 +158,9 @@ pub async fn xchandles_extend(
     println!("Submitting transaction...");
     let resp = cli.push_tx(sb).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
-    wait_for_coin(&cli, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&cli, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

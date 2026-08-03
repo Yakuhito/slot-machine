@@ -1,10 +1,11 @@
-use std::collections::HashSet;
-
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes32};
+use chia_bls::Signature;
+use chia_protocol::Bytes32;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{SpendContext, XchandlesRegistry},
+    driver::{DriverError, Slot, SpendContext, XchandlesConstants, XchandlesRegistry},
+    types::puzzles::{XchandlesSlotNonce, XchandlesUpdateSlotValue},
 };
+use clvm_utils::ToTreeHash;
 
 use crate::{CliError, Db};
 
@@ -116,49 +117,18 @@ pub async fn sync_xchandles(
             .coin_solution
             .ok_or(CliError::CoinNotSpent(coin_record.coin.coin_id()))?;
 
-        registry = XchandlesRegistry::from_spend(ctx, &coin_spend, registry.info.constants)?
-            .ok_or(CliError::Custom(
-                "Could not parse new XCHandles registry spend".to_string(),
-            ))?;
+        registry = XchandlesRegistry::from_spend(
+            ctx,
+            &coin_spend,
+            registry.info.constants,
+            chia_bls::Signature::default(),
+        )?
+        .ok_or(CliError::Custom(
+            "Could not parse new XCHandles registry spend".to_string(),
+        ))?;
 
-        for value in registry.pending_spend.spent_slots.iter() {
-            db.mark_slot_as_spent(
-                launcher_id,
-                0,
-                value.tree_hash().into(),
-                coin_record.spent_block_index,
-            )
-            .await?;
-
-            // no need to actually delete handle indexed value, as
-            //   all actions will overwrite (not remove) the handle
-            //   from the list
-        }
-
-        let mut processed_values = HashSet::<Bytes32>::new();
-        for slot_value in registry.pending_spend.created_slots.iter() {
+        for slot_value in registry.pending_spend.created_handle_slots.iter() {
             let slot_value_hash: Bytes32 = slot_value.tree_hash().into();
-            if processed_values.contains(&slot_value_hash) {
-                continue;
-            }
-            processed_values.insert(slot_value_hash);
-
-            // same slot can be created and spent mutliple times in the same block
-            let no_spent = registry
-                .pending_spend
-                .spent_slots
-                .iter()
-                .filter(|sv| sv.tree_hash() == slot_value_hash.into())
-                .count();
-            let no_created = registry
-                .pending_spend
-                .created_slots
-                .iter()
-                .filter(|sv| sv.tree_hash() == slot_value_hash.into())
-                .count();
-            if no_spent >= no_created {
-                continue;
-            }
 
             db.save_xchandles_indexed_slot_value(
                 registry.info.constants.launcher_id,
@@ -168,8 +138,18 @@ pub async fn sync_xchandles(
             .await?;
             db.save_slot(
                 ctx,
-                registry.created_slot_value_to_slot(slot_value.clone()),
+                registry.created_handle_slot_value_to_slot(*slot_value),
                 0,
+            )
+            .await?;
+        }
+
+        for value in registry.pending_spend.spent_handle_slots.iter() {
+            db.mark_slot_as_spent(
+                launcher_id,
+                XchandlesSlotNonce::HANDLE.to_u64(),
+                value.tree_hash().into(),
+                coin_record.spent_block_index,
             )
             .await?;
         }
@@ -177,57 +157,77 @@ pub async fn sync_xchandles(
         registry = registry.child(registry.pending_spend.latest_state.1);
     }
 
-    mempool_registry_maybe(ctx, registry, client).await
-}
-
-pub async fn mempool_registry_maybe(
-    ctx: &mut SpendContext,
-    on_chain_registry: XchandlesRegistry,
-    client: &CoinsetClient,
-) -> Result<XchandlesRegistry, CliError> {
-    let Some(mut mempool_items) = client
-        .get_mempool_items_by_coin_name(on_chain_registry.coin.coin_id())
+    if let Some(mempool_items) = client
+        .get_mempool_items_by_coin_name(registry.coin.coin_id())
         .await?
         .mempool_items
-    else {
-        return Ok(on_chain_registry);
-    };
-
-    if mempool_items.is_empty() {
-        return Ok(on_chain_registry);
-    }
-
-    let mempool_item = mempool_items.remove(0);
-    let mut registry = on_chain_registry;
-    let mut parent_id_to_look_for = registry.coin.parent_coin_info;
-    loop {
-        let Some(registry_spend) = mempool_item
-            .spend_bundle
-            .coin_spends
-            .iter()
-            .find(|c| c.coin.parent_coin_info == parent_id_to_look_for)
-        else {
-            break;
-        };
-
-        let Some(new_registry) =
-            XchandlesRegistry::from_spend(ctx, registry_spend, registry.info.constants)?
-        else {
-            break;
-        };
-        registry = new_registry;
-        parent_id_to_look_for = registry.coin.coin_id();
-    }
-
-    mempool_item
-        .spend_bundle
-        .coin_spends
-        .into_iter()
-        .for_each(|coin_spend| {
-            if coin_spend.coin != registry.coin {
-                ctx.insert(coin_spend);
+    {
+        if !mempool_items.is_empty() {
+            if let Some(new_registry) = XchandlesRegistry::from_mempool_item(
+                ctx,
+                mempool_items[0].spend_bundle.clone(),
+                registry.info.constants,
+            )? {
+                return Ok(new_registry);
             }
-        });
-    registry.set_pending_signature(mempool_item.spend_bundle.aggregated_signature);
+        }
+    }
+
     Ok(registry)
+}
+
+pub async fn find_xchandles_update_slot(
+    ctx: &mut SpendContext,
+    client: &CoinsetClient,
+    constants: XchandlesConstants,
+    update_initiator_coin_id: Bytes32,
+    handle_hash: Bytes32,
+) -> Result<Slot<XchandlesUpdateSlotValue>, CliError> {
+    let mut possible_records = client
+        .get_coin_records_by_hint(update_initiator_coin_id, None, None, Some(false), None)
+        .await?
+        .coin_records
+        .ok_or(CliError::Driver(DriverError::MissingHint))?;
+
+    while !possible_records.is_empty() {
+        let coin_record = possible_records.remove(0);
+        let registry_spent = client
+            .get_puzzle_and_solution(
+                coin_record.coin.parent_coin_info,
+                Some(coin_record.confirmed_block_index),
+            )
+            .await?
+            .coin_solution
+            .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
+
+        let Some(registry) =
+            XchandlesRegistry::from_spend(ctx, &registry_spent, constants, Signature::default())?
+        else {
+            continue;
+        };
+
+        if let Some(slot) =
+            registry
+                .pending_spend
+                .created_update_slots
+                .iter()
+                .find_map(|slot_value| {
+                    if slot_value.handle_hash != handle_hash
+                        || slot_value.update_initiator_coin_id != update_initiator_coin_id
+                    {
+                        return None;
+                    }
+                    let slot = registry.created_update_slot_value_to_slot(*slot_value);
+                    if slot.coin == coin_record.coin {
+                        Some(slot)
+                    } else {
+                        None
+                    }
+                })
+        {
+            return Ok(slot);
+        }
+    }
+
+    Err(CliError::SlotNotFound("Update"))
 }

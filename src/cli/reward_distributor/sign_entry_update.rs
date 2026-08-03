@@ -1,8 +1,7 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes, Bytes32},
+use chia_protocol::Bytes;
+use chia_wallet_sdk::driver::{
+    MedievalVault, RewardDistributorReceivedMessagePrefix, RewardDistributorType,
 };
-use chia_wallet_sdk::driver::MedievalVault;
 use clvmr::Allocator;
 
 use crate::{
@@ -33,12 +32,20 @@ pub async fn reward_distributor_sign_entry_update(
             "Could not get reward distributor constants - try running another command to sync it first".to_string(),
         ))?;
 
-    let (my_pubkey, mut ctx, _client, medieval_vault) = multisig_sign_thing_start(
-        my_pubkey_str,
-        hex::encode(distributor_constants.manager_or_collection_did_launcher_id),
-        testnet11,
-    )
-    .await?;
+    let manager_launcher_id = match distributor_constants.reward_distributor_type {
+        RewardDistributorType::Managed {
+            manager_singleton_launcher_id,
+        } => manager_singleton_launcher_id,
+        _ => {
+            return Err(CliError::Custom(
+                "Entry updates require a managed reward distributor".to_string(),
+            ));
+        }
+    };
+
+    let (my_pubkey, mut ctx, _client, medieval_vault) =
+        multisig_sign_thing_start(my_pubkey_str, hex::encode(manager_launcher_id), testnet11)
+            .await?;
 
     if remove_entry {
         println!("\nYou'll *REMOVE* the following entry from the reward list:");
@@ -51,17 +58,20 @@ pub async fn reward_distributor_sign_entry_update(
     );
     println!("  Entry shares: {}", entry_shares);
 
-    let message: Bytes32 = (entry_payout_puzzle_hash, entry_shares).tree_hash().into();
-    let mut message: Vec<u8> = message.to_vec();
-    if remove_entry {
-        message.insert(0, b'r');
-    } else {
-        message.insert(0, b'a');
-    }
-
     let delegated_puzzle = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes>(
         &mut ctx,
-        Bytes::new(message),
+        if remove_entry {
+            RewardDistributorReceivedMessagePrefix::remove_entry(
+                entry_payout_puzzle_hash,
+                entry_shares,
+            )
+        } else {
+            RewardDistributorReceivedMessagePrefix::add_entry(
+                entry_payout_puzzle_hash,
+                entry_shares,
+            )
+        }
+        .into(),
         launcher_id,
         medieval_vault.coin,
         &medieval_vault.info,

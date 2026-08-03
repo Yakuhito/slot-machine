@@ -1,0 +1,118 @@
+; initiate_update.clsp by yakuhito
+;; An update is a 'rare' process through which the onwer of a record can
+;; update the owner_launcher_id and/or resolved_launcher_id of that record
+
+;; To complete the update, the child of the owner coin that initiated the update
+;;  needs to finish it after a delay - otherwise, the update is invalidated.
+
+;; Update slot format is (c (c update_initiator_coin_id . min_height) (c handle_hash (c new_owner_launcher_id new_resolved_launcher_id)))
+
+(mod (
+    SINGLETON_MOD_HASH
+    SINGLETON_LAUNCHER_PUZZLE_HASH
+    RELATIVE_BLOCK_HEIGHT ; how many blocks to wait before the update can be executed
+    HANDLE_SLOT_1ST_CURRY_HASH ; after 1st curry
+    UPDATE_SLOT_1ST_CURRY_HASH ; after 1st curry
+    Truth
+    ; solution
+    (@
+        current_slot
+        (counter .
+            (@
+                current_slot_rest
+                (
+                    (handle_hash . neighbors) .
+                    (expiration . (@ current_data (current_owner_launcher_id . current_resolved_launcher_id)))
+                )
+            )
+        )
+    )
+    (@ new_data (new_owner_launcher_id . new_resolved_launcher_id))
+    (current_owner_parent_id current_owner_inner_puzzle_hash . current_owner_amount) . ; current owner compact coin proof
+    min_height
+)
+    (include condition_codes.clib)
+    (include sha256tree.clib)
+    (include xchandles.clib)
+    (include curry.clib)
+    (include slots.clib)
+
+    (defun update_slot_value_hash (
+        UPDATE_SLOT_1ST_CURRY_HASH
+        update_slot_value_hash
+        owner_coin_id
+    )
+        (list
+            ; assert message from current owner
+            (list
+                RECEIVE_MESSAGE
+                58 ; coin-puzzle
+                (concat 'i' update_slot_value_hash)
+                owner_coin_id
+            )
+
+            ; create update slot
+            (create_slot_with_hint UPDATE_SLOT_1ST_CURRY_HASH
+                update_slot_value_hash
+                owner_coin_id
+            )
+        )
+    )
+
+    (defun consume_messages_and_create_slot_stager (
+        UPDATE_SLOT_1ST_CURRY_HASH
+        min_execution_height
+        update_slot_value_b ; partial update slot value
+        owner_coin_id
+    )
+        (update_slot_value_hash
+            UPDATE_SLOT_1ST_CURRY_HASH
+            (sha256tree (c
+                (c owner_coin_id min_execution_height)
+                update_slot_value_b
+            ))
+            owner_coin_id
+        )
+    )
+
+    (c
+        Truth
+        (c
+            ; can't update if expired
+            (list ASSERT_BEFORE_SECONDS_ABSOLUTE expiration)
+            (c
+                ; min_height is in the future
+                (list ASSERT_BEFORE_HEIGHT_ABSOLUTE min_height)
+                (c
+                    ; spend slot
+                    (spend_slot HANDLE_SLOT_1ST_CURRY_HASH 
+                        (sha256tree current_slot)
+                    )
+                    (c
+                        ; re-create slot
+                        (create_slot HANDLE_SLOT_1ST_CURRY_HASH
+                            (sha256tree (c (+ counter 1) current_slot_rest))
+                        )
+                        (consume_messages_and_create_slot_stager
+                            UPDATE_SLOT_1ST_CURRY_HASH
+                            (+ min_height RELATIVE_BLOCK_HEIGHT)
+                            ; update_slot_value_b - partial update slot value
+                            (c handle_hash new_data)
+                            ; initiator coin id
+                            (coinid
+                                current_owner_parent_id
+                                (curry_hashes SINGLETON_MOD_HASH
+                                    (sha256tree
+                                        (c SINGLETON_MOD_HASH (c current_owner_launcher_id SINGLETON_LAUNCHER_PUZZLE_HASH))
+                                    ) ; tree hash of SINGLETON_STRUCT
+                                    current_owner_inner_puzzle_hash
+                                )
+                                current_owner_amount
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

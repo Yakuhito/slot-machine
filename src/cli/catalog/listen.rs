@@ -16,13 +16,9 @@ use serde::{Deserialize, Serialize};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::CorsLayer;
 
-use crate::{get_coinset_client, hex_string_to_bytes32, sync_catalog, CliError, Db};
-
-#[derive(Debug, Deserialize)]
-struct WebSocketMessage {
-    #[serde(rename = "type")]
-    message_type: String,
-}
+use crate::{
+    get_coinset_client, hex_string_to_bytes32, sync_catalog, CliError, CoinsetWebSocketMessage, Db,
+};
 
 #[derive(Debug, Deserialize)]
 struct CatalogNeighborsQuery {
@@ -34,6 +30,9 @@ pub struct CatalogNeighborResponse {
     pub asset_id: String,
     pub left_asset_id: String,
     pub right_asset_id: String,
+
+    pub left_counter: u64,
+    pub right_counter: u64,
 
     pub left_left_asset_id: String,
     pub right_right_asset_id: String,
@@ -147,6 +146,9 @@ async fn get_neighbors(
         left_asset_id: hex::encode(left.info.value.asset_id.to_bytes()),
         right_asset_id: hex::encode(right.info.value.asset_id.to_bytes()),
 
+        left_counter: left.info.value.counter,
+        right_counter: right.info.value.counter,
+
         left_left_asset_id: hex::encode(left.info.value.neighbors.left_value.to_bytes()),
         right_right_asset_id: hex::encode(right.info.value.neighbors.right_value.to_bytes()),
 
@@ -192,9 +194,10 @@ async fn connect_websocket(
 
     while let Some(message) = read.next().await {
         match message {
-            Ok(Message::Text(text)) => match serde_json::from_str::<WebSocketMessage>(&text) {
+            Ok(Message::Text(text)) => match serde_json::from_str::<CoinsetWebSocketMessage>(&text)
+            {
                 Ok(msg) => {
-                    if msg.message_type == "peak" {
+                    if msg.message_type() == "peak" {
                         let now = SystemTime::now();
                         println!(
                             "[{}] Received new peak",

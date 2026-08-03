@@ -1,0 +1,3 @@
+[compiler]
+version = "0.9.0"
+entrypoint = "rue-puzzles"

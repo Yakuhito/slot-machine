@@ -1,8 +1,8 @@
-use chia::protocol::Bytes32;
-use chia::{clvm_utils::ToTreeHash, protocol::Bytes};
+use chia_protocol::Bytes;
 use chia_wallet_sdk::driver::{
-    MedievalVault, RewardDistributorAddEntryAction, RewardDistributorRemoveEntryAction,
-    RewardDistributorSyncAction, SingletonInfo,
+    MedievalVault, RewardDistributorAddEntryAction, RewardDistributorReceivedMessagePrefix,
+    RewardDistributorRemoveEntryAction, RewardDistributorSyncAction, RewardDistributorType,
+    SingletonInfo,
 };
 use chia_wallet_sdk::types::puzzles::StateSchedulerLayerSolution;
 use clvmr::{Allocator, NodePtr};
@@ -36,13 +36,20 @@ pub async fn reward_distributor_broadcast_entry_update(
             "Could not get reward distributor constants - try running another command to sync it first".to_string(),
         ))?;
 
+    let manager_launcher_id = match distributor_constants.reward_distributor_type {
+        RewardDistributorType::Managed {
+            manager_singleton_launcher_id,
+        } => manager_singleton_launcher_id,
+        _ => {
+            return Err(CliError::Custom(
+                "Entry updates require a managed reward distributor".to_string(),
+            ));
+        }
+    };
+
     let (signature_from_signers, pubkeys, client, mut ctx, medieval_vault) =
-        multisig_broadcast_thing_start(
-            signatures_str,
-            hex::encode(distributor_constants.manager_or_collection_did_launcher_id),
-            testnet11,
-        )
-        .await?;
+        multisig_broadcast_thing_start(signatures_str, hex::encode(manager_launcher_id), testnet11)
+            .await?;
 
     println!("\nSyncing reward distributor... ");
     let mut reward_distributor = sync_distributor(&client, &db, &mut ctx, launcher_id).await?;
@@ -73,21 +80,24 @@ pub async fn reward_distributor_broadcast_entry_update(
     );
     println!("  Entry shares: {}", entry_shares);
 
-    let message: Bytes32 = (entry_payout_puzzle_hash, entry_shares).tree_hash().into();
-    let mut message: Vec<u8> = message.to_vec();
-    if remove_entry {
-        message.insert(0, b'r');
-    } else {
-        message.insert(0, b'a');
-    }
-
     let constants = get_constants(testnet11);
     let medieval_vault_coin_id = medieval_vault.coin.coin_id();
     let medieval_vault_inner_ph = medieval_vault.info.inner_puzzle_hash();
 
     let delegated_puzzle_ptr = MedievalVault::delegated_puzzle_for_flexible_send_message::<Bytes>(
         &mut ctx,
-        Bytes::from(message),
+        if remove_entry {
+            RewardDistributorReceivedMessagePrefix::remove_entry(
+                entry_payout_puzzle_hash,
+                entry_shares,
+            )
+        } else {
+            RewardDistributorReceivedMessagePrefix::add_entry(
+                entry_payout_puzzle_hash,
+                entry_shares,
+            )
+        }
+        .into(),
         launcher_id,
         medieval_vault.coin,
         &medieval_vault.info,
@@ -119,7 +129,7 @@ pub async fn reward_distributor_broadcast_entry_update(
         .await?
         .into_iter()
         .next()
-        .ok_or(CliError::SlotNotFound("Mirror"))?;
+        .ok_or(CliError::SlotNotFound("Entry"))?;
 
         let (_conds, last_payment_amount) = reward_distributor
             .new_action::<RewardDistributorRemoveEntryAction>()
@@ -130,7 +140,7 @@ pub async fn reward_distributor_broadcast_entry_update(
                 medieval_vault_inner_ph.into(),
             )?;
         println!(
-            "Last payment ammount to entry: {} CAT mojos",
+            "Last payment amount to entry: {} CAT mojos",
             last_payment_amount
         );
     } else {

@@ -1,30 +1,31 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, SpendBundle},
-};
+use chia_bls::Signature;
+use chia_protocol::{Bytes32, SpendBundle};
 use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, LineageProof};
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
         create_security_coin, decode_offer, spend_security_coin, CatLayer, DriverError, Layer,
-        Offer, PrecommitCoin, PrecommitLayer, Puzzle, Slot, SpendContext, XchandlesExpireAction,
-        XchandlesExpirePricingPuzzle, XchandlesPrecommitValue, XchandlesRefundAction,
+        Offer, PrecommitCoin, PrecommitLayer, Puzzle, SingletonInfo, Slot, SpendContext,
+        XchandlesExpireAction, XchandlesExpirePricingPuzzle, XchandlesPrecommitValue,
+        XchandlesRefundAction,
     },
     types::{
         puzzles::{
-            DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesPricingSolution,
-            XchandlesSlotValue,
+            DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs, XchandlesHandleSlotValue,
+            XchandlesPricingSolution, XchandlesSlotNonce,
         },
         Mod,
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, NodePtr};
 
 use crate::{
-    assets_xch_only, get_coinset_client, get_constants, get_last_onchain_timestamp, get_prefix,
-    hex_string_to_bytes32, no_assets, parse_amount, quick_sync_xchandles, sync_xchandles,
-    wait_for_coin, yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
+    assets_xch_only, confirm_pushed_transaction, fetch_nft_from_wallet, get_coinset_client,
+    get_constants, get_last_onchain_timestamp, get_prefix, hex_string_to_bytes32, no_assets,
+    parse_amount, quick_sync_xchandles, recreate_nft_in_wallet, sync_xchandles, wait_for_coin,
+    yes_no_prompt, CliError, Db, SageClient, XchandlesApiClient,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -85,9 +86,15 @@ pub async fn xchandles_expire(
             .get_xchandles_indexed_slot_value(launcher_id, handle.tree_hash().into())
             .await?
             .ok_or(CliError::SlotNotFound("Handle"))?;
-        db.get_slot(&mut ctx, launcher_id, 0, slot_value_hash, 0)
-            .await?
-            .ok_or(CliError::SlotNotFound("Handle"))?
+        db.get_slot(
+            &mut ctx,
+            launcher_id,
+            XchandlesSlotNonce::HANDLE.to_u64(),
+            slot_value_hash,
+            0,
+        )
+        .await?
+        .ok_or(CliError::SlotNotFound("Handle"))?
     } else {
         let xchandles_api_client = XchandlesApiClient::get(testnet11);
         xchandles_api_client
@@ -164,7 +171,7 @@ pub async fn xchandles_expire(
         handle.clone(),
         secret,
         nft_launcher_id,
-        nft_launcher_id.into(),
+        nft_launcher_id,
     );
 
     let refund_address = if let Some(provided_refund_address) = refund_address {
@@ -190,7 +197,13 @@ pub async fn xchandles_expire(
         CatArgs::curry_tree_hash(payment_asset_id, precommit_inner_puzzle_hash);
 
     let Some(potential_precommit_coin_records) = cli
-        .get_coin_records_by_hint(precommit_inner_puzzle_hash.into(), None, None, Some(false))
+        .get_coin_records_by_hint(
+            precommit_inner_puzzle_hash.into(),
+            None,
+            None,
+            Some(false),
+            None,
+        )
         .await?
         .coin_records
     else {
@@ -284,9 +297,21 @@ pub async fn xchandles_expire(
             payment_cat_amount,
         )?;
 
+        let nft_and_p2 = if refund {
+            None
+        } else {
+            let (nft, p2_layer) = fetch_nft_from_wallet(&mut ctx, &sage, &cli, nft).await?;
+            Some((nft, p2_layer))
+        };
+
         println!("A one-sided offer will be created; it will consume:");
         println!("  - 1 mojo");
         println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
+        if !refund {
+            println!(
+                "For security, your NFT will be spent separately and re-created into your wallet."
+            );
+        }
         yes_no_prompt("Proceed?")?;
 
         let offer_resp = sage
@@ -299,13 +324,13 @@ pub async fn xchandles_expire(
         let (security_coin_sk, security_coin) =
             create_security_coin(&mut ctx, offer.offered_coins().xch[0])?;
 
-        let sec_conds = if refund {
+        let (sec_conds, nft_sig) = if refund {
             let factor_puzzle_hash = XchandlesFactorPricingPuzzleArgs {
                 base_price: payment_cat_base_price,
                 registration_period,
             }
             .curry_tree_hash();
-            let slot: Option<Slot<XchandlesSlotValue>> =
+            let slot: Option<Slot<XchandlesHandleSlotValue>> =
                 if DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into()).curry_tree_hash()
                     == registry.info.state.cat_maker_puzzle_hash.into()
                     && registry.info.state.pricing_puzzle_hash == factor_puzzle_hash.into()
@@ -323,28 +348,46 @@ pub async fn xchandles_expire(
 
             let precommitted_pricing_puzzle = ctx.curry(pricing_puzzle)?;
             let precommitted_pricing_solution = ctx.alloc(&pricing_solution)?;
-            registry
-                .new_action::<XchandlesRefundAction>()
-                .spend(
+
+            (
+                registry
+                    .new_action::<XchandlesRefundAction>()
+                    .spend(
+                        &mut ctx,
+                        &mut registry,
+                        &precommit_coin,
+                        precommitted_pricing_puzzle,
+                        precommitted_pricing_solution,
+                        slot,
+                    )?
+                    .reserve_fee(1),
+                Signature::default(),
+            )
+        } else {
+            let (nft, p2_layer) = nft_and_p2.unwrap();
+            let nft_inner_ph = nft.info.inner_puzzle_hash().into();
+
+            let (expire_conds, mut owner_message_conds, resolved_message_conds) =
+                registry.new_action::<XchandlesExpireAction>().spend(
                     &mut ctx,
                     &mut registry,
-                    &precommit_coin,
-                    precommitted_pricing_puzzle,
-                    precommitted_pricing_solution,
                     slot,
-                )?
-                .reserve_fee(1)
-        } else {
-            registry.new_action::<XchandlesExpireAction>().spend(
-                &mut ctx,
-                &mut registry,
-                slot,
-                num_periods,
-                payment_cat_base_price,
-                registration_period,
-                precommit_coin,
-                expire_time,
-            )?
+                    num_periods,
+                    payment_cat_base_price,
+                    registration_period,
+                    &precommit_coin,
+                    expire_time,
+                    nft_inner_ph,
+                    nft_inner_ph,
+                )?;
+
+            if let Some(resolved_message_conds) = resolved_message_conds {
+                owner_message_conds = owner_message_conds.extend(resolved_message_conds);
+            }
+            let nft_sig =
+                recreate_nft_in_wallet(&mut ctx, &sage, nft, p2_layer, owner_message_conds).await?;
+
+            (expire_conds, nft_sig)
         };
 
         let (_new_registry, pending_sig) = registry.finish_spend(&mut ctx)?;
@@ -359,15 +402,15 @@ pub async fn xchandles_expire(
 
         let sb = offer.take(SpendBundle::new(
             ctx.take(),
-            security_coin_sig + &pending_sig,
+            security_coin_sig + &pending_sig + &nft_sig,
         ));
 
         println!("Submitting transaction...");
         let resp = cli.push_tx(sb).await?;
 
-        println!("Transaction submitted; status='{}'", resp.status);
-        wait_for_coin(&cli, security_coin.coin_id(), true).await?;
-        println!("Confirmed!");
+        if confirm_pushed_transaction(&cli, &resp, security_coin.coin_id(), true).await? {
+            println!("Confirmed!");
+        }
 
         return Ok(());
     }

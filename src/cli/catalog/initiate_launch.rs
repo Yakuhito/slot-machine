@@ -5,15 +5,12 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    get_coinset_client, get_prefix, load_catalog_state_schedule_csv, no_assets, parse_amount,
-    print_medieval_vault_configuration, wait_for_coin, SageClient,
+    confirm_pushed_transaction, get_coinset_client, get_prefix, load_catalog_state_schedule_csv,
+    no_assets, parse_amount, print_medieval_vault_configuration, SageClient,
 };
-use chia::{
-    bls::PublicKey,
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin, SpendBundle},
-    puzzles::cat::GenesisByCoinIdTailArgs,
-};
+use chia_bls::PublicKey;
+use chia_protocol::{Bytes32, Coin, SpendBundle};
+use chia_puzzle_types::cat::GenesisByCoinIdTailArgs;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -22,10 +19,12 @@ use chia_wallet_sdk::{
         SpendContext, StateSchedulerInfo,
     },
     types::{
-        puzzles::DefaultCatMakerArgs, Conditions, Mod, MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
+        conditions::RunCatTail, puzzles::DefaultCatMakerArgs, Conditions, Mod, MAINNET_CONSTANTS,
+        TESTNET11_CONSTANTS,
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 use clvmr::NodePtr;
 
 #[allow(clippy::type_complexity)]
@@ -35,7 +34,7 @@ fn get_additional_info_for_launch(
     security_coin: Coin,
     (catalog_constants, state_schedule, pubkeys, m, cat_amount, cat_destination_puzzle_hash): (
         CatalogRegistryConstants,
-        Vec<(u32, CatalogRegistryState)>,
+        Vec<(u64, CatalogRegistryState)>,
         Vec<PublicKey>,
         usize,
         u64,
@@ -67,7 +66,7 @@ fn get_additional_info_for_launch(
         state_schedule,
         0,
         multisig_info.inner_puzzle_hash().into(),
-    );
+    )?;
     let (price_singleton_launch_conds, _coin) = price_singleton_launcher.spend(
         ctx,
         state_scheduler_info.inner_puzzle_hash().into(),
@@ -76,10 +75,16 @@ fn get_additional_info_for_launch(
     conditions = conditions.extend(price_singleton_launch_conds);
 
     let hint = ctx.hint(cat_destination_puzzle_hash)?;
-    let (cat_creation_conds, eve_cat) = Cat::issue_with_coin(
+    let run_tail = RunCatTail::new(
+        ctx.curry(GenesisByCoinIdTailArgs::new(security_coin.coin_id()))?,
+        NodePtr::NIL,
+    );
+    let (cat_creation_conds, eve_cat) = Cat::issue(
         ctx,
         security_coin.coin_id(),
+        None,
         cat_amount,
+        run_tail,
         Conditions::new().create_coin(cat_destination_puzzle_hash, cat_amount, hint),
     )?;
     conditions = conditions.extend(cat_creation_conds);
@@ -142,8 +147,8 @@ pub async fn catalog_initiate_launch(
     println!("Price schedule:");
     for record in price_schedule.iter() {
         println!(
-            "  After block height {}, a registration will cost {} CAT mojos (asset id: {}).",
-            record.block_height, record.registration_price, record.asset_id
+            "  After timestamp {}, a registration will cost {} CAT mojos (asset id: {}).",
+            record.timestamp, record.registration_price, record.asset_id
         );
     }
 
@@ -253,7 +258,7 @@ pub async fn catalog_initiate_launch(
                 .into_iter()
                 .map(|ps| {
                     (
-                        ps.block_height,
+                        ps.timestamp,
                         CatalogRegistryState {
                             cat_maker_puzzle_hash: DefaultCatMakerArgs::new(
                                 ps.asset_id.tree_hash().into(),
@@ -293,10 +298,9 @@ pub async fn catalog_initiate_launch(
     println!("Submitting transaction...");
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

@@ -12,7 +12,7 @@
         REFUND_PUZZLE_HASH ; where the funds go if message=0 (refund)
         VALUE
         spend_mode ; 0 = refund, 1 = spend to payout puzzle hash
-        my_amount
+        my_amount .
         ; info about this coin's spender (singleton coin being spent)
         singleton_inner_puzzle_hash
     )

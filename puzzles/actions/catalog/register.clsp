@@ -15,11 +15,11 @@
 ;; |  left slot  | <---> |  new slot   | <---> | right slot  |
 ;; ---------------       ---------------       ---------------
 ;; 
-;; A slot's value is (my_value . (left_value . right_value))
+;; A slot's value is (counter . (my_value . (left_value . right_value)))
 ;; For CATalog, a slot's value is the tail hash of a registered CAT
 
 (mod (
-    NFT_PACK ; see 'assert_launcher_ann' to see what this contains
+    NFT_PACK ; see 'secure_nft.clib' to see what this contains (packed as tree)
     UNIQUENESS_PRELAUNCHER_1ST_CURRY_HASH ; after 1st curry
     PRECOMMIT_1ST_CURRY_HASH ; after 1st curry
     SLOT_1ST_CURRY_HASH ; after 1st curry
@@ -33,16 +33,16 @@
             )
         )
     )
-    ( 
-        cat_maker_reveal
-        cat_maker_solution
+    ; solution
+    my_id
+    (left_counter left_tail_hash . left_left_tail_hash) ; left slot info
+    (right_counter right_tail_hash . right_right_tail_hash) ; right slot info
+    (cat_maker_reveal . cat_maker_solution) . ; cat_maker_puzzle_and_solution
+    (
         tail_hash ; full TAIL in the reveal of the pre-commit coin
-        initial_nft_owner_ph ; also included in the pre-commit coin
+        initial_nft_owner_ph . ; also included in the pre-commit coin
         refund_puzzle_hash_hash ; used to compute precommit coin puzzle hash
-        left_tail_hash left_left_tail_hash ; left slot info
-        right_tail_hash right_right_tail_hash . ; right slot info
-        my_id
-    ) ; solution
+    ) ; other_precommit_data 
 )
     (include condition_codes.clib)
     (include secure_nft.clib)
@@ -67,7 +67,7 @@
                     initial_nft_owner_ph
                     (coinid 
                         (coinid my_id prelauncher_full_puzzle_hash 0) ; prelauncher id
-                        (f NFT_PACK)
+                        (f (f (f NFT_PACK))) ; launcher puzzle hash
                         1
                     ) ; launcher id
                 )
@@ -76,8 +76,8 @@
         )
     )
 
-    (defun-inline get_slot_value_hash (value left_value right_value)
-        (sha256tree (c value (c left_value right_value)))
+    (defun-inline get_slot_value_hash (counter value left_value right_value)
+        (sha256tree (c counter (c value (c left_value right_value))))
     )
 
     (if (all
@@ -106,24 +106,24 @@
 
                     ; spend left slot
                     (spend_slot SLOT_1ST_CURRY_HASH
-                        (get_slot_value_hash left_tail_hash left_left_tail_hash right_tail_hash)
+                        (get_slot_value_hash left_counter left_tail_hash left_left_tail_hash right_tail_hash)
                     )
                     ; spend right slot
                     (spend_slot SLOT_1ST_CURRY_HASH
-                        (get_slot_value_hash right_tail_hash left_tail_hash right_right_tail_hash)
+                        (get_slot_value_hash right_counter right_tail_hash left_tail_hash right_right_tail_hash)
                     )
                     
                     ; create new slot
                     (create_slot SLOT_1ST_CURRY_HASH
-                        (get_slot_value_hash tail_hash left_tail_hash right_tail_hash)
+                        (get_slot_value_hash 0 tail_hash left_tail_hash right_tail_hash)
                     ) 
                     ; create new left slot
                     (create_slot SLOT_1ST_CURRY_HASH
-                        (get_slot_value_hash left_tail_hash left_left_tail_hash tail_hash)
+                        (get_slot_value_hash (+ left_counter 1) left_tail_hash left_left_tail_hash tail_hash)
                     ) 
                     ; create new right slot
                     (create_slot SLOT_1ST_CURRY_HASH
-                        (get_slot_value_hash right_tail_hash tail_hash right_right_tail_hash)
+                        (get_slot_value_hash (+ right_counter 1) right_tail_hash tail_hash right_right_tail_hash)
                     ) 
                     
                     ; consume precommit coin

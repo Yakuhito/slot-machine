@@ -1,5 +1,5 @@
-use chia::bls::PublicKey;
-use chia::protocol::{Bytes, Bytes32};
+use chia_bls::PublicKey;
+use chia_protocol::{Bytes, Bytes32};
 use chia_wallet_sdk::utils::Address;
 use csv::ReaderBuilder;
 use hex::FromHex;
@@ -123,7 +123,7 @@ pub fn get_alias_map() -> Result<HashMap<PublicKey, String>, CliError> {
 
 #[derive(Debug, Deserialize)]
 pub struct CatalogStateScheduleRecord {
-    pub block_height: u32,
+    pub timestamp: u64,
     #[serde(deserialize_with = "hex_string_to_bytes32")]
     pub asset_id: Bytes32,
     pub registration_price: u64,
@@ -144,9 +144,9 @@ pub fn load_catalog_state_schedule_csv<P: AsRef<Path>>(
     Ok(records)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct XchandlesStateScheduleRecord {
-    pub block_height: u32,
+    pub timestamp: u64,
     #[serde(deserialize_with = "hex_string_to_bytes32")]
     pub asset_id: Bytes32,
     pub registration_price: u64,
@@ -171,7 +171,20 @@ pub fn load_xchandles_state_schedule_csv<P: AsRef<Path>>(
 #[derive(Debug, Deserialize, Clone)]
 pub struct XchandlesPremineRecord {
     pub handle: String,
-    pub owner_nft: String,
+    #[serde(deserialize_with = "decode_bech32m")]
+    pub recipient: Bytes32,
+    #[serde(deserialize_with = "deserialize_string_array")]
+    pub image_uris: Vec<String>,
+    #[serde(deserialize_with = "hex_string_to_bytes32")]
+    pub image_hash: Bytes32,
+    #[serde(deserialize_with = "deserialize_string_array")]
+    pub metadata_uris: Vec<String>,
+    #[serde(deserialize_with = "hex_string_to_bytes32")]
+    pub metadata_hash: Bytes32,
+    #[serde(deserialize_with = "deserialize_string_array")]
+    pub license_uris: Vec<String>,
+    #[serde(deserialize_with = "hex_string_to_bytes32")]
+    pub license_hash: Bytes32,
 }
 
 pub fn load_xchandles_premine_csv<P: AsRef<Path>>(
@@ -187,4 +200,134 @@ pub fn load_xchandles_premine_csv<P: AsRef<Path>>(
     }
 
     Ok(records)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatastoreNftRecord {
+    pub nft_id: Bytes32,
+    pub weight: u64,
+}
+
+fn decode_nft_id<'de, D>(deserializer: D) -> Result<Bytes32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: &str = Deserialize::deserialize(deserializer)?;
+    let address = Address::decode(s).map_err(serde::de::Error::custom)?;
+
+    if address.prefix != "nft" {
+        return Err(serde::de::Error::custom(
+            "Invalid bech32m prefix: expected nft",
+        ));
+    }
+
+    Ok(address.puzzle_hash)
+}
+
+#[derive(Debug, Deserialize)]
+struct DatastoreNftCsvRow {
+    #[serde(deserialize_with = "decode_nft_id")]
+    nft_id: Bytes32,
+    weight: u64,
+}
+
+pub fn load_datastore_nft_csv<P: AsRef<Path>>(
+    path: P,
+) -> Result<Vec<DatastoreNftRecord>, CliError> {
+    let file = File::open(path)?;
+    let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
+
+    let mut records = Vec::new();
+    for result in rdr.deserialize() {
+        let row: DatastoreNftCsvRow = result.map_err(CliError::Csv)?;
+        records.push(DatastoreNftRecord {
+            nft_id: row.nft_id,
+            weight: row.weight,
+        });
+    }
+
+    Ok(records)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn write_temp_csv(contents: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("catalog_schedule_{nanos}.csv"));
+        fs::write(&path, contents).unwrap();
+        path
+    }
+
+    #[test]
+    fn catalog_schedule_csv_uses_timestamp_u64() {
+        let path = write_temp_csv(
+            "timestamp,asset_id,registration_price\n\
+             1,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",3\n\
+             2,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",2\n\
+             3,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",1\n",
+        );
+
+        let records = load_catalog_state_schedule_csv(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].timestamp, 1);
+        assert_eq!(records[1].timestamp, 2);
+        assert_eq!(records[2].timestamp, 3);
+        assert_eq!(records[0].registration_price, 3);
+    }
+
+    #[test]
+    fn catalog_schedule_csv_rejects_block_height_header() {
+        let path = write_temp_csv(
+            "block_height,asset_id,registration_price\n\
+             1,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",3\n",
+        );
+
+        let err = load_catalog_state_schedule_csv(&path);
+        let _ = fs::remove_file(&path);
+
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn xchandles_schedule_csv_uses_timestamp_u64() {
+        let path = write_temp_csv(
+            "timestamp,asset_id,registration_price,registration_period\n\
+             1,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",3,31557600\n\
+             2,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",2,31557600\n\
+             3,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",1,31557600\n",
+        );
+
+        let records = load_xchandles_state_schedule_csv(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].timestamp, 1);
+        assert_eq!(records[1].timestamp, 2);
+        assert_eq!(records[2].timestamp, 3);
+        assert_eq!(records[0].registration_price, 3);
+        assert_eq!(records[0].registration_period, 31557600);
+    }
+
+    #[test]
+    fn xchandles_schedule_csv_rejects_block_height_header() {
+        let path = write_temp_csv(
+            "block_height,asset_id,registration_price,registration_period\n\
+             1,\"d82dd03f8a9ad2f84353cd953c4de6b21dbaaf7de3ba3f4ddd9abe31ecba80ad\",3,31557600\n",
+        );
+
+        let err = load_xchandles_state_schedule_csv(&path);
+        let _ = fs::remove_file(&path);
+
+        assert!(err.is_err());
+    }
 }

@@ -1,14 +1,11 @@
-use chia::{
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, CoinSpend},
-    puzzles::{cat::CatArgs, singleton::SingletonStruct, LineageProof},
-};
-use chia_puzzle_types::cat::CatSolution;
+use chia_bls::Signature;
+use chia_protocol::Bytes32;
+use chia_puzzle_types::{cat::CatArgs, singleton::SingletonStruct, LineageProof};
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
     driver::{
-        Cat, CatInfo, CatLayer, CatSpend, DriverError, HashedPtr, Layer, Puzzle, Reserve,
-        RewardDistributor, RewardDistributorConstants, SingletonLayer, Slot, Spend, SpendContext,
+        CatLayer, DriverError, HashedPtr, Layer, Puzzle, Reserve, RewardDistributor,
+        RewardDistributorConstants, SingletonLayer, Slot, SpendContext,
     },
     types::puzzles::{
         P2DelegatedBySingletonLayerArgs, RewardDistributorCommitmentSlotValue,
@@ -16,6 +13,7 @@ use chia_wallet_sdk::{
         RewardDistributorSlotNonce, SlotInfo,
     },
 };
+use clvm_utils::ToTreeHash;
 use clvmr::NodePtr;
 
 use crate::{CliError, Db};
@@ -26,6 +24,7 @@ pub async fn sync_distributor(
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
 ) -> Result<RewardDistributor, CliError> {
+    let mut constants_from_chain = false;
     let constants = if let Some(cached_constants) = db
         .get_reward_distributor_configuration(ctx, launcher_id)
         .await?
@@ -57,11 +56,17 @@ pub async fn sync_distributor(
             ));
         };
 
+        constants_from_chain = true;
         constants
     };
 
+    if constants_from_chain {
+        db.save_reward_distributor_configuration(ctx, constants.launcher_id, constants)
+            .await?;
+    }
+
     let mut records = client
-        .get_coin_records_by_hint(constants.launcher_id, None, None, Some(false))
+        .get_coin_records_by_hint(constants.launcher_id, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(CliError::Custom(
@@ -83,10 +88,26 @@ pub async fn sync_distributor(
             .coin_solution
             .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
-        if let Ok(Some(distributor)) =
+        if let Ok(Some(on_chain_distributor)) =
             RewardDistributor::from_parent_spend(ctx, &next_spend, constants)
         {
-            return mempool_distributor_maybe(ctx, distributor, client).await;
+            if let Some(mempool_items) = client
+                .get_mempool_items_by_coin_name(on_chain_distributor.coin.coin_id())
+                .await?
+                .mempool_items
+            {
+                if !mempool_items.is_empty() {
+                    if let Some(new_distributor) = RewardDistributor::from_mempool_item(
+                        ctx,
+                        mempool_items[0].spend_bundle.clone(),
+                        constants,
+                    )? {
+                        return Ok(new_distributor);
+                    }
+                }
+            }
+
+            return Ok(on_chain_distributor);
         }
     }
 
@@ -165,7 +186,7 @@ pub async fn find_reserve(
     let puzzle_hash: Bytes32 = CatArgs::curry_tree_hash(asset_id, inner_puzzle_hash).into();
 
     let Some(coin_records) = client
-        .get_coin_records_by_puzzle_hash(puzzle_hash, None, None, Some(include_spent))
+        .get_coin_records_by_puzzle_hash(puzzle_hash, None, None, Some(include_spent), None)
         .await?
         .coin_records
     else {
@@ -213,133 +234,6 @@ pub async fn find_reserve(
     })
 }
 
-pub async fn mempool_distributor_maybe(
-    ctx: &mut SpendContext,
-    on_chain_distributor: RewardDistributor,
-    client: &CoinsetClient,
-) -> Result<RewardDistributor, CliError> {
-    let Some(mut mempool_items) = client
-        .get_mempool_items_by_coin_name(on_chain_distributor.coin.coin_id())
-        .await?
-        .mempool_items
-    else {
-        return Ok(on_chain_distributor);
-    };
-
-    if mempool_items.is_empty() {
-        return Ok(on_chain_distributor);
-    }
-
-    let mempool_item = mempool_items.remove(0);
-    let mut distributor = on_chain_distributor;
-    let mut parent_id_to_look_for = distributor.coin.parent_coin_info;
-    let mut distributor_counter = 0;
-    loop {
-        let Some(distributor_spend) = mempool_item
-            .spend_bundle
-            .coin_spends
-            .iter()
-            .find(|c| c.coin.parent_coin_info == parent_id_to_look_for)
-        else {
-            break;
-        };
-
-        let Some(new_distributor) = RewardDistributor::from_spend(
-            ctx,
-            distributor_spend,
-            Some(if distributor_counter > 0 {
-                distributor.reserve.child(1).proof
-            } else {
-                distributor.reserve.proof
-            }),
-            distributor.info.constants,
-        )?
-        else {
-            break;
-        };
-        distributor = new_distributor;
-        parent_id_to_look_for = distributor.coin.coin_id();
-        distributor_counter += 1;
-    }
-
-    let reserve_spend = mempool_item
-        .spend_bundle
-        .coin_spends
-        .iter()
-        .find(|coin_spend| coin_spend.coin == distributor.reserve.coin)
-        .ok_or(DriverError::Custom("Reserve spend not found".to_string()))?
-        .clone();
-    let spends_to_add: Vec<CoinSpend> = mempool_item
-        .spend_bundle
-        .coin_spends
-        .into_iter()
-        .filter(|coin_spend| {
-            coin_spend.coin != distributor.coin && coin_spend.coin != distributor.reserve.coin
-        })
-        .collect();
-
-    // CATs spent with reserve are stored in the pending spend info item
-    // since they need to be spent to form a ring (in finish_spend)
-    let mut other_cats = Vec::new();
-    #[allow(unused_assignments)]
-    let (mut cat_spend, mut cat_solution) = spend_to_cat_spend(ctx, reserve_spend)?;
-    loop {
-        let cat_to_find = cat_solution.prev_coin_id;
-        if cat_to_find == distributor.reserve.coin.coin_id() {
-            break;
-        }
-
-        let cat_coin_spend = spends_to_add
-            .iter()
-            .find(|coin_spend| coin_spend.coin.coin_id() == cat_to_find)
-            .ok_or(DriverError::Custom("CAT spend not found".to_string()))?
-            .clone();
-        (cat_spend, cat_solution) = spend_to_cat_spend(ctx, cat_coin_spend)?;
-        other_cats.push(cat_spend);
-    }
-
-    // finally, set things up for RBF
-    spends_to_add.into_iter().for_each(|coin_spend| {
-        if other_cats
-            .iter()
-            .all(|cat_spend| cat_spend.cat.coin != coin_spend.coin)
-        {
-            ctx.insert(coin_spend);
-        }
-    });
-    distributor.set_pending_signature(mempool_item.spend_bundle.aggregated_signature);
-    distributor.set_pending_other_cats(other_cats);
-
-    Ok(distributor)
-}
-
-pub fn spend_to_cat_spend(
-    ctx: &mut SpendContext,
-    spend: CoinSpend,
-) -> Result<(CatSpend, CatSolution<NodePtr>), DriverError> {
-    let puzzle_ptr = ctx.alloc(&spend.puzzle_reveal)?;
-    let solution_ptr = ctx.alloc(&spend.solution)?;
-
-    let puzzle = Puzzle::parse(ctx, puzzle_ptr);
-    let cat = CatLayer::<HashedPtr>::parse_puzzle(ctx, puzzle)?
-        .ok_or(DriverError::Custom("Not a CAT".to_string()))?;
-
-    let solution = ctx.extract::<CatSolution<NodePtr>>(solution_ptr)?;
-
-    Ok((
-        CatSpend {
-            cat: Cat::new(
-                spend.coin,
-                solution.lineage_proof,
-                CatInfo::new(cat.asset_id, None, cat.inner_puzzle.tree_hash().into()),
-            ),
-            spend: Spend::new(cat.inner_puzzle.ptr(), solution.inner_puzzle_solution),
-            hidden: false,
-        },
-        solution,
-    ))
-}
-
 pub async fn find_reward_slot(
     ctx: &mut SpendContext,
     client: &CoinsetClient,
@@ -350,7 +244,13 @@ pub async fn find_reward_slot(
 
     loop {
         let mut possible_records = client
-            .get_coin_records_by_hint(epoch_start.tree_hash().into(), None, None, Some(false))
+            .get_coin_records_by_hint(
+                epoch_start.tree_hash().into(),
+                None,
+                None,
+                Some(false),
+                None,
+            )
             .await?
             .coin_records
             .ok_or(DriverError::MissingHint)?;
@@ -366,11 +266,17 @@ pub async fn find_reward_slot(
                 .coin_solution
                 .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
-            let Some(distributor) =
-                RewardDistributor::from_spend(ctx, &distributor_spent, None, constants)?
+            let Some(distributor) = RewardDistributor::from_spend(
+                ctx,
+                &distributor_spent,
+                None,
+                constants,
+                Signature::default(),
+            )?
             else {
                 // eve spend
                 let slot_value = RewardDistributorRewardSlotValue {
+                    counter: 0,
                     epoch_start,
                     next_epoch_initialized: false,
                     rewards: 0,
@@ -392,8 +298,16 @@ pub async fn find_reward_slot(
                     },
                     slot_info,
                 );
+
+                if slot.coin != coin_record.coin {
+                    continue;
+                }
                 return Ok(slot);
             };
+
+            if distributor.info.constants.launcher_id != constants.launcher_id {
+                continue;
+            }
 
             if let Some(slot) = distributor
                 .pending_spend
@@ -429,7 +343,7 @@ pub async fn find_commitment_slots(
     rewards: Option<u64>,
 ) -> Result<Vec<Slot<RewardDistributorCommitmentSlotValue>>, CliError> {
     let mut possible_records = client
-        .get_coin_records_by_hint(clawback_ph, None, None, Some(false))
+        .get_coin_records_by_hint(clawback_ph, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(DriverError::MissingHint)?;
@@ -447,11 +361,20 @@ pub async fn find_commitment_slots(
             .coin_solution
             .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
-        let Some(distributor) =
-            RewardDistributor::from_spend(ctx, &distributor_spent, None, constants)?
+        let Some(distributor) = RewardDistributor::from_spend(
+            ctx,
+            &distributor_spent,
+            None,
+            constants,
+            Signature::default(),
+        )?
         else {
             continue;
         };
+
+        if distributor.info.constants.launcher_id != constants.launcher_id {
+            continue;
+        }
 
         if let Some(slot) = distributor
             .pending_spend
@@ -493,11 +416,11 @@ pub async fn find_entry_slots(
     client: &CoinsetClient,
     constants: RewardDistributorConstants,
     payout_puzzle_hash: Bytes32,
-    initial_cumulative_payout: Option<u64>,
+    initial_cumulative_payout: Option<u128>,
     shares: Option<u64>,
 ) -> Result<Vec<Slot<RewardDistributorEntrySlotValue>>, CliError> {
     let mut possible_records = client
-        .get_coin_records_by_hint(payout_puzzle_hash, None, None, Some(false))
+        .get_coin_records_by_hint(payout_puzzle_hash, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(DriverError::MissingHint)?;
@@ -515,11 +438,20 @@ pub async fn find_entry_slots(
             .coin_solution
             .ok_or(CliError::CoinNotSpent(coin_record.coin.parent_coin_info))?;
 
-        let Some(distributor) =
-            RewardDistributor::from_spend(ctx, &distributor_spent, None, constants)?
+        let Some(distributor) = RewardDistributor::from_spend(
+            ctx,
+            &distributor_spent,
+            None,
+            constants,
+            Signature::default(),
+        )?
         else {
             continue;
         };
+
+        if distributor.info.constants.launcher_id != constants.launcher_id {
+            continue;
+        }
 
         if let Some(slot) = distributor
             .pending_spend

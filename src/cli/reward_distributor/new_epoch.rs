@@ -1,9 +1,9 @@
 use crate::{
-    assets_xch_only, find_reward_slot, get_coinset_client, get_constants, hex_string_to_bytes32,
-    no_assets, parse_amount, sync_distributor, wait_for_coin, yes_no_prompt, CliError, Db,
-    SageClient,
+    assets_xch_only, confirm_pushed_transaction, find_reward_slot, get_coinset_client,
+    get_constants, hex_string_to_bytes32, no_assets, parse_amount, sync_distributor, yes_no_prompt,
+    CliError, Db, SageClient,
 };
-use chia::protocol::SpendBundle;
+use chia_protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -51,8 +51,8 @@ pub async fn reward_distributor_new_epoch(
     .await?;
 
     println!("A one-sided offer will be created. It will contain:");
-    println!("  1 mojo",);
-    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
+    println!("  - 1 mojo");
+    println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
 
     yes_no_prompt("Proceed?")?;
 
@@ -91,10 +91,9 @@ pub async fn reward_distributor_new_epoch(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

@@ -1,4 +1,4 @@
-use chia::bls::{verify, Signature};
+use chia_bls::{verify, Signature};
 
 use crate::{hex_string_to_bytes, hex_string_to_bytes32, hex_string_to_pubkey, CliError};
 

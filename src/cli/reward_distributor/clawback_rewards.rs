@@ -1,4 +1,4 @@
-use chia::protocol::{Coin, SpendBundle};
+use chia_protocol::{Coin, SpendBundle};
 use chia_puzzle_types::Memos;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
@@ -13,10 +13,10 @@ use clvm_traits::clvm_quote;
 use clvmr::NodePtr;
 
 use crate::{
-    assets_xch_only, find_commitment_slots, find_reward_slot, get_coin_public_key,
-    get_coinset_client, get_constants, hex_string_to_bytes32, hex_string_to_signature, no_assets,
-    parse_amount, spend_to_coin_spend, sync_distributor, wait_for_coin, yes_no_prompt, CliError,
-    Db, SageClient,
+    assets_xch_only, confirm_pushed_transaction, find_commitment_slots, find_reward_slot,
+    get_coin_public_key, get_coinset_client, get_constants, hex_string_to_bytes32,
+    hex_string_to_signature, no_assets, parse_amount, spend_to_coin_spend, sync_distributor,
+    yes_no_prompt, CliError, Db, SageClient,
 };
 
 pub async fn reward_distributor_clawback_rewards(
@@ -68,8 +68,8 @@ pub async fn reward_distributor_clawback_rewards(
     );
 
     println!("A one-sided offer will be created. It will contain:");
-    println!("  1 mojo",);
-    println!("  {} XCH ({} mojos) reserved as fees", fee_str, fee);
+    println!("  - 1 mojo");
+    println!("  - {} XCH ({} mojos) reserved as fees", fee_str, fee);
     println!("Additionally, another 1-mojo coin with the clawback puzzle will be automatically created and used.");
 
     yes_no_prompt("Proceed?")?;
@@ -134,10 +134,9 @@ pub async fn reward_distributor_clawback_rewards(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

@@ -1,9 +1,9 @@
 (
-    (defun-inline get_xchandles_slot_value_hash (handle_hash neighbors expiration data)
-        (sha256tree (c
+    (defun-inline get_xchandles_slot_value_hash (counter handle_hash neighbors expiration data)
+        (sha256tree (c counter (c
             (c handle_hash neighbors)
             (c expiration data)
-        ))
+        )))
     )
 
     (defun-inline xchandles_precommitment_value (

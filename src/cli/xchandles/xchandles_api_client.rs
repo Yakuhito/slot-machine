@@ -1,11 +1,11 @@
-use chia::protocol::Bytes32;
+use chia_protocol::Bytes32;
 use chia_puzzle_types::LineageProof;
 use chia_wallet_sdk::driver::Slot;
-use chia_wallet_sdk::types::puzzles::{SlotInfo, XchandlesSlotValue};
+use chia_wallet_sdk::types::puzzles::{SlotInfo, XchandlesHandleSlotValue, XchandlesSlotNonce};
 use reqwest::Client;
 use std::time::Duration;
 
-use crate::{hex_string_to_bytes, hex_string_to_bytes32, CliError};
+use crate::{hex_string_to_bytes32, CliError};
 
 use super::XchandlesNeighborsResponse;
 
@@ -65,7 +65,13 @@ impl XchandlesApiClient {
         &self,
         launcher_id: Bytes32,
         handle_hash: Bytes32,
-    ) -> Result<(Slot<XchandlesSlotValue>, Slot<XchandlesSlotValue>), CliError> {
+    ) -> Result<
+        (
+            Slot<XchandlesHandleSlotValue>,
+            Slot<XchandlesHandleSlotValue>,
+        ),
+        CliError,
+    > {
         let url = format!(
             "{}/neighbors?launcher_id={}&handle_hash={}",
             self.base_url,
@@ -82,14 +88,16 @@ impl XchandlesApiClient {
         let left_left_handle_hash = hex_string_to_bytes32(&neighbors_resp.left_left_handle_hash)?;
         let left_expiration = neighbors_resp.left_expiration;
         let left_owner_launcher_id = hex_string_to_bytes32(&neighbors_resp.left_owner_launcher_id)?;
-        let left_resolved_data = hex_string_to_bytes(&neighbors_resp.left_resolved_data)?;
-        let left_value = XchandlesSlotValue::new(
+        let left_resolved_launcher_id =
+            hex_string_to_bytes32(&neighbors_resp.left_resolved_launcher_id)?;
+        let left_value = XchandlesHandleSlotValue::new(
+            neighbors_resp.left_counter,
             left_handle_hash,
             left_left_handle_hash,
             right_handle_hash,
             left_expiration,
             left_owner_launcher_id,
-            left_resolved_data,
+            left_resolved_launcher_id,
         );
 
         let right_right_handle_hash =
@@ -97,14 +105,16 @@ impl XchandlesApiClient {
         let right_expiration = neighbors_resp.right_expiration;
         let right_owner_launcher_id =
             hex_string_to_bytes32(&neighbors_resp.right_owner_launcher_id)?;
-        let right_resolved_data = hex_string_to_bytes(&neighbors_resp.right_resolved_data)?;
-        let right_value = XchandlesSlotValue::new(
+        let right_resolved_launcher_id =
+            hex_string_to_bytes32(&neighbors_resp.right_resolved_launcher_id)?;
+        let right_value = XchandlesHandleSlotValue::new(
+            neighbors_resp.right_counter,
             right_handle_hash,
             left_handle_hash,
             right_right_handle_hash,
             right_expiration,
             right_owner_launcher_id,
-            right_resolved_data,
+            right_resolved_launcher_id,
         );
 
         let left_parent_parent_info =
@@ -129,11 +139,19 @@ impl XchandlesApiClient {
             parent_amount: right_parent_amount,
         };
 
-        let left_info = SlotInfo::<XchandlesSlotValue>::from_value(launcher_id, 0, left_value);
-        let left = Slot::<XchandlesSlotValue>::new(left_proof, left_info);
+        let left_info = SlotInfo::<XchandlesHandleSlotValue>::from_value(
+            launcher_id,
+            XchandlesSlotNonce::HANDLE.to_u64(),
+            left_value,
+        );
+        let left = Slot::<XchandlesHandleSlotValue>::new(left_proof, left_info);
 
-        let right_info = SlotInfo::<XchandlesSlotValue>::from_value(launcher_id, 0, right_value);
-        let right = Slot::<XchandlesSlotValue>::new(right_proof, right_info);
+        let right_info = SlotInfo::<XchandlesHandleSlotValue>::from_value(
+            launcher_id,
+            XchandlesSlotNonce::HANDLE.to_u64(),
+            right_value,
+        );
+        let right = Slot::<XchandlesHandleSlotValue>::new(right_proof, right_info);
 
         Ok((left, right))
     }
@@ -142,7 +160,7 @@ impl XchandlesApiClient {
         &self,
         launcher_id: Bytes32,
         handle_hash: Bytes32,
-    ) -> Result<Slot<XchandlesSlotValue>, CliError> {
+    ) -> Result<Slot<XchandlesHandleSlotValue>, CliError> {
         let mut handle_hash_minus_one = handle_hash.to_bytes();
         let mut index = 31;
         while handle_hash_minus_one[index] == 0 {

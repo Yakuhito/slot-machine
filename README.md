@@ -4,8 +4,7 @@ A repo containing the main CLI and code used to interact with Chia blockchain dA
 
 ## CATalog
 
-A decentralized, shared CAT registration system for the Chia blockchain. It allows CAT creators to register new CATs and add useful information such as name and image URL. Verifiers can then create verification coins to attest that the data is not misleading, as well as assign custom metadata to the CAT that their website/apps later use.
-
+A decentralized, shared CAT registration system for the Chia blockchain. It allows CAT creators to register new CATs and add useful information such as name and image URL.
 
 ## XCHandles
 
@@ -13,11 +12,14 @@ A decentralized naming system/address book for the Chia blockchain. XCHandles an
 
 ## Reward Distributor
 
-A transaction-efficient distribution system. Anyone can commit rewards for the current or future distribution periods, which usually last one week. The reward amount is efficiently distributed among eligible recipients. Some reward distributors act as permissioned farms, where a manager controls the list of currently active reward addresses, as well as their weight. The other mode allows anyone to stake any NFT minted by a given DID to start earning rewards right away - users may unstake an NFT at any time.
+A transaction-efficient distribution system. Anyone can commit rewards for the current or future distribution periods, which usually last one week. The reward amount is efficiently distributed among eligible recipients. Some reward distributors act as permissioned farms, where a manager controls the list of currently active reward addresses, as well as their weight. Another mode allows anyone to stake any NFT minted by a given DID to start earning rewards right away - users may unstake an NFT at any time. Yet another mode allows sourcing a whitelist of NFTs and their corresponding weights from a DataStore. Lastly, the CAT mode allows users to stake CATs instead of NFTs in the distributor, with the weight being proportional to the amount staked.
+
+_Note_: The reward distributor puzzles have been moved [here](https://github.com/DIG-Network/reward-distributor-clsp).
 
 ## Learn More
 
 Want to learn more? Here are some resources that might help (in recommended order):
+ * [CHIP-0054: XCHandles & CHIP-0055: CATalog](https://github.com/Chia-Network/chips/pull/192)
  * [CHIP-0050 (Action Layer and Slots) & CHIP-0051 (Reward Distributor)](https://github.com/Chia-Network/chips/pull/165)
  * [CHIPs Presentation](https://pitch.com/v/chip-0050-chip-0051-xymjnx)
  * [Post: The Problem of Uniqueness](https://blog.fireacademy.io/p/uniqueness-on-chain)
@@ -30,6 +32,7 @@ Want to learn more? Here are some resources that might help (in recommended orde
  * [CATalog Docs: Technical Manual](https://docs.catalog.cat/)
  * [XCHandles Docs: Technical Manual](https://docs.xchandles.com/)
 
+
 ## License
 
-This repo is licensed under the MIT license - see the [LICENSE](LICENSE) for more details.
+Please note that this repositoru is now licensed under the [Prosperity Public License](https://prosperitylicense.com/) and commercial use needs to be licensed after a trial period - please see the [LICENSE.md](LICENSE.md) for more details.

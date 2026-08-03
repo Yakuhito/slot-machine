@@ -1,10 +1,10 @@
-use chia::protocol::CoinSpend;
+use chia_protocol::CoinSpend;
 use dirs::data_dir;
 use reqwest::Identity;
 use sage_api::{
-    Amount, CoinJson, CoinSpendJson, GetDerivations, GetDerivationsResponse, MakeOffer,
-    MakeOfferResponse, OfferAmount, SendCat, SendCatResponse, SendXch, SendXchResponse,
-    SignCoinSpends, SignCoinSpendsResponse,
+    Amount, CheckAddress, CheckAddressResponse, CoinJson, CoinSpendJson, GetDerivations,
+    GetDerivationsResponse, GetNft, GetNftResponse, MakeOffer, MakeOfferResponse, OfferAmount,
+    SendCat, SendCatResponse, SendXch, SendXchResponse, SignCoinSpends, SignCoinSpendsResponse,
 };
 use thiserror::Error;
 
@@ -123,6 +123,51 @@ impl SageClient {
         Ok(response_body)
     }
 
+    pub async fn get_nft(&self, nft_id: String) -> Result<GetNftResponse, ClientError> {
+        let url = format!("{}/get_nft", self.base_url);
+        let response = self
+            .client
+            .post(&url)
+            .json(&GetNft { nft_id })
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(ClientError::InvalidResponse(format!(
+                "Status: {}, Body: {:?}",
+                response.status(),
+                response.text().await?
+            )));
+        }
+
+        let response_body = response.json::<GetNftResponse>().await?;
+        Ok(response_body)
+    }
+
+    pub async fn check_address(
+        &self,
+        address: String,
+    ) -> Result<CheckAddressResponse, ClientError> {
+        let url = format!("{}/check_address", self.base_url);
+        let response = self
+            .client
+            .post(&url)
+            .json(&CheckAddress { address })
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(ClientError::InvalidResponse(format!(
+                "Status: {}, Body: {:?}",
+                response.status(),
+                response.text().await?
+            )));
+        }
+
+        let response_body = response.json::<CheckAddressResponse>().await?;
+        Ok(response_body)
+    }
+
     pub async fn send_xch(
         &self,
         address: String,
@@ -223,6 +268,7 @@ impl SageClient {
                 receive_address,
                 expires_at_second,
                 auto_import,
+                coin_ids: None,
             })
             .send()
             .await?;
@@ -243,6 +289,7 @@ impl SageClient {
 pub fn assets_xch_only(amount: u64) -> Vec<OfferAmount> {
     vec![OfferAmount {
         asset_id: None,
+        hidden_puzzle_hash: None,
         amount: Amount::u64(amount),
     }]
 }
@@ -255,10 +302,12 @@ pub fn assets_xch_and_cat(xch_amount: u64, asset_id: String, cat_amount: u64) ->
     vec![
         OfferAmount {
             asset_id: None,
+            hidden_puzzle_hash: None,
             amount: Amount::u64(xch_amount),
         },
         OfferAmount {
             asset_id: Some(asset_id),
+            hidden_puzzle_hash: None,
             amount: Amount::u64(cat_amount),
         },
     ]
@@ -268,10 +317,12 @@ pub fn assets_xch_and_nft(xch_amount: u64, nft_id: String) -> Vec<OfferAmount> {
     vec![
         OfferAmount {
             asset_id: None,
+            hidden_puzzle_hash: None,
             amount: Amount::u64(xch_amount),
         },
         OfferAmount {
             asset_id: Some(nft_id),
+            hidden_puzzle_hash: None,
             amount: Amount::u64(1),
         },
     ]

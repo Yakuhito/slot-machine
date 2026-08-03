@@ -1,11 +1,8 @@
-use chia::{
-    bls::PublicKey,
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin},
-    puzzles::{
-        singleton::{LauncherSolution, SingletonArgs},
-        LineageProof, Proof,
-    },
+use chia_bls::PublicKey;
+use chia_protocol::{Bytes32, Coin};
+use chia_puzzle_types::{
+    singleton::{LauncherSolution, SingletonArgs},
+    LineageProof, Proof,
 };
 use chia_wallet_sdk::driver::{
     MedievalVaultHint, MedievalVaultInfo, SingletonInfo, SpendContext, StateSchedulerInfo,
@@ -15,6 +12,7 @@ use chia_wallet_sdk::{
     driver::{MedievalVault, StateScheduler},
 };
 use clvm_traits::{FromClvm, ToClvm};
+use clvm_utils::ToTreeHash;
 use clvmr::{serde::node_from_bytes, Allocator, NodePtr};
 
 use crate::{get_alias_map, CliError};
@@ -53,7 +51,7 @@ pub async fn sync_multisig_singleton<S>(
     client: &CoinsetClient,
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
-    print_state_info: Option<fn(u32, &S) -> Result<(), CliError>>,
+    print_state_info: Option<fn(u64, &S) -> Result<(), CliError>>,
 ) -> Result<(MultisigSingleton<S>, Option<StateSchedulerInfo<S>>), CliError>
 where
     S: Clone + ToClvm<Allocator> + FromClvm<Allocator> + ToTreeHash,
@@ -95,8 +93,8 @@ where
 
         if let Some(print_state_info) = print_state_info {
             println!("Vault launched as a state scheduler first. Schedule: ");
-            for (block, state) in state_scheduler_info.state_schedule.clone() {
-                print_state_info(block, &state)?;
+            for (timestamp, state) in state_scheduler_info.state_schedule.clone() {
+                print_state_info(timestamp, &state)?;
             }
 
             println!("\nInitial medieval vault configuration: ");
@@ -135,7 +133,7 @@ where
                 state_scheduler = child;
                 if print_sync {
                     println!(
-                        "State scheduler spent to update state to one after block {}.",
+                        "State scheduler spent to update state to one after timestamp {}.",
                         state_scheduler.info.state_schedule[state_scheduler.info.generation - 1].0
                     );
                 }
@@ -180,7 +178,7 @@ where
         println!("Getting latest vault on-chain...");
     }
     let vault_records = client
-        .get_coin_records_by_hint(launcher_id, None, None, Some(false))
+        .get_coin_records_by_hint(launcher_id, None, None, Some(false), None)
         .await?
         .coin_records
         .ok_or(CliError::CoinNotFound(launcher_id))?;

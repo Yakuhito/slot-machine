@@ -1,17 +1,96 @@
-use chia::clvm_utils::ToTreeHash;
 use chia_wallet_sdk::{
-    driver::{SpendContext, XchandlesExpirePricingPuzzle},
+    driver::{SpendContext, XchandlesExpirePricingPuzzle, XchandlesRegistryState},
     types::{
         puzzles::{DefaultCatMakerArgs, XchandlesFactorPricingPuzzleArgs},
         Mod,
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 
 use crate::{
     get_coinset_client, get_prefix, hex_string_to_bytes32, parse_amount, quick_sync_xchandles,
     CliError, Db,
 };
+
+pub fn print_registry_state(
+    registry_state: XchandlesRegistryState,
+    payment_asset_id_hint_str: Option<String>,
+    payment_cat_base_price_hint_str: Option<String>,
+    registration_period_hint: Option<u64>,
+) -> Result<(), CliError> {
+    println!(
+        "  CAT maker puzzle hash: {}",
+        registry_state.cat_maker_puzzle_hash
+    );
+    if let Some(payment_asset_id) = payment_asset_id_hint_str {
+        let payment_asset_id = hex_string_to_bytes32(&payment_asset_id)?;
+        if registry_state.cat_maker_puzzle_hash
+            == DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into())
+                .curry_tree_hash()
+                .into()
+        {
+            println!(
+                "    Payment CAT asset id: {} (VERIFIED)",
+                hex::encode(payment_asset_id)
+            );
+        } else {
+            return Err(CliError::Custom(
+                "Payment asset id hint is wrong".to_string(),
+            ));
+        }
+    }
+    let payment_cat_base_price_maybe =
+        if let (Some(payment_cat_base_price), Some(registration_period)) =
+            (payment_cat_base_price_hint_str, registration_period_hint)
+        {
+            let payment_cat_base_price = parse_amount(&payment_cat_base_price, true)?;
+            let fph = XchandlesFactorPricingPuzzleArgs {
+                base_price: payment_cat_base_price,
+                registration_period,
+            }
+            .curry_tree_hash();
+            if registry_state.pricing_puzzle_hash == fph.into()
+                && registry_state.expired_handle_pricing_puzzle_hash
+                    == XchandlesExpirePricingPuzzle::curry_tree_hash(
+                        payment_cat_base_price,
+                        registration_period,
+                    )
+                    .into()
+            {
+                Some(payment_cat_base_price)
+            } else {
+                return Err(CliError::Custom(
+                    "Payment CAT base price hint is wrong".to_string(),
+                ));
+            }
+        } else {
+            None
+        };
+
+    println!(
+        "  Pricing puzzle hash: {}",
+        hex::encode(registry_state.pricing_puzzle_hash)
+    );
+    if let Some(payment_cat_base_price) = payment_cat_base_price_maybe {
+        println!(
+            "    Payment CAT base price: {} mojos (VERIFIED)",
+            payment_cat_base_price
+        );
+    }
+    println!(
+        "  Expired handle pricing puzzle hash: {}",
+        hex::encode(registry_state.expired_handle_pricing_puzzle_hash)
+    );
+    if let Some(payment_cat_base_price) = payment_cat_base_price_maybe {
+        println!(
+            "    Payment CAT base price: {} mojos (VERIFIED)",
+            payment_cat_base_price
+        );
+    }
+
+    Ok(())
+}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn xchandles_view(
@@ -31,63 +110,13 @@ pub async fn xchandles_view(
     let registry = quick_sync_xchandles(&cli, &mut db, &mut ctx, launcher_id).await?;
     println!("done.\n");
 
-    println!("State:");
-    println!(
-        "  CAT maker puzzle hash: {}",
-        registry.info.state.cat_maker_puzzle_hash
-    );
-    if let Some(payment_asset_id) = payment_asset_id_str {
-        let payment_asset_id = hex_string_to_bytes32(&payment_asset_id)?;
-        if registry.info.state.cat_maker_puzzle_hash
-            == DefaultCatMakerArgs::new(payment_asset_id.tree_hash().into())
-                .curry_tree_hash()
-                .into()
-        {
-            println!(
-                "    Payment asset id: {} (VERIFIED)",
-                hex::encode(payment_asset_id)
-            );
-        } else {
-            return Err(CliError::Custom(
-                "Payment asset id hint is wrong".to_string(),
-            ));
-        }
-    }
-    println!(
-        "  Pricing puzzle hash: {}",
-        hex::encode(registry.info.state.pricing_puzzle_hash)
-    );
-    println!(
-        "  Expired handle pricing puzzle hash: {}",
-        hex::encode(registry.info.state.expired_handle_pricing_puzzle_hash)
-    );
-    if let (Some(payment_cat_base_price), Some(registration_period)) =
-        (payment_cat_base_price_str, registration_period)
-    {
-        let payment_cat_base_price = parse_amount(&payment_cat_base_price, true)?;
-        let fph = XchandlesFactorPricingPuzzleArgs {
-            base_price: payment_cat_base_price,
-            registration_period,
-        }
-        .curry_tree_hash();
-        if registry.info.state.pricing_puzzle_hash == fph.into()
-            && registry.info.state.expired_handle_pricing_puzzle_hash
-                == XchandlesExpirePricingPuzzle::curry_tree_hash(
-                    payment_cat_base_price,
-                    registration_period,
-                )
-                .into()
-        {
-            println!(
-                "    Payment CAT base price: {} mojos (VERIFIED)",
-                payment_cat_base_price
-            );
-        } else {
-            return Err(CliError::Custom(
-                "Payment CAT base price hint is wrong".to_string(),
-            ));
-        }
-    }
+    print!("State:");
+    print_registry_state(
+        registry.info.state,
+        payment_asset_id_str,
+        payment_cat_base_price_str,
+        registration_period,
+    )?;
 
     println!("Constants:");
     println!(

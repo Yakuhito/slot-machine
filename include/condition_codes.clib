@@ -43,4 +43,5 @@
     (defconstant SEND_MESSAGE 66)
     (defconstant RECEIVE_MESSAGE 67)
     (defconstant ASSERT_BEFORE_SECONDS_ABSOLUTE 85)
+    (defconstant ASSERT_BEFORE_HEIGHT_ABSOLUTE 87)
 )

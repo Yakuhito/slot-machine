@@ -1,4 +1,5 @@
-use chia::{bls::PublicKey, protocol::SpendBundle};
+use chia_bls::PublicKey;
+use chia_protocol::SpendBundle;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -9,8 +10,8 @@ use chia_wallet_sdk::{
 };
 
 use crate::{
-    assets_xch_only, get_coinset_client, get_constants, no_assets, parse_amount,
-    print_medieval_vault_configuration, wait_for_coin, yes_no_prompt, CliError, SageClient,
+    assets_xch_only, confirm_pushed_transaction, get_coinset_client, get_constants, no_assets,
+    parse_amount, print_medieval_vault_configuration, yes_no_prompt, CliError, SageClient,
 };
 
 pub async fn multisig_launch(
@@ -85,10 +86,9 @@ pub async fn multisig_launch(
     let client = get_coinset_client(testnet11);
     let resp = client.push_tx(sb).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

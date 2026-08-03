@@ -4,15 +4,16 @@ use crate::{
         utils::{yes_no_prompt, CliError},
         Db,
     },
-    get_coinset_client, get_prefix, load_xchandles_premine_csv, load_xchandles_state_schedule_csv,
-    no_assets, parse_amount, print_medieval_vault_configuration, wait_for_coin, SageClient,
+    confirm_pushed_transaction, controller_matches_configured, default_mainnet_bundle_path,
+    default_mainnet_plan_path, default_testnet11_bundle_path, emit_pre_broadcast_plan,
+    get_coinset_client, get_prefix, launch_handles_from_bundle, load_premine_launch_bundle,
+    load_xchandles_state_schedule_csv, no_assets, parse_amount, print_medieval_vault_configuration,
+    schedule_records_match_configured, SageClient, REGISTRATION_PERIOD,
 };
-use chia::{
-    bls::PublicKey,
-    clvm_utils::ToTreeHash,
-    protocol::{Bytes32, Coin, SpendBundle},
-    puzzles::cat::GenesisByCoinIdTailArgs,
-};
+use std::path::Path;
+use chia_bls::PublicKey;
+use chia_protocol::{Bytes32, Coin, SpendBundle};
+use chia_puzzle_types::cat::GenesisByCoinIdTailArgs;
 use chia_wallet_sdk::{
     coinset::ChiaRpcClient,
     driver::{
@@ -21,11 +22,12 @@ use chia_wallet_sdk::{
         XchandlesConstants, XchandlesRegistryState,
     },
     types::{
-        puzzles::XchandlesFactorPricingPuzzleArgs, Conditions, MAINNET_CONSTANTS,
-        TESTNET11_CONSTANTS,
+        conditions::RunCatTail, puzzles::XchandlesFactorPricingPuzzleArgs, Conditions,
+        MAINNET_CONSTANTS, TESTNET11_CONSTANTS,
     },
     utils::Address,
 };
+use clvm_utils::ToTreeHash;
 use clvmr::NodePtr;
 
 #[allow(clippy::type_complexity)]
@@ -35,7 +37,7 @@ fn get_additional_info_for_launch(
     security_coin: Coin,
     (xchandles_constants, state_schedule, pubkeys, m, cat_amount, cat_destination_puzzle_hash): (
         XchandlesConstants,
-        Vec<(u32, XchandlesRegistryState)>,
+        Vec<(u64, XchandlesRegistryState)>,
         Vec<PublicKey>,
         usize,
         u64,
@@ -67,7 +69,7 @@ fn get_additional_info_for_launch(
         state_schedule,
         0,
         multisig_info.inner_puzzle_hash().into(),
-    );
+    )?;
     let (price_singleton_launch_conds, _coin) = price_singleton_launcher.spend(
         ctx,
         state_scheduler_info.inner_puzzle_hash().into(),
@@ -76,10 +78,16 @@ fn get_additional_info_for_launch(
     conditions = conditions.extend(price_singleton_launch_conds);
 
     let cat_memos = ctx.hint(cat_destination_puzzle_hash)?;
-    let (cat_creation_conds, eve_cat) = Cat::issue_with_coin(
+    let run_tail = RunCatTail::new(
+        ctx.curry(GenesisByCoinIdTailArgs::new(security_coin.coin_id()))?,
+        NodePtr::NIL,
+    );
+    let (cat_creation_conds, eve_cat) = Cat::issue(
         ctx,
         security_coin.coin_id(),
+        None,
         cat_amount,
+        run_tail,
         Conditions::new().create_coin(cat_destination_puzzle_hash, cat_amount, cat_memos),
     )?;
     conditions = conditions.extend(cat_creation_conds);
@@ -127,6 +135,19 @@ pub async fn xchandles_initiate_launch(
         pubkeys.push(pubkey);
     }
 
+    if !testnet11 && !controller_matches_configured(m, &pubkeys)? {
+        return Err(CliError::Custom(
+            "Mainnet post-schedule controller must be the ordered configured 6-of-10 validator key set"
+                .to_string(),
+        ));
+    }
+
+    if !testnet11 && registration_period != REGISTRATION_PERIOD {
+        return Err(CliError::Custom(format!(
+            "Mainnet registration period must be exactly {REGISTRATION_PERIOD} seconds"
+        )));
+    }
+
     let fee = parse_amount(&fee_str, false)?;
 
     println!("First things first, this multisig will have control over the price singleton once the state schedule is over:");
@@ -144,32 +165,56 @@ pub async fn xchandles_initiate_launch(
     );
 
     let price_schedule = load_xchandles_state_schedule_csv(price_schedule_csv_filename)?;
+    if !testnet11 && !schedule_records_match_configured(&price_schedule) {
+        return Err(CliError::Custom(
+            "Mainnet price schedule CSV does not match typed launch configuration".to_string(),
+        ));
+    }
     println!("Price schedule:");
     for record in price_schedule.iter() {
         println!(
-            "  After block height {}, the base registration price will be {} CAT mojos (asset id: {}).",
-            record.block_height, record.registration_price, record.asset_id
+            "  After timestamp {}, the base registration price will be {} CAT mojos (asset id: {}).",
+            record.timestamp, record.registration_price, record.asset_id
         );
     }
 
-    let premine_csv_filename = if testnet11 {
-        "xchandles_premine_testnet11.csv"
+    let bundle_path = if testnet11 {
+        default_testnet11_bundle_path()
     } else {
-        "xchandles_premine_mainnet.csv"
+        default_mainnet_bundle_path()
     };
 
-    println!("Loading premine data from '{}'...", premine_csv_filename);
-    let handles_to_launch = load_xchandles_premine_csv(premine_csv_filename)?;
+    println!("Loading Premine Launch Bundle from '{}'...", bundle_path);
+    let bundle = load_premine_launch_bundle(bundle_path)?;
+    let handles_to_launch = launch_handles_from_bundle(&bundle)?;
     println!(
-        "Loaded {} handles to be premined. First few records:",
-        handles_to_launch.len()
+        "Loaded {} handles to be premined (batch size {}). First few records:",
+        handles_to_launch.len(),
+        bundle.handles_per_batch
     );
     for record in handles_to_launch.iter().take(7) {
         println!(
-            "  handle: {:}, owner_nft: {:}",
-            record.handle, record.owner_nft
+            "  handle: {}, recipient: {}, expiration: {}, image: {}",
+            record.handle,
+            Address::new(record.recipient, get_prefix(testnet11)).encode()?,
+            record.expiration,
+            record.image_uris.first().cloned().unwrap_or_default()
         );
     }
+
+    // Emit the complete pre-broadcast plan before constructing any irreversible spend.
+    let plan_path = if testnet11 {
+        Some(Path::new(crate::default_testnet11_plan_path()))
+    } else {
+        Some(Path::new(default_mainnet_plan_path()))
+    };
+    let plan = emit_pre_broadcast_plan(&bundle, plan_path)?;
+    println!(
+        "Pre-broadcast plan covers {} rows in {} batches (handles_per_batch={}).",
+        plan.total_rows,
+        plan.batches.len(),
+        plan.handles_per_batch
+    );
 
     yes_no_prompt("Is all the data above correct?")?;
 
@@ -265,7 +310,7 @@ pub async fn xchandles_initiate_launch(
                 .into_iter()
                 .map(|ps| {
                     (
-                        ps.block_height,
+                        ps.timestamp,
                         XchandlesRegistryState::from(
                             ps.asset_id.tree_hash().into(),
                             ps.registration_price,
@@ -309,10 +354,9 @@ pub async fn xchandles_initiate_launch(
     println!("Submitting transaction...");
     let resp = client.push_tx(spend_bundle).await?;
 
-    println!("Transaction submitted; status='{}'", resp.status);
-
-    wait_for_coin(&client, security_coin.coin_id(), true).await?;
-    println!("Confirmed!");
+    if confirm_pushed_transaction(&client, &resp, security_coin.coin_id(), true).await? {
+        println!("Confirmed!");
+    }
 
     Ok(())
 }

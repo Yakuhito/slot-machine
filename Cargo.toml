@@ -6,51 +6,58 @@ license = "MIT"
 authors = ["yakuhito <y@kuhi.to>"]
 homepage = "https://github.com/Yakuhito/slot-machine"
 repository = "https://github.com/Yakuhito/slot-machine"
+rust-version = "1.95.0"
 
 [dependencies]
-clvmr = "0.14.0"
-chia = "0.26.0"
-clvm-traits = "0.26.0"
-chia-puzzle-types = "0.26.0"
-getrandom = "0.3.2"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+clvmr = "0.16.2"
+clvm-traits = "0.36.1"
+clvm-utils = "0.36.1"
+chia-protocol = { version = "0.36.1", features = ["serde"] }
+chia-bls = "0.36.1"
+chia-consensus = "0.36.1"
+chia-puzzle-types = "0.36.1"
+getrandom = "0.3.4"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
 hex = "0.4.3"
-clap = { version = "4", features = ["derive"] }
-csv = "1.3.1"
-thiserror = "2.0.16"
-tokio = { version = "1.44.1", features = ["full"] }
-sqlx = { version = "0.8.3", features = ["sqlite", "runtime-async-std-native-tls"] }
+clap = { version = "4.5.50", features = ["derive"] }
+csv = "1.4.0"
+thiserror = "2.0.17"
+tokio = { version = "1.47.1", features = ["full"] }
+sqlx = { version = "0.9.0", features = ["sqlite", "runtime-tokio"] }
 bech32 = "0.9.1"
-reqwest = { version = "0.12.20", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12.23", features = ["json", "rustls-tls"] }
 dirs = "6.0.0"
-rustls = { version = "0.23", features = ["ring","logging","tls12"], default-features = false }
-tokio-tungstenite ={ version = "0.26.2", features = ["rustls-tls-native-roots"] }
-futures-util = "0.3.31"
-axum = { version = "0.8.3", features = ["macros"]}
-tower-http = { version = "0.6.2", features = ["cors"] }
-futures = "0.3.31"
-chia-wallet-sdk = { git = "https://github.com/xch-dev/chia-wallet-sdk.git", rev="010a5e932b6eeb2fc318d2d79492965bf4e26ef2", features=["offer-compression", "action-layer"] }
-sage-api = { version = "0.12.3", git = "https://github.com/xch-dev/sage.git" }
-chia-puzzles = "0.20.1"
+rustls = { version = "0.23.32", features = ["ring","logging","tls12"], default-features = false }
+tokio-tungstenite = { version = "0.24.0", features = ["rustls-tls-native-roots"] }
+futures-util = "0.3.30"
+axum = { version = "0.8.9", features = ["macros"]}
+tower-http = { version = "0.7.0", features = ["cors"] }
+futures = "0.3.32"
+chia-wallet-sdk = { path = "../chia-wallet-sdk", features = ["offer-compression", "action-layer", "chip-0035"] }
+xchandles-nfts = { path = "../xchandles-nfts" }
+sage-api = { version = "0.12.11", git = "https://github.com/xch-dev/sage.git" }
+chia-puzzles = "0.20.3"
+hex-literal = "1.1.0"
+sha2 = "0.10.9"
 
 [dev-dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.100"
 rstest = "0.22.0"
 prettytable-rs = "0.10.0"
 
 [target.aarch64-unknown-linux-gnu.dependencies]
-openssl = { version = "0.10.64", features = ["vendored"] }
-openssl-sys = { version = "0.9.102", features = ["vendored"] }
+openssl = { version = "0.10.81", features = ["vendored"] }
+openssl-sys = { version = "0.9.117", features = ["vendored"] }
 
 [target.aarch64-unknown-linux-musl.dependencies]
-openssl = { version = "0.10.64", features = ["vendored"] }
-openssl-sys = { version = "0.9.102", features = ["vendored"] }
+openssl = { version = "0.10.81", features = ["vendored"] }
+openssl-sys = { version = "0.9.117", features = ["vendored"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
-openssl = { version = "0.10.64", features = ["vendored"] }
-openssl-sys = { version = "0.9.102", features = ["vendored"] }
+openssl = { version = "0.10.81", features = ["vendored"] }
+openssl-sys = { version = "0.9.117", features = ["vendored"] }
 
 [target.x86_64-unknown-linux-musl.dependencies]
-openssl = { version = "0.10.64", features = ["vendored"] }
-openssl-sys = { version = "0.9.102", features = ["vendored"] }
+openssl = { version = "0.10.81", features = ["vendored"] }
+openssl-sys = { version = "0.9.117", features = ["vendored"] }

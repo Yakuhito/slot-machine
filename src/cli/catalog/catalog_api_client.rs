@@ -1,4 +1,4 @@
-use chia::protocol::Bytes32;
+use chia_protocol::Bytes32;
 use chia_puzzle_types::LineageProof;
 use reqwest::Client;
 use std::time::Duration;
@@ -79,11 +79,20 @@ impl CatalogApiClient {
         let right_asset_id = hex_string_to_bytes32(&neighbors_resp.right_asset_id)?;
 
         let left_left_asset_id = hex_string_to_bytes32(&neighbors_resp.left_left_asset_id)?;
-        let left_value = CatalogSlotValue::new(left_asset_id, left_left_asset_id, right_asset_id);
+        let left_value = CatalogSlotValue::new(
+            neighbors_resp.left_counter,
+            left_asset_id,
+            left_left_asset_id,
+            right_asset_id,
+        );
 
         let right_right_asset_id = hex_string_to_bytes32(&neighbors_resp.right_right_asset_id)?;
-        let right_value =
-            CatalogSlotValue::new(right_asset_id, left_asset_id, right_right_asset_id);
+        let right_value = CatalogSlotValue::new(
+            neighbors_resp.right_counter,
+            right_asset_id,
+            left_asset_id,
+            right_right_asset_id,
+        );
 
         let left_parent_parent_info =
             hex_string_to_bytes32(&neighbors_resp.left_parent_parent_info)?;
