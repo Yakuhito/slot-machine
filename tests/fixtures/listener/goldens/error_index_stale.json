@@ -1,0 +1,9 @@
+{
+  "code": "index_stale",
+  "message": "Listener index is stale, rolling back, or resyncing",
+  "request_id": "FIXED_REQUEST_ID",
+  "details": {
+    "indexed_peak_height": 100,
+    "upstream_peak_height": 200
+  }
+}

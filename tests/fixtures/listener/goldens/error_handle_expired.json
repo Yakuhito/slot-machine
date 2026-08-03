@@ -1,0 +1,8 @@
+{
+  "code": "handle_expired",
+  "message": "Handle registration has expired",
+  "request_id": "FIXED_REQUEST_ID",
+  "details": {
+    "expiration": 1000
+  }
+}

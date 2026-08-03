@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "handle": "carol",
+      "action_kind": "expire",
+      "confirmation_height": 110
+    },
+    {
+      "handle": "bob",
+      "action_kind": "register",
+      "confirmation_height": 100
+    },
+    {
+      "handle": "alice",
+      "action_kind": "register",
+      "confirmation_height": 90
+    }
+  ],
+  "total_registered": 2,
+  "indexed_peak_height": 116
+}

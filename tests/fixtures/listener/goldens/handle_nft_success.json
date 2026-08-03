@@ -1,0 +1,36 @@
+{
+  "registry_launcher_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "handle": "alice",
+  "slot": {
+    "counter": 0,
+    "handle_hash": "395fced32ca1987666678d466cdf9b8a59daf590930631eab7b6fda7c8d0be0a",
+    "neighbors": {
+      "left_value": "0000000000000000000000000000000000000000000000000000000000000000",
+      "right_value": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "expiration": 4102444800,
+    "owner_launcher_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "resolved_launcher_id": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "slot_parent_coin_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "slot_confirmation_height": 90,
+  "resolved_singleton": {
+    "launcher_id": "1111111111111111111111111111111111111111111111111111111111111111",
+    "parent_coin_id": "2222222222222222222222222222222222222222222222222222222222222222",
+    "amount": 1,
+    "inner_puzzle_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+    "confirmation_height": 100,
+    "melted": false,
+    "melt_height": null,
+    "nft": {
+      "metadata_treehash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "metadata_updater_puzzle_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "current_owner": null,
+      "royalty_puzzle_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "royalty_basis_points": 420,
+      "p2_puzzle_hash": "7777777777777777777777777777777777777777777777777777777777777777"
+    },
+    "indexed_peak_height": 116
+  },
+  "indexed_peak_height": 116
+}

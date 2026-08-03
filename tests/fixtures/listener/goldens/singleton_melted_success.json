@@ -1,0 +1,11 @@
+{
+  "launcher_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "parent_coin_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "amount": 1,
+  "inner_puzzle_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "confirmation_height": 10,
+  "melted": true,
+  "melt_height": 42,
+  "nft": null,
+  "indexed_peak_height": 50
+}

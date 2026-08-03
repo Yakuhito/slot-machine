@@ -40,11 +40,16 @@ sage-api = { version = "0.12.11", git = "https://github.com/xch-dev/sage.git" }
 chia-puzzles = "0.20.3"
 hex-literal = "1.1.0"
 sha2 = "0.10.9"
+uuid = { version = "1.17.0", features = ["v4"] }
+tempfile = "3.20.0"
+async-trait = "0.1.88"
 
 [dev-dependencies]
 anyhow = "1.0.100"
 rstest = "0.22.0"
 prettytable-rs = "0.10.0"
+reqwest = { version = "0.12.23", features = ["json", "blocking", "rustls-tls"] }
+tokio = { version = "1.47.1", features = ["full", "test-util"] }
 
 [target.aarch64-unknown-linux-gnu.dependencies]
 openssl = { version = "0.10.81", features = ["vendored"] }

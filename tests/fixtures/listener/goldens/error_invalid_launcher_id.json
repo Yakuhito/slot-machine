@@ -1,0 +1,5 @@
+{
+  "code": "invalid_launcher_id",
+  "message": "Launcher ID must be 32-byte lowercase hex without a required 0x prefix",
+  "request_id": "FIXED_REQUEST_ID"
+}

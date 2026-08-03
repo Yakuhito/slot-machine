@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "handle": "dan",
+      "expiration": 1800604800,
+      "base_registration_fee": 640000
+    },
+    {
+      "handle": "eve",
+      "expiration": 1802505600,
+      "base_registration_fee": 640000
+    },
+    {
+      "handle": "frank",
+      "expiration": 1802592000,
+      "base_registration_fee": 80000
+    }
+  ],
+  "indexed_peak_height": 116,
+  "confirmed_timestamp": 1800000000
+}

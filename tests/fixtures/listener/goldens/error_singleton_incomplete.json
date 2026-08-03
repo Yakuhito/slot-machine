@@ -1,0 +1,5 @@
+{
+  "code": "singleton_incomplete",
+  "message": "Referenced singleton has not been reconstructed yet",
+  "request_id": "FIXED_REQUEST_ID"
+}

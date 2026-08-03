@@ -4,22 +4,60 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::debug_handler;
 use axum::extract::{Query, State};
-use axum::http::{HeaderValue, Method};
-use axum::{http::StatusCode, routing::get, Json, Router};
+use axum::http::Method;
+use axum::{Json, Router, http::StatusCode, routing::get};
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::coinset::ChiaRpcClient;
 use chia_wallet_sdk::driver::{SpendContext, XchandlesRegistry};
-use chia_wallet_sdk::types::puzzles::XchandlesHandleSlotValue;
+use chia_wallet_sdk::types::puzzles::{XchandlesHandleSlotValue, XchandlesSlotNonce};
+use clvm_utils::ToTreeHash;
 use clvmr::Allocator;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 
-use crate::{
-    get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, CoinsetWebSocketMessage,
-    Db,
+use super::listener::{
+    DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore, DbSingletonStore, FreshnessState,
+    HandleSlotStore, ListenerApiState, PendingUpdateStore, RegistrationStore, RegistryPricing,
+    SingletonIndexer, SingletonStore, listener_router,
 };
+use crate::{
+    BASE_PRICE_AT_FACTOR_ONE, CliError, CoinsetWebSocketMessage, Db, PRICE_SCHEDULE,
+    REGISTRATION_PERIOD, get_coinset_client, hex_string_to_bytes32, sync_xchandles,
+};
+use chia_wallet_sdk::driver::XchandlesExpirePricingPuzzle;
+use chia_wallet_sdk::types::{Mod, puzzles::XchandlesFactorPricingPuzzleArgs};
+
+fn pricing_from_registry_state(
+    pricing_puzzle_hash: Bytes32,
+    expired_handle_pricing_puzzle_hash: Bytes32,
+) -> Option<RegistryPricing> {
+    let candidates: Vec<u64> = PRICE_SCHEDULE
+        .iter()
+        .map(|(_, _, price)| *price)
+        .chain(std::iter::once(BASE_PRICE_AT_FACTOR_ONE))
+        .collect();
+    for base_price in candidates {
+        let factor = XchandlesFactorPricingPuzzleArgs {
+            base_price,
+            registration_period: REGISTRATION_PERIOD,
+        }
+        .curry_tree_hash();
+        let expired =
+            XchandlesExpirePricingPuzzle::curry_tree_hash(base_price, REGISTRATION_PERIOD);
+        if factor == pricing_puzzle_hash.into()
+            && expired == expired_handle_pricing_puzzle_hash.into()
+        {
+            return Some(RegistryPricing {
+                base_price,
+                registration_period: REGISTRATION_PERIOD,
+            });
+        }
+    }
+    None
+}
 
 #[derive(Debug, Deserialize)]
 struct XchandlesNeighborsQuery {
@@ -58,34 +96,78 @@ struct AppState {
     db: Arc<futures::lock::Mutex<Db>>,
 }
 
+fn bind_addr() -> SocketAddr {
+    std::env::var("BIND_ADDR")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 8080)))
+}
+
 pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(), CliError> {
-    let db = Db::new(true).await?;
+    let db = Db::new(false).await?;
     let db = Arc::new(futures::lock::Mutex::new(db));
-
-    let state = AppState {
-        db: Arc::clone(&db),
-    };
-
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install rustls crypto provider");
-
-    // API
-    let api_state = state.clone();
-    tokio::spawn(async move {
-        if let Err(e) = start_api_server(api_state).await {
-            eprintln!("API server error: {}", e);
-        }
-    });
 
     let launcher_ids = launcher_ids
         .split(',')
         .map(hex_string_to_bytes32)
         .collect::<Result<Vec<Bytes32>, CliError>>()?;
 
-    // Updates
+    let singleton_store: Arc<dyn SingletonStore> = DbSingletonStore::new(Arc::clone(&db));
+    let handle_slots: Arc<dyn HandleSlotStore> = DbHandleSlotStore::new(Arc::clone(&db));
+    let registrations: Arc<dyn RegistrationStore> = DbRegistrationStore::new(Arc::clone(&db));
+    let pending_updates: Arc<dyn PendingUpdateStore> = DbPendingUpdateStore::new(Arc::clone(&db));
+    let freshness = Arc::new(RwLock::new(FreshnessState::fresh_at(
+        0,
+        FreshnessState::now_unix(),
+    )));
+    let indexer = Arc::new(SingletonIndexer::new(
+        Arc::clone(&singleton_store),
+        Arc::clone(&handle_slots),
+        Arc::clone(&registrations),
+        Arc::clone(&pending_updates),
+        Arc::clone(&freshness),
+    ));
+
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
+    let mut initial_pricing = std::collections::HashMap::new();
+    for id in &launcher_ids {
+        initial_pricing.insert(*id, RegistryPricing::default());
+    }
+    let registry_pricing = Arc::new(RwLock::new(initial_pricing));
+
+    let api_state = ListenerApiState {
+        store: Arc::clone(&singleton_store),
+        handle_slots: Arc::clone(&handle_slots),
+        registrations: Arc::clone(&registrations),
+        pending_updates: Arc::clone(&pending_updates),
+        freshness: Arc::clone(&freshness),
+        registry_pricing: Arc::clone(&registry_pricing),
+        registry_launcher_ids: launcher_ids.clone(),
+        now_unix_override: None,
+    };
+    let neighbors_state = AppState {
+        db: Arc::clone(&db),
+    };
+
+    tokio::spawn(async move {
+        if let Err(e) = start_api_server(api_state, neighbors_state).await {
+            eprintln!("API server error: {}", e);
+        }
+    });
+
     loop {
-        match connect_websocket(testnet11, Arc::clone(&db), launcher_ids.clone()).await {
+        match connect_websocket(
+            testnet11,
+            Arc::clone(&db),
+            launcher_ids.clone(),
+            Arc::clone(&indexer),
+            Arc::clone(&registry_pricing),
+        )
+        .await
+        {
             Ok(_resp) => (),
             Err(e) => {
                 println!("WebSocket error: {}", e);
@@ -96,22 +178,26 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
     }
 }
 
-async fn start_api_server(state: AppState) -> Result<(), CliError> {
-    // API routes
-    let app = Router::new()
+async fn start_api_server(
+    listener_state: ListenerApiState,
+    neighbors_state: AppState,
+) -> Result<(), CliError> {
+    let neighbors = Router::new()
         .route("/", get(health_check))
         .route("/neighbors", get(get_neighbors))
-        .layer(
-            CorsLayer::new()
-                .allow_origin("*".parse::<HeaderValue>().unwrap())
-                .allow_methods([Method::GET, Method::OPTIONS, Method::POST]),
-        )
-        .with_state(state);
+        .with_state(neighbors_state);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let app = listener_router(listener_state).merge(neighbors).layer(
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods([Method::GET, Method::HEAD, Method::OPTIONS])
+            .allow_headers(Any),
+    );
+
+    let addr = bind_addr();
     println!("API server listening on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 
     Ok(())
@@ -177,20 +263,77 @@ async fn connect_websocket(
     testnet11: bool,
     db: Arc<futures::lock::Mutex<Db>>,
     launcher_ids: Vec<Bytes32>,
+    indexer: Arc<SingletonIndexer>,
+    registry_pricing: Arc<RwLock<std::collections::HashMap<Bytes32, RegistryPricing>>>,
 ) -> Result<(), CliError> {
-    println!("Syncing XCHanldes registries (initial)...");
+    println!("Syncing XCHandles registries (initial)...");
     let client = get_coinset_client(testnet11);
 
     let mut registries = Vec::<XchandlesRegistry>::new();
-    for launcher_id in launcher_ids {
+    for launcher_id in &launcher_ids {
         let registry = {
             let mut db = db.lock().await;
             let mut ctx = SpendContext::new();
 
-            sync_xchandles(&client, &mut db, &mut ctx, launcher_id).await?
+            sync_xchandles(&client, &mut db, &mut ctx, *launcher_id).await?
         };
 
         registries.push(registry);
+    }
+
+    // Seed confirmed pricing from the currently synced registry states.
+    {
+        let mut pricing = registry_pricing.write().await;
+        for registry in &registries {
+            let launcher_id = registry.info.constants.launcher_id;
+            if let Some(p) = pricing_from_registry_state(
+                registry.info.state.pricing_puzzle_hash,
+                registry.info.state.expired_handle_pricing_puzzle_hash,
+            ) {
+                pricing.insert(launcher_id, p);
+            }
+        }
+    }
+
+    // Cold start: project currently indexed Handle slots so proofs work for already-synced
+    // registries. Confirmation height is unknown for historical slots (0) — fishy for
+    // exact height, but the slot value and parent coin remain verifiable.
+    {
+        let mut allocator = Allocator::new();
+        let db_guard = db.lock().await;
+        for launcher_id in &launcher_ids {
+            if let Ok(rows) = db_guard.list_xchandles_indexed_slots(*launcher_id).await {
+                for (handle_hash, value_hash) in rows {
+                    let Ok(Some(slot)) = db_guard
+                        .get_slot::<XchandlesHandleSlotValue>(
+                            &mut allocator,
+                            *launcher_id,
+                            XchandlesSlotNonce::HANDLE.to_u64(),
+                            value_hash,
+                            0,
+                        )
+                        .await
+                    else {
+                        continue;
+                    };
+                    // Skip sentinel end markers (no real Owner/Resolved).
+                    if slot.info.value.owner_launcher_id == Bytes32::default()
+                        && slot.info.value.resolved_launcher_id == Bytes32::default()
+                    {
+                        continue;
+                    }
+                    let _ = handle_hash;
+                    indexer
+                        .project_handle_slot(
+                            *launcher_id,
+                            slot.info.value,
+                            slot.coin.parent_coin_info,
+                            0,
+                        )
+                        .await;
+                }
+            }
+        }
     }
 
     let ws_url = format!("{}/ws", client.base_url().replace("https://", "wss://"));
@@ -212,10 +355,16 @@ async fn connect_websocket(
                 Ok(msg) => {
                     if msg.message_type() == "peak" {
                         let now = SystemTime::now();
-                        println!(
-                            "[{}] Received new peak",
-                            now.duration_since(UNIX_EPOCH).unwrap().as_secs()
-                        );
+                        let now_unix = now.duration_since(UNIX_EPOCH).unwrap().as_secs();
+                        println!("[{}] Received new peak", now_unix);
+
+                        let upstream_peak = client
+                            .get_blockchain_state()
+                            .await?
+                            .blockchain_state
+                            .as_ref()
+                            .map(|s| s.peak.height)
+                            .unwrap_or(0);
 
                         let coin_resp = client
                             .get_coin_records_by_names(
@@ -227,35 +376,195 @@ async fn connect_websocket(
                             )
                             .await?;
 
-                        let coin_recorss = coin_resp.coin_records.ok_or(CliError::Custom(
+                        let coin_records = coin_resp.coin_records.ok_or(CliError::Custom(
                             "Weird - coin records not found after peak update.".to_string(),
                         ))?;
-                        for (i, coin_record) in coin_recorss.iter().enumerate() {
+                        for (i, coin_record) in coin_records.iter().enumerate() {
                             if coin_record.spent {
                                 print!(
                                     "Latest registry #{} coin was spent at height {}... ",
                                     i, coin_record.spent_block_index
                                 );
 
-                                let registry = {
+                                let spent_height = coin_record.spent_block_index;
+                                let header_hash = client
+                                    .get_block_record_by_height(spent_height)
+                                    .await?
+                                    .block_record
+                                    .map(|r| r.header_hash);
+
+                                let block_spends = if let Some(hh) = header_hash {
+                                    client
+                                        .get_block_spends(hh)
+                                        .await?
+                                        .block_spends
+                                        .unwrap_or_default()
+                                } else {
+                                    Vec::new()
+                                };
+
+                                let (registry, logs) = {
                                     let mut ctx = SpendContext::new();
                                     let mut db = db.lock().await;
 
-                                    sync_xchandles(
+                                    let parent_spend = client
+                                        .get_puzzle_and_solution(
+                                            coin_record.coin.coin_id(),
+                                            Some(spent_height),
+                                        )
+                                        .await?
+                                        .coin_solution
+                                        .ok_or(CliError::CoinNotSpent(
+                                            coin_record.coin.coin_id(),
+                                        ))?;
+
+                                    let parsed = XchandlesRegistry::from_spend(
+                                        &mut ctx,
+                                        &parent_spend,
+                                        registries[i].info.constants,
+                                        chia_bls::Signature::default(),
+                                    )?
+                                    .ok_or(
+                                        CliError::Custom("Could not parse registry spend".into()),
+                                    )?;
+                                    let logs = parsed.pending_spend.logs.clone();
+
+                                    let registry = sync_xchandles(
                                         &client,
                                         &mut db,
                                         &mut ctx,
                                         registries[i].info.constants.launcher_id,
                                     )
-                                    .await?
+                                    .await?;
+                                    (registry, logs)
                                 };
                                 registries[i] = registry;
+
+                                let registry_launcher_id = registries[i].info.constants.launcher_id;
+                                if let Some(p) = pricing_from_registry_state(
+                                    registries[i].info.state.pricing_puzzle_hash,
+                                    registries[i].info.state.expired_handle_pricing_puzzle_hash,
+                                ) {
+                                    registry_pricing.write().await.insert(registry_launcher_id, p);
+                                }
+
+                                // Build parent_coin_id map for created slots from the synced DB.
+                                let parent_by_value_hash = {
+                                    let mut allocator = Allocator::new();
+                                    let db_guard = db.lock().await;
+                                    let mut map = std::collections::HashMap::new();
+                                    let mut created = Vec::new();
+                                    for log in &logs {
+                                        log.extend_created_handle_slots(&mut created);
+                                    }
+                                    for value in &created {
+                                        let value_hash: Bytes32 = value.tree_hash().into();
+                                        if let Ok(Some(slot)) = db_guard
+                                            .get_slot::<XchandlesHandleSlotValue>(
+                                                &mut allocator,
+                                                registry_launcher_id,
+                                                XchandlesSlotNonce::HANDLE.to_u64(),
+                                                value_hash,
+                                                0,
+                                            )
+                                            .await
+                                        {
+                                            map.insert(value_hash, slot.coin.parent_coin_info);
+                                        }
+                                    }
+                                    map
+                                };
+
+                                let mut allocator = Allocator::new();
+                                if let Err(e) = indexer
+                                    .on_registry_transition(
+                                        &mut allocator,
+                                        spent_height,
+                                        &block_spends,
+                                        &logs,
+                                    )
+                                    .await
+                                {
+                                    eprintln!("singleton discovery error: {e}");
+                                }
+                                indexer
+                                    .project_handle_slots_from_logs(
+                                        registry_launcher_id,
+                                        spent_height,
+                                        &logs,
+                                        |value_hash| parent_by_value_hash.get(&value_hash).copied(),
+                                    )
+                                    .await;
+                                indexer
+                                    .project_registrations_from_logs(
+                                        registry_launcher_id,
+                                        spent_height,
+                                        &logs,
+                                    )
+                                    .await;
+                                indexer
+                                    .project_pending_updates_from_logs(
+                                        registry_launcher_id,
+                                        spent_height,
+                                        &logs,
+                                    )
+                                    .await;
+                                if let Err(e) = indexer
+                                    .on_block(&mut allocator, spent_height, &block_spends)
+                                    .await
+                                {
+                                    eprintln!("singleton follow error: {e}");
+                                }
+
                                 println!("synced :)")
                             }
                         }
 
+                        // Follow singleton spends in the new tip block as well.
+                        if let Some(state) = client.get_blockchain_state().await?.blockchain_state {
+                            let tip = state.peak.height;
+                            let mut confirmed_timestamp = state.peak.timestamp.unwrap_or(0);
+                            if let Some(rec) =
+                                client.get_block_record_by_height(tip).await?.block_record
+                            {
+                                if let Some(ts) = rec.timestamp {
+                                    confirmed_timestamp = ts;
+                                } else if confirmed_timestamp == 0 {
+                                    // Walk back like get_last_onchain_timestamp when tip is non-tx.
+                                    let mut height = tip.saturating_sub(1);
+                                    while height > 0 && confirmed_timestamp == 0 {
+                                        if let Some(br) = client
+                                            .get_block_record_by_height(height)
+                                            .await?
+                                            .block_record
+                                        {
+                                            if let Some(ts) = br.timestamp {
+                                                confirmed_timestamp = ts;
+                                                break;
+                                            }
+                                        }
+                                        height = height.saturating_sub(1);
+                                    }
+                                }
+                                let tip_spends = client
+                                    .get_block_spends(rec.header_hash)
+                                    .await?
+                                    .block_spends
+                                    .unwrap_or_default();
+                                let mut allocator = Allocator::new();
+                                let _ = indexer.on_block(&mut allocator, tip, &tip_spends).await;
+                            }
+                            indexer
+                                .note_peak(
+                                    tip,
+                                    upstream_peak.max(tip),
+                                    now_unix,
+                                    confirmed_timestamp,
+                                )
+                                .await;
+                        }
+
                         if last_clear_time.elapsed().unwrap().as_secs() > 60 * 30 {
-                            // 30 minutes in seconds
                             if let Some(current_blockchain_state) =
                                 client.get_blockchain_state().await?.blockchain_state
                             {

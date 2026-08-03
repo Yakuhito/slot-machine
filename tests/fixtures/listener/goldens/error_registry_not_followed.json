@@ -1,0 +1,5 @@
+{
+  "code": "registry_not_followed",
+  "message": "Registry launcher is not in the listener's configured follow set",
+  "request_id": "FIXED_REQUEST_ID"
+}

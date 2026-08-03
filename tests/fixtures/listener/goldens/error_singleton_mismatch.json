@@ -1,0 +1,5 @@
+{
+  "code": "singleton_mismatch",
+  "message": "Block-local singleton discovery found an integrity mismatch",
+  "request_id": "FIXED_REQUEST_ID"
+}

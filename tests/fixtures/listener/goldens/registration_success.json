@@ -1,0 +1,8 @@
+{
+  "handle": "alice",
+  "registration_secret": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "action_kind": "register",
+  "protocol_fee": 1000,
+  "confirmation_height": 90,
+  "indexed_peak_height": 116
+}
