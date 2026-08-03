@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::{
@@ -38,6 +39,89 @@ pub const PLAN_VERSION: u32 = 1;
 pub const OWNER_RESOLVED_RELATIONSHIP: &str = "same_dedicated_handle_nft";
 
 const ACCEPTED_ALLOCATION_TYPES: [&str; 3] = ["contributor", "cns", "namesdao"];
+
+fn unix_now_secs() -> Result<u64, CliError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .map_err(|e| CliError::Custom(format!("system clock before unix epoch: {e}")))
+}
+
+/// UTC `(year, month, day)` for a Unix timestamp (Howard Hinnant's civil-from-days).
+fn civil_ymd_from_unix(secs: u64) -> (i32, u32, u32) {
+    let z = (secs / 86_400) as i64 + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = (yoe as i64) + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32;
+    let y = (y + if m <= 2 { 1 } else { 0 }) as i32;
+    (y, m, d)
+}
+
+fn unix_from_civil_ymd(year: i32, month: u32, day: u32) -> u64 {
+    let y = year as i64 - if month <= 2 { 1 } else { 0 };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u64;
+    let mp = (month as u64) + if month > 2 { 0 } else { 12 } - 3;
+    let doy = (153 * mp + 2) / 5 + (day as u64) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let z = (era * 146_097 + doe as i64) - 719_468;
+    (z as u64).saturating_mul(86_400)
+}
+
+/// Buffered "past" reference for premine `buy_time`: UTC midnight on the 1st of the
+/// month containing `now_secs`, except when `now` falls on the 1st — then use the
+/// previous month's 1st so precommit vs deploy within that day cannot flip `n`.
+pub fn buy_time_past_reference(now_secs: u64) -> u64 {
+    let (y, m, d) = civil_ymd_from_unix(now_secs);
+    let (y, m) = if d == 1 {
+        if m == 1 {
+            (y - 1, 12)
+        } else {
+            (y, m - 1)
+        }
+    } else {
+        (y, m)
+    };
+    unix_from_civil_ymd(y, m, 1)
+}
+
+/// Lowest `n >= 1` such that `expiration - n * REGISTRATION_PERIOD` is strictly
+/// before [`buy_time_past_reference`]. Handles that expire far ahead (e.g. ~2030)
+/// therefore use `n > 1`.
+pub fn premine_buy_time(expiration: u64, now_secs: u64) -> Result<u64, CliError> {
+    let reference = buy_time_past_reference(now_secs);
+    if expiration < REGISTRATION_PERIOD {
+        return Err(CliError::Custom(format!(
+            "expiration {expiration} is below one registration period"
+        )));
+    }
+    let mut n = 1u64;
+    loop {
+        let span = n.checked_mul(REGISTRATION_PERIOD).ok_or_else(|| {
+            CliError::Custom(format!(
+                "registration-period span overflow for n={n} expiration={expiration}"
+            ))
+        })?;
+        let Some(buy_time) = expiration.checked_sub(span) else {
+            return Err(CliError::Custom(format!(
+                "expiration {expiration} cannot yield buy_time before reference {reference}"
+            )));
+        };
+        if buy_time < reference {
+            return Ok(buy_time);
+        }
+        n = n.checked_add(1).ok_or_else(|| {
+            CliError::Custom(format!(
+                "n overflow while computing buy_time for expiration {expiration}"
+            ))
+        })?;
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PremineLaunchBundle {
@@ -173,7 +257,7 @@ fn validate_mainnet_constants() -> Result<(Bytes32, String), CliError> {
 
 /// Transform a published five-column Premine CSV into one sorted, versioned launch bundle.
 pub fn generate_premine_launch_bundle(csv_bytes: &[u8]) -> Result<PremineLaunchBundle, CliError> {
-    generate_premine_launch_bundle_for_network(csv_bytes, true)
+    generate_premine_launch_bundle_at(csv_bytes, true, unix_now_secs()?)
 }
 
 /// Same as [`generate_premine_launch_bundle`], but optionally allows `txch` recipients
@@ -181,6 +265,16 @@ pub fn generate_premine_launch_bundle(csv_bytes: &[u8]) -> Result<PremineLaunchB
 pub fn generate_premine_launch_bundle_for_network(
     csv_bytes: &[u8],
     require_mainnet_recipients: bool,
+) -> Result<PremineLaunchBundle, CliError> {
+    generate_premine_launch_bundle_at(csv_bytes, require_mainnet_recipients, unix_now_secs()?)
+}
+
+/// Deterministic entry point: `buy_time` is computed against `now_secs` via
+/// [`premine_buy_time`] (month-buffered past reference).
+pub fn generate_premine_launch_bundle_at(
+    csv_bytes: &[u8],
+    require_mainnet_recipients: bool,
+    now_secs: u64,
 ) -> Result<PremineLaunchBundle, CliError> {
     let (royalty_ph, license_hash) = validate_mainnet_constants()?;
     let updater_hash = hex::encode(Bytes32::from(ANY_METADATA_UPDATER_HASH));
@@ -272,13 +366,9 @@ pub fn generate_premine_launch_bundle_for_network(
         }
         let recipient_ph = address.puzzle_hash;
 
-        if row.expiration < REGISTRATION_PERIOD {
-            return Err(CliError::Custom(format!(
-                "expiration {} for {handle} is below one registration period",
-                row.expiration
-            )));
-        }
-        let buy_time = row.expiration - REGISTRATION_PERIOD;
+        let buy_time = premine_buy_time(row.expiration, now_secs).map_err(|e| {
+            CliError::Custom(format!("buy_time for {handle}: {e}"))
+        })?;
 
         let png = generate_v1_png(&handle)
             .map_err(|e| CliError::Custom(format!("png generation failed for {handle}: {e}")))?;
@@ -559,9 +649,47 @@ mod tests {
         )
     }
 
+    /// Fixed generation clock: 2026-08-03 UTC (within August → reference = 2026-08-01).
+    const GEN_NOW: u64 = 1_785_629_000;
+
+    fn generate_fixture() -> PremineLaunchBundle {
+        generate_premine_launch_bundle_at(fixture_csv().as_bytes(), true, GEN_NOW).unwrap()
+    }
+
+    #[test]
+    fn buy_time_past_reference_uses_first_of_month_buffer() {
+        // Mid-month → 1st of same month.
+        assert_eq!(buy_time_past_reference(GEN_NOW), 1_785_542_400);
+        // On the 1st → previous month's 1st.
+        assert_eq!(
+            buy_time_past_reference(1_785_542_400),
+            1_782_864_000 // 2026-07-01 UTC
+        );
+    }
+
+    #[test]
+    fn premine_buy_time_picks_lowest_n_in_the_past() {
+        // Contributor expiry needs n=2 against the Aug-2026 buffer.
+        assert_eq!(
+            premine_buy_time(CONTRIBUTION_PREMINE_EXPIRATION, GEN_NOW).unwrap(),
+            CONTRIBUTION_PREMINE_EXPIRATION - 2 * REGISTRATION_PERIOD
+        );
+        // Nearer expiries still use n=1.
+        assert_eq!(
+            premine_buy_time(1_797_757_200, GEN_NOW).unwrap(),
+            1_797_757_200 - REGISTRATION_PERIOD
+        );
+        // Far ~2030 expiry needs n>1.
+        let far = 1_893_456_000u64;
+        let buy = premine_buy_time(far, GEN_NOW).unwrap();
+        assert!(buy < buy_time_past_reference(GEN_NOW));
+        assert_eq!((far - buy) % REGISTRATION_PERIOD, 0);
+        assert!((far - buy) / REGISTRATION_PERIOD >= 2);
+    }
+
     #[test]
     fn bundle_accepts_canonical_schema_and_sorts_lexicographically() {
-        let bundle = generate_premine_launch_bundle(fixture_csv().as_bytes()).unwrap();
+        let bundle = generate_fixture();
         assert_eq!(bundle.format, BUNDLE_FORMAT);
         assert_eq!(bundle.version, 1);
         assert_eq!(bundle.handles_per_batch, LAUNCH_HANDLES_PER_BATCH);
@@ -583,13 +711,17 @@ mod tests {
         assert_eq!(bundle.rows[0].expiration, CONTRIBUTION_PREMINE_EXPIRATION);
         assert_eq!(
             bundle.rows[0].buy_time,
-            CONTRIBUTION_PREMINE_EXPIRATION - REGISTRATION_PERIOD
+            CONTRIBUTION_PREMINE_EXPIRATION - 2 * REGISTRATION_PERIOD
+        );
+        assert_eq!(
+            (bundle.rows[0].expiration - bundle.rows[0].buy_time) % REGISTRATION_PERIOD,
+            0
         );
     }
 
     #[test]
     fn bundle_row_media_matches_generator_v1_goldens() {
-        let bundle = generate_premine_launch_bundle(fixture_csv().as_bytes()).unwrap();
+        let bundle = generate_fixture();
         let alice = bundle.rows.iter().find(|r| r.handle == "alice").unwrap();
         assert_eq!(
             alice.image_uri,
@@ -629,7 +761,7 @@ mod tests {
 
     #[test]
     fn long_premine_handle_passes_unchanged() {
-        let bundle = generate_premine_launch_bundle(fixture_csv().as_bytes()).unwrap();
+        let bundle = generate_fixture();
         let row = bundle.rows.iter().find(|r| r.handle == LONG_HANDLE).unwrap();
         assert_eq!(row.handle.len(), 42);
         assert_eq!(row.source_handle, LONG_HANDLE);
@@ -638,8 +770,8 @@ mod tests {
 
     #[test]
     fn whole_bundle_is_byte_deterministic() {
-        let a = generate_premine_launch_bundle(fixture_csv().as_bytes()).unwrap();
-        let b = generate_premine_launch_bundle(fixture_csv().as_bytes()).unwrap();
+        let a = generate_premine_launch_bundle_at(fixture_csv().as_bytes(), true, GEN_NOW).unwrap();
+        let b = generate_premine_launch_bundle_at(fixture_csv().as_bytes(), true, GEN_NOW).unwrap();
         let a_bytes = serde_json::to_vec(&a).unwrap();
         let b_bytes = serde_json::to_vec(&b).unwrap();
         assert_eq!(a_bytes, b_bytes);
@@ -652,14 +784,16 @@ mod tests {
             "handle,recipient,expiration,allocation_type,allocation_explanation\n\
              alice,{ALICE_RECIPIENT},1797757200,contributor,https://example.com/alice\n"
         );
-        let err = generate_premine_launch_bundle(bad_expiry.as_bytes()).unwrap_err();
+        let err =
+            generate_premine_launch_bundle_at(bad_expiry.as_bytes(), true, GEN_NOW).unwrap_err();
         assert!(err.to_string().contains("contributor expiration"));
 
         let bad_type = format!(
             "handle,recipient,expiration,allocation_type,allocation_explanation\n\
              alice,{ALICE_RECIPIENT},1818752400,other,https://example.com/alice\n"
         );
-        let err = generate_premine_launch_bundle(bad_type.as_bytes()).unwrap_err();
+        let err =
+            generate_premine_launch_bundle_at(bad_type.as_bytes(), true, GEN_NOW).unwrap_err();
         assert!(err.to_string().contains("unknown allocation_type"));
     }
 
@@ -670,42 +804,50 @@ mod tests {
              alice,{ALICE_RECIPIENT},1818752400,contributor,https://example.com/a\n\
              alice,{ALICE_RECIPIENT},1818752400,contributor,https://example.com/b\n"
         );
-        assert!(generate_premine_launch_bundle(dup.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("duplicate"));
+        assert!(
+            generate_premine_launch_bundle_at(dup.as_bytes(), true, GEN_NOW)
+                .unwrap_err()
+                .to_string()
+                .contains("duplicate")
+        );
 
         let invalid = format!(
             "handle,recipient,expiration,allocation_type,allocation_explanation\n\
              AL,{ALICE_RECIPIENT},1818752400,contributor,https://example.com/a\n"
         );
-        assert!(generate_premine_launch_bundle(invalid.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("invalid Handle"));
+        assert!(
+            generate_premine_launch_bundle_at(invalid.as_bytes(), true, GEN_NOW)
+                .unwrap_err()
+                .to_string()
+                .contains("invalid Handle")
+        );
 
         let txch = format!(
             "handle,recipient,expiration,allocation_type,allocation_explanation\n\
              alice,txch1we8f6e6d97jyru8klr79uay6zlw7x30tuj3n2d4060h5z73l3jgqg5g78p,1818752400,contributor,https://example.com/a\n"
         );
-        assert!(generate_premine_launch_bundle(txch.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("non-mainnet"));
+        assert!(
+            generate_premine_launch_bundle_at(txch.as_bytes(), true, GEN_NOW)
+                .unwrap_err()
+                .to_string()
+                .contains("non-mainnet")
+        );
 
         let bad_url = format!(
             "handle,recipient,expiration,allocation_type,allocation_explanation\n\
              alice,{ALICE_RECIPIENT},1818752400,contributor,not-a-url\n"
         );
-        assert!(generate_premine_launch_bundle(bad_url.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("HTTP(S)"));
+        assert!(
+            generate_premine_launch_bundle_at(bad_url.as_bytes(), true, GEN_NOW)
+                .unwrap_err()
+                .to_string()
+                .contains("HTTP(S)")
+        );
     }
 
     #[test]
     fn pre_broadcast_plan_enumerates_batches() {
-        let bundle = generate_premine_launch_bundle(fixture_csv().as_bytes()).unwrap();
+        let bundle = generate_fixture();
         let plan = build_pre_broadcast_plan(&bundle);
         assert_eq!(plan.format, PLAN_FORMAT);
         assert_eq!(plan.total_rows, 3);
@@ -729,12 +871,12 @@ mod tests {
         fs::write(&plan_path, b"PRIOR_PLAN").unwrap();
 
         // Generation fails before write — prior files untouched.
-        let err = generate_premine_launch_bundle(b"not,csv\n");
+        let err = generate_premine_launch_bundle_at(b"not,csv\n", true, GEN_NOW);
         assert!(err.is_err());
         assert_eq!(fs::read(&bundle_path).unwrap(), b"PRIOR_BUNDLE");
         assert_eq!(fs::read(&plan_path).unwrap(), b"PRIOR_PLAN");
 
-        let bundle = generate_premine_launch_bundle(fixture_csv().as_bytes()).unwrap();
+        let bundle = generate_fixture();
         let plan = build_pre_broadcast_plan(&bundle);
         write_premine_launch_outputs_atomically(&bundle, &plan, &bundle_path, &plan_path).unwrap();
         assert!(fs::read_to_string(&bundle_path)
@@ -745,15 +887,16 @@ mod tests {
 
     #[test]
     fn launch_handles_deserialize_without_legacy_media_columns() {
-        let bundle = generate_premine_launch_bundle(fixture_csv().as_bytes()).unwrap();
+        let bundle = generate_fixture();
         let handles = launch_handles_from_bundle(&bundle).unwrap();
         assert_eq!(handles.len(), 3);
         assert_eq!(handles[0].handle, "alice");
         assert_eq!(handles[0].expiration, CONTRIBUTION_PREMINE_EXPIRATION);
         assert_eq!(
-            handles[0].buy_time + REGISTRATION_PERIOD,
-            handles[0].expiration
+            (handles[0].expiration - handles[0].buy_time) % REGISTRATION_PERIOD,
+            0
         );
+        assert!(handles[0].buy_time < buy_time_past_reference(GEN_NOW));
         // No global period: each row carries its own buy_time/expiration.
         assert_ne!(handles[0].expiration, handles[1].expiration);
     }
