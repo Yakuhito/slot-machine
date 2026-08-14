@@ -633,28 +633,12 @@ dependencies = [
 [[package]]
 name = "chia-sdk-client"
 version = "0.33.0"
-dependencies = [
- "chia-protocol",
- "chia-sdk-types 0.33.0",
- "chia-ssl 0.42.1",
- "chia-traits 0.36.1",
- "futures-util",
- "thiserror 2.0.19",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "tungstenite",
-]
-
-[[package]]
-name = "chia-sdk-client"
-version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3857ebe69820f4644d346bf00713b2cfdb071af5c3070da6eca5f0d7a3d1184a"
 dependencies = [
  "aws-lc-rs",
  "chia-protocol",
- "chia-sdk-types 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chia-sdk-types 0.33.0",
  "chia-ssl 0.36.1",
  "chia-traits 0.36.1",
  "futures-util",
@@ -668,15 +652,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "chia-sdk-coinset"
-version = "0.33.0"
+name = "chia-sdk-client"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
 dependencies = [
  "chia-protocol",
- "hex",
- "hex-literal 0.4.1",
- "reqwest",
- "serde",
- "serde_json",
+ "chia-sdk-types 0.34.0",
+ "chia-ssl 0.42.1",
+ "chia-traits 0.36.1",
+ "futures-util",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tungstenite",
 ]
 
 [[package]]
@@ -694,11 +683,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "chia-sdk-daemon"
-version = "0.33.0"
+name = "chia-sdk-coinset"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
 dependencies = [
- "chia-sdk-client 0.33.0",
- "chia-sdk-coinset 0.33.0",
+ "chia-protocol",
+ "hex",
+ "hex-literal 0.4.1",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "chia-sdk-daemon"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
+dependencies = [
+ "chia-sdk-client 0.34.0",
+ "chia-sdk-coinset 0.34.0",
  "futures-util",
  "serde",
  "serde_json",
@@ -707,15 +710,6 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "tungstenite",
-]
-
-[[package]]
-name = "chia-sdk-derive"
-version = "0.33.0"
-dependencies = [
- "convert_case 0.8.0",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -730,8 +724,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "chia-sdk-derive"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
+dependencies = [
+ "convert_case 0.8.0",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "chia-sdk-driver"
 version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbee2d08c43e0ed406a6e67ac4dca252c0d9efaf8b15d1e6019d05b5e041625a"
 dependencies = [
  "bigdecimal",
  "bip39",
@@ -758,15 +764,13 @@ dependencies = [
  "num-bigint",
  "rand 0.9.5",
  "rand_chacha 0.9.0",
- "serde",
  "thiserror 2.0.19",
 ]
 
 [[package]]
 name = "chia-sdk-driver"
-version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbee2d08c43e0ed406a6e67ac4dca252c0d9efaf8b15d1e6019d05b5e041625a"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
 dependencies = [
  "bigdecimal",
  "bip39",
@@ -775,9 +779,9 @@ dependencies = [
  "chia-protocol",
  "chia-puzzle-types",
  "chia-puzzles",
- "chia-sdk-signer 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-types 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-utils 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chia-sdk-signer 0.34.0",
+ "chia-sdk-types 0.34.0",
+ "chia-sdk-utils 0.34.0",
  "chia-secp",
  "chia-sha2 0.36.1",
  "chia-traits 0.36.1",
@@ -793,24 +797,7 @@ dependencies = [
  "num-bigint",
  "rand 0.9.5",
  "rand_chacha 0.9.0",
- "thiserror 2.0.19",
-]
-
-[[package]]
-name = "chia-sdk-signer"
-version = "0.33.0"
-dependencies = [
- "chia-bls 0.36.1",
- "chia-consensus",
- "chia-protocol",
- "chia-sdk-types 0.33.0",
- "chia-secp",
- "chia-sha2 0.36.1",
- "clvm-traits 0.36.1",
- "clvmr",
- "colored",
- "k256",
- "rue-lir",
+ "serde",
  "thiserror 2.0.19",
 ]
 
@@ -823,41 +810,32 @@ dependencies = [
  "chia-bls 0.36.1",
  "chia-consensus",
  "chia-protocol",
- "chia-sdk-types 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chia-sdk-types 0.33.0",
  "chia-secp",
  "chia-sha2 0.36.1",
  "clvm-traits 0.36.1",
  "clvmr",
  "k256",
- "rue-lir",
+ "rue-lir 0.6.0",
  "thiserror 2.0.19",
 ]
 
 [[package]]
-name = "chia-sdk-test"
-version = "0.33.0"
+name = "chia-sdk-signer"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
 dependencies = [
- "anyhow",
- "bincode",
- "bip39",
  "chia-bls 0.36.1",
  "chia-consensus",
  "chia-protocol",
- "chia-puzzle-types",
- "chia-sdk-signer 0.33.0",
- "chia-sdk-types 0.33.0",
+ "chia-sdk-types 0.34.0",
  "chia-secp",
  "chia-sha2 0.36.1",
- "chia-traits 0.36.1",
  "clvm-traits 0.36.1",
- "clvm-utils",
  "clvmr",
- "hex",
- "indexmap 2.14.0",
- "prettytable-rs",
- "rand 0.9.5",
- "rand_chacha 0.9.0",
- "serde",
+ "colored",
+ "k256",
+ "rue-lir 0.8.5",
  "thiserror 2.0.19",
 ]
 
@@ -874,9 +852,9 @@ dependencies = [
  "chia-consensus",
  "chia-protocol",
  "chia-puzzle-types",
- "chia-sdk-client 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-signer 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-types 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chia-sdk-client 0.33.0",
+ "chia-sdk-signer 0.33.0",
+ "chia-sdk-types 0.33.0",
  "chia-secp",
  "chia-sha2 0.36.1",
  "chia-traits 0.36.1",
@@ -900,26 +878,34 @@ dependencies = [
 ]
 
 [[package]]
-name = "chia-sdk-types"
-version = "0.33.0"
+name = "chia-sdk-test"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
 dependencies = [
+ "anyhow",
+ "bincode",
+ "bip39",
  "chia-bls 0.36.1",
  "chia-consensus",
  "chia-protocol",
  "chia-puzzle-types",
- "chia-puzzles",
- "chia-sdk-derive 0.33.0",
+ "chia-sdk-coinset 0.34.0",
+ "chia-sdk-signer 0.34.0",
+ "chia-sdk-types 0.34.0",
  "chia-secp",
  "chia-sha2 0.36.1",
- "chialisp",
+ "chia-traits 0.36.1",
  "clvm-traits 0.36.1",
  "clvm-utils",
  "clvmr",
+ "hex",
  "hex-literal 0.4.1",
- "rue-compiler",
- "rue-lir",
- "rue-options",
+ "indexmap 2.14.0",
+ "prettytable-rs",
+ "rand 0.9.5",
+ "rand_chacha 0.9.0",
  "serde",
+ "serde_json",
  "thiserror 2.0.19",
 ]
 
@@ -934,7 +920,7 @@ dependencies = [
  "chia-protocol",
  "chia-puzzle-types",
  "chia-puzzles",
- "chia-sdk-derive 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chia-sdk-derive 0.33.0",
  "chia-secp",
  "chia-sha2 0.36.1",
  "chialisp",
@@ -942,15 +928,42 @@ dependencies = [
  "clvm-utils",
  "clvmr",
  "hex-literal 0.4.1",
- "rue-compiler",
- "rue-lir",
- "rue-options",
+ "rue-compiler 0.6.0",
+ "rue-lir 0.6.0",
+ "rue-options 0.6.0",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "chia-sdk-types"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
+dependencies = [
+ "chia-bls 0.36.1",
+ "chia-consensus",
+ "chia-protocol",
+ "chia-puzzle-types",
+ "chia-puzzles",
+ "chia-sdk-derive 0.34.0",
+ "chia-secp",
+ "chia-sha2 0.36.1",
+ "chialisp",
+ "clvm-traits 0.36.1",
+ "clvm-utils",
+ "clvmr",
+ "hex-literal 0.4.1",
+ "rue-compiler 0.8.5",
+ "rue-lir 0.8.5",
+ "rue-options 0.8.5",
+ "serde",
  "thiserror 2.0.19",
 ]
 
 [[package]]
 name = "chia-sdk-utils"
 version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93cecade7c3fe750845cde404e2c69aaeb75caf88dc343fff2ff4952554eccf9"
 dependencies = [
  "bech32",
  "chia-protocol",
@@ -963,9 +976,8 @@ dependencies = [
 
 [[package]]
 name = "chia-sdk-utils"
-version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93cecade7c3fe750845cde404e2c69aaeb75caf88dc343fff2ff4952554eccf9"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
 dependencies = [
  "bech32",
  "chia-protocol",
@@ -1096,33 +1108,6 @@ dependencies = [
 [[package]]
 name = "chia-wallet-sdk"
 version = "0.33.0"
-dependencies = [
- "chia-bls 0.36.1",
- "chia-consensus",
- "chia-protocol",
- "chia-puzzle-types",
- "chia-puzzles",
- "chia-sdk-client 0.33.0",
- "chia-sdk-coinset 0.33.0",
- "chia-sdk-daemon",
- "chia-sdk-driver 0.33.0",
- "chia-sdk-signer 0.33.0",
- "chia-sdk-test 0.33.0",
- "chia-sdk-types 0.33.0",
- "chia-sdk-utils 0.33.0",
- "chia-secp",
- "chia-serde",
- "chia-sha2 0.36.1",
- "chia-ssl 0.42.1",
- "chia-traits 0.36.1",
- "clvm-traits 0.36.1",
- "clvm-utils",
- "clvmr",
-]
-
-[[package]]
-name = "chia-wallet-sdk"
-version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e862bece82985b64931b25bb8a3856b1807cd44deceb520ce1f56001a320956e"
 dependencies = [
@@ -1131,17 +1116,45 @@ dependencies = [
  "chia-protocol",
  "chia-puzzle-types",
  "chia-puzzles",
- "chia-sdk-client 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-coinset 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-driver 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-signer 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-test 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-types 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "chia-sdk-utils 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chia-sdk-client 0.33.0",
+ "chia-sdk-coinset 0.33.0",
+ "chia-sdk-driver 0.33.0",
+ "chia-sdk-signer 0.33.0",
+ "chia-sdk-test 0.33.0",
+ "chia-sdk-types 0.33.0",
+ "chia-sdk-utils 0.33.0",
  "chia-secp",
  "chia-serde",
  "chia-sha2 0.36.1",
  "chia-ssl 0.36.1",
+ "chia-traits 0.36.1",
+ "clvm-traits 0.36.1",
+ "clvm-utils",
+ "clvmr",
+]
+
+[[package]]
+name = "chia-wallet-sdk"
+version = "0.34.0"
+source = "git+https://github.com/xch-dev/chia-wallet-sdk.git?rev=04873a96e664548ddb8d4bc064688fc8446d734c#04873a96e664548ddb8d4bc064688fc8446d734c"
+dependencies = [
+ "chia-bls 0.36.1",
+ "chia-consensus",
+ "chia-protocol",
+ "chia-puzzle-types",
+ "chia-puzzles",
+ "chia-sdk-client 0.34.0",
+ "chia-sdk-coinset 0.34.0",
+ "chia-sdk-daemon",
+ "chia-sdk-driver 0.34.0",
+ "chia-sdk-signer 0.34.0",
+ "chia-sdk-test 0.34.0",
+ "chia-sdk-types 0.34.0",
+ "chia-sdk-utils 0.34.0",
+ "chia-secp",
+ "chia-serde",
+ "chia-sha2 0.36.1",
+ "chia-ssl 0.42.1",
  "chia-traits 0.36.1",
  "clvm-traits 0.36.1",
  "clvm-utils",
@@ -2562,6 +2575,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "include_dir"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "923d117408f1e49d914f1a379a309cffe4f18c05cf4e3d12e613a15fc81bd0dd"
+dependencies = [
+ "include_dir_macros",
+]
+
+[[package]]
+name = "include_dir_macros"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cab85a7ed0bd5f0e76d93846e0147172bed2e2d3f859bcc33a8d9699cad1a75"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3752,7 +3784,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e8feffcdd1f81db8d83980714cdd15d53608f7cc49e4d4a1c52d0fe1d523c4b"
 dependencies = [
  "paste",
- "rue-parser",
+ "rue-parser 0.6.0",
+]
+
+[[package]]
+name = "rue-ast"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82e99e24bfbaa8fe116b23d3fa1df09e2f59982e654e04430f8fad0d348271fa"
+dependencies = [
+ "paste",
+ "rue-parser 0.8.5",
 ]
 
 [[package]]
@@ -3769,14 +3811,40 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "rowan",
- "rue-ast",
- "rue-diagnostic",
- "rue-hir",
- "rue-lexer",
- "rue-lir",
- "rue-options",
- "rue-parser",
- "rue-types",
+ "rue-ast 0.6.0",
+ "rue-diagnostic 0.6.0",
+ "rue-hir 0.6.0",
+ "rue-lexer 0.6.0",
+ "rue-lir 0.6.0",
+ "rue-options 0.6.0",
+ "rue-parser 0.6.0",
+ "rue-types 0.6.0",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "rue-compiler"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59f127828ed5bdd04dee995b5028f3ae291394850e66856bb6998198c51c4514"
+dependencies = [
+ "clvmr",
+ "hex",
+ "id-arena",
+ "include_dir",
+ "indexmap 2.14.0",
+ "log",
+ "num-bigint",
+ "num-traits",
+ "rowan",
+ "rue-ast 0.8.5",
+ "rue-diagnostic 0.8.5",
+ "rue-hir 0.8.5",
+ "rue-lexer 0.8.5",
+ "rue-lir 0.8.5",
+ "rue-options 0.8.5",
+ "rue-parser 0.8.5",
+ "rue-types 0.8.5",
  "thiserror 2.0.19",
 ]
 
@@ -3787,6 +3855,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a953cccb3041f21c77e80ea8fdb03e7214b91195d939f3146f054e27020ea1a9"
 dependencies = [
  "derive_more",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "rue-diagnostic"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d25461b6850121106735e1abe334ecf2bf56e27244284d46ef5dfbc0e4bc2894"
+dependencies = [
  "thiserror 2.0.19",
 ]
 
@@ -3802,10 +3879,28 @@ dependencies = [
  "indexmap 2.14.0",
  "log",
  "num-bigint",
- "rue-diagnostic",
- "rue-lir",
- "rue-options",
- "rue-types",
+ "rue-diagnostic 0.6.0",
+ "rue-lir 0.6.0",
+ "rue-options 0.6.0",
+ "rue-types 0.6.0",
+]
+
+[[package]]
+name = "rue-hir"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd0cc66defc213a291efd185f0ff18f703abec2850c931a459ce187ee667e1fd"
+dependencies = [
+ "derive_more",
+ "hex",
+ "id-arena",
+ "indexmap 2.14.0",
+ "log",
+ "num-bigint",
+ "rue-diagnostic 0.8.5",
+ "rue-lir 0.8.5",
+ "rue-options 0.8.5",
+ "rue-types 0.8.5",
 ]
 
 [[package]]
@@ -3815,10 +3910,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68345f23ba80d548d4a671de14e455de74ae58fccfa436db105b35308a1780ed"
 
 [[package]]
+name = "rue-lexer"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "579df9994fcc6485832d6a19f77309f38d12cf48bb73b7a2b99eb4ae094aaadf"
+
+[[package]]
 name = "rue-lir"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "099f3c3d6b432bb94cf8876b7f71b650d6887ae9193e8063c529feca37276b6f"
+dependencies = [
+ "chialisp",
+ "clvm-traits 0.28.1",
+ "clvmr",
+ "colored",
+ "id-arena",
+ "num-bigint",
+ "num-integer",
+ "sha2 0.10.9",
+ "sha3",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "rue-lir"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3ba00e6908f8baf1de08b41f11213a1bc0ef4dfd75f47ebca341665b1d1f5b7"
 dependencies = [
  "chialisp",
  "clvm-traits 0.28.1",
@@ -3844,6 +3963,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rue-options"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6c9855c49ee3f3f248004bfb2daf166ca0648a46820f95255fedb4e815b269d"
+dependencies = [
+ "serde",
+ "thiserror 2.0.19",
+ "toml",
+]
+
+[[package]]
 name = "rue-parser"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3855,8 +3985,24 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rowan",
- "rue-diagnostic",
- "rue-lexer",
+ "rue-diagnostic 0.6.0",
+ "rue-lexer 0.6.0",
+]
+
+[[package]]
+name = "rue-parser"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2eeffa2e32037202a8fb8a4361f06bf01dd0a7d7ace092dfab3ff1aa5f2cd42f"
+dependencies = [
+ "derive_more",
+ "indexmap 2.14.0",
+ "itertools 0.14.0",
+ "num-derive",
+ "num-traits",
+ "rowan",
+ "rue-diagnostic 0.8.5",
+ "rue-lexer 0.8.5",
 ]
 
 [[package]]
@@ -3872,7 +4018,24 @@ dependencies = [
  "indexmap 2.14.0",
  "log",
  "rstest 0.26.1",
- "rue-diagnostic",
+ "rue-diagnostic 0.6.0",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "rue-types"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0766e7089d3b5e41cebb17bee53055479adee1925207e4c1a5dea36a2bf29d06"
+dependencies = [
+ "clvmr",
+ "derive_more",
+ "hex",
+ "id-arena",
+ "indexmap 2.14.0",
+ "log",
+ "rstest 0.26.1",
+ "rue-diagnostic 0.8.5",
  "thiserror 2.0.19",
 ]
 
@@ -4004,7 +4167,7 @@ name = "sage-config"
 version = "0.12.11"
 source = "git+https://github.com/xch-dev/sage.git#8e9f2d5c18bb53f792a84a978cbaea155075b61b"
 dependencies = [
- "chia-wallet-sdk 0.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chia-wallet-sdk 0.33.0",
  "hex",
  "indexmap 2.14.0",
  "serde",
@@ -4341,7 +4504,7 @@ dependencies = [
  "chia-protocol",
  "chia-puzzle-types",
  "chia-puzzles",
- "chia-wallet-sdk 0.33.0",
+ "chia-wallet-sdk 0.34.0",
  "chrono",
  "clap",
  "clvm-traits 0.36.1",
