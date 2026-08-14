@@ -41,7 +41,11 @@ impl FreshnessState {
         if self.rolling_back || self.resyncing {
             return false;
         }
-        if self.upstream_peak_height.saturating_sub(self.indexed_peak_height) > 16 {
+        if self
+            .upstream_peak_height
+            .saturating_sub(self.indexed_peak_height)
+            > 16
+        {
             return false;
         }
         if now_unix.saturating_sub(self.last_successful_peak_unix) > 300 {

@@ -21,14 +21,14 @@ use clvm_utils::ToTreeHash;
 use clvmr::Allocator;
 use serde_json::Value;
 use slot_machine::{
+    discover_singleton_in_block, listener_router, push_handle_replacement,
+    push_pending_replacement, push_registration_replacement, push_replacement, rollback_to_before,
     DiscoveryResult, FollowRecordStatus, FollowedSingleton, FreshnessState, HandleSlotRecord,
     HandleSlotStore, ListenerApiState, MemoryHandleSlotStore, MemoryPendingUpdateStore,
     MemoryRegistrationStore, MemorySingletonStore, ParsedNftState, PendingUpdateRecord,
     PendingUpdateStore, RegistrationActionKind, RegistrationRecord, RegistrationStore,
     RegistryPricing, RegistryRegistrationStats, SingletonIndexer, SingletonStore, StoredHandleSlot,
     StoredPendingUpdate, StoredRegistration, StoredRegistrationEvent, StoredSingletonState,
-    discover_singleton_in_block, listener_router, push_handle_replacement,
-    push_pending_replacement, push_registration_replacement, push_replacement, rollback_to_before,
 };
 use tokio::sync::RwLock;
 
@@ -696,13 +696,11 @@ async fn real_http_golden_handle_proofs_and_errors() {
     );
     let body: Value = resp.json().await.unwrap();
     assert_eq!(body, load_golden("handle_nft_success.json"));
-    assert!(
-        body["resolved_singleton"]["nft"]
-            .as_object()
-            .unwrap()
-            .get("metadata")
-            .is_none()
-    );
+    assert!(body["resolved_singleton"]["nft"]
+        .as_object()
+        .unwrap()
+        .get("metadata")
+        .is_none());
 
     let with_meta: Value = client
         .get(format!(
@@ -1028,10 +1026,13 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
         registrations: MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
         pending_updates: MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
         freshness: Arc::clone(&freshness),
-        registry_pricing: Arc::new(RwLock::new(HashMap::from([(registry, RegistryPricing {
-            base_price: 5_000,
-            registration_period: 31_557_600,
-        })]))),
+        registry_pricing: Arc::new(RwLock::new(HashMap::from([(
+            registry,
+            RegistryPricing {
+                base_price: 5_000,
+                registration_period: 31_557_600,
+            },
+        )]))),
         registry_launcher_ids: vec![registry],
         now_unix_override: Some(1_700_000_000),
     };
@@ -1067,7 +1068,14 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
     // Reorganization orphans height 20; prior slot restored.
     indexer.rollback(20).await;
     // Clear rolling_back so reads succeed; production would note_peak after recovery.
-    indexer.note_peak(50, 50, FreshnessState::now_unix(), FreshnessState::now_unix()).await;
+    indexer
+        .note_peak(
+            50,
+            50,
+            FreshnessState::now_unix(),
+            FreshnessState::now_unix(),
+        )
+        .await;
 
     let after: Value = client
         .get(format!("{base}/handle/{handle}"))
@@ -1385,10 +1393,13 @@ async fn registration_reorganization_restores_prior_and_reverses_total() {
         registrations: registrations.clone() as Arc<dyn RegistrationStore>,
         pending_updates: MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
         freshness: Arc::clone(&freshness),
-        registry_pricing: Arc::new(RwLock::new(HashMap::from([(registry, RegistryPricing {
-            base_price: 5_000,
-            registration_period: 31_557_600,
-        })]))),
+        registry_pricing: Arc::new(RwLock::new(HashMap::from([(
+            registry,
+            RegistryPricing {
+                base_price: 5_000,
+                registration_period: 31_557_600,
+            },
+        )]))),
         registry_launcher_ids: vec![registry],
         now_unix_override: None,
     };
@@ -1432,7 +1443,12 @@ async fn registration_reorganization_restores_prior_and_reverses_total() {
 
     indexer.rollback(20).await;
     indexer
-        .note_peak(200, 200, FreshnessState::now_unix(), FreshnessState::now_unix())
+        .note_peak(
+            200,
+            200,
+            FreshnessState::now_unix(),
+            FreshnessState::now_unix(),
+        )
         .await;
 
     let after: Value = client
@@ -2169,10 +2185,13 @@ async fn pending_transfer_reorganization_restores_or_removes() {
         registrations: MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
         pending_updates: pending_updates.clone() as Arc<dyn PendingUpdateStore>,
         freshness: Arc::clone(&freshness),
-        registry_pricing: Arc::new(RwLock::new(HashMap::from([(registry, RegistryPricing {
-            base_price: 5_000,
-            registration_period: 31_557_600,
-        })]))),
+        registry_pricing: Arc::new(RwLock::new(HashMap::from([(
+            registry,
+            RegistryPricing {
+                base_price: 5_000,
+                registration_period: 31_557_600,
+            },
+        )]))),
         registry_launcher_ids: vec![registry],
         now_unix_override: Some(1_700_000_000),
     };
@@ -2301,14 +2320,12 @@ async fn project_pending_updates_from_logs_covers_initiate_execute_invalidate() 
     indexer
         .project_pending_updates_from_logs(registry, 110, &[extend])
         .await;
-    assert!(
-        pending_updates
-            .get(registry, handle_hash)
-            .await
-            .unwrap()
-            .current
-            .is_none()
-    );
+    assert!(pending_updates
+        .get(registry, handle_hash)
+        .await
+        .unwrap()
+        .current
+        .is_none());
 
     // Re-initiate then execute clears.
     let initiate2 = XchandlesActionLog::InitiateUpdate(XchandlesInitiateUpdateActionLog {
@@ -2320,14 +2337,12 @@ async fn project_pending_updates_from_logs_covers_initiate_execute_invalidate() 
     indexer
         .project_pending_updates_from_logs(registry, 120, &[initiate2])
         .await;
-    assert!(
-        pending_updates
-            .get(registry, handle_hash)
-            .await
-            .unwrap()
-            .current
-            .is_some()
-    );
+    assert!(pending_updates
+        .get(registry, handle_hash)
+        .await
+        .unwrap()
+        .current
+        .is_some());
 
     let execute = XchandlesActionLog::ExecuteUpdate(XchandlesExecuteUpdateActionLog {
         spent_handle_slot: handle_slot(3),
@@ -2342,14 +2357,12 @@ async fn project_pending_updates_from_logs_covers_initiate_execute_invalidate() 
     indexer
         .project_pending_updates_from_logs(registry, 130, &[execute])
         .await;
-    assert!(
-        pending_updates
-            .get(registry, handle_hash)
-            .await
-            .unwrap()
-            .current
-            .is_none()
-    );
+    assert!(pending_updates
+        .get(registry, handle_hash)
+        .await
+        .unwrap()
+        .current
+        .is_none());
 }
 
 // --- Ticket 14: GET /expiring -------------------------------------------------
@@ -2389,7 +2402,12 @@ fn named_registration(registry: Bytes32, handle: &str) -> StoredRegistration {
     }
 }
 
-async fn seed_named_handle(server: &RunningListener, registry: Bytes32, handle: &str, expiration: u64) {
+async fn seed_named_handle(
+    server: &RunningListener,
+    registry: Bytes32,
+    handle: &str,
+    expiration: u64,
+) {
     upsert_handle_slot(server, named_slot(registry, handle, expiration)).await;
     upsert_registration(server, named_registration(registry, handle)).await;
 }
@@ -2658,11 +2676,7 @@ async fn expiring_membership_updates_after_fork_rollback() {
         current: None,
         history: Vec::new(),
     };
-    push_registration_replacement(
-        &mut reg_rec,
-        named_registration(registry, handle),
-        100,
-    );
+    push_registration_replacement(&mut reg_rec, named_registration(registry, handle), 100);
     registrations.upsert(reg_rec).await;
 
     let state = ListenerApiState {

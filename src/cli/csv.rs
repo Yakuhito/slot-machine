@@ -255,7 +255,6 @@ pub fn load_datastore_nft_csv<P: AsRef<Path>>(
     Ok(records)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

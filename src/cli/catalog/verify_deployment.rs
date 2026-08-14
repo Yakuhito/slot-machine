@@ -25,8 +25,8 @@ use clvmr::NodePtr;
 
 use crate::{
     get_coinset_client, initial_cat_inner_puzzle_ptr, load_catalog_premine_csv,
-    load_catalog_state_schedule_csv, print_medieval_vault_configuration, CatalogStateScheduleRecord,
-    CliError, MultisigSingleton,
+    load_catalog_state_schedule_csv, print_medieval_vault_configuration,
+    CatalogStateScheduleRecord, CliError, MultisigSingleton,
 };
 
 use crate::sync_multisig_singleton;

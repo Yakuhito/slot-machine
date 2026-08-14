@@ -112,8 +112,7 @@ pub fn dereferenced_launchers(
     if !still(spent.owner_launcher_id) {
         out.push(spent.owner_launcher_id);
     }
-    if spent.resolved_launcher_id != spent.owner_launcher_id && !still(spent.resolved_launcher_id)
-    {
+    if spent.resolved_launcher_id != spent.owner_launcher_id && !still(spent.resolved_launcher_id) {
         out.push(spent.resolved_launcher_id);
     }
     out

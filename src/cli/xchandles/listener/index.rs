@@ -6,26 +6,26 @@ use clvmr::Allocator;
 use tokio::sync::RwLock;
 
 use super::discovery::{
-    DiscoveryResult, FollowSpendResult, discover_singleton_in_block, follow_singleton_spend,
+    discover_singleton_in_block, follow_singleton_spend, DiscoveryResult, FollowSpendResult,
 };
 use super::freshness::FreshnessState;
 use super::handle_store::{
-    HandleSlotRecord, HandleSlotStore, StoredHandleSlot, push_handle_replacement,
-    rollback_handle_to_before,
+    push_handle_replacement, rollback_handle_to_before, HandleSlotRecord, HandleSlotStore,
+    StoredHandleSlot,
 };
 use super::pending_store::{
-    PendingUpdateRecord, PendingUpdateStore, StoredPendingUpdate, clear_pending_current,
-    push_pending_replacement, rollback_pending_to_before,
+    clear_pending_current, push_pending_replacement, rollback_pending_to_before,
+    PendingUpdateRecord, PendingUpdateStore, StoredPendingUpdate,
 };
-use super::refs::{SingletonReference, dereferenced_launchers, references_from_action_log};
+use super::refs::{dereferenced_launchers, references_from_action_log, SingletonReference};
 use super::registration_store::{
+    push_registration_replacement, rollback_registration_to_before, rollback_stats_to_before,
     RegistrationActionKind, RegistrationRecord, RegistrationStore, StoredRegistration,
-    StoredRegistrationEvent, push_registration_replacement, rollback_registration_to_before,
-    rollback_stats_to_before,
+    StoredRegistrationEvent,
 };
 use super::store::{
-    FollowRecordStatus, FollowedSingleton, SingletonStore, StoredSingletonState, push_replacement,
-    rollback_to_before,
+    push_replacement, rollback_to_before, FollowRecordStatus, FollowedSingleton, SingletonStore,
+    StoredSingletonState,
 };
 use chia_wallet_sdk::driver::XchandlesActionLog;
 use chia_wallet_sdk::types::puzzles::XchandlesHandleSlotValue;

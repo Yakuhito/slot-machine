@@ -205,7 +205,10 @@ pub async fn xchandles_continue_launch(
 
     println!("Loading enriched launch CSV from '{}'...", premine);
     let handles_to_launch = load_xchandles_launch_csv(&premine)?;
-    println!("Loaded {} handles from launch CSV.", handles_to_launch.len());
+    println!(
+        "Loaded {} handles from launch CSV.",
+        handles_to_launch.len()
+    );
 
     println!("Initializing Chia RPC client...");
     let client = if testnet11 {
@@ -372,8 +375,10 @@ pub async fn xchandles_continue_launch(
             let mut security_coin_conditions = Conditions::new();
             let mut cat_creator_conds = Conditions::new();
 
-            for (index, (handle_info, (buy_time, n))) in
-                handle_infos.into_iter().zip(batch_timings.iter().copied()).enumerate()
+            for (index, (handle_info, (buy_time, n))) in handle_infos
+                .into_iter()
+                .zip(batch_timings.iter().copied())
+                .enumerate()
             {
                 // unique hint per deployment to minimize confusions
                 let hint: Bytes32 = (

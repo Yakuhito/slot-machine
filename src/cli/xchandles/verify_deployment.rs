@@ -214,10 +214,7 @@ pub async fn xchandles_verify_deployment(
                         })?,
                 )
                 .ok_or_else(|| {
-                    CliError::Custom(format!(
-                        "expiration overflow for handle #{}",
-                        handle_index
-                    ))
+                    CliError::Custom(format!("expiration overflow for handle #{}", handle_index))
                 })?;
             if on_chain_expiration != handles_to_verify[handle_index].expiration {
                 return Err(CliError::Custom(format!(
@@ -342,8 +339,8 @@ pub async fn xchandles_verify_deployment(
             }
 
             // Then, check metadata.
-            let expected_metadata_hash = metadata_for_handle_nft(&handles_to_verify[handle_index])
-                .tree_hash();
+            let expected_metadata_hash =
+                metadata_for_handle_nft(&handles_to_verify[handle_index]).tree_hash();
             if expected_metadata_hash != eve_nft.info.metadata.tree_hash() {
                 return Err(CliError::Custom(format!(
                     "Metadata hash mismatch for handle #{}",
@@ -443,10 +440,8 @@ pub async fn xchandles_verify_deployment(
     );
 
     let price_schedule = load_xchandles_state_schedule_csv(price_schedule_csv_filename)?;
-    let price_schedule_ok = xchandles_trusted_schedule_matches(
-        &price_schedule,
-        &state_scheduler_info.state_schedule,
-    );
+    let price_schedule_ok =
+        xchandles_trusted_schedule_matches(&price_schedule, &state_scheduler_info.state_schedule);
 
     if price_schedule_ok {
         println!("OK");

@@ -23,8 +23,7 @@ pub const REGISTRATION_PERIOD: u64 = 31_557_600;
 pub const LAUNCH_INSTANT: u64 = 1_787_216_400;
 
 /// XCHandles-minted royalty bech32m address.
-pub const ROYALTY_ADDRESS: &str =
-    "xch1xmdgcuuqzxla65w52uuh2s7g7ug29pvc7m97esqej556xkwwhjqssy7fzl";
+pub const ROYALTY_ADDRESS: &str = "xch1xmdgcuuqzxla65w52uuh2s7g7ug29pvc7m97esqej556xkwwhjqssy7fzl";
 
 /// XCHandles-minted royalty puzzle hash.
 pub const ROYALTY_PUZZLE_HASH: Bytes32 = Bytes32::new(hex!(
@@ -38,8 +37,7 @@ pub const ROYALTY_BASIS_POINTS: u16 = 420;
 pub const MEDIA_ORIGIN: &str = "https://nfts.xchandles.com";
 
 /// Initial license URI (CC0 1.0 Universal legal text).
-pub const LICENSE_URI: &str =
-    "https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt";
+pub const LICENSE_URI: &str = "https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt";
 
 /// Contribution Premine Expiration: 2027-08-20 09:00:00 UTC.
 pub const CONTRIBUTION_PREMINE_EXPIRATION: u64 = 1_818_752_400;
@@ -102,12 +100,14 @@ pub fn price_singleton_public_keys() -> Result<Vec<PublicKey>, CliError> {
 pub fn mainnet_price_schedule_records() -> Vec<XchandlesStateScheduleRecord> {
     PRICE_SCHEDULE
         .iter()
-        .map(|(timestamp, _factor, registration_price)| XchandlesStateScheduleRecord {
-            timestamp: *timestamp,
-            asset_id: WUSDC_B_ASSET_ID,
-            registration_price: *registration_price,
-            registration_period: REGISTRATION_PERIOD,
-        })
+        .map(
+            |(timestamp, _factor, registration_price)| XchandlesStateScheduleRecord {
+                timestamp: *timestamp,
+                asset_id: WUSDC_B_ASSET_ID,
+                registration_price: *registration_price,
+                registration_period: REGISTRATION_PERIOD,
+            },
+        )
         .collect()
 }
 
@@ -116,9 +116,7 @@ pub fn controller_matches_configured(m: usize, pubkeys: &[PublicKey]) -> Result<
     Ok(m == PRICE_SINGLETON_M && pubkeys == configured.as_slice())
 }
 
-pub fn schedule_records_match_configured(
-    records: &[XchandlesStateScheduleRecord],
-) -> bool {
+pub fn schedule_records_match_configured(records: &[XchandlesStateScheduleRecord]) -> bool {
     records == mainnet_price_schedule_records().as_slice()
 }
 
@@ -182,7 +180,10 @@ mod tests {
             royalty_puzzle_hash_from_address().unwrap(),
             ROYALTY_PUZZLE_HASH
         );
-        assert_eq!(ROYALTY_ADDRESS, "xch1xmdgcuuqzxla65w52uuh2s7g7ug29pvc7m97esqej556xkwwhjqssy7fzl");
+        assert_eq!(
+            ROYALTY_ADDRESS,
+            "xch1xmdgcuuqzxla65w52uuh2s7g7ug29pvc7m97esqej556xkwwhjqssy7fzl"
+        );
     }
 
     #[test]
@@ -213,8 +214,9 @@ mod tests {
 
     #[test]
     fn mainnet_csv_matches_typed_schedule() {
-        let records = crate::load_xchandles_state_schedule_csv("xchandles_price_schedule_mainnet.csv")
-            .expect("mainnet schedule csv must load");
+        let records =
+            crate::load_xchandles_state_schedule_csv("xchandles_price_schedule_mainnet.csv")
+                .expect("mainnet schedule csv must load");
         assert!(schedule_records_match_configured(&records));
     }
 

@@ -1,6 +1,8 @@
 use chia_protocol::{Bytes32, Coin, CoinSpend};
 use chia_puzzle_types::singleton::SingletonArgs;
-use chia_wallet_sdk::driver::{DriverError, Layer, Nft, NftInfo, Puzzle, SingletonInfo, SingletonLayer};
+use chia_wallet_sdk::driver::{
+    DriverError, Layer, Nft, NftInfo, Puzzle, SingletonInfo, SingletonLayer,
+};
 use chia_wallet_sdk::types::{run_puzzle, Condition};
 use clvm_traits::FromClvm;
 use clvm_utils::ToTreeHash;

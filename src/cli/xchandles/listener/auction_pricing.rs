@@ -4,8 +4,8 @@
 //! listener can price pages without inventing heights or secrets.
 
 use chia_wallet_sdk::types::puzzles::{
-    PREMIUM_BITS_LIST, PREMIUM_PRECISION, XchandlesExponentialPremiumRenewPuzzleArgs,
-    XchandlesFactorPricingPuzzleArgs,
+    XchandlesExponentialPremiumRenewPuzzleArgs, XchandlesFactorPricingPuzzleArgs,
+    PREMIUM_BITS_LIST, PREMIUM_PRECISION,
 };
 
 /// One registration-period year used for directory base fees.
@@ -35,11 +35,7 @@ pub fn projected_pricing_timestamp(confirmed_timestamp: u64) -> u64 {
 
 /// One-year base registration fee under the current confirmed base price.
 pub fn base_registration_fee(base_price: u64, handle: &str) -> u64 {
-    XchandlesFactorPricingPuzzleArgs::get_price(
-        base_price,
-        handle,
-        DIRECTORY_REGISTRATION_PERIODS,
-    )
+    XchandlesFactorPricingPuzzleArgs::get_price(base_price, handle, DIRECTORY_REGISTRATION_PERIODS)
 }
 
 /// Day-0-through-day-28 auction premium at `buy_time` for a handle that expired at `expiration`.
@@ -78,7 +74,12 @@ fn premium_after_elapsed(elapsed: u64) -> u64 {
 }
 
 /// Total registration fee = one-year base + current auction premium.
-pub fn total_registration_fee(base_price: u64, handle: &str, expiration: u64, buy_time: u64) -> u64 {
+pub fn total_registration_fee(
+    base_price: u64,
+    handle: &str,
+    expiration: u64,
+    buy_time: u64,
+) -> u64 {
     base_registration_fee(base_price, handle).saturating_add(auction_premium(expiration, buy_time))
 }
 

@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::debug_handler;
 use axum::extract::{Query, State};
 use axum::http::Method;
-use axum::{Json, Router, http::StatusCode, routing::get};
+use axum::{http::StatusCode, routing::get, Json, Router};
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::coinset::ChiaRpcClient;
 use chia_wallet_sdk::driver::{SpendContext, XchandlesRegistry};
@@ -19,16 +19,16 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::{Any, CorsLayer};
 
 use super::listener::{
-    DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore, DbSingletonStore, FreshnessState,
-    HandleSlotStore, ListenerApiState, PendingUpdateStore, RegistrationStore, RegistryPricing,
-    SingletonIndexer, SingletonStore, listener_router,
+    listener_router, DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore,
+    DbSingletonStore, FreshnessState, HandleSlotStore, ListenerApiState, PendingUpdateStore,
+    RegistrationStore, RegistryPricing, SingletonIndexer, SingletonStore,
 };
 use crate::{
-    BASE_PRICE_AT_FACTOR_ONE, CliError, CoinsetWebSocketMessage, Db, PRICE_SCHEDULE,
-    REGISTRATION_PERIOD, get_coinset_client, hex_string_to_bytes32, sync_xchandles,
+    get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, CoinsetWebSocketMessage,
+    Db, BASE_PRICE_AT_FACTOR_ONE, PRICE_SCHEDULE, REGISTRATION_PERIOD,
 };
 use chia_wallet_sdk::driver::XchandlesExpirePricingPuzzle;
-use chia_wallet_sdk::types::{Mod, puzzles::XchandlesFactorPricingPuzzleArgs};
+use chia_wallet_sdk::types::{puzzles::XchandlesFactorPricingPuzzleArgs, Mod};
 
 fn pricing_from_registry_state(
     pricing_puzzle_hash: Bytes32,
@@ -445,7 +445,10 @@ async fn connect_websocket(
                                     registries[i].info.state.pricing_puzzle_hash,
                                     registries[i].info.state.expired_handle_pricing_puzzle_hash,
                                 ) {
-                                    registry_pricing.write().await.insert(registry_launcher_id, p);
+                                    registry_pricing
+                                        .write()
+                                        .await
+                                        .insert(registry_launcher_id, p);
                                 }
 
                                 // Build parent_coin_id map for created slots from the synced DB.

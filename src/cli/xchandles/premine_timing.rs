@@ -81,9 +81,9 @@ pub fn assert_intended_expiration(
             "registration-period span overflow for n={n} period={registration_period}"
         ))
     })?;
-    let reconstituted = buy_time.checked_add(span).ok_or_else(|| {
-        CliError::Custom("buy_time + n*period overflow".into())
-    })?;
+    let reconstituted = buy_time
+        .checked_add(span)
+        .ok_or_else(|| CliError::Custom("buy_time + n*period overflow".into()))?;
     if reconstituted != csv_expiration {
         return Err(CliError::Custom(format!(
             "buy_time invariant failed: {buy_time} + {n}*{registration_period} = {reconstituted}, expected {csv_expiration}"
@@ -139,7 +139,10 @@ mod tests {
             buy,
             CONTRIBUTION_PREMINE_EXPIRATION - 2 * REGISTRATION_PERIOD
         );
-        assert_eq!(buy + n * REGISTRATION_PERIOD, CONTRIBUTION_PREMINE_EXPIRATION);
+        assert_eq!(
+            buy + n * REGISTRATION_PERIOD,
+            CONTRIBUTION_PREMINE_EXPIRATION
+        );
 
         let (buy, n) = premine_buy_time(1_797_757_200, GEN_NOW).unwrap();
         assert_eq!(n, 1);
@@ -169,14 +172,14 @@ mod tests {
             ("alice".to_string(), CONTRIBUTION_PREMINE_EXPIRATION),
             ("bob".to_string(), 1_797_757_200),
         ];
-        let timings =
-            assert_batch_csv_expirations(&ok_rows, GEN_NOW, REGISTRATION_PERIOD).unwrap();
+        let timings = assert_batch_csv_expirations(&ok_rows, GEN_NOW, REGISTRATION_PERIOD).unwrap();
         assert_eq!(timings.len(), 2);
         assert_eq!(timings[0].1, 2);
         assert_eq!(timings[1].1, 1);
 
         let bad_rows = vec![("broken".to_string(), 1u64)];
-        let err = assert_batch_csv_expirations(&bad_rows, GEN_NOW, REGISTRATION_PERIOD).unwrap_err();
+        let err =
+            assert_batch_csv_expirations(&bad_rows, GEN_NOW, REGISTRATION_PERIOD).unwrap_err();
         assert!(err.to_string().contains("expiration"));
     }
 }

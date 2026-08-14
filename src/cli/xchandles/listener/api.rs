@@ -13,8 +13,8 @@ use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 
 use super::auction_pricing::{
-    SOON_WINDOW_SECONDS, auction_premium, base_registration_fee, projected_pricing_timestamp,
-    reaches_base_at,
+    auction_premium, base_registration_fee, projected_pricing_timestamp, reaches_base_at,
+    SOON_WINDOW_SECONDS,
 };
 use super::error::ApiError;
 use super::freshness::FreshnessState;
@@ -23,12 +23,11 @@ use super::pending_store::PendingUpdateStore;
 use super::registration_store::{RegistrationActionKind, RegistrationStore, StoredRegistration};
 use super::store::{FollowRecordStatus, SingletonStore, StoredSingletonState};
 use super::types::{
-    ExpiringActiveItem, ExpiringActiveResponse, ExpiringQuery, ExpiringSoonItem,
-    ExpiringSoonResponse, ExpiringView, HandleProofResponse, HandleQuery, HandleSlotJson,
-    PendingTransferQuery, PendingTransferResponse, RecentRegistrationItem,
-    RecentRegistrationsQuery, RecentRegistrationsResponse, RegistrationQuery, RegistrationResponse,
-    SingletonQuery, SingletonResponse, SlotNeighborsJson, hex32, is_canonical_handle,
-    parse_launcher_id,
+    hex32, is_canonical_handle, parse_launcher_id, ExpiringActiveItem, ExpiringActiveResponse,
+    ExpiringQuery, ExpiringSoonItem, ExpiringSoonResponse, ExpiringView, HandleProofResponse,
+    HandleQuery, HandleSlotJson, PendingTransferQuery, PendingTransferResponse,
+    RecentRegistrationItem, RecentRegistrationsQuery, RecentRegistrationsResponse,
+    RegistrationQuery, RegistrationResponse, SingletonQuery, SingletonResponse, SlotNeighborsJson,
 };
 use crate::{BASE_PRICE_AT_FACTOR_ONE, REGISTRATION_PERIOD};
 
@@ -140,10 +139,7 @@ async fn require_fresh(state: &ListenerApiState) -> Result<(u32, u64), ApiError>
             freshness.upstream_peak_height,
         ));
     }
-    Ok((
-        freshness.indexed_peak_height,
-        freshness.confirmed_timestamp,
-    ))
+    Ok((freshness.indexed_peak_height, freshness.confirmed_timestamp))
 }
 
 /// Opaque cursor: `v1.{expiration}.{handle}` — stable for the canonical projection order.
@@ -171,7 +167,8 @@ fn after_cursor(key: &ExpiringKey, cursor: Option<&(u64, String)>) -> bool {
     match cursor {
         None => true,
         Some((exp, handle)) => {
-            key.expiration > *exp || (key.expiration == *exp && key.handle.as_str() > handle.as_str())
+            key.expiration > *exp
+                || (key.expiration == *exp && key.handle.as_str() > handle.as_str())
         }
     }
 }

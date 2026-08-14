@@ -100,10 +100,10 @@ impl RegistrationStore for MemoryRegistrationStore {
     }
 
     async fn upsert(&self, record: RegistrationRecord) {
-        self.records.write().await.insert(
-            key(record.registry_launcher_id, record.handle_hash),
-            record,
-        );
+        self.records
+            .write()
+            .await
+            .insert(key(record.registry_launcher_id, record.handle_hash), record);
     }
 
     async fn remove(&self, registry_launcher_id: Bytes32, handle_hash: Bytes32) {

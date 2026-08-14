@@ -75,10 +75,10 @@ impl HandleSlotStore for MemoryHandleSlotStore {
     }
 
     async fn upsert(&self, record: HandleSlotRecord) {
-        self.inner.write().await.insert(
-            key(record.registry_launcher_id, record.handle_hash),
-            record,
-        );
+        self.inner
+            .write()
+            .await
+            .insert(key(record.registry_launcher_id, record.handle_hash), record);
     }
 
     async fn remove(&self, registry_launcher_id: Bytes32, handle_hash: Bytes32) {
