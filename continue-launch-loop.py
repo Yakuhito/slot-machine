@@ -11,8 +11,13 @@ waits 30s then 300s, and retries; it exits only if the list is still early.
 `Confirmed!` / `Error:` in the output as the real success/failure signal.
 
 Usage:
-  ./continue-launch-loop.py cargo r xchandles continue-launch ... \\
+  ./continue-launch-loop.py [loop options] cargo r xchandles continue-launch ... \\
       --premine FILE --handles-per-spend N [--skip START]
+
+Loop options (stripped before the CLI runs; default to --handles-per-spend):
+  --precommit-handles-per-spend N   first pass (precommit + eve NFT mint)
+  --register-handles-per-spend N    second pass (register eve NFTs)
+  --register-only                   skip precommit and start at the register pass
 """
 
 from __future__ import annotations
@@ -28,6 +33,9 @@ from pathlib import Path
 
 LOOKBEHIND_BATCHES = 16
 EARLIER_RETRY_WAITS = (30, 300)
+PRECOMMIT_HANDLES_OPT = "--precommit-handles-per-spend"
+REGISTER_HANDLES_OPT = "--register-handles-per-spend"
+REGISTER_ONLY_OPT = "--register-only"
 PROMPT = "Proceed? (yes/no): "
 ALREADY_DONE = "All handles have already been registered"
 CONFIRMED = "Confirmed!"
@@ -75,6 +83,50 @@ def set_opt(cmd: list[str], name: str, value: str) -> list[str]:
             return out
     out.extend([name, value])
     return out
+
+
+def take_opt(cmd: list[str], name: str) -> tuple[str | None, list[str]]:
+    out: list[str] = []
+    value: str | None = None
+    i = 0
+    while i < len(cmd):
+        arg = cmd[i]
+        if arg == name:
+            if i + 1 >= len(cmd):
+                raise SystemExit(f"error: {name} is missing a value")
+            if value is not None:
+                raise SystemExit(f"error: {name} specified more than once")
+            value = cmd[i + 1]
+            i += 2
+            continue
+        if arg.startswith(name + "="):
+            if value is not None:
+                raise SystemExit(f"error: {name} specified more than once")
+            value = arg.split("=", 1)[1]
+            i += 1
+            continue
+        out.append(arg)
+        i += 1
+    return value, out
+
+
+def take_flag(cmd: list[str], name: str) -> tuple[bool, list[str]]:
+    present = False
+    out: list[str] = []
+    for arg in cmd:
+        if arg == name:
+            present = True
+            continue
+        if arg.startswith(name + "="):
+            raise SystemExit(f"error: {name} does not take a value")
+        out.append(arg)
+    return present, out
+
+
+def parse_positive_int(name: str, raw: str) -> int:
+    if not re.fullmatch(r"[1-9][0-9]*", raw):
+        raise SystemExit(f"error: {name} must be a positive integer, got: {raw}")
+    return int(raw)
 
 
 def strip_flag(cmd: list[str], name: str) -> list[str]:
@@ -249,7 +301,8 @@ def run_one(
     print()
     print(
         f"=== {pass_name} run {run}/{planned}  skip={logical_skip}  "
-        f"safe-skip={safe_skip}  handles={len(expected)} ==="
+        f"safe-skip={safe_skip}  handles={len(expected)}  "
+        f"handles-per-spend={opt_value(cmd, '--handles-per-spend')} ==="
     )
     print("Command:", " ".join(launch_cmd), flush=True)
     print("Expected from CSV:")
@@ -376,9 +429,11 @@ def run_pass(
     pass_name: str,
     skip: int,
     handles_per_spend: int,
+    env: dict[str, str] | None = None,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> None:
     total = len(rows)
+    cmd = set_opt(cmd, "--handles-per-spend", str(handles_per_spend))
     planned = batch_count(total, skip, handles_per_spend)
     if planned == 0:
         print(
@@ -400,6 +455,7 @@ def run_pass(
             pass_name,
             run,
             planned,
+            env=env,
             sleep_fn=sleep_fn,
         )
         if status == "already_done":
@@ -413,11 +469,17 @@ def main() -> None:
     cmd = sys.argv[1:]
     if not cmd:
         raise SystemExit(
-            "usage: continue-launch-loop.py <continue-launch command...>"
+            "usage: continue-launch-loop.py "
+            "[--precommit-handles-per-spend N] [--register-handles-per-spend N] "
+            "[--register-only] <continue-launch command...>"
         )
     if cmd == ["--self-test"]:
         self_test()
         return
+
+    precommit_hps_raw, cmd = take_opt(cmd, PRECOMMIT_HANDLES_OPT)
+    register_hps_raw, cmd = take_opt(cmd, REGISTER_HANDLES_OPT)
+    register_only, cmd = take_flag(cmd, REGISTER_ONLY_OPT)
 
     premine = opt_value(cmd, "--premine")
     if not premine:
@@ -425,11 +487,17 @@ def main() -> None:
     hps_raw = opt_value(cmd, "--handles-per-spend")
     if not hps_raw:
         raise SystemExit("error: command must include --handles-per-spend <n>")
-    if not re.fullmatch(r"[1-9][0-9]*", hps_raw):
-        raise SystemExit(
-            f"error: --handles-per-spend must be a positive integer, got: {hps_raw}"
-        )
-    handles_per_spend = int(hps_raw)
+    handles_per_spend = parse_positive_int("--handles-per-spend", hps_raw)
+    precommit_hps = (
+        parse_positive_int(PRECOMMIT_HANDLES_OPT, precommit_hps_raw)
+        if precommit_hps_raw is not None
+        else handles_per_spend
+    )
+    register_hps = (
+        parse_positive_int(REGISTER_HANDLES_OPT, register_hps_raw)
+        if register_hps_raw is not None
+        else handles_per_spend
+    )
 
     skip_raw = opt_value(cmd, "--skip")
     if skip_raw in (None, "", "n"):
@@ -443,23 +511,38 @@ def main() -> None:
 
     rows = load_premine(Path(premine))
     total = len(rows)
-    precommit_batches = batch_count(total, start_skip, handles_per_spend)
-    register_batches = batch_count(total, 0, handles_per_spend)
-
-    print(f"Premine {premine}: {total} handles, {handles_per_spend} per spend")
-    print(
-        f"Precommit pass starts at skip={start_skip} ({precommit_batches} runs); "
-        f"register pass starts at skip=0 ({register_batches} runs)"
+    precommit_batches = (
+        0 if register_only else batch_count(total, start_skip, precommit_hps)
     )
+    register_start = start_skip if register_only else 0
+    register_batches = batch_count(total, register_start, register_hps)
+
     print(
-        f"CLI --skip is max(0, logical_skip - {LOOKBEHIND_BATCHES}*"
-        f"{handles_per_spend}) so recent reorgs are still visible"
+        f"Premine {premine}: {total} handles; "
+        f"precommit {precommit_hps}/spend, register {register_hps}/spend"
+    )
+    if register_only:
+        print(
+            f"Starting at register pass (--register-only), "
+            f"skip={register_start} ({register_batches} runs)"
+        )
+    else:
+        print(
+            f"Precommit pass starts at skip={start_skip} ({precommit_batches} runs); "
+            f"register pass starts at skip=0 ({register_batches} runs)"
+        )
+    print(
+        f"CLI --skip lookbehind is {LOOKBEHIND_BATCHES} batches at that pass's "
+        "handles-per-spend so recent reorgs are still visible"
     )
 
-    run_pass(cmd, rows, "precommit", start_skip, handles_per_spend)
-    print()
-    print("=== precommit pass complete; resetting skip to 0 for register pass ===")
-    run_pass(cmd, rows, "register", 0, handles_per_spend)
+    if not register_only:
+        run_pass(cmd, rows, "precommit", start_skip, precommit_hps)
+        print()
+        print(
+            "=== precommit pass complete; resetting skip to 0 for register pass ==="
+        )
+    run_pass(cmd, rows, "register", register_start, register_hps)
     print()
     print(f"Done: continue-launch finished for {total} handles.")
 
@@ -496,6 +579,18 @@ MOCK_CLI = r"""
 import os, sys
 mode = os.environ["MOCK_MODE"]
 sys.stdout.reconfigure(line_buffering=True)
+expect = os.environ.get("MOCK_EXPECT_HPS")
+if expect:
+    got = None
+    args = sys.argv[1:]
+    for i, arg in enumerate(args):
+        if arg == "--handles-per-spend" and i + 1 < len(args):
+            got = args[i + 1]
+        elif arg.startswith("--handles-per-spend="):
+            got = arg.split("=", 1)[1]
+    if got != expect:
+        print(f"Error: expected --handles-per-spend {expect}, got {got}")
+        sys.exit(0)
 if mode == "already_done":
     print("All handles have already been registered - nothing to do!", file=sys.stderr)
     sys.exit(0)
@@ -546,6 +641,32 @@ def self_test() -> None:
     assert batch_count(7, 0, 5) == 2
     assert batch_count(7, 5, 5) == 1
     assert batch_count(7, 7, 5) == 0
+    assert batch_count(250, 0, 250) == 1
+    assert batch_count(280, 0, 30) == 10
+
+    taken, rest = take_opt(
+        ["cargo", PRECOMMIT_HANDLES_OPT, "250", "r", REGISTER_HANDLES_OPT + "=30"],
+        PRECOMMIT_HANDLES_OPT,
+    )
+    assert taken == "250"
+    taken, rest = take_opt(rest, REGISTER_HANDLES_OPT)
+    assert taken == "30" and rest == ["cargo", "r"]
+    taken, rest = take_opt(["cargo", "r"], REGISTER_HANDLES_OPT)
+    assert taken is None and rest == ["cargo", "r"]
+    present, rest = take_flag(
+        ["cargo", REGISTER_ONLY_OPT, "r", "--handles-per-spend", "30"],
+        REGISTER_ONLY_OPT,
+    )
+    assert present and rest == ["cargo", "r", "--handles-per-spend", "30"]
+    present, rest = take_flag(["cargo", "r"], REGISTER_ONLY_OPT)
+    assert not present and rest == ["cargo", "r"]
+    assert parse_positive_int("--handles-per-spend", "30") == 30
+    try:
+        parse_positive_int(REGISTER_HANDLES_OPT, "300x")
+    except SystemExit:
+        pass
+    else:
+        raise SystemExit("self-test: expected invalid register handles-per-spend")
 
     def preamble_for(batch: list[HandleRow]) -> str:
         lines = [
@@ -629,6 +750,25 @@ def self_test() -> None:
     else:
         raise SystemExit("self-test: expected earlier-handle abort after retries")
     assert slept == [30, 300], slept
+
+    rows3 = rows7[:3]
+    env = os.environ.copy()
+    env.update(
+        {
+            "MOCK_MODE": "ok",
+            "MOCK_PREAMBLE": preamble_for(rows3),
+            "MOCK_EXPECT_HPS": "3",
+        }
+    )
+    run_pass(
+        ["python3", "-c", MOCK_CLI, "--handles-per-spend", "5"],
+        rows3,
+        "precommit",
+        0,
+        3,
+        env=env,
+        sleep_fn=lambda _s: None,
+    )
 
     print("self-test ok")
 
