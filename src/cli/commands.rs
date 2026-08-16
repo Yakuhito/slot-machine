@@ -428,6 +428,10 @@ enum XchandlesCliAction {
         /// Fee to use, in XCH
         #[arg(long, default_value = "0.0025")]
         fee: String,
+
+        /// Skip the 'Proceed?' confirmation prompt
+        #[arg(long, default_value_t = false)]
+        yes: bool,
     },
     /// Unrolls the state scheduler
     UnrollStateScheduler {
@@ -1409,6 +1413,7 @@ pub async fn run_cli() {
                 registration_period,
                 testnet11,
                 fee,
+                yes,
             } => {
                 xchandles_continue_launch(
                     launcher_id,
@@ -1421,6 +1426,7 @@ pub async fn run_cli() {
                     registration_period,
                     testnet11,
                     fee,
+                    yes,
                 )
                 .await
             }

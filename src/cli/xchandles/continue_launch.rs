@@ -179,6 +179,7 @@ pub async fn xchandles_continue_launch(
     registration_period: u64,
     testnet11: bool,
     fee_str: String,
+    yes: bool,
 ) -> Result<(), CliError> {
     let launcher_id = hex_string_to_bytes32(&launcher_id_str)?;
     let royalty_puzzle_hash = Address::decode(&royalty_address)?.puzzle_hash;
@@ -349,7 +350,11 @@ pub async fn xchandles_continue_launch(
                 handle_infos.len()
             );
             println!("Eve NFTs will be temporarily stored in your wallet before being transferred to the final recipient.");
-            yes_no_prompt("Proceed?")?;
+            if yes {
+                println!("Proceeding (--yes).");
+            } else {
+                yes_no_prompt("Proceed?")?;
+            }
 
             let offer_resp = sage
                 .make_offer(
@@ -733,7 +738,11 @@ pub async fn xchandles_continue_launch(
     println!("A one-sided offer will be created; it will consume:");
     println!("  - 1 mojo for the sake of it");
     println!("  - {} XCH for fees ({} mojos)", fee_str, fee);
-    yes_no_prompt("Proceed?")?;
+    if yes {
+        println!("Proceeding (--yes).");
+    } else {
+        yes_no_prompt("Proceed?")?;
+    }
 
     let offer_resp = sage
         .make_offer(no_assets(), assets_xch_only(1), fee, None, None, false)
