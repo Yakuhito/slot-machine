@@ -4,6 +4,8 @@
 The CLI `--skip` sent to each run is a lookbehind of 16 batches so a reorg that
 undid recent work is still discovered. The script only answers `yes` at
 `Proceed?` when the printed handles match the CSV rows at the logical skip.
+If the CLI lists *earlier* handles (reorg of recent work), it answers `no`,
+waits 30s then 300s, and retries; it exits only if the list is still early.
 
 `slot-machine` prints `Error: ...` and still exits 0, so this script treats
 `Confirmed!` / `Error:` in the output as the real success/failure signal.
@@ -19,10 +21,13 @@ import os
 import re
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 LOOKBEHIND_BATCHES = 16
+EARLIER_RETRY_WAITS = (30, 300)
 PROMPT = "Proceed? (yes/no): "
 ALREADY_DONE = "All handles have already been registered"
 CONFIRMED = "Confirmed!"
@@ -171,21 +176,23 @@ def csv_index(rows: list[HandleRow], handle: str) -> int | None:
     return None
 
 
-def refuse_mismatch(
+def printed_starts_earlier(
+    rows: list[HandleRow],
+    printed: list[HandleRow],
+    logical_skip: int,
+) -> bool:
+    if not printed:
+        return False
+    idx = csv_index(rows, printed[0].handle)
+    return idx is not None and idx < logical_skip
+
+
+def print_handle_mismatch(
     rows: list[HandleRow],
     expected: list[HandleRow],
     printed: list[HandleRow],
     logical_skip: int,
 ) -> None:
-    print()
-    print(
-        "ERROR: continue-launch printed a different handle list than "
-        f"CSV skip={logical_skip}."
-    )
-    print(
-        "A reorg likely dropped recent precommits or registrations; "
-        "refusing to proceed."
-    )
     print()
     print("Expected:")
     for row in expected:
@@ -204,6 +211,24 @@ def refuse_mismatch(
             )
     else:
         print("  (no handle lines found before Proceed?)")
+
+
+def refuse_mismatch(
+    rows: list[HandleRow],
+    expected: list[HandleRow],
+    printed: list[HandleRow],
+    logical_skip: int,
+) -> None:
+    print()
+    print(
+        "ERROR: continue-launch printed a different handle list than "
+        f"CSV skip={logical_skip}."
+    )
+    print(
+        "A reorg likely dropped recent precommits or registrations; "
+        "refusing to proceed."
+    )
+    print_handle_mismatch(rows, expected, printed, logical_skip)
     raise SystemExit(1)
 
 
@@ -217,7 +242,7 @@ def run_one(
     run: int,
     planned: int,
     env: dict[str, str] | None = None,
-) -> str:
+) -> tuple[str, list[HandleRow]]:
     launch_cmd = strip_flag(cmd, "--yes")
     launch_cmd = set_opt(launch_cmd, "--skip", str(safe_skip))
 
@@ -251,7 +276,7 @@ def run_one(
                     f"error: continue-launch failed before Proceed?: {err}"
                 )
             if ALREADY_DONE in output:
-                return "already_done"
+                return "already_done", []
             raise SystemExit(
                 "error: continue-launch exited before Proceed? "
                 "(see output above)"
@@ -265,6 +290,8 @@ def run_one(
             except BrokenPipeError:
                 pass
             drain(proc)
+            if printed_starts_earlier(rows, printed, logical_skip):
+                return "earlier", printed
             refuse_mismatch(rows, expected, printed, logical_skip)
 
         print(
@@ -282,7 +309,7 @@ def run_one(
                 "error: continue-launch did not print Confirmed! after yes "
                 "(slot-machine exits 0 even on failure; aborting)"
             )
-        return "ok"
+        return "ok", printed
     except KeyboardInterrupt:
         if proc.poll() is None:
             try:
@@ -301,12 +328,55 @@ def batch_count(total: int, start: int, handles_per_spend: int) -> int:
     return (remaining + handles_per_spend - 1) // handles_per_spend
 
 
+def run_one_with_retries(
+    cmd: list[str],
+    rows: list[HandleRow],
+    expected: list[HandleRow],
+    logical_skip: int,
+    safe_skip: int,
+    pass_name: str,
+    run: int,
+    planned: int,
+    env: dict[str, str] | None = None,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> str:
+    last_printed: list[HandleRow] = []
+    for attempt in range(len(EARLIER_RETRY_WAITS) + 1):
+        status, printed = run_one(
+            cmd,
+            rows,
+            expected,
+            logical_skip,
+            safe_skip,
+            pass_name,
+            run,
+            planned,
+            env=env,
+        )
+        if status != "earlier":
+            return status
+        last_printed = printed
+        if attempt >= len(EARLIER_RETRY_WAITS):
+            break
+        wait = EARLIER_RETRY_WAITS[attempt]
+        print(
+            f"CLI listed earlier handles than skip={logical_skip}; "
+            f"answering no and waiting {wait}s before retry "
+            f"{attempt + 1}/{len(EARLIER_RETRY_WAITS)}.",
+            flush=True,
+        )
+        print_handle_mismatch(rows, expected, printed, logical_skip)
+        sleep_fn(wait)
+    refuse_mismatch(rows, expected, last_printed, logical_skip)
+
+
 def run_pass(
     cmd: list[str],
     rows: list[HandleRow],
     pass_name: str,
     skip: int,
     handles_per_spend: int,
+    sleep_fn: Callable[[float], None] = time.sleep,
 ) -> None:
     total = len(rows)
     planned = batch_count(total, skip, handles_per_spend)
@@ -321,7 +391,7 @@ def run_pass(
         expected = rows[skip : skip + handles_per_spend]
         safe_skip = safe_skip_for(skip, handles_per_spend)
         run += 1
-        status = run_one(
+        status = run_one_with_retries(
             cmd,
             rows,
             expected,
@@ -330,6 +400,7 @@ def run_pass(
             pass_name,
             run,
             planned,
+            sleep_fn=sleep_fn,
         )
         if status == "already_done":
             print(f"=== {pass_name}: all handles already registered ===")
@@ -446,7 +517,7 @@ print("Confirmed!")
 
 def self_test() -> None:
     rows = load_premine(Path("xchandles_premine_testnet11.csv"))
-    assert [r.handle for r in rows] == [
+    assert [r.handle for r in rows[:7]] == [
         "test1",
         "test2",
         "test3",
@@ -455,12 +526,17 @@ def self_test() -> None:
         "test6",
         "test7",
     ]
+    rows7 = rows[:7]
 
     pre = parse_printed_handles(PRECOMMIT_SAMPLE.partition(PROMPT)[0])
-    assert pre == rows[2:7], pre
+    assert [r.handle for r in pre] == ["test3", "test4", "test5", "test6", "test7"]
     reg = parse_printed_handles(REGISTER_SAMPLE.partition(PROMPT)[0])
-    assert reg == rows[0:5], reg
-    assert parse_printed_handles(PRECOMMIT_SAMPLE) != rows[0:5]
+    assert [r.handle for r in reg] == ["test1", "test2", "test3", "test4", "test5"]
+
+    assert printed_starts_earlier(rows7, rows7[2:7], 5)
+    assert not printed_starts_earlier(rows7, rows7[2:7], 2)
+    assert not printed_starts_earlier(rows7, rows7[2:7], 0)
+    assert not printed_starts_earlier(rows7, [], 5)
 
     assert safe_skip_for(0, 5) == 0
     assert safe_skip_for(5, 5) == 0
@@ -471,14 +547,26 @@ def self_test() -> None:
     assert batch_count(7, 5, 5) == 1
     assert batch_count(7, 7, 5) == 0
 
-    preamble = PRECOMMIT_SAMPLE.partition(PROMPT)[0]
-    mock = ["python3", "-c", MOCK_CLI]
-    expected = rows[2:7]
+    def preamble_for(batch: list[HandleRow]) -> str:
+        lines = [
+            "Some precommitment coins were not launched yet - they correspond to these handles:"
+        ]
+        for row in batch:
+            lines.append(
+                f"  handle: {row.handle}, recipient: {row.recipient}, "
+                f"expiration: {row.expiration}, image_uris: \"x\""
+            )
+        lines.append("")
+        return "\n".join(lines)
 
-    status = _run_mock(
+    mock = ["python3", "-c", MOCK_CLI]
+    expected = rows7[2:7]
+    preamble = preamble_for(expected)
+
+    status, _printed = _run_mock(
         mock,
         {"MOCK_MODE": "ok", "MOCK_PREAMBLE": preamble},
-        rows,
+        rows7,
         expected,
         logical_skip=2,
     )
@@ -488,8 +576,8 @@ def self_test() -> None:
         _run_mock(
             mock,
             {"MOCK_MODE": "ok", "MOCK_PREAMBLE": preamble},
-            rows,
-            rows[0:5],
+            rows7,
+            rows7[0:5],
             logical_skip=0,
         )
     except SystemExit as e:
@@ -498,10 +586,10 @@ def self_test() -> None:
     else:
         raise SystemExit("self-test: expected mismatch abort")
 
-    status = _run_mock(
+    status, _printed = _run_mock(
         mock,
         {"MOCK_MODE": "already_done", "MOCK_PREAMBLE": ""},
-        rows,
+        rows7,
         expected,
         logical_skip=2,
     )
@@ -511,7 +599,7 @@ def self_test() -> None:
         _run_mock(
             mock,
             {"MOCK_MODE": "fail_after", "MOCK_PREAMBLE": preamble},
-            rows,
+            rows7,
             expected,
             logical_skip=2,
         )
@@ -525,6 +613,23 @@ def self_test() -> None:
     else:
         raise SystemExit("self-test: expected fail_after abort")
 
+    slept: list[float] = []
+    try:
+        _run_mock_with_retries(
+            mock,
+            {"MOCK_MODE": "ok", "MOCK_PREAMBLE": preamble_for(rows7[2:7])},
+            rows7,
+            rows7[5:7],
+            logical_skip=5,
+            sleep_fn=slept.append,
+        )
+    except SystemExit as e:
+        if e.code != 1:
+            raise
+    else:
+        raise SystemExit("self-test: expected earlier-handle abort after retries")
+    assert slept == [30, 300], slept
+
     print("self-test ok")
 
 
@@ -534,7 +639,7 @@ def _run_mock(
     rows: list[HandleRow],
     expected: list[HandleRow],
     logical_skip: int,
-) -> str:
+) -> tuple[str, list[HandleRow]]:
     env = os.environ.copy()
     env.update(extra_env)
     return run_one(
@@ -547,6 +652,30 @@ def _run_mock(
         1,
         1,
         env=env,
+    )
+
+
+def _run_mock_with_retries(
+    mock: list[str],
+    extra_env: dict[str, str],
+    rows: list[HandleRow],
+    expected: list[HandleRow],
+    logical_skip: int,
+    sleep_fn: Callable[[float], None],
+) -> str:
+    env = os.environ.copy()
+    env.update(extra_env)
+    return run_one_with_retries(
+        mock,
+        rows,
+        expected,
+        logical_skip,
+        safe_skip_for(logical_skip, 5),
+        "self-test",
+        1,
+        1,
+        env=env,
+        sleep_fn=sleep_fn,
     )
 
 
