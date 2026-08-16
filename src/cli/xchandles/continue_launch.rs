@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use chia_consensus::spendbundle_conditions::get_conditions_from_spendbundle;
 use chia_protocol::{Bytes32, Coin, CoinSpend, SpendBundle};
 use chia_puzzle_types::{
     cat::CatArgs,
@@ -28,7 +29,7 @@ use chia_wallet_sdk::{
 };
 use clvm_traits::clvm_quote;
 use clvm_utils::ToTreeHash;
-use clvmr::{serde::node_from_bytes, NodePtr};
+use clvmr::{serde::node_from_bytes, Allocator, NodePtr};
 
 use crate::{
     assert_batch_csv_expirations, assets_xch_and_cat, assets_xch_only, confirm_pushed_transaction,
@@ -63,6 +64,31 @@ fn precommit_value_for_handle(
         handle_nft_launcher_id,
         handle_nft_launcher_id,
     ))
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn print_spend_bundle_cost(sb: &SpendBundle, testnet11: bool) -> Result<(), CliError> {
+    let constants = if testnet11 {
+        &*TESTNET11_CONSTANTS
+    } else {
+        &*MAINNET_CONSTANTS
+    };
+    let conds = get_conditions_from_spendbundle(
+        &mut Allocator::new(),
+        sb,
+        u64::MAX,
+        100_000_000,
+        constants,
+    )
+    .map_err(|e| CliError::Custom(format!("Failed to analyze spend bundle cost: {e}")))?;
+
+    let pct = conds.cost as f64 / constants.max_block_cost_clvm as f64 * 100.0;
+    println!(
+        "Spend bundle cost: {} ({:.2}% of max block cost; execution={}, conditions={})",
+        conds.cost, pct, conds.execution_cost, conds.condition_cost
+    );
+
+    Ok(())
 }
 
 pub fn metadata_for_handle_nft(handle_info: &XchandlesLaunchRecord) -> HandleNftMetadata {
@@ -536,6 +562,7 @@ pub async fn xchandles_continue_launch(
 
             // Build spend bundle
             let sb = offer.take(SpendBundle::new(ctx.take(), security_coin_sig));
+            print_spend_bundle_cost(&sb, testnet11)?;
 
             println!("Submitting transaction...");
             let resp = client.push_tx(sb).await?;
@@ -916,6 +943,7 @@ pub async fn xchandles_continue_launch(
         ctx.take(),
         security_coin_sig + &pending_sig + &nft_sig,
     ));
+    print_spend_bundle_cost(&sb, testnet11)?;
 
     println!("Submitting transaction...");
     let resp = client.push_tx(sb).await?;
