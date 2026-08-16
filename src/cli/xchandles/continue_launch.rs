@@ -399,7 +399,7 @@ pub async fn xchandles_continue_launch(
                 let prelauncher_amount = (index * 2) as u64;
                 let remark = ctx.alloc(&"XCHandles".to_string())?;
                 let prelauncher_puzzle = clvm_quote!(Conditions::new()
-                    .create_coin(SINGLETON_LAUNCHER_HASH.into(), 1, Memos::None)
+                    .create_coin(SINGLETON_LAUNCHER_HASH.into(), 1, hint)
                     .remark(remark));
                 let prelauncher_puzzle_ptr = ctx.alloc(&prelauncher_puzzle)?;
                 let prelauncher_puzzle_hash = ctx.tree_hash(prelauncher_puzzle_ptr);
