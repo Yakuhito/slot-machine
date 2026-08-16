@@ -439,7 +439,13 @@ pub async fn xchandles_continue_launch(
                     royalty_basis_points,
                 )?;
 
-                security_coin_conditions = security_coin_conditions.extend(sec_conditions);
+                security_coin_conditions = security_coin_conditions
+                    .extend(sec_conditions.into_iter().filter(|c| !c.is_create_coin()))
+                    .create_coin(
+                        prelauncher_coin.puzzle_hash,
+                        prelauncher_coin.amount,
+                        Memos::None,
+                    );
 
                 // Create precommitment coin
                 let handle_reg_price =
