@@ -105,14 +105,26 @@ async fn eve_nft_for_handle(
         ));
     };
 
+    let remark = ctx.alloc(&"XCHandles".to_string())?;
+    let prelauncher_puzzle = clvm_quote!(Conditions::new()
+        .create_coin(SINGLETON_LAUNCHER_HASH.into(), 1, Memos::None)
+        .remark(remark));
+    let prelauncher_puzzle_ptr = ctx.alloc(&prelauncher_puzzle)?;
+    let prelauncher_puzzle_hash = ctx.tree_hash(prelauncher_puzzle_ptr);
+
     possible_launcher_records.retain(|cr| {
-        cr.coin.amount % 2 == 0 && cr.coin.puzzle_hash == SINGLETON_LAUNCHER_HASH.into()
+        cr.coin.amount % 2 == 0 && cr.coin.puzzle_hash == prelauncher_puzzle_hash.into()
     });
 
     let expected_coins: Vec<(NftInfo, Coin)> = possible_launcher_records
         .iter()
         .map(|possible_launcher_record| {
-            let launcher_id = possible_launcher_record.coin.coin_id();
+            let launcher_id = Coin::new(
+                possible_launcher_record.coin.coin_id(),
+                SINGLETON_LAUNCHER_HASH.into(),
+                1,
+            )
+            .coin_id();
             let nft_info = NftInfo::new(
                 launcher_id,
                 metadata,
@@ -156,8 +168,8 @@ async fn eve_nft_for_handle(
     };
 
     let proof = Proof::Eve(EveProof {
-        parent_parent_coin_info: possible_launcher_records[found_index].coin.parent_coin_info,
-        parent_amount: possible_launcher_records[found_index].coin.amount,
+        parent_parent_coin_info: possible_launcher_records[found_index].coin.coin_id(),
+        parent_amount: 1,
     });
 
     Ok(Some(Nft::new(
@@ -399,7 +411,7 @@ pub async fn xchandles_continue_launch(
                 let prelauncher_amount = (index * 2) as u64;
                 let remark = ctx.alloc(&"XCHandles".to_string())?;
                 let prelauncher_puzzle = clvm_quote!(Conditions::new()
-                    .create_coin(SINGLETON_LAUNCHER_HASH.into(), 1, hint)
+                    .create_coin(SINGLETON_LAUNCHER_HASH.into(), 1, Memos::None)
                     .remark(remark));
                 let prelauncher_puzzle_ptr = ctx.alloc(&prelauncher_puzzle)?;
                 let prelauncher_puzzle_hash = ctx.tree_hash(prelauncher_puzzle_ptr);
@@ -416,7 +428,7 @@ pub async fn xchandles_continue_launch(
                 )?;
 
                 // Launch eve NFT
-                let launcher = Launcher::with_memos(prelauncher_coin.coin_id(), 1, hint);
+                let launcher = Launcher::new(prelauncher_coin.coin_id(), 1);
                 let launcher_id = launcher.coin().coin_id();
 
                 println!(
@@ -441,11 +453,7 @@ pub async fn xchandles_continue_launch(
 
                 security_coin_conditions = security_coin_conditions
                     .extend(sec_conditions.into_iter().filter(|c| !c.is_create_coin()))
-                    .create_coin(
-                        prelauncher_coin.puzzle_hash,
-                        prelauncher_coin.amount,
-                        Memos::None,
-                    );
+                    .create_coin(prelauncher_coin.puzzle_hash, prelauncher_coin.amount, hint);
 
                 // Create precommitment coin
                 let handle_reg_price =
