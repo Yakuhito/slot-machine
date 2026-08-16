@@ -6,7 +6,7 @@ use chia_puzzle_types::{
     nft::{NftOwnershipLayerSolution, NftStateLayerSolution},
     singleton::{SingletonSolution, SingletonStruct},
     standard::StandardSolution,
-    CoinProof, EveProof, LineageProof, Proof,
+    CoinProof, EveProof, LineageProof, Memos, Proof,
 };
 use chia_puzzles::SINGLETON_LAUNCHER_HASH;
 use chia_wallet_sdk::{
@@ -394,10 +394,29 @@ pub async fn xchandles_continue_launch(
                     .into();
                 let hint = ctx.hint(hint)?;
 
+                // Prelauncher means all the NFTs have the same 'minter address' (puzzle hash of coin that
+                //  creates the launcher), which allows them to be displayed on the same collection page :)
+                let prelauncher_amount = (index * 2) as u64;
+                let remark = ctx.alloc(&"XCHandles".to_string())?;
+                let prelauncher_puzzle = clvm_quote!(Conditions::new()
+                    .create_coin(SINGLETON_LAUNCHER_HASH.into(), 1, Memos::None)
+                    .remark(remark));
+                let prelauncher_puzzle_ptr = ctx.alloc(&prelauncher_puzzle)?;
+                let prelauncher_puzzle_hash = ctx.tree_hash(prelauncher_puzzle_ptr);
+                let prelauncher_coin = Coin::new(
+                    security_coin.coin_id(),
+                    prelauncher_puzzle_hash.into(),
+                    prelauncher_amount,
+                );
+
+                // Spend prelauncher
+                ctx.spend(
+                    prelauncher_coin,
+                    Spend::new(prelauncher_puzzle_ptr, NodePtr::NIL),
+                )?;
+
                 // Launch eve NFT
-                let launcher_amount = (index * 2) as u64;
-                let launcher = Launcher::with_memos(security_coin.coin_id(), launcher_amount, hint)
-                    .with_singleton_amount(1);
+                let launcher = Launcher::with_memos(prelauncher_coin.coin_id(), 1, hint);
                 let launcher_id = launcher.coin().coin_id();
 
                 println!(
