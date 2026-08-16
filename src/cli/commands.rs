@@ -406,7 +406,7 @@ enum XchandlesCliAction {
         royalty_address: String,
 
         /// Royalty basis points for the launch
-        #[arg(long, default_value = "420")]
+        #[arg(long, default_value = "500")]
         royalty_basis_points: u16,
 
         /// How many handles to deploy for this spend

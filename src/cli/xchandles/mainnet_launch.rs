@@ -31,7 +31,7 @@ pub const ROYALTY_PUZZLE_HASH: Bytes32 = Bytes32::new(hex!(
 ));
 
 /// Royalty basis points for XCHandles-minted Handle NFTs.
-pub const ROYALTY_BASIS_POINTS: u16 = 420;
+pub const ROYALTY_BASIS_POINTS: u16 = 500;
 
 /// Production media origin for generator-v1 URLs.
 pub const MEDIA_ORIGIN: &str = "https://nfts.xchandles.com";
@@ -171,7 +171,7 @@ mod tests {
         );
         assert_eq!(REGISTRATION_PERIOD, 31_557_600);
         assert_eq!(LAUNCH_INSTANT, 1_787_216_400);
-        assert_eq!(ROYALTY_BASIS_POINTS, 420);
+        assert_eq!(ROYALTY_BASIS_POINTS, 500);
         assert_eq!(
             hex::encode(ROYALTY_PUZZLE_HASH),
             "36da8c738011bfdd51d457397543c8f710a28598f6cbecc0199529a359cebc81"

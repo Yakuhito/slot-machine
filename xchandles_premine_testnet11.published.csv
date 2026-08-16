@@ -1,8 +1,41 @@
 handle,recipient,expiration,allocation_type,allocation_explanation
-test1,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1797757200,test,testnet deployment rehearsal
-test2,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1797757200,test,testnet deployment rehearsal
-test3,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1797757200,test,testnet deployment rehearsal
-test4,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1797757200,test,testnet deployment rehearsal
-test5,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1797757200,test,testnet deployment rehearsal
-test6,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1797757200,test,testnet deployment rehearsal
-test7,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1797757200,test,testnet deployment rehearsal
+test1,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784106000,test,testnet final: expired 32 days before 2026-08-16 09:00 UTC
+test2,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784192400,test,testnet final: expired 31 days before 2026-08-16 09:00 UTC
+test3,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784278800,test,testnet final: expired 30 days before 2026-08-16 09:00 UTC
+test4,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784365200,test,testnet final: expired 29 days before 2026-08-16 09:00 UTC
+test5,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784451600,test,testnet final: expired 28 days before 2026-08-16 09:00 UTC
+test6,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784538000,test,testnet final: expired 27 days before 2026-08-16 09:00 UTC
+test7,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784624400,test,testnet final: expired 26 days before 2026-08-16 09:00 UTC
+test8,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784710800,test,testnet final: expired 25 days before 2026-08-16 09:00 UTC
+test9,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784797200,test,testnet final: expired 24 days before 2026-08-16 09:00 UTC
+test10,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784883600,test,testnet final: expired 23 days before 2026-08-16 09:00 UTC
+test11,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1784970000,test,testnet final: expired 22 days before 2026-08-16 09:00 UTC
+test12,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785056400,test,testnet final: expired 21 days before 2026-08-16 09:00 UTC
+test13,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785142800,test,testnet final: expired 20 days before 2026-08-16 09:00 UTC
+test14,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785229200,test,testnet final: expired 19 days before 2026-08-16 09:00 UTC
+test15,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785315600,test,testnet final: expired 18 days before 2026-08-16 09:00 UTC
+test16,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785402000,test,testnet final: expired 17 days before 2026-08-16 09:00 UTC
+test17,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785488400,test,testnet final: expired 16 days before 2026-08-16 09:00 UTC
+test18,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785574800,test,testnet final: expired 15 days before 2026-08-16 09:00 UTC
+test19,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785661200,test,testnet final: expired 14 days before 2026-08-16 09:00 UTC
+test20,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785747600,test,testnet final: expired 13 days before 2026-08-16 09:00 UTC
+test21,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785834000,test,testnet final: expired 12 days before 2026-08-16 09:00 UTC
+test22,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1785920400,test,testnet final: expired 11 days before 2026-08-16 09:00 UTC
+test23,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786006800,test,testnet final: expired 10 days before 2026-08-16 09:00 UTC
+test24,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786093200,test,testnet final: expired 9 days before 2026-08-16 09:00 UTC
+test25,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786179600,test,testnet final: expired 8 days before 2026-08-16 09:00 UTC
+test26,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786266000,test,testnet final: expired 7 days before 2026-08-16 09:00 UTC
+test27,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786352400,test,testnet final: expired 6 days before 2026-08-16 09:00 UTC
+test28,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786438800,test,testnet final: expired 5 days before 2026-08-16 09:00 UTC
+test29,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786525200,test,testnet final: expired 4 days before 2026-08-16 09:00 UTC
+test30,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786611600,test,testnet final: expired 3 days before 2026-08-16 09:00 UTC
+test31,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786698000,test,testnet final: expired 2 days before 2026-08-16 09:00 UTC
+test32,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786784400,test,testnet final: expired 1 day before 2026-08-16 09:00 UTC
+test33,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786870800,test,testnet final: expires 2026-08-16 09:00 UTC (today)
+test34,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1786957200,test,testnet final: expires 1 day after 2026-08-16 09:00 UTC
+test35,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1787043600,test,testnet final: expires 2 days after 2026-08-16 09:00 UTC
+test36,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1787130000,test,testnet final: expires 3 days after 2026-08-16 09:00 UTC
+test37,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1787216400,test,testnet final: expires 4 days after 2026-08-16 09:00 UTC
+test38,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1787302800,test,testnet final: expires 5 days after 2026-08-16 09:00 UTC
+test39,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,1787389200,test,testnet final: expires 6 days after 2026-08-16 09:00 UTC
+yakuhito,txch1snrh897fv9rt7ckqmcak4kva3rxzefhxz9u027qs8ja45quuqfuqf7j8yy,2008141200,test,testnet final: expires 2033-08-20 09:00 UTC
