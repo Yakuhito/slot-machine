@@ -189,6 +189,17 @@ pub fn rollback_registration_to_before(record: &mut RegistrationRecord, from_hei
     }
 }
 
+/// Max confirmed events retained for the recent-registration feed (oldest-first).
+pub const RECENT_REGISTRATION_EVENTS_MAX: usize = 50;
+
+/// Append a confirmed register/expire event, dropping the oldest when over the cap.
+pub fn push_registration_event(stats: &mut RegistryRegistrationStats, ev: StoredRegistrationEvent) {
+    stats.events.push(ev);
+    if stats.events.len() > RECENT_REGISTRATION_EVENTS_MAX {
+        stats.events.remove(0);
+    }
+}
+
 /// Drop orphaned recent events and reverse register counts for a reorganization.
 pub fn rollback_stats_to_before(stats: &mut RegistryRegistrationStats, from_height: u32) {
     while let Some(ev) = stats.events.last() {
@@ -287,5 +298,35 @@ impl RegistrationStore for DbRegistrationStore {
         db.all_registration_stats_registry_ids()
             .await
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn push_registration_event_caps_at_max_and_drops_oldest() {
+        let mut stats = RegistryRegistrationStats {
+            total_registered: 100,
+            events: Vec::new(),
+        };
+        for i in 0..=RECENT_REGISTRATION_EVENTS_MAX {
+            push_registration_event(
+                &mut stats,
+                StoredRegistrationEvent {
+                    handle: format!("h{i}"),
+                    action_kind: RegistrationActionKind::Register,
+                    confirmation_height: i as u32,
+                },
+            );
+        }
+        assert_eq!(stats.events.len(), RECENT_REGISTRATION_EVENTS_MAX);
+        assert_eq!(stats.events[0].handle, "h1");
+        assert_eq!(
+            stats.events.last().map(|ev| ev.handle.as_str()),
+            Some("h50")
+        );
+        assert_eq!(stats.total_registered, 100);
     }
 }

@@ -54,3 +54,22 @@ impl FreshnessState {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::FreshnessState;
+
+    #[test]
+    fn is_fresh_false_while_resyncing() {
+        let mut state = FreshnessState::fresh_at(100, 1_000);
+        state.resyncing = true;
+        assert!(!state.is_fresh(1_000));
+    }
+
+    #[test]
+    fn is_fresh_true_for_normal_fresh_at() {
+        let state = FreshnessState::fresh_at(100, 1_000);
+        assert!(!state.resyncing);
+        assert!(state.is_fresh(1_000));
+    }
+}

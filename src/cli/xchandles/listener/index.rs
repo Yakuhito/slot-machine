@@ -19,9 +19,9 @@ use super::pending_store::{
 };
 use super::refs::{dereferenced_launchers, references_from_action_log, SingletonReference};
 use super::registration_store::{
-    push_registration_replacement, rollback_registration_to_before, rollback_stats_to_before,
-    RegistrationActionKind, RegistrationRecord, RegistrationStore, StoredRegistration,
-    StoredRegistrationEvent,
+    push_registration_event, push_registration_replacement, rollback_registration_to_before,
+    rollback_stats_to_before, RegistrationActionKind, RegistrationRecord, RegistrationStore,
+    StoredRegistration, StoredRegistrationEvent,
 };
 use super::store::{
     push_replacement, rollback_to_before, FollowRecordStatus, FollowedSingleton, SingletonStore,
@@ -203,11 +203,14 @@ impl SingletonIndexer {
             self.registrations.upsert(record).await;
 
             let mut stats = self.registrations.get_stats(registry_launcher_id).await;
-            stats.events.push(StoredRegistrationEvent {
-                handle,
-                action_kind,
-                confirmation_height: height,
-            });
+            push_registration_event(
+                &mut stats,
+                StoredRegistrationEvent {
+                    handle,
+                    action_kind,
+                    confirmation_height: height,
+                },
+            );
             if action_kind == RegistrationActionKind::Register {
                 stats.total_registered = stats.total_registered.saturating_add(1);
             }

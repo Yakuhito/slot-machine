@@ -143,8 +143,18 @@ impl Db {
                     registry_launcher_id BLOB NOT NULL,
                     handle_hash BLOB NOT NULL,
                     record_json TEXT NOT NULL,
+                    expiration INTEGER NOT NULL DEFAULT 0,
                     PRIMARY KEY (registry_launcher_id, handle_hash)
                 )
+                ",
+            )
+            .execute(&pool)
+            .await?;
+
+            sqlx::query(
+                "
+                CREATE INDEX IF NOT EXISTS idx_handle_slots_expiring
+                ON handle_slot_records (registry_launcher_id, expiration)
                 ",
             )
             .execute(&pool)
@@ -965,22 +975,87 @@ impl Db {
         registry_launcher_id: Bytes32,
         handle_hash: Bytes32,
         record_json: &str,
+        expiration: u64,
     ) -> Result<(), CliError> {
         sqlx::query(
             "
-            INSERT INTO handle_slot_records (registry_launcher_id, handle_hash, record_json)
-            VALUES (?1, ?2, ?3)
+            INSERT INTO handle_slot_records (
+                registry_launcher_id, handle_hash, record_json, expiration
+            )
+            VALUES (?1, ?2, ?3, ?4)
             ON CONFLICT(registry_launcher_id, handle_hash)
-            DO UPDATE SET record_json = excluded.record_json
+            DO UPDATE SET
+                record_json = excluded.record_json,
+                expiration = excluded.expiration
             ",
         )
         .bind(registry_launcher_id.to_vec())
         .bind(handle_hash.to_vec())
         .bind(record_json)
+        .bind(expiration as i64)
         .execute(&self.pool)
         .await
         .map_err(CliError::Sqlx)?;
         Ok(())
+    }
+
+    pub async fn list_named_handle_slots_in_expiration_window(
+        &self,
+        registry_launcher_id: Bytes32,
+        min_expiration: u64,
+        max_expiration: u64,
+        after: Option<(u64, String)>,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>, CliError> {
+        let (after_expiration, after_handle) = match after {
+            Some((expiration, handle)) => (expiration, handle),
+            None => (0, String::new()),
+        };
+        let rows = sqlx::query(
+            "
+            SELECT h.record_json AS record_json,
+                   json_extract(r.record_json, '$.current.handle') AS handle
+            FROM handle_slot_records h
+            JOIN registration_records r
+              ON h.registry_launcher_id = r.registry_launcher_id
+             AND h.handle_hash = r.handle_hash
+            WHERE h.registry_launcher_id = ?1
+              AND h.expiration >= ?2 AND h.expiration <= ?3
+              AND json_extract(r.record_json, '$.current.handle') IS NOT NULL
+              AND json_extract(r.record_json, '$.current.handle') != ''
+              AND (
+                    h.expiration > ?4
+                    OR (
+                        h.expiration = ?4
+                        AND json_extract(r.record_json, '$.current.handle') > ?5
+                    )
+                  )
+            ORDER BY h.expiration ASC,
+                     json_extract(r.record_json, '$.current.handle') ASC
+            LIMIT ?6
+            ",
+        )
+        .bind(registry_launcher_id.to_vec())
+        .bind(min_expiration as i64)
+        .bind(max_expiration as i64)
+        .bind(after_expiration as i64)
+        .bind(after_handle)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(CliError::Sqlx)?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            let Ok(json) = row.try_get::<String, _>("record_json") else {
+                continue;
+            };
+            let Ok(handle) = row.try_get::<String, _>("handle") else {
+                continue;
+            };
+            out.push((json, handle));
+        }
+        Ok(out)
     }
 
     pub async fn delete_handle_slot_record(

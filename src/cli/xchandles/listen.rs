@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -151,6 +152,10 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
     let neighbors_state = AppState {
         db: Arc::clone(&db),
     };
+
+    // Mark the index as resyncing before the HTTP server binds so persisted slots
+    // are not served as fresh until the first successful websocket peak.
+    indexer.begin_resync().await;
 
     tokio::spawn(async move {
         if let Err(e) = start_api_server(api_state, neighbors_state).await {
@@ -347,6 +352,9 @@ async fn connect_websocket(
 
     let (mut _write, mut read) = ws_stream.split();
     let mut last_clear_time = SystemTime::now();
+    // In-memory window of recently processed peak (height, header_hash) pairs.
+    // Used only to detect reorgs; not persisted.
+    let mut recent_peaks: VecDeque<(u32, Bytes32)> = VecDeque::new();
 
     while let Some(message) = read.next().await {
         match message {
@@ -358,13 +366,102 @@ async fn connect_websocket(
                         let now_unix = now.duration_since(UNIX_EPOCH).unwrap().as_secs();
                         println!("[{}] Received new peak", now_unix);
 
-                        let upstream_peak = client
-                            .get_blockchain_state()
-                            .await?
-                            .blockchain_state
+                        let blockchain_state =
+                            client.get_blockchain_state().await?.blockchain_state;
+                        let upstream_peak = blockchain_state
                             .as_ref()
                             .map(|s| s.peak.height)
                             .unwrap_or(0);
+                        let tip_height = blockchain_state.as_ref().map(|s| s.peak.height);
+                        let mut confirmed_timestamp = blockchain_state
+                            .as_ref()
+                            .and_then(|s| s.peak.timestamp)
+                            .unwrap_or(0);
+                        let mut tip_rec = None;
+
+                        if let Some(tip) = tip_height {
+                            if let Some(rec) =
+                                client.get_block_record_by_height(tip).await?.block_record
+                            {
+                                if let Some(ts) = rec.timestamp {
+                                    confirmed_timestamp = ts;
+                                } else if confirmed_timestamp == 0 {
+                                    // Walk back like get_last_onchain_timestamp when tip is non-tx.
+                                    let mut height = tip.saturating_sub(1);
+                                    while height > 0 && confirmed_timestamp == 0 {
+                                        if let Some(br) = client
+                                            .get_block_record_by_height(height)
+                                            .await?
+                                            .block_record
+                                        {
+                                            if let Some(ts) = br.timestamp {
+                                                confirmed_timestamp = ts;
+                                                break;
+                                            }
+                                        }
+                                        height = height.saturating_sub(1);
+                                    }
+                                }
+
+                                let needs_hash_at = match recent_peaks.back() {
+                                    Some(&(last_height, last_hash)) => {
+                                        tip != last_height.saturating_add(1)
+                                            || rec.prev_hash != last_hash
+                                    }
+                                    None => false,
+                                };
+                                let mut hash_at_cache = std::collections::HashMap::new();
+                                if needs_hash_at {
+                                    for &(h, _) in &recent_peaks {
+                                        if hash_at_cache.contains_key(&h) {
+                                            continue;
+                                        }
+                                        if let Some(br) =
+                                            client.get_block_record_by_height(h).await?.block_record
+                                        {
+                                            hash_at_cache.insert(h, br.header_hash);
+                                        }
+                                    }
+                                }
+                                if let Some(from_height) = reorg_rollback_from(
+                                    recent_peaks.make_contiguous(),
+                                    tip,
+                                    rec.prev_hash,
+                                    |h| hash_at_cache.get(&h).copied(),
+                                ) {
+                                    eprintln!(
+                                        "chain reorg: rolling back from height {from_height}"
+                                    );
+                                    indexer.rollback(from_height).await;
+                                    recent_peaks.retain(|(h, _)| *h < from_height);
+                                    for (i, launcher_id) in launcher_ids.iter().enumerate() {
+                                        let registry = {
+                                            let mut ctx = SpendContext::new();
+                                            let mut db = db.lock().await;
+                                            sync_xchandles(
+                                                &client,
+                                                &mut db,
+                                                &mut ctx,
+                                                *launcher_id,
+                                            )
+                                            .await?
+                                        };
+                                        if let Some(p) = pricing_from_registry_state(
+                                            registry.info.state.pricing_puzzle_hash,
+                                            registry.info.state.expired_handle_pricing_puzzle_hash,
+                                        ) {
+                                            registry_pricing
+                                                .write()
+                                                .await
+                                                .insert(*launcher_id, p);
+                                        }
+                                        registries[i] = registry;
+                                    }
+                                }
+
+                                tip_rec = Some(rec);
+                            }
+                        }
 
                         let coin_resp = client
                             .get_coin_records_by_names(
@@ -524,39 +621,21 @@ async fn connect_websocket(
                         }
 
                         // Follow singleton spends in the new tip block as well.
-                        if let Some(state) = client.get_blockchain_state().await?.blockchain_state {
-                            let tip = state.peak.height;
-                            let mut confirmed_timestamp = state.peak.timestamp.unwrap_or(0);
-                            if let Some(rec) =
-                                client.get_block_record_by_height(tip).await?.block_record
-                            {
-                                if let Some(ts) = rec.timestamp {
-                                    confirmed_timestamp = ts;
-                                } else if confirmed_timestamp == 0 {
-                                    // Walk back like get_last_onchain_timestamp when tip is non-tx.
-                                    let mut height = tip.saturating_sub(1);
-                                    while height > 0 && confirmed_timestamp == 0 {
-                                        if let Some(br) = client
-                                            .get_block_record_by_height(height)
-                                            .await?
-                                            .block_record
-                                        {
-                                            if let Some(ts) = br.timestamp {
-                                                confirmed_timestamp = ts;
-                                                break;
-                                            }
-                                        }
-                                        height = height.saturating_sub(1);
-                                    }
-                                }
-                                let tip_spends = client
-                                    .get_block_spends(rec.header_hash)
-                                    .await?
-                                    .block_spends
-                                    .unwrap_or_default();
-                                let mut allocator = Allocator::new();
-                                let _ = indexer.on_block(&mut allocator, tip, &tip_spends).await;
+                        if let (Some(tip), Some(rec)) = (tip_height, tip_rec) {
+                            let tip_spends = client
+                                .get_block_spends(rec.header_hash)
+                                .await?
+                                .block_spends
+                                .unwrap_or_default();
+                            let mut allocator = Allocator::new();
+                            let _ = indexer.on_block(&mut allocator, tip, &tip_spends).await;
+                            recent_peaks.retain(|(h, _)| *h < tip);
+                            recent_peaks.push_back((tip, rec.header_hash));
+                            while recent_peaks.len() > 32 {
+                                recent_peaks.pop_front();
                             }
+                        }
+                        if let Some(tip) = tip_height {
                             indexer
                                 .note_peak(
                                     tip,
@@ -568,11 +647,9 @@ async fn connect_websocket(
                         }
 
                         if last_clear_time.elapsed().unwrap().as_secs() > 60 * 30 {
-                            if let Some(current_blockchain_state) =
-                                client.get_blockchain_state().await?.blockchain_state
-                            {
+                            if let Some(tip) = tip_height {
                                 print!("Clearing cache (every 30m)... ");
-                                let cutoff = current_blockchain_state.peak.height - 128;
+                                let cutoff = tip.saturating_sub(128);
                                 {
                                     let db = db.lock().await;
                                     db.delete_slots_spent_before(cutoff).await?;
@@ -601,4 +678,112 @@ async fn connect_websocket(
     }
 
     Ok(())
+}
+
+/// First height that is no longer canonical, for `indexer.rollback`.
+///
+/// - Empty window or linear extend (`new_height == last+1` and `new_prev_hash == last.hash`): `None`.
+/// - Tip rewound (`new_height < last`): `Some(new_height + 1)` — everything above the new tip is orphaned.
+/// - First stored height whose on-chain header no longer matches: `Some(that height)`.
+/// - `hash_at` returning `None` stops the scan (RPC miss); that is not treated as a reorg.
+/// - If every stored hash still matches, this is a skipped-peak gap, not a reorg.
+fn reorg_rollback_from(
+    stored: &[(u32, Bytes32)],
+    new_height: u32,
+    new_prev_hash: Bytes32,
+    hash_at: impl Fn(u32) -> Option<Bytes32>,
+) -> Option<u32> {
+    let &(last_height, last_hash) = stored.last()?;
+
+    if new_height < last_height {
+        return Some(new_height.saturating_add(1));
+    }
+    if new_height == last_height.saturating_add(1) && new_prev_hash == last_hash {
+        return None;
+    }
+
+    for &(height, hash) in stored {
+        match hash_at(height) {
+            Some(on_chain) if on_chain == hash => continue,
+            Some(_) => return Some(height),
+            None => break,
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn h(byte: u8) -> Bytes32 {
+        Bytes32::new([byte; 32])
+    }
+
+    #[test]
+    fn reorg_rollback_from_empty_stored() {
+        assert_eq!(
+            reorg_rollback_from(&[], 10, h(1), |_| panic!("hash_at unused")),
+            None
+        );
+    }
+
+    #[test]
+    fn reorg_rollback_from_linear_extend() {
+        let stored = [(10, h(1))];
+        assert_eq!(
+            reorg_rollback_from(&stored, 11, h(1), |_| panic!("hash_at unused")),
+            None
+        );
+    }
+
+    #[test]
+    fn reorg_rollback_from_gap_last_still_canonical() {
+        let stored = [(10, h(1))];
+        let hash_at = |height: u32| {
+            assert_eq!(height, 10);
+            Some(h(1))
+        };
+        assert_eq!(reorg_rollback_from(&stored, 12, h(99), hash_at), None);
+    }
+
+    #[test]
+    fn reorg_rollback_from_last_hash_changed() {
+        let stored = [(10, h(1))];
+        let hash_at = |height: u32| {
+            if height == 10 {
+                Some(h(2))
+            } else {
+                None
+            }
+        };
+        assert_eq!(reorg_rollback_from(&stored, 10, h(0), hash_at), Some(10));
+    }
+
+    #[test]
+    fn reorg_rollback_from_tip_rewound() {
+        let stored = [(10, h(1)), (11, h(2))];
+        assert_eq!(
+            reorg_rollback_from(&stored, 10, h(0), |_| panic!("hash_at unused")),
+            Some(11)
+        );
+    }
+
+    #[test]
+    fn reorg_rollback_from_first_mismatch_in_window() {
+        let stored = [(10, h(1)), (11, h(2)), (12, h(3))];
+        let hash_at = |height: u32| match height {
+            10 => Some(h(1)),
+            11 => Some(h(9)),
+            12 => Some(h(8)),
+            _ => None,
+        };
+        assert_eq!(reorg_rollback_from(&stored, 13, h(0), hash_at), Some(11));
+    }
+
+    #[test]
+    fn reorg_rollback_from_unverified_hash_is_not_a_reorg() {
+        let stored = [(10, h(1))];
+        assert_eq!(reorg_rollback_from(&stored, 12, h(99), |_| None), None);
+    }
 }

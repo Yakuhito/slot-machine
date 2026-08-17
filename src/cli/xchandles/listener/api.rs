@@ -14,7 +14,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use super::auction_pricing::{
     auction_premium, base_registration_fee, projected_pricing_timestamp, reaches_base_at,
-    SOON_WINDOW_SECONDS,
+    AUCTION_DURATION_SECONDS, SOON_WINDOW_SECONDS,
 };
 use super::error::ApiError;
 use super::freshness::FreshnessState;
@@ -157,20 +157,23 @@ fn decode_cursor(cursor: &str) -> Option<(u64, String)> {
     Some((expiration, handle.to_string()))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct ExpiringKey {
-    expiration: u64,
-    handle: String,
+/// Inclusive `[min, max]` matching `now >= expiration` and `auction_premium(expiration, projected) != 0`.
+///
+/// Membership is `expiration in (projected - 28d, min(now, projected)]`.
+fn active_expiration_window(now: u64, projected: u64) -> (u64, u64) {
+    let min_expiration = match projected.checked_sub(AUCTION_DURATION_SECONDS) {
+        None => 0,
+        Some(left_exclusive) => left_exclusive.saturating_add(1),
+    };
+    (min_expiration, now.min(projected))
 }
 
-fn after_cursor(key: &ExpiringKey, cursor: Option<&(u64, String)>) -> bool {
-    match cursor {
-        None => true,
-        Some((exp, handle)) => {
-            key.expiration > *exp
-                || (key.expiration == *exp && key.handle.as_str() > handle.as_str())
-        }
-    }
+/// Inclusive `[min, max]` matching `now < expiration <= now + SOON_WINDOW_SECONDS`.
+fn soon_expiration_window(now: u64) -> (u64, u64) {
+    (
+        now.saturating_add(1),
+        now.saturating_add(SOON_WINDOW_SECONDS),
+    )
 }
 
 fn state_to_response(
@@ -484,33 +487,6 @@ async fn lookup_pending_transfer(
     }))
 }
 
-async fn collect_named_slots(
-    state: &ListenerApiState,
-    registry: Bytes32,
-) -> Vec<(String, StoredHandleSlot)> {
-    let mut out = Vec::new();
-    for (reg, handle_hash) in state.handle_slots.all_keys().await {
-        if reg != registry {
-            continue;
-        }
-        let Some(record) = state.handle_slots.get(reg, handle_hash).await else {
-            continue;
-        };
-        let Some(slot) = record.current else {
-            continue;
-        };
-        // Cold-backfill slots without a registration fact lack a Handle string — skip.
-        let Some(reg_rec) = state.registrations.get(reg, handle_hash).await else {
-            continue;
-        };
-        let Some(reg_cur) = reg_rec.current else {
-            continue;
-        };
-        out.push((reg_cur.handle, slot));
-    }
-    out
-}
-
 async fn lookup_expiring_active(
     state: &ListenerApiState,
     query: &ExpiringQuery,
@@ -531,26 +507,24 @@ async fn lookup_expiring_active(
     // Malformed cursors restart from the beginning rather than inventing a new error code.
 
     let limit = query.limit.unwrap_or(50).min(50) as usize;
-    let mut rows: Vec<(ExpiringKey, ExpiringActiveItem)> = Vec::new();
-    for (handle, slot) in collect_named_slots(state, registry).await {
-        // Fail-closed at/after expiry (Ticket 11 alignment).
-        if now < slot.expiration {
-            continue;
-        }
-        let premium = auction_premium(slot.expiration, projected);
-        if premium == 0 {
-            continue;
-        }
-        let key = ExpiringKey {
-            expiration: slot.expiration,
-            handle: handle.clone(),
-        };
-        if !after_cursor(&key, cursor.as_ref()) {
-            continue;
-        }
-        let base = base_registration_fee(pricing.base_price, &handle);
-        rows.push((
-            key,
+    let (min_expiration, max_expiration) = active_expiration_window(now, projected);
+    let named = state
+        .handle_slots
+        .list_named_in_expiration_window(
+            registry,
+            min_expiration,
+            max_expiration,
+            cursor,
+            limit.saturating_add(1),
+            state.registrations.as_ref(),
+        )
+        .await;
+
+    let rows: Vec<ExpiringActiveItem> = named
+        .into_iter()
+        .map(|(handle, slot)| {
+            let premium = auction_premium(slot.expiration, projected);
+            let base = base_registration_fee(pricing.base_price, &handle);
             ExpiringActiveItem {
                 handle,
                 expiration: slot.expiration,
@@ -559,18 +533,17 @@ async fn lookup_expiring_active(
                 total_registration_fee: base.saturating_add(premium),
                 base_registration_fee: base,
                 reaches_base_at: reaches_base_at(slot.expiration),
-            },
-        ));
-    }
-    rows.sort_by(|a, b| a.0.cmp(&b.0));
+            }
+        })
+        .collect();
 
     let next_cursor = if rows.len() > limit {
-        let last = &rows[limit - 1].0;
+        let last = &rows[limit - 1];
         Some(encode_cursor(last.expiration, &last.handle))
     } else {
         None
     };
-    let items = rows.into_iter().take(limit).map(|(_, item)| item).collect();
+    let items = rows.into_iter().take(limit).collect();
 
     Ok(ExpiringActiveResponse {
         items,
@@ -598,38 +571,38 @@ async fn lookup_expiring_soon(
     let cursor = query.cursor.as_deref().and_then(decode_cursor);
 
     let limit = query.limit.unwrap_or(50).min(50) as usize;
-    let soon_deadline = now.saturating_add(SOON_WINDOW_SECONDS);
-    let mut rows: Vec<(ExpiringKey, ExpiringSoonItem)> = Vec::new();
-    for (handle, slot) in collect_named_slots(state, registry).await {
-        // Active (not yet expired) and within the inclusive 30-day window.
-        if slot.expiration <= now || slot.expiration > soon_deadline {
-            continue;
-        }
-        let key = ExpiringKey {
-            expiration: slot.expiration,
-            handle: handle.clone(),
-        };
-        if !after_cursor(&key, cursor.as_ref()) {
-            continue;
-        }
-        rows.push((
-            key,
+    let (min_expiration, max_expiration) = soon_expiration_window(now);
+    let named = state
+        .handle_slots
+        .list_named_in_expiration_window(
+            registry,
+            min_expiration,
+            max_expiration,
+            cursor,
+            limit.saturating_add(1),
+            state.registrations.as_ref(),
+        )
+        .await;
+
+    let rows: Vec<ExpiringSoonItem> = named
+        .into_iter()
+        .map(|(handle, slot)| {
+            let base_registration_fee = base_registration_fee(pricing.base_price, &handle);
             ExpiringSoonItem {
-                handle: handle.clone(),
+                handle,
                 expiration: slot.expiration,
-                base_registration_fee: base_registration_fee(pricing.base_price, &handle),
-            },
-        ));
-    }
-    rows.sort_by(|a, b| a.0.cmp(&b.0));
+                base_registration_fee,
+            }
+        })
+        .collect();
 
     let next_cursor = if rows.len() > limit {
-        let last = &rows[limit - 1].0;
+        let last = &rows[limit - 1];
         Some(encode_cursor(last.expiration, &last.handle))
     } else {
         None
     };
-    let items = rows.into_iter().take(limit).map(|(_, item)| item).collect();
+    let items = rows.into_iter().take(limit).collect();
 
     Ok(ExpiringSoonResponse {
         items,
@@ -777,4 +750,27 @@ pub async fn serve_listener(
     let app = listener_router(state);
     let listener = tokio::net::TcpListener::bind(bind).await?;
     axum::serve(listener, app).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn active_expiration_window_uses_projected_min_and_min_now_projected_max() {
+        let now = 1_800_000_000;
+        let projected = now + 420;
+        let (min_expiration, max_expiration) = active_expiration_window(now, projected);
+        assert_eq!(min_expiration, projected - AUCTION_DURATION_SECONDS + 1);
+        assert_eq!(max_expiration, now.min(projected));
+
+        let now_ahead = projected + 100;
+        let (min_ahead, max_ahead) = active_expiration_window(now_ahead, projected);
+        assert_eq!(min_ahead, projected - AUCTION_DURATION_SECONDS + 1);
+        assert_eq!(max_ahead, projected);
+
+        let (min_under, max_under) = active_expiration_window(10, 5);
+        assert_eq!(min_under, 0);
+        assert_eq!(max_under, 5);
+    }
 }
