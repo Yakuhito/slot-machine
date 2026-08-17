@@ -1268,7 +1268,7 @@ async fn registrations_recent_golden_limit_and_total_semantics() {
     server.registrations.set_stats(registry, stats).await;
 
     let resp = client
-        .get(format!("{}/registrations/recent?limit=50", server.base))
+        .get(format!("{}/recent-registrations?limit=50", server.base))
         .send()
         .await
         .unwrap();
@@ -1291,7 +1291,7 @@ async fn registrations_recent_golden_limit_and_total_semantics() {
     assert_eq!(item_keys, ["action_kind", "confirmation_height", "handle"]);
 
     let limited: Value = client
-        .get(format!("{}/registrations/recent?limit=1", server.base))
+        .get(format!("{}/recent-registrations?limit=1", server.base))
         .send()
         .await
         .unwrap()
@@ -1303,7 +1303,7 @@ async fn registrations_recent_golden_limit_and_total_semantics() {
     assert_eq!(limited["total_registered"].as_u64().unwrap(), 2);
 
     let capped: Value = client
-        .get(format!("{}/registrations/recent?limit=999", server.base))
+        .get(format!("{}/recent-registrations?limit=999", server.base))
         .send()
         .await
         .unwrap()
@@ -1311,6 +1311,33 @@ async fn registrations_recent_golden_limit_and_total_semantics() {
         .await
         .unwrap();
     assert_eq!(capped["items"].as_array().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn registrations_recent_path_looks_up_the_handle_named_recent() {
+    let server =
+        RunningListener::spawn(FreshnessState::fresh_at(116, FreshnessState::now_unix())).await;
+    let client = reqwest::Client::new();
+
+    let stolen = client
+        .get(format!("{}/registrations/recent", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stolen.status(), 404);
+    assert_eq!(
+        normalize_request_id(stolen.json().await.unwrap())["code"],
+        "handle_not_found"
+    );
+
+    let feed = client
+        .get(format!("{}/recent-registrations", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(feed.status(), 200);
+    let body: Value = feed.json().await.unwrap();
+    assert!(body["items"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -1431,7 +1458,7 @@ async fn registration_reorganization_restores_prior_and_reverses_total() {
         hex::encode(b32(0x22))
     );
     let recent_before: Value = client
-        .get(format!("{base}/registrations/recent?limit=50"))
+        .get(format!("{base}/recent-registrations?limit=50"))
         .send()
         .await
         .unwrap()
@@ -1466,7 +1493,7 @@ async fn registration_reorganization_restores_prior_and_reverses_total() {
     assert_eq!(after["confirmation_height"].as_u64().unwrap(), 10);
 
     let recent_after: Value = client
-        .get(format!("{base}/registrations/recent?limit=50"))
+        .get(format!("{base}/recent-registrations?limit=50"))
         .send()
         .await
         .unwrap()
@@ -1713,7 +1740,7 @@ async fn registration_registry_selection_matches_handle_semantics() {
 
     let recent_other: Value = client
         .get(format!(
-            "{}/registrations/recent?limit=50&launcher_id={}",
+            "{}/recent-registrations?limit=50&launcher_id={}",
             server.base,
             hex::encode(other)
         ))

@@ -7,9 +7,9 @@ use axum::debug_handler;
 use axum::extract::{Query, State};
 use axum::http::Method;
 use axum::{http::StatusCode, routing::get, Json, Router};
-use chia_protocol::Bytes32;
-use chia_wallet_sdk::coinset::ChiaRpcClient;
-use chia_wallet_sdk::driver::{SpendContext, XchandlesRegistry};
+use chia_protocol::{Bytes32, CoinSpend};
+use chia_wallet_sdk::coinset::{ChiaRpcClient, CoinsetClient};
+use chia_wallet_sdk::driver::{SpendContext, XchandlesActionLog, XchandlesRegistry};
 use chia_wallet_sdk::types::puzzles::{XchandlesHandleSlotValue, XchandlesSlotNonce};
 use clvm_utils::ToTreeHash;
 use clvmr::Allocator;
@@ -21,12 +21,13 @@ use tower_http::cors::{Any, CorsLayer};
 
 use super::listener::{
     listener_router, DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore,
-    DbSingletonStore, FreshnessState, HandleSlotStore, ListenerApiState, PendingUpdateStore,
-    RegistrationStore, RegistryPricing, SingletonIndexer, SingletonStore,
+    DbSingletonStore, FollowRecordStatus, FreshnessState, HandleSlotStore, ListenerApiState,
+    PendingUpdateStore, RegistrationStore, RegistryPricing, SingletonIndexer, SingletonStore,
 };
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, sync_xchandles, CliError, CoinsetWebSocketMessage,
-    Db, BASE_PRICE_AT_FACTOR_ONE, PRICE_SCHEDULE, REGISTRATION_PERIOD,
+    get_coinset_client, hex_string_to_bytes32, sync_xchandles, sync_xchandles_detailed, CliError,
+    CoinsetWebSocketMessage, Db, XchandlesSpentTransition, BASE_PRICE_AT_FACTOR_ONE,
+    PRICE_SCHEDULE, REGISTRATION_PERIOD,
 };
 use chia_wallet_sdk::driver::XchandlesExpirePricingPuzzle;
 use chia_wallet_sdk::types::{puzzles::XchandlesFactorPricingPuzzleArgs, Mod};
@@ -264,6 +265,148 @@ async fn get_neighbors(
     Ok(Json(response))
 }
 
+async fn block_spends_at_height(
+    client: &CoinsetClient,
+    height: u32,
+) -> Result<Vec<CoinSpend>, CliError> {
+    let header_hash = client
+        .get_block_record_by_height(height)
+        .await?
+        .block_record
+        .map(|r| r.header_hash);
+    if let Some(hh) = header_hash {
+        Ok(client
+            .get_block_spends(hh)
+            .await?
+            .block_spends
+            .unwrap_or_default())
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+async fn parent_coin_by_created_slot_hash(
+    db: &Arc<futures::lock::Mutex<Db>>,
+    launcher_id: Bytes32,
+    logs: &[XchandlesActionLog],
+) -> std::collections::HashMap<Bytes32, Bytes32> {
+    let mut allocator = Allocator::new();
+    let db_guard = db.lock().await;
+    let mut map = std::collections::HashMap::new();
+    let mut created = Vec::new();
+    for log in logs {
+        log.extend_created_handle_slots(&mut created);
+    }
+    for value in &created {
+        let value_hash: Bytes32 = value.tree_hash().into();
+        if let Ok(Some(slot)) = db_guard
+            .get_slot::<XchandlesHandleSlotValue>(
+                &mut allocator,
+                launcher_id,
+                XchandlesSlotNonce::HANDLE.to_u64(),
+                value_hash,
+                0,
+            )
+            .await
+        {
+            map.insert(value_hash, slot.coin.parent_coin_info);
+        }
+    }
+    map
+}
+
+/// Same indexer path as a live registry spend: discover NFTs in the block,
+/// project slots/registrations/pending, then follow any spent current coins.
+async fn index_registry_transition(
+    db: &Arc<futures::lock::Mutex<Db>>,
+    indexer: &SingletonIndexer,
+    launcher_id: Bytes32,
+    height: u32,
+    logs: &[XchandlesActionLog],
+    block_spends: &[CoinSpend],
+) {
+    let parent_by_value_hash = parent_coin_by_created_slot_hash(db, launcher_id, logs).await;
+    let mut allocator = Allocator::new();
+    if let Err(e) = indexer
+        .on_registry_transition(&mut allocator, height, block_spends, logs)
+        .await
+    {
+        eprintln!("singleton discovery error: {e}");
+    }
+    indexer
+        .project_handle_slots_from_logs(launcher_id, height, logs, |value_hash| {
+            parent_by_value_hash.get(&value_hash).copied()
+        })
+        .await;
+    indexer
+        .project_registrations_from_logs(launcher_id, height, logs)
+        .await;
+    indexer
+        .project_pending_updates_from_logs(launcher_id, height, logs)
+        .await;
+    if let Err(e) = indexer.on_block(&mut allocator, height, block_spends).await {
+        eprintln!("singleton follow error: {e}");
+    }
+}
+
+/// Walk every followed NFT already in the store (including ones persisted
+/// before this restart) until a full pass finds no spent current coins.
+async fn catch_up_followed_nfts(
+    client: &CoinsetClient,
+    indexer: &SingletonIndexer,
+) -> Result<(), CliError> {
+    loop {
+        let ids = indexer.store.all_launcher_ids().await;
+        let mut followed_a_spend = 0usize;
+        for launcher_id in ids {
+            let Some(rec) = indexer.store.get(launcher_id).await else {
+                continue;
+            };
+            if rec.status != FollowRecordStatus::Active {
+                continue;
+            }
+            let Some(current) = rec.current else {
+                continue;
+            };
+            if current.melted {
+                continue;
+            }
+            let Some(coin_record) = client
+                .get_coin_record_by_name(current.coin_id)
+                .await?
+                .coin_record
+            else {
+                continue;
+            };
+            if !coin_record.spent {
+                continue;
+            }
+            let Some(spend) = client
+                .get_puzzle_and_solution(current.coin_id, Some(coin_record.spent_block_index))
+                .await?
+                .coin_solution
+            else {
+                return Err(CliError::CoinNotSpent(current.coin_id));
+            };
+            let mut allocator = Allocator::new();
+            if let Err(e) = indexer
+                .on_block(&mut allocator, coin_record.spent_block_index, &[spend])
+                .await
+            {
+                eprintln!("singleton follow error: {e}");
+            }
+            followed_a_spend += 1;
+        }
+        if followed_a_spend == 0 {
+            eprintln!("[xchandles-listen] all followed NFT coins are unspent");
+            return Ok(());
+        }
+        eprintln!(
+            "[xchandles-listen] followed {followed_a_spend} subsequent NFT spend(s); rechecking unspent coins"
+        );
+    }
+}
+
 async fn connect_websocket(
     testnet11: bool,
     db: Arc<futures::lock::Mutex<Db>>,
@@ -275,15 +418,26 @@ async fn connect_websocket(
     let client = get_coinset_client(testnet11);
 
     let mut registries = Vec::<XchandlesRegistry>::new();
+    let mut spent_by_launcher: Vec<(Bytes32, Vec<XchandlesSpentTransition>)> = Vec::new();
     for launcher_id in &launcher_ids {
-        let registry = {
+        eprintln!(
+            "[xchandles-listen] initial sync {}",
+            hex::encode(launcher_id)
+        );
+        let synced = {
             let mut db = db.lock().await;
             let mut ctx = SpendContext::new();
 
-            sync_xchandles(&client, &mut db, &mut ctx, *launcher_id).await?
+            sync_xchandles_detailed(&client, &mut db, &mut ctx, *launcher_id).await?
         };
-
-        registries.push(registry);
+        eprintln!(
+            "[xchandles-listen] initial sync {} done, tip coin {}, {} spent transition(s)",
+            hex::encode(launcher_id),
+            hex::encode(synced.registry.coin.coin_id()),
+            synced.spent_transitions.len()
+        );
+        spent_by_launcher.push((*launcher_id, synced.spent_transitions));
+        registries.push(synced.registry);
     }
 
     // Seed confirmed pricing from the currently synced registry states.
@@ -300,9 +454,28 @@ async fn connect_websocket(
         }
     }
 
-    // Cold start: project currently indexed Handle slots so proofs work for already-synced
-    // registries. Confirmation height is unknown for historical slots (0) — fishy for
-    // exact height, but the slot value and parent coin remain verifiable.
+    // Replay spent registry transitions with the same discover+project+follow
+    // path as live peaks, so cold start can pick up NFTs created in those blocks.
+    for (launcher_id, transitions) in &spent_by_launcher {
+        for transition in transitions {
+            let block_spends = block_spends_at_height(&client, transition.height).await?;
+            index_registry_transition(
+                &db,
+                indexer.as_ref(),
+                *launcher_id,
+                transition.height,
+                &transition.logs,
+                &block_spends,
+            )
+            .await;
+        }
+    }
+
+    // Fallback for indexed slots that were never in a replayed action log
+    // (upgrade from a sync-only DB). Load slots first, then project —
+    // DbHandleSlotStore uses the same `db` mutex, so projecting while this
+    // lock is held deadlocks.
+    let mut persisted_slots = Vec::new();
     {
         let mut allocator = Allocator::new();
         let db_guard = db.lock().await;
@@ -321,25 +494,45 @@ async fn connect_websocket(
                     else {
                         continue;
                     };
-                    // Skip sentinel end markers (no real Owner/Resolved).
                     if slot.info.value.owner_launcher_id == Bytes32::default()
                         && slot.info.value.resolved_launcher_id == Bytes32::default()
                     {
                         continue;
                     }
-                    let _ = handle_hash;
-                    indexer
-                        .project_handle_slot(
-                            *launcher_id,
-                            slot.info.value,
-                            slot.coin.parent_coin_info,
-                            0,
-                        )
-                        .await;
+                    persisted_slots.push((
+                        *launcher_id,
+                        handle_hash,
+                        slot.info.value,
+                        slot.coin.parent_coin_info,
+                    ));
                 }
             }
         }
     }
+    let mut fallback = 0usize;
+    for (launcher_id, handle_hash, value, parent_coin_info) in persisted_slots {
+        let already = indexer
+            .handle_slots
+            .get(launcher_id, handle_hash)
+            .await
+            .and_then(|r| r.current);
+        if already.is_some() {
+            continue;
+        }
+        fallback += 1;
+        indexer
+            .project_handle_slot(launcher_id, value, parent_coin_info, 0)
+            .await;
+    }
+    if fallback > 0 {
+        eprintln!("[xchandles-listen] projected {fallback} persisted handle slot(s) without logs");
+    }
+
+    eprintln!(
+        "[xchandles-listen] catching up {} followed NFT singleton(s)",
+        indexer.store.all_launcher_ids().await.len()
+    );
+    catch_up_followed_nfts(&client, indexer.as_ref()).await?;
 
     let ws_url = format!("{}/ws", client.base_url().replace("https://", "wss://"));
     println!("Connecting to WebSocket at {}", ws_url);
@@ -438,22 +631,14 @@ async fn connect_websocket(
                                         let registry = {
                                             let mut ctx = SpendContext::new();
                                             let mut db = db.lock().await;
-                                            sync_xchandles(
-                                                &client,
-                                                &mut db,
-                                                &mut ctx,
-                                                *launcher_id,
-                                            )
-                                            .await?
+                                            sync_xchandles(&client, &mut db, &mut ctx, *launcher_id)
+                                                .await?
                                         };
                                         if let Some(p) = pricing_from_registry_state(
                                             registry.info.state.pricing_puzzle_hash,
                                             registry.info.state.expired_handle_pricing_puzzle_hash,
                                         ) {
-                                            registry_pricing
-                                                .write()
-                                                .await
-                                                .insert(*launcher_id, p);
+                                            registry_pricing.write().await.insert(*launcher_id, p);
                                         }
                                         registries[i] = registry;
                                     }
@@ -484,21 +669,8 @@ async fn connect_websocket(
                                 );
 
                                 let spent_height = coin_record.spent_block_index;
-                                let header_hash = client
-                                    .get_block_record_by_height(spent_height)
-                                    .await?
-                                    .block_record
-                                    .map(|r| r.header_hash);
-
-                                let block_spends = if let Some(hh) = header_hash {
-                                    client
-                                        .get_block_spends(hh)
-                                        .await?
-                                        .block_spends
-                                        .unwrap_or_default()
-                                } else {
-                                    Vec::new()
-                                };
+                                let block_spends =
+                                    block_spends_at_height(&client, spent_height).await?;
 
                                 let (registry, logs) = {
                                     let mut ctx = SpendContext::new();
@@ -548,73 +720,15 @@ async fn connect_websocket(
                                         .insert(registry_launcher_id, p);
                                 }
 
-                                // Build parent_coin_id map for created slots from the synced DB.
-                                let parent_by_value_hash = {
-                                    let mut allocator = Allocator::new();
-                                    let db_guard = db.lock().await;
-                                    let mut map = std::collections::HashMap::new();
-                                    let mut created = Vec::new();
-                                    for log in &logs {
-                                        log.extend_created_handle_slots(&mut created);
-                                    }
-                                    for value in &created {
-                                        let value_hash: Bytes32 = value.tree_hash().into();
-                                        if let Ok(Some(slot)) = db_guard
-                                            .get_slot::<XchandlesHandleSlotValue>(
-                                                &mut allocator,
-                                                registry_launcher_id,
-                                                XchandlesSlotNonce::HANDLE.to_u64(),
-                                                value_hash,
-                                                0,
-                                            )
-                                            .await
-                                        {
-                                            map.insert(value_hash, slot.coin.parent_coin_info);
-                                        }
-                                    }
-                                    map
-                                };
-
-                                let mut allocator = Allocator::new();
-                                if let Err(e) = indexer
-                                    .on_registry_transition(
-                                        &mut allocator,
-                                        spent_height,
-                                        &block_spends,
-                                        &logs,
-                                    )
-                                    .await
-                                {
-                                    eprintln!("singleton discovery error: {e}");
-                                }
-                                indexer
-                                    .project_handle_slots_from_logs(
-                                        registry_launcher_id,
-                                        spent_height,
-                                        &logs,
-                                        |value_hash| parent_by_value_hash.get(&value_hash).copied(),
-                                    )
-                                    .await;
-                                indexer
-                                    .project_registrations_from_logs(
-                                        registry_launcher_id,
-                                        spent_height,
-                                        &logs,
-                                    )
-                                    .await;
-                                indexer
-                                    .project_pending_updates_from_logs(
-                                        registry_launcher_id,
-                                        spent_height,
-                                        &logs,
-                                    )
-                                    .await;
-                                if let Err(e) = indexer
-                                    .on_block(&mut allocator, spent_height, &block_spends)
-                                    .await
-                                {
-                                    eprintln!("singleton follow error: {e}");
-                                }
+                                index_registry_transition(
+                                    &db,
+                                    indexer.as_ref(),
+                                    registry_launcher_id,
+                                    spent_height,
+                                    &logs,
+                                    &block_spends,
+                                )
+                                .await;
 
                                 println!("synced :)")
                             }

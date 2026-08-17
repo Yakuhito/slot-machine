@@ -1,13 +1,39 @@
+use std::time::Instant;
+
 use chia_bls::Signature;
 use chia_protocol::Bytes32;
 use chia_wallet_sdk::{
     coinset::{ChiaRpcClient, CoinsetClient},
-    driver::{DriverError, Slot, SpendContext, XchandlesConstants, XchandlesRegistry},
+    driver::{
+        DriverError, Slot, SpendContext, XchandlesActionLog, XchandlesConstants, XchandlesRegistry,
+    },
     types::puzzles::{XchandlesSlotNonce, XchandlesUpdateSlotValue},
 };
 use clvm_utils::ToTreeHash;
 
 use crate::{CliError, Db};
+
+/// One spent registry coin encountered while walking to the unspent tip.
+#[derive(Debug, Clone)]
+pub struct XchandlesSpentTransition {
+    pub height: u32,
+    pub logs: Vec<XchandlesActionLog>,
+}
+
+/// Result of a full XCHandles singleton walk, including action logs for indexer replay.
+#[derive(Debug, Clone)]
+pub struct XchandlesSyncResult {
+    pub registry: XchandlesRegistry,
+    pub spent_transitions: Vec<XchandlesSpentTransition>,
+}
+
+fn sync_log(launcher_id: Bytes32, msg: impl AsRef<str>) {
+    eprintln!(
+        "[xchandles-sync] {} {}",
+        hex::encode(launcher_id),
+        msg.as_ref()
+    );
+}
 
 pub async fn sync_xchandles(
     client: &CoinsetClient,
@@ -15,11 +41,28 @@ pub async fn sync_xchandles(
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
 ) -> Result<XchandlesRegistry, CliError> {
+    Ok(sync_xchandles_detailed(client, db, ctx, launcher_id)
+        .await?
+        .registry)
+}
+
+pub async fn sync_xchandles_detailed(
+    client: &CoinsetClient,
+    db: &mut Db,
+    ctx: &mut SpendContext,
+    launcher_id: Bytes32,
+) -> Result<XchandlesSyncResult, CliError> {
+    let started = Instant::now();
+    sync_log(launcher_id, "start");
     let (mut registry, mut skip_save): (XchandlesRegistry, bool) =
         if let (Some((_coin_id, parent_coin_id)), Some(constants)) = (
             db.get_last_unspent_singleton_coin(launcher_id).await?,
             db.get_xchandles_configuration(ctx, launcher_id).await?,
         ) {
+            sync_log(
+                launcher_id,
+                format!("resume from parent {}", hex::encode(parent_coin_id)),
+            );
             let parent_record = client
                 .get_coin_record_by_name(parent_coin_id)
                 .await?
@@ -39,6 +82,7 @@ pub async fn sync_xchandles(
                 false,
             )
         } else {
+            sync_log(launcher_id, "cold start from launcher coin");
             let launcher_record = client
                 .get_coin_record_by_name(launcher_id)
                 .await?
@@ -90,12 +134,15 @@ pub async fn sync_xchandles(
             (registry, true)
         };
 
+    let mut steps = 0u32;
+    let mut spent_transitions = Vec::new();
     loop {
+        let coin_id = registry.coin.coin_id();
         let coin_record = client
-            .get_coin_record_by_name(registry.coin.coin_id())
+            .get_coin_record_by_name(coin_id)
             .await?
             .coin_record
-            .ok_or(CliError::CoinNotFound(registry.coin.coin_id()))?;
+            .ok_or(CliError::CoinNotFound(coin_id))?;
 
         if skip_save {
             skip_save = false;
@@ -105,17 +152,22 @@ pub async fn sync_xchandles(
         }
 
         if !coin_record.spent {
+            sync_log(
+                launcher_id,
+                format!(
+                    "unspent tip {} after {steps} spent step(s) in {:?}",
+                    hex::encode(coin_id),
+                    started.elapsed()
+                ),
+            );
             break;
         }
 
         let coin_spend = client
-            .get_puzzle_and_solution(
-                coin_record.coin.coin_id(),
-                Some(coin_record.spent_block_index),
-            )
+            .get_puzzle_and_solution(coin_id, Some(coin_record.spent_block_index))
             .await?
             .coin_solution
-            .ok_or(CliError::CoinNotSpent(coin_record.coin.coin_id()))?;
+            .ok_or(CliError::CoinNotSpent(coin_id))?;
 
         registry = XchandlesRegistry::from_spend(
             ctx,
@@ -154,7 +206,20 @@ pub async fn sync_xchandles(
             .await?;
         }
 
+        let logs = registry.pending_spend.logs.clone();
+        let height = coin_record.spent_block_index;
         registry = registry.child(registry.pending_spend.latest_state.1);
+        spent_transitions.push(XchandlesSpentTransition { height, logs });
+        steps = steps.saturating_add(1);
+        if steps.is_multiple_of(10) {
+            sync_log(
+                launcher_id,
+                format!(
+                    "still walking history; {steps} spent coins in {:?}",
+                    started.elapsed()
+                ),
+            );
+        }
     }
 
     if let Some(mempool_items) = client
@@ -168,12 +233,23 @@ pub async fn sync_xchandles(
                 mempool_items[0].spend_bundle.clone(),
                 registry.info.constants,
             )? {
-                return Ok(new_registry);
+                sync_log(
+                    launcher_id,
+                    format!("done (mempool tip) in {:?}", started.elapsed()),
+                );
+                return Ok(XchandlesSyncResult {
+                    registry: new_registry,
+                    spent_transitions,
+                });
             }
         }
     }
 
-    Ok(registry)
+    sync_log(launcher_id, format!("done in {:?}", started.elapsed()));
+    Ok(XchandlesSyncResult {
+        registry,
+        spent_transitions,
+    })
 }
 
 pub async fn find_xchandles_update_slot(

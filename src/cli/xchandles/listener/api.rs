@@ -111,9 +111,8 @@ pub fn listener_router(state: ListenerApiState) -> Router {
             get(get_pending_transfer).head(head_pending_transfer),
         )
         .route("/handle/{handle}", get(get_handle).head(head_handle))
-        // Static path before `{handle}` so the handle "recent" never shadows this feed.
         .route(
-            "/registrations/recent",
+            "/recent-registrations",
             get(get_registrations_recent).head(head_registrations_recent),
         )
         .route(
