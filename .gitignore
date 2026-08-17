@@ -173,3 +173,4 @@ sb.debug*
 data.db
 *.costs
 *.guide
+/xchandles-data
