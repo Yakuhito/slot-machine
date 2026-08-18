@@ -354,8 +354,9 @@ async fn lookup_handle_proof(
     )
     .await?;
 
-    // Owner Singleton incompleteness must not invalidate a complete Resolved proof.
-    // (No Owner lookup is performed here.)
+    // Owner incompleteness must not invalidate a complete Resolved proof; it
+    // only means there is no performable pending transfer to embed.
+    let pending_transfer = performable_pending_transfer(state, registry, handle_hash, slot).await;
 
     Ok(HandleProofResponse {
         registry_launcher_id: hex32(registry),
@@ -365,6 +366,7 @@ async fn lookup_handle_proof(
         slot_confirmation_height: slot.confirmation_height,
         resolved_singleton: resolved,
         indexed_peak_height,
+        pending_transfer,
     })
 }
 
@@ -423,6 +425,46 @@ async fn lookup_registrations_recent(
     })
 }
 
+/// Same payload as `GET /handle/{handle}/pending-transfer` 200, or `None` for 204.
+async fn performable_pending_transfer(
+    state: &ListenerApiState,
+    registry: Bytes32,
+    handle_hash: Bytes32,
+    slot: &StoredHandleSlot,
+) -> Option<PendingTransferResponse> {
+    // Expired Handles are not performable - distinct from unified proof's 410.
+    if state.now_unix() >= slot.expiration {
+        return None;
+    }
+
+    let pending_record = state.pending_updates.get(registry, handle_hash).await;
+    let pending = pending_record.as_ref().and_then(|r| r.current.as_ref())?;
+
+    // Executor must be the live Owner Singleton coin whose parent is the initiator.
+    let owner_rec = state.store.get(slot.owner_launcher_id).await?;
+    if owner_rec.status != FollowRecordStatus::Active {
+        return None;
+    }
+    let owner = owner_rec.current.as_ref()?;
+    if owner.melted {
+        return None;
+    }
+    // Separately spent lineage: current coin is no longer the post-initiate executor.
+    if owner.parent_coin_id != pending.update_initiator_coin_id {
+        return None;
+    }
+
+    Some(PendingTransferResponse {
+        handle_hash: hex32(pending.handle_hash),
+        new_owner_launcher_id: hex32(pending.new_owner_launcher_id),
+        new_resolved_launcher_id: hex32(pending.new_resolved_launcher_id),
+        update_confirmation_height: pending.update_confirmation_height,
+        minimum_execution_height: pending.minimum_execution_height,
+        update_initiator_coin_id: hex32(pending.update_initiator_coin_id),
+        current_executor_coin_id: hex32(owner.coin_id),
+    })
+}
+
 /// Returns `Ok(Some(_))` when performable, `Ok(None)` for 204, or an API error.
 async fn lookup_pending_transfer(
     state: &ListenerApiState,
@@ -447,43 +489,7 @@ async fn lookup_pending_transfer(
         .as_ref()
         .ok_or_else(ApiError::handle_not_found)?;
 
-    // Expired Handles are not performable - distinct from unified proof's 410.
-    if state.now_unix() >= slot.expiration {
-        return Ok(None);
-    }
-
-    let pending_record = state.pending_updates.get(registry, handle_hash).await;
-    let Some(pending) = pending_record.as_ref().and_then(|r| r.current.as_ref()) else {
-        return Ok(None);
-    };
-
-    // Executor must be the live Owner Singleton coin whose parent is the initiator.
-    let Some(owner_rec) = state.store.get(slot.owner_launcher_id).await else {
-        return Ok(None);
-    };
-    if owner_rec.status != FollowRecordStatus::Active {
-        return Ok(None);
-    }
-    let Some(owner) = owner_rec.current.as_ref() else {
-        return Ok(None);
-    };
-    if owner.melted {
-        return Ok(None);
-    }
-    // Separately spent lineage: current coin is no longer the post-initiate executor.
-    if owner.parent_coin_id != pending.update_initiator_coin_id {
-        return Ok(None);
-    }
-
-    Ok(Some(PendingTransferResponse {
-        handle_hash: hex32(pending.handle_hash),
-        new_owner_launcher_id: hex32(pending.new_owner_launcher_id),
-        new_resolved_launcher_id: hex32(pending.new_resolved_launcher_id),
-        update_confirmation_height: pending.update_confirmation_height,
-        minimum_execution_height: pending.minimum_execution_height,
-        update_initiator_coin_id: hex32(pending.update_initiator_coin_id),
-        current_executor_coin_id: hex32(owner.coin_id),
-    }))
+    Ok(performable_pending_transfer(state, registry, handle_hash, slot).await)
 }
 
 async fn lookup_expiring_active(

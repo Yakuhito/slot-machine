@@ -1948,6 +1948,14 @@ async fn pending_transfer_golden_future_ready_and_exact_fields() {
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
     assert_eq!(body, load_golden("pending_transfer_success.json"));
+    let handle_resp = client
+        .get(format!("{}/handle/{handle}", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(handle_resp.status(), 200);
+    let handle_body: Value = handle_resp.json().await.unwrap();
+    assert_eq!(handle_body["pending_transfer"], body);
     let mut keys: Vec<_> = body.as_object().unwrap().keys().cloned().collect();
     keys.sort();
     assert_eq!(
@@ -2023,6 +2031,15 @@ async fn pending_transfer_returns_204_for_non_performable_cases() {
         .await
         .unwrap();
     assert_eq!(none.status(), 204);
+    let proof: Value = client
+        .get(format!("{}/handle/{handle}", server.base))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(proof["pending_transfer"].is_null());
 
     upsert_pending(
         &server,

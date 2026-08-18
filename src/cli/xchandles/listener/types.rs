@@ -72,6 +72,8 @@ pub struct HandleProofResponse {
     pub slot_confirmation_height: u32,
     pub resolved_singleton: SingletonResponse,
     pub indexed_peak_height: u32,
+    /// Performable pending transfer, or `null` when `/pending-transfer` would be 204.
+    pub pending_transfer: Option<PendingTransferResponse>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,7 +128,8 @@ pub struct PendingTransferQuery {
     pub launcher_id: Option<String>,
 }
 
-/// Performable pending transfer returned by `GET /handle/{handle}/pending-transfer`.
+/// Performable pending transfer returned by `GET /handle/{handle}/pending-transfer`
+/// and embedded as `HandleProofResponse.pending_transfer`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingTransferResponse {
     pub handle_hash: String,
