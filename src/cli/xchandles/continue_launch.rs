@@ -93,7 +93,7 @@ fn print_spend_bundle_cost(sb: &SpendBundle, testnet11: bool) -> Result<(), CliE
 
 pub fn metadata_for_handle_nft(handle_info: &XchandlesLaunchRecord) -> HandleNftMetadata {
     HandleNftMetadata {
-        display_name: Some(handle_info.handle.clone()),
+        display_name: Some(format!("@{}", handle_info.handle)),
         image_uris: handle_info.image_uris.clone(),
         image_hash: Some(handle_info.image_hash),
         metadata_uris: handle_info.metadata_uris.clone(),
@@ -953,4 +953,29 @@ pub async fn xchandles_continue_launch(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_record(handle: &str) -> XchandlesLaunchRecord {
+        XchandlesLaunchRecord {
+            handle: handle.to_string(),
+            recipient: Bytes32::default(),
+            expiration: 1_818_752_400,
+            image_uris: vec!["https://example.com/a.png".to_string()],
+            image_hash: Bytes32::from([0xaa; 32]),
+            metadata_uris: vec!["https://example.com/a.json".to_string()],
+            metadata_hash: Bytes32::from([0xbb; 32]),
+            license_uris: vec!["https://example.com/l.pdf".to_string()],
+            license_hash: Bytes32::from([0xcc; 32]),
+        }
+    }
+
+    #[test]
+    fn handle_nft_display_name_is_at_prefixed_handle() {
+        let metadata = metadata_for_handle_nft(&sample_record("alice"));
+        assert_eq!(metadata.display_name.as_deref(), Some("@alice"));
+    }
 }
