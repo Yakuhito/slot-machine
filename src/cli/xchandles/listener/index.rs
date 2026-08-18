@@ -409,10 +409,12 @@ impl SingletonIndexer {
                 (Some(s), Some(c)) => vec![(s, c)],
                 _ => Vec::new(),
             },
+            // New handle is created, not a replacement of either neighbor.
+            // Pairing spent_left with created_handle would falsely drop the
+            // left neighbor's Owner/Resolved NFT follow.
             XchandlesActionLog::Register(e) => vec![
                 (e.spent_left_slot, e.created_left_slot),
                 (e.spent_right_slot, e.created_right_slot),
-                (e.spent_left_slot, e.created_handle_slot),
             ],
             XchandlesActionLog::DelegatedState(_) => Vec::new(),
         };

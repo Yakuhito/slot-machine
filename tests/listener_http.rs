@@ -1631,6 +1631,117 @@ async fn project_registrations_from_logs_covers_register_expire_skips_extend() {
 }
 
 #[tokio::test]
+async fn register_keeps_left_neighbor_nft_follow_after_finality() {
+    use chia_wallet_sdk::driver::{
+        XchandlesActionLog, XchandlesPrecommitValue, XchandlesRegisterActionLog,
+    };
+    use chia_wallet_sdk::types::puzzles::{XchandlesHandleSlotValue, XchandlesPricingSolution};
+
+    let store = MemorySingletonStore::shared();
+    let indexer = SingletonIndexer::new(
+        store.clone() as Arc<dyn SingletonStore>,
+        MemoryHandleSlotStore::shared() as Arc<dyn HandleSlotStore>,
+        MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+        MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
+        Arc::new(RwLock::new(FreshnessState::fresh_at(
+            50,
+            FreshnessState::now_unix(),
+        ))),
+    );
+
+    let alice_nft = b32(0xa1);
+    let bob_nft = b32(0xb2);
+    let alice_state = StoredSingletonState {
+        launcher_id: alice_nft,
+        parent_coin_id: b32(0x22),
+        amount: 1,
+        inner_puzzle_hash: b32(0x33),
+        confirmation_height: 10,
+        melted: false,
+        melt_height: None,
+        nft: None,
+        coin_id: b32(0x88),
+    };
+    store
+        .upsert(active_record(alice_nft, alice_state.clone()))
+        .await;
+    store
+        .upsert(active_record(
+            bob_nft,
+            StoredSingletonState {
+                launcher_id: bob_nft,
+                ..alice_state
+            },
+        ))
+        .await;
+
+    let slot = |handle: &str, counter: u64, owner: Bytes32| {
+        XchandlesHandleSlotValue::new(
+            counter,
+            handle.tree_hash().into(),
+            Bytes32::default(),
+            Bytes32::new([0xff; 32]),
+            4_102_444_800,
+            owner,
+            owner,
+        )
+    };
+    let precommit = |handle: &str, owner: Bytes32| {
+        XchandlesPrecommitValue::new(
+            b32(0x01),
+            (),
+            b32(0x02),
+            XchandlesPricingSolution {
+                buy_time: 1_700_000_000,
+                current_expiration: 0,
+                handle: handle.to_string(),
+                num_periods: 1,
+            },
+            handle.to_string(),
+            Bytes32::default(),
+            owner,
+            owner,
+        )
+    };
+
+    // Later register inserts to the right of alice, spending alice's slot as left neighbor.
+    let register_bob = XchandlesActionLog::Register(XchandlesRegisterActionLog {
+        spent_left_slot: slot("alice", 0, alice_nft),
+        spent_right_slot: slot("right", 0, Bytes32::default()),
+        created_left_slot: slot("alice", 1, alice_nft),
+        created_handle_slot: slot("bob", 0, bob_nft),
+        created_right_slot: slot("right", 1, Bytes32::default()),
+        precommit_value: precommit("bob", bob_nft),
+        total_price: 1000,
+        registered_time: 31_557_600,
+        owner_full_puzzle_hash: b32(0x31),
+        resolved_full_puzzle_hash: None,
+        owner_inner_puzzle_hash: b32(0x32),
+        resolved_inner_puzzle_hash: b32(0x32),
+    });
+
+    let mut allocator = Allocator::new();
+    indexer
+        .on_registry_transition(&mut allocator, 20, &[], &[register_bob])
+        .await
+        .unwrap();
+
+    let alice_after = store
+        .get(alice_nft)
+        .await
+        .expect("alice NFT still followed");
+    assert_eq!(alice_after.reference_count, 1);
+    assert_eq!(alice_after.status, FollowRecordStatus::Active);
+    assert!(alice_after.dereference_height.is_none());
+
+    indexer.on_block(&mut allocator, 52, &[]).await.unwrap();
+    assert!(
+        store.get(alice_nft).await.is_some(),
+        "alice NFT must survive 32-block finality after a neighbor register"
+    );
+}
+
+#[tokio::test]
 async fn registration_registry_selection_matches_handle_semantics() {
     let default_registry = b32(0xaa);
     let other = b32(0xbb);

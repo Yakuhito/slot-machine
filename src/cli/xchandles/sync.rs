@@ -52,13 +52,52 @@ pub async fn sync_xchandles_detailed(
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
 ) -> Result<XchandlesSyncResult, CliError> {
+    sync_xchandles_detailed_opts(client, db, ctx, launcher_id, false).await
+}
+
+/// Walk from the launcher coin so every spent registry transition is returned.
+/// Used by `xchandles listen` so indexer replay can rediscover NFT follows
+/// even when the slot DB already sits on the unspent tip.
+pub async fn sync_xchandles_detailed_from_launcher(
+    client: &CoinsetClient,
+    db: &mut Db,
+    ctx: &mut SpendContext,
+    launcher_id: Bytes32,
+) -> Result<XchandlesSyncResult, CliError> {
+    sync_xchandles_detailed_opts(client, db, ctx, launcher_id, true).await
+}
+
+async fn sync_xchandles_detailed_opts(
+    client: &CoinsetClient,
+    db: &mut Db,
+    ctx: &mut SpendContext,
+    launcher_id: Bytes32,
+    from_launcher: bool,
+) -> Result<XchandlesSyncResult, CliError> {
     let started = Instant::now();
-    sync_log(launcher_id, "start");
-    let (mut registry, mut skip_save): (XchandlesRegistry, bool) =
-        if let (Some((_coin_id, parent_coin_id)), Some(constants)) = (
+    sync_log(
+        launcher_id,
+        if from_launcher {
+            "start (from launcher)"
+        } else {
+            "start"
+        },
+    );
+    let resume = if from_launcher {
+        None
+    } else {
+        match (
             db.get_last_unspent_singleton_coin(launcher_id).await?,
             db.get_xchandles_configuration(ctx, launcher_id).await?,
         ) {
+            (Some((_coin_id, parent_coin_id)), Some(constants)) => {
+                Some((parent_coin_id, constants))
+            }
+            _ => None,
+        }
+    };
+    let (mut registry, mut skip_save): (XchandlesRegistry, bool) =
+        if let Some((parent_coin_id, constants)) = resume {
             sync_log(
                 launcher_id,
                 format!("resume from parent {}", hex::encode(parent_coin_id)),
