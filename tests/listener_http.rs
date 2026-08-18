@@ -2800,8 +2800,10 @@ async fn expiring_day28_premium_transition_and_projection() {
     let projected = EXPIRING_CONFIRMED + 420;
     // Exactly at day-28 boundary relative to projected pricing timestamp → excluded.
     seed_named_handle(&server, registry, "edge", projected - 28 * 86_400).await;
-    // One second earlier → still positive premium.
-    seed_named_handle(&server, registry, "last", projected - 28 * 86_400 + 1).await;
+    // Decay is already 0 ~18 minutes before the cutoff → also excluded.
+    seed_named_handle(&server, registry, "gone", projected - 28 * 86_400 + 1).await;
+    // Still a positive premium ~33 minutes before the 28-day mark.
+    seed_named_handle(&server, registry, "last", projected - 28 * 86_400 + 2_000).await;
 
     let body: Value = client
         .get(format!("{}/expiring?view=active", server.base))
@@ -2822,7 +2824,7 @@ async fn expiring_day28_premium_transition_and_projection() {
     assert!(body["items"][0]["current_premium"].as_u64().unwrap() > 0);
     assert_eq!(
         body["items"][0]["reaches_base_at"].as_u64().unwrap(),
-        (projected - 28 * 86_400 + 1) + 28 * 86_400
+        (projected - 28 * 86_400 + 2_000) + 28 * 86_400
     );
 }
 

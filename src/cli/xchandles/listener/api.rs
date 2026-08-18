@@ -540,6 +540,8 @@ async fn lookup_expiring_active(
                 reaches_base_at: reaches_base_at(slot.expiration),
             }
         })
+        // Integer decay hits 0 ~18 minutes before the 28-day window edge.
+        .filter(|item| item.current_premium != 0)
         .collect();
 
     let next_cursor = if rows.len() > limit {

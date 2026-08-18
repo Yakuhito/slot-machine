@@ -61,13 +61,14 @@ fn premium_after_elapsed(elapsed: u64) -> u64 {
     let fraction_part = (65536 * (elapsed % HALVING_PERIOD)) / HALVING_PERIOD;
 
     // START_PREMIUM / 2^whole_periods - periods stay below 28 while premium is positive.
+    // Match `exponential_premium.rue`: test bit 0 (acc=1) first, then shift.
     let mut premium = start_premium / (1u64 << whole_periods);
     let mut acc: u64 = 1;
     for bit in PREMIUM_BITS_LIST {
-        acc <<= 1;
         if fraction_part & acc != 0 {
             premium = ((premium as u128) * (bit as u128) / (PREMIUM_PRECISION as u128)) as u64;
         }
+        acc <<= 1;
     }
 
     premium.saturating_sub(end_value)
@@ -122,8 +123,67 @@ mod tests {
             0
         );
 
-        assert!(auction_premium(0, day28 - 1) > 0);
+        // Integer decay reaches END_VALUE ~18 minutes before the 28-day cutoff.
+        assert_eq!(auction_premium(0, day28 - 1), 0);
+        assert_eq!(
+            XchandlesExpirePricingPuzzle::get_price(
+                &mut ctx,
+                args,
+                "yakuhito".into(),
+                0,
+                day28 - 1,
+                1
+            )
+            .unwrap() as u64,
+            0
+        );
+        assert!(auction_premium(0, day28 - 2_000) > 0);
         assert_eq!(reaches_base_at(1_000), 1_000 + day28);
+    }
+
+    #[test]
+    fn hourly_premium_matches_sdk_puzzle_including_last_day() {
+        let mut ctx = SpendContext::new();
+        let args = XchandlesExpirePricingPuzzle::from_info(&mut ctx, 0, 31_557_600).unwrap();
+
+        // Docs / CLVM: day 0 hour 1 is 97_153_878.776 CAT, not the too-slow helper value.
+        assert_eq!(auction_premium(0, 3_600), 97_153_878_776);
+
+        for day in 0..28 {
+            for hour in 0..24 {
+                let buy_time = day * 86_400 + hour * 3_600;
+                let helper = auction_premium(0, buy_time);
+                let puzzle = XchandlesExpirePricingPuzzle::get_price(
+                    &mut ctx,
+                    args.clone(),
+                    "yakuhito".into(),
+                    0,
+                    buy_time,
+                    1,
+                )
+                .unwrap() as u64;
+                assert_eq!(
+                    helper, puzzle,
+                    "mismatch at day {day} hour {hour} (elapsed={buy_time})"
+                );
+            }
+        }
+
+        // ~19h56m remaining (the reported @test8 auction-end countdown).
+        let remaining = 19 * 3_600 + 56 * 60 + 7;
+        let buy_time = AUCTION_DURATION_SECONDS - remaining;
+        let helper = auction_premium(0, buy_time);
+        let puzzle = XchandlesExpirePricingPuzzle::get_price(
+            &mut ctx,
+            args,
+            "yakuhito".into(),
+            0,
+            buy_time,
+            1,
+        )
+        .unwrap() as u64;
+        assert_eq!(helper, puzzle);
+        assert_eq!(helper, 285);
     }
 
     #[test]

@@ -4,8 +4,8 @@
       "handle": "bob",
       "expiration": 1798272000,
       "projected_pricing_timestamp": 1800000420,
-      "current_premium": 94830,
-      "total_registration_fee": 734830,
+      "current_premium": 94670,
+      "total_registration_fee": 734670,
       "base_registration_fee": 640000,
       "reaches_base_at": 1800691200
     },
@@ -13,8 +13,8 @@
       "handle": "alice",
       "expiration": 1799136000,
       "projected_pricing_timestamp": 1800000420,
-      "current_premium": 97491788,
-      "total_registration_fee": 97571788,
+      "current_premium": 97327974,
+      "total_registration_fee": 97407974,
       "base_registration_fee": 80000,
       "reaches_base_at": 1801555200
     },
@@ -22,8 +22,8 @@
       "handle": "carol",
       "expiration": 1799568000,
       "projected_pricing_timestamp": 1800000420,
-      "current_premium": 3119748800,
-      "total_registration_fee": 3119828800,
+      "current_premium": 3114506798,
+      "total_registration_fee": 3114586798,
       "base_registration_fee": 80000,
       "reaches_base_at": 1801987200
     }
