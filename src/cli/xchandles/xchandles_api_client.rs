@@ -117,7 +117,7 @@ impl XchandlesApiClient {
         );
 
         let left_parent_parent_info =
-            hex_string_to_bytes32(&neighbors_resp.left_parent_parent_info)?;
+            hex_string_to_bytes32(&neighbors_resp.left_parent_parent_id)?;
         let left_parent_inner_puzzle_hash =
             hex_string_to_bytes32(&neighbors_resp.left_parent_inner_puzzle_hash)?;
         let left_parent_amount = neighbors_resp.left_parent_amount;
@@ -128,7 +128,7 @@ impl XchandlesApiClient {
         };
 
         let right_parent_parent_info =
-            hex_string_to_bytes32(&neighbors_resp.right_parent_parent_info)?;
+            hex_string_to_bytes32(&neighbors_resp.right_parent_parent_id)?;
         let right_parent_inner_puzzle_hash =
             hex_string_to_bytes32(&neighbors_resp.right_parent_inner_puzzle_hash)?;
         let right_parent_amount = neighbors_resp.right_parent_amount;

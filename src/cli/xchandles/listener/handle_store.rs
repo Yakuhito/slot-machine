@@ -7,6 +7,14 @@ use tokio::sync::RwLock;
 
 use super::registration_store::RegistrationStore;
 
+/// Parent coin id plus compact lineage proof needed to spend a Handle slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SlotParentLineage {
+    pub parent_coin_id: Bytes32,
+    pub parent_parent_id: Bytes32,
+    pub parent_inner_puzzle_hash: Bytes32,
+}
+
 /// Canonical Handle-slot projection used by unified Handle proofs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredHandleSlot {
@@ -19,6 +27,10 @@ pub struct StoredHandleSlot {
     pub owner_launcher_id: Bytes32,
     pub resolved_launcher_id: Bytes32,
     pub parent_coin_id: Bytes32,
+    #[serde(default)]
+    pub parent_parent_id: Bytes32,
+    #[serde(default)]
+    pub parent_inner_puzzle_hash: Bytes32,
     pub confirmation_height: u32,
 }
 
@@ -344,6 +356,8 @@ mod tests {
             owner_launcher_id: b32(0x11),
             resolved_launcher_id: b32(0x11),
             parent_coin_id: b32(0x31),
+            parent_parent_id: b32(0xee),
+            parent_inner_puzzle_hash: b32(0xef),
             confirmation_height: 90,
         }
     }

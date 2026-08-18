@@ -11,7 +11,7 @@ use super::discovery::{
 use super::freshness::FreshnessState;
 use super::handle_store::{
     push_handle_replacement, rollback_handle_to_before, HandleSlotRecord, HandleSlotStore,
-    StoredHandleSlot,
+    SlotParentLineage, StoredHandleSlot,
 };
 use super::pending_store::{
     clear_pending_current, push_pending_replacement, rollback_pending_to_before,
@@ -103,7 +103,7 @@ impl SingletonIndexer {
         &self,
         registry_launcher_id: Bytes32,
         value: XchandlesHandleSlotValue,
-        parent_coin_id: Bytes32,
+        parent: SlotParentLineage,
         confirmation_height: u32,
     ) {
         let stored = StoredHandleSlot {
@@ -115,7 +115,9 @@ impl SingletonIndexer {
             expiration: value.expiration,
             owner_launcher_id: value.owner_launcher_id,
             resolved_launcher_id: value.resolved_launcher_id,
-            parent_coin_id,
+            parent_coin_id: parent.parent_coin_id,
+            parent_parent_id: parent.parent_parent_id,
+            parent_inner_puzzle_hash: parent.parent_inner_puzzle_hash,
             confirmation_height,
         };
         let mut record = self
@@ -138,7 +140,7 @@ impl SingletonIndexer {
         registry_launcher_id: Bytes32,
         height: u32,
         logs: &[XchandlesActionLog],
-        parent_for: impl Fn(Bytes32) -> Option<Bytes32>,
+        parent_for: impl Fn(Bytes32) -> Option<SlotParentLineage>,
     ) {
         let mut created = Vec::new();
         for log in logs {

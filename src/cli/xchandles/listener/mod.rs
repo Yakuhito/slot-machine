@@ -29,7 +29,7 @@ pub use error::ApiError;
 pub use freshness::FreshnessState;
 pub use handle_store::{
     prune_handle_history, push_handle_replacement, rollback_handle_to_before, DbHandleSlotStore,
-    HandleSlotRecord, HandleSlotStore, MemoryHandleSlotStore, StoredHandleSlot,
+    HandleSlotRecord, HandleSlotStore, MemoryHandleSlotStore, SlotParentLineage, StoredHandleSlot,
 };
 pub use index::SingletonIndexer;
 pub use pending_store::{

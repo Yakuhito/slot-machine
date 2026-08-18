@@ -23,6 +23,7 @@ use super::listener::{
     listener_router, DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore,
     DbSingletonStore, FollowRecordStatus, FreshnessState, HandleSlotStore, ListenerApiState,
     PendingUpdateStore, RegistrationStore, RegistryPricing, SingletonIndexer, SingletonStore,
+    SlotParentLineage,
 };
 use crate::{
     get_coinset_client, get_last_onchain_timestamp, hex_string_to_bytes32, sync_xchandles,
@@ -99,17 +100,22 @@ pub struct XchandlesNeighborsResponse {
     pub left_counter: u64,
     pub left_owner_launcher_id: String,
     pub left_resolved_launcher_id: String,
+    #[serde(default)]
+    pub left_parent_id: String,
+    #[serde(alias = "left_parent_parent_info")]
+    pub left_parent_parent_id: String,
+    pub left_parent_inner_puzzle_hash: String,
+    pub left_parent_amount: u64,
 
     pub right_right_handle_hash: String,
     pub right_expiration: u64,
     pub right_counter: u64,
     pub right_owner_launcher_id: String,
     pub right_resolved_launcher_id: String,
-
-    pub left_parent_parent_info: String,
-    pub left_parent_inner_puzzle_hash: String,
-    pub left_parent_amount: u64,
-    pub right_parent_parent_info: String,
+    #[serde(default)]
+    pub right_parent_id: String,
+    #[serde(alias = "right_parent_parent_info")]
+    pub right_parent_parent_id: String,
     pub right_parent_inner_puzzle_hash: String,
     pub right_parent_amount: u64,
 }
@@ -267,17 +273,18 @@ async fn get_neighbors(
         left_counter: left.info.value.counter,
         left_owner_launcher_id: hex::encode(left.info.value.owner_launcher_id.to_bytes()),
         left_resolved_launcher_id: hex::encode(left.info.value.resolved_launcher_id.to_bytes()),
+        left_parent_id: hex::encode(left.coin.parent_coin_info.to_bytes()),
+        left_parent_parent_id: hex::encode(left.proof.parent_parent_coin_info.to_bytes()),
+        left_parent_inner_puzzle_hash: hex::encode(left.proof.parent_inner_puzzle_hash.to_bytes()),
+        left_parent_amount: left.proof.parent_amount,
 
         right_right_handle_hash: hex::encode(right.info.value.neighbors.right_value.to_bytes()),
         right_expiration: right.info.value.expiration,
         right_counter: right.info.value.counter,
         right_owner_launcher_id: hex::encode(right.info.value.owner_launcher_id.to_bytes()),
         right_resolved_launcher_id: hex::encode(right.info.value.resolved_launcher_id.to_bytes()),
-
-        left_parent_parent_info: hex::encode(left.proof.parent_parent_coin_info.to_bytes()),
-        left_parent_inner_puzzle_hash: hex::encode(left.proof.parent_inner_puzzle_hash.to_bytes()),
-        left_parent_amount: left.proof.parent_amount,
-        right_parent_parent_info: hex::encode(right.proof.parent_parent_coin_info.to_bytes()),
+        right_parent_id: hex::encode(right.coin.parent_coin_info.to_bytes()),
+        right_parent_parent_id: hex::encode(right.proof.parent_parent_coin_info.to_bytes()),
         right_parent_inner_puzzle_hash: hex::encode(
             right.proof.parent_inner_puzzle_hash.to_bytes(),
         ),
@@ -307,11 +314,11 @@ async fn block_spends_at_height(
     }
 }
 
-async fn parent_coin_by_created_slot_hash(
+async fn parent_lineage_by_created_slot_hash(
     db: &Arc<futures::lock::Mutex<Db>>,
     launcher_id: Bytes32,
     logs: &[XchandlesActionLog],
-) -> std::collections::HashMap<Bytes32, Bytes32> {
+) -> std::collections::HashMap<Bytes32, SlotParentLineage> {
     let mut allocator = Allocator::new();
     let db_guard = db.lock().await;
     let mut map = std::collections::HashMap::new();
@@ -331,7 +338,14 @@ async fn parent_coin_by_created_slot_hash(
             )
             .await
         {
-            map.insert(value_hash, slot.coin.parent_coin_info);
+            map.insert(
+                value_hash,
+                SlotParentLineage {
+                    parent_coin_id: slot.coin.parent_coin_info,
+                    parent_parent_id: slot.proof.parent_parent_coin_info,
+                    parent_inner_puzzle_hash: slot.proof.parent_inner_puzzle_hash,
+                },
+            );
         }
     }
     map
@@ -347,7 +361,7 @@ async fn index_registry_transition(
     logs: &[XchandlesActionLog],
     block_spends: &[CoinSpend],
 ) {
-    let parent_by_value_hash = parent_coin_by_created_slot_hash(db, launcher_id, logs).await;
+    let parent_by_value_hash = parent_lineage_by_created_slot_hash(db, launcher_id, logs).await;
     let mut allocator = Allocator::new();
     if let Err(e) = indexer
         .on_registry_transition(&mut allocator, height, block_spends, logs)
@@ -526,14 +540,18 @@ async fn connect_websocket(
                         *launcher_id,
                         handle_hash,
                         slot.info.value,
-                        slot.coin.parent_coin_info,
+                        SlotParentLineage {
+                            parent_coin_id: slot.coin.parent_coin_info,
+                            parent_parent_id: slot.proof.parent_parent_coin_info,
+                            parent_inner_puzzle_hash: slot.proof.parent_inner_puzzle_hash,
+                        },
                     ));
                 }
             }
         }
     }
     let mut fallback = 0usize;
-    for (launcher_id, handle_hash, value, parent_coin_info) in persisted_slots {
+    for (launcher_id, handle_hash, value, parent) in persisted_slots {
         let already = indexer
             .handle_slots
             .get(launcher_id, handle_hash)
@@ -544,7 +562,7 @@ async fn connect_websocket(
         }
         fallback += 1;
         indexer
-            .project_handle_slot(launcher_id, value, parent_coin_info, 0)
+            .project_handle_slot(launcher_id, value, parent, 0)
             .await;
     }
     if fallback > 0 {

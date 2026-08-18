@@ -678,6 +678,8 @@ async fn real_http_golden_handle_proofs_and_errors() {
             owner_launcher_id: owner,
             resolved_launcher_id: resolved,
             parent_coin_id: b32(0xdd),
+            parent_parent_id: b32(0xee),
+            parent_inner_puzzle_hash: b32(0xef),
             confirmation_height: 90,
         },
     )
@@ -876,6 +878,8 @@ async fn real_http_golden_handle_proofs_and_errors() {
             owner_launcher_id: owner,
             resolved_launcher_id: resolved,
             parent_coin_id: b32(0xdd),
+            parent_parent_id: b32(0xee),
+            parent_inner_puzzle_hash: b32(0xef),
             confirmation_height: 90,
         },
     )
@@ -962,6 +966,8 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
         owner_launcher_id: resolved_a,
         resolved_launcher_id: resolved_a,
         parent_coin_id: b32(0x31),
+        parent_parent_id: b32(0xee),
+        parent_inner_puzzle_hash: b32(0xef),
         confirmation_height: 10,
     };
     let slot_b = StoredHandleSlot {
@@ -974,6 +980,8 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
         owner_launcher_id: resolved_b,
         resolved_launcher_id: resolved_b,
         parent_coin_id: b32(0x32),
+        parent_parent_id: b32(0xee),
+        parent_inner_puzzle_hash: b32(0xef),
         confirmation_height: 20,
     };
 
@@ -1091,7 +1099,7 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
     );
     assert_eq!(after["slot_confirmation_height"].as_u64().unwrap(), 10);
     assert_eq!(
-        after["slot_parent_coin_id"].as_str().unwrap(),
+        after["slot_parent_id"].as_str().unwrap(),
         hex::encode(b32(0x31))
     );
 }
@@ -1887,6 +1895,8 @@ fn unexpired_slot(registry: Bytes32, handle_hash: Bytes32, owner: Bytes32) -> St
         owner_launcher_id: owner,
         resolved_launcher_id: owner,
         parent_coin_id: b32(0x31),
+        parent_parent_id: b32(0xee),
+        parent_inner_puzzle_hash: b32(0xef),
         confirmation_height: 90,
     }
 }
@@ -2541,6 +2551,8 @@ fn named_slot(registry: Bytes32, handle: &str, expiration: u64) -> StoredHandleS
         owner_launcher_id: b32(0x11),
         resolved_launcher_id: b32(0x11),
         parent_coin_id: b32(0x31),
+        parent_parent_id: b32(0xee),
+        parent_inner_puzzle_hash: b32(0xef),
         confirmation_height: 90,
     }
 }

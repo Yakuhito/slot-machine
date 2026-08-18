@@ -12,7 +12,9 @@
     "owner_launcher_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "resolved_launcher_id": "1111111111111111111111111111111111111111111111111111111111111111"
   },
-  "slot_parent_coin_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "slot_parent_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "slot_parent_parent_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "slot_parent_inner_puzzle_hash": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
   "slot_confirmation_height": 90,
   "resolved_singleton": {
     "launcher_id": "1111111111111111111111111111111111111111111111111111111111111111",
