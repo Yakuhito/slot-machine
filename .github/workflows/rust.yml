@@ -16,6 +16,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -23,11 +27,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
       - name: Cargo binstall
         run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
-      - name: Instal cargo-workspaces
-        run: cargo binstall cargo-workspaces --locked -y
+      - name: Fmt
+        run: cargo fmt --all -- --files-with-diff --check
 
       - name: Install cargo-tarpaulin
         run: cargo binstall cargo-tarpaulin --locked -y
@@ -45,6 +59,3 @@ jobs:
         run: |
           cargo binstall cargo-machete --locked -y
           cargo machete
-
-      - name: Fmt
-        run: cargo fmt --all -- --files-with-diff --check
