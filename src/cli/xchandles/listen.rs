@@ -26,8 +26,8 @@ use super::listener::{
 };
 use crate::{
     get_coinset_client, hex_string_to_bytes32, sync_xchandles, sync_xchandles_detailed, CliError,
-    CoinsetWebSocketMessage, Db,
-    XchandlesSpentTransition, BASE_PRICE_AT_FACTOR_ONE, PRICE_SCHEDULE, REGISTRATION_PERIOD,
+    CoinsetWebSocketMessage, Db, XchandlesSpentTransition, BASE_PRICE_AT_FACTOR_ONE,
+    PRICE_SCHEDULE, REGISTRATION_PERIOD,
 };
 use chia_wallet_sdk::driver::XchandlesExpirePricingPuzzle;
 use chia_wallet_sdk::types::{puzzles::XchandlesFactorPricingPuzzleArgs, Mod};
