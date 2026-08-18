@@ -7,7 +7,7 @@ use chia_wallet_sdk::{
     driver::{
         DriverError, Slot, SpendContext, XchandlesActionLog, XchandlesConstants, XchandlesRegistry,
     },
-    types::puzzles::{XchandlesSlotNonce, XchandlesUpdateSlotValue},
+    types::puzzles::{XchandlesHandleSlotValue, XchandlesSlotNonce, XchandlesUpdateSlotValue},
 };
 use clvm_utils::ToTreeHash;
 
@@ -52,52 +52,15 @@ pub async fn sync_xchandles_detailed(
     ctx: &mut SpendContext,
     launcher_id: Bytes32,
 ) -> Result<XchandlesSyncResult, CliError> {
-    sync_xchandles_detailed_opts(client, db, ctx, launcher_id, false).await
-}
-
-/// Walk from the launcher coin so every spent registry transition is returned.
-/// Used by `xchandles listen` so indexer replay can rediscover NFT follows
-/// even when the slot DB already sits on the unspent tip.
-pub async fn sync_xchandles_detailed_from_launcher(
-    client: &CoinsetClient,
-    db: &mut Db,
-    ctx: &mut SpendContext,
-    launcher_id: Bytes32,
-) -> Result<XchandlesSyncResult, CliError> {
-    sync_xchandles_detailed_opts(client, db, ctx, launcher_id, true).await
-}
-
-async fn sync_xchandles_detailed_opts(
-    client: &CoinsetClient,
-    db: &mut Db,
-    ctx: &mut SpendContext,
-    launcher_id: Bytes32,
-    from_launcher: bool,
-) -> Result<XchandlesSyncResult, CliError> {
     let started = Instant::now();
-    sync_log(
-        launcher_id,
-        if from_launcher {
-            "start (from launcher)"
-        } else {
-            "start"
-        },
-    );
-    let resume = if from_launcher {
-        None
-    } else {
-        match (
-            db.get_last_unspent_singleton_coin(launcher_id).await?,
-            db.get_xchandles_configuration(ctx, launcher_id).await?,
-        ) {
-            (Some((_coin_id, parent_coin_id)), Some(constants)) => {
-                Some((parent_coin_id, constants))
-            }
-            _ => None,
-        }
-    };
+    sync_log(launcher_id, "start");
+    let last_unspent = db.get_last_unspent_singleton_coin(launcher_id).await?;
+    let saved_constants = db.get_xchandles_configuration(ctx, launcher_id).await?;
+    let persist_constants = saved_constants.is_none();
     let (mut registry, mut skip_save): (XchandlesRegistry, bool) =
-        if let Some((parent_coin_id, constants)) = resume {
+        if let Some((parent_coin_id, constants)) =
+            resume_from_saved_tip(last_unspent, saved_constants)
+        {
             sync_log(
                 launcher_id,
                 format!("resume from parent {}", hex::encode(parent_coin_id)),
@@ -122,23 +85,8 @@ async fn sync_xchandles_detailed_opts(
             )
         } else {
             sync_log(launcher_id, "cold start from launcher coin");
-            let launcher_record = client
-                .get_coin_record_by_name(launcher_id)
-                .await?
-                .coin_record
-                .ok_or(CliError::CoinNotFound(launcher_id))?;
-
-            let launcher_spend = client
-                .get_puzzle_and_solution(launcher_id, Some(launcher_record.spent_block_index))
-                .await?
-                .coin_solution
-                .ok_or(CliError::CoinNotSpent(launcher_id))?;
-
-            let solution_ptr = ctx.alloc(&launcher_spend.solution)?;
-
             let (registry, initial_slots, _initial_registration_asset_id, _initial_base_price) =
-                XchandlesRegistry::from_launcher_solution(ctx, launcher_record.coin, solution_ptr)?
-                    .ok_or(CliError::CoinNotFound(launcher_id))?;
+                xchandles_registry_from_launcher(client, ctx, launcher_id).await?;
 
             db.save_slot(ctx, initial_slots[0].clone(), 0).await?;
             db.save_xchandles_indexed_slot_value(
@@ -172,6 +120,11 @@ async fn sync_xchandles_detailed_opts(
 
             (registry, true)
         };
+
+    if persist_constants {
+        db.save_xchandles_configuration(ctx, registry.info.constants)
+            .await?;
+    }
 
     let mut steps = 0u32;
     let mut spent_transitions = Vec::new();
@@ -291,6 +244,49 @@ async fn sync_xchandles_detailed_opts(
     })
 }
 
+/// Resume from the parent of the last unspent registry coin when constants are
+/// already in the DB. Missing either piece means a launcher cold start.
+fn resume_from_saved_tip(
+    last_unspent: Option<(Bytes32, Bytes32)>,
+    constants: Option<XchandlesConstants>,
+) -> Option<(Bytes32, XchandlesConstants)> {
+    match (last_unspent, constants) {
+        (Some((_, parent_coin_id)), Some(constants)) => Some((parent_coin_id, constants)),
+        _ => None,
+    }
+}
+
+async fn xchandles_registry_from_launcher(
+    client: &CoinsetClient,
+    ctx: &mut SpendContext,
+    launcher_id: Bytes32,
+) -> Result<
+    (
+        XchandlesRegistry,
+        [Slot<XchandlesHandleSlotValue>; 2],
+        Bytes32,
+        u64,
+    ),
+    CliError,
+> {
+    let launcher_record = client
+        .get_coin_record_by_name(launcher_id)
+        .await?
+        .coin_record
+        .ok_or(CliError::CoinNotFound(launcher_id))?;
+
+    let launcher_spend = client
+        .get_puzzle_and_solution(launcher_id, Some(launcher_record.spent_block_index))
+        .await?
+        .coin_solution
+        .ok_or(CliError::CoinNotSpent(launcher_id))?;
+
+    let solution_ptr = ctx.alloc(&launcher_spend.solution)?;
+
+    XchandlesRegistry::from_launcher_solution(ctx, launcher_record.coin, solution_ptr)?
+        .ok_or(CliError::CoinNotFound(launcher_id))
+}
+
 pub async fn find_xchandles_update_slot(
     ctx: &mut SpendContext,
     client: &CoinsetClient,
@@ -345,4 +341,36 @@ pub async fn find_xchandles_update_slot(
     }
 
     Err(CliError::SlotNotFound("Update"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn h(byte: u8) -> Bytes32 {
+        Bytes32::new([byte; 32])
+    }
+
+    fn constants() -> XchandlesConstants {
+        XchandlesConstants::new(h(1), h(2), 32, h(3))
+    }
+
+    #[test]
+    fn resume_uses_saved_unspent_tip_and_constants() {
+        let parent = h(0x94);
+        let (parent_coin_id, got) =
+            resume_from_saved_tip(Some((h(0x79), parent)), Some(constants())).unwrap();
+        assert_eq!(parent_coin_id, parent);
+        assert_eq!(got, constants());
+    }
+
+    #[test]
+    fn resume_skips_when_constants_were_never_saved() {
+        assert_eq!(resume_from_saved_tip(Some((h(0x79), h(0x94))), None), None);
+    }
+
+    #[test]
+    fn resume_skips_when_no_unspent_singleton_in_db() {
+        assert_eq!(resume_from_saved_tip(None, Some(constants())), None);
+    }
 }

@@ -25,8 +25,8 @@ use super::listener::{
     PendingUpdateStore, RegistrationStore, RegistryPricing, SingletonIndexer, SingletonStore,
 };
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, sync_xchandles,
-    sync_xchandles_detailed_from_launcher, CliError, CoinsetWebSocketMessage, Db,
+    get_coinset_client, hex_string_to_bytes32, sync_xchandles, sync_xchandles_detailed, CliError,
+    CoinsetWebSocketMessage, Db,
     XchandlesSpentTransition, BASE_PRICE_AT_FACTOR_ONE, PRICE_SCHEDULE, REGISTRATION_PERIOD,
 };
 use chia_wallet_sdk::driver::XchandlesExpirePricingPuzzle;
@@ -428,7 +428,7 @@ async fn connect_websocket(
             let mut db = db.lock().await;
             let mut ctx = SpendContext::new();
 
-            sync_xchandles_detailed_from_launcher(&client, &mut db, &mut ctx, *launcher_id).await?
+            sync_xchandles_detailed(&client, &mut db, &mut ctx, *launcher_id).await?
         };
         eprintln!(
             "[xchandles-listen] initial sync {} done, tip coin {}, {} spent transition(s)",
@@ -454,8 +454,9 @@ async fn connect_websocket(
         }
     }
 
-    // Replay spent registry transitions with the same discover+project+follow
-    // path as live peaks, so cold start can pick up NFTs created in those blocks.
+    // Replay spent registry transitions (full history on first sync, only new
+    // spends when resuming a saved tip) with the same discover+project+follow
+    // path as live peaks.
     for (launcher_id, transitions) in &spent_by_launcher {
         for transition in transitions {
             let block_spends = block_spends_at_height(&client, transition.height).await?;
