@@ -1,4 +1,4 @@
-//! Real-HTTP listener fixture and golden contracts for Tickets 10–14.
+//! Real-HTTP listener fixture and golden contracts for Tickets 10-14.
 //!
 //! Later tickets must extend this same server fixture and consume these goldens
 //! rather than redefining the singleton/error envelope independently.
@@ -594,7 +594,7 @@ async fn real_http_golden_handle_proofs_and_errors() {
     .await;
     let client = reqwest::Client::new();
 
-    // Strict Handle syntax — no normalization.
+    // Strict Handle syntax - no normalization.
     for bad in ["ab", "ABC", "@alice", " alice", "alice!", "%40alice"] {
         let err = client
             .get(format!("{}/handle/{}", server.base, bad))
@@ -1128,7 +1128,7 @@ async fn registration_golden_and_lifecycle_semantics() {
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
     assert_eq!(body, load_golden("registration_success.json"));
-    // Exact public fields only — no private recovery/browser keys.
+    // Exact public fields only - no private recovery/browser keys.
     let mut keys: Vec<_> = body.as_object().unwrap().keys().cloned().collect();
     keys.sort();
     assert_eq!(
@@ -1223,7 +1223,7 @@ async fn registration_readable_after_expiration_and_replaced_by_expire_not_exten
     );
     server.registrations.upsert(record).await;
 
-    // Extension leaves the latest registration unchanged — we simply do not project it.
+    // Extension leaves the latest registration unchanged - we simply do not project it.
     let body: Value = client
         .get(format!("{}/registrations/{handle}", server.base))
         .send()
@@ -2362,7 +2362,7 @@ async fn pending_transfer_reorganization_restores_or_removes() {
         hex::encode(b32(0x77))
     );
 
-    // Roll back the later initiate — prior pending is restored.
+    // Roll back the later initiate - prior pending is restored.
     indexer.rollback(120).await;
     *freshness.write().await = FreshnessState::fresh_at(200, FreshnessState::now_unix());
 
@@ -2380,7 +2380,7 @@ async fn pending_transfer_reorganization_restores_or_removes() {
         hex::encode(b32(0x33))
     );
 
-    // Roll back the original initiate — pending removed → 204.
+    // Roll back the original initiate - pending removed → 204.
     indexer.rollback(100).await;
     *freshness.write().await = FreshnessState::fresh_at(200, FreshnessState::now_unix());
     assert_eq!(
@@ -2911,7 +2911,7 @@ async fn expiring_new_peak_refreshes_projected_pricing() {
     let prem_before = before["items"][0]["current_premium"].as_u64().unwrap();
     assert_eq!(before["confirmed_timestamp"], EXPIRING_CONFIRMED);
 
-    // Advance confirmed chain time by one day — premium must fall.
+    // Advance confirmed chain time by one day - premium must fall.
     server.freshness.write().await.confirmed_timestamp = EXPIRING_CONFIRMED + 86_400;
     let after: Value = client
         .get(format!("{}/expiring?view=active", server.base))

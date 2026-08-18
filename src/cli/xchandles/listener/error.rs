@@ -48,7 +48,7 @@ impl ApiError {
         Self::new(
             StatusCode::NOT_FOUND,
             "singleton_not_followed",
-            "Launcher is not followed by any canonical Handle slot",
+            "Launcher is not followed by any live handle slot",
         )
     }
 
@@ -92,7 +92,7 @@ impl ApiError {
         Self::new(
             StatusCode::NOT_FOUND,
             "handle_not_found",
-            "No canonical Handle slot is indexed for this Handle",
+            "No live handle slot is indexed for this handle",
         )
     }
 

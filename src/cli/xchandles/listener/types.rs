@@ -205,7 +205,7 @@ pub struct ExpiringSoonResponse {
     pub confirmed_timestamp: u64,
 }
 
-/// Canonical Handle grammar: 3–63 lowercase ASCII alphanumeric, no normalization.
+/// Canonical Handle grammar: 3-63 lowercase ASCII alphanumeric, no normalization.
 pub fn is_canonical_handle(handle: &str) -> bool {
     let len = handle.len();
     (3..=63).contains(&len)

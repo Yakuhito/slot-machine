@@ -60,7 +60,7 @@ fn premium_after_elapsed(elapsed: u64) -> u64 {
     let whole_periods = elapsed / HALVING_PERIOD;
     let fraction_part = (65536 * (elapsed % HALVING_PERIOD)) / HALVING_PERIOD;
 
-    // START_PREMIUM / 2^whole_periods — periods stay below 28 while premium is positive.
+    // START_PREMIUM / 2^whole_periods - periods stay below 28 while premium is positive.
     let mut premium = start_premium / (1u64 << whole_periods);
     let mut acc: u64 = 1;
     for bit in PREMIUM_BITS_LIST {

@@ -14,7 +14,7 @@ pub fn unix_now_secs() -> Result<u64, CliError> {
 }
 
 /// Buffered "past" reference for premine `buy_time`: UTC midnight on the 1st of the
-/// month containing `now_secs`, except when `now` falls on the 1st — then use the
+/// month containing `now_secs`, except when `now` falls on the 1st - then use the
 /// previous month's 1st so precommit vs deploy within that day cannot flip `n`.
 pub fn buy_time_past_reference(now_secs: u64) -> u64 {
     let now = Utc

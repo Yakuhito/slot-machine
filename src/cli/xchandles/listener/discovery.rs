@@ -66,11 +66,11 @@ impl ParsedNftState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiscoveryResult {
-    /// Zero matching odd singleton children — retryable incomplete state.
+    /// Zero matching odd singleton children - retryable incomplete state.
     Incomplete,
     /// Exactly one match.
     Found(Box<DiscoveredSingleton>),
-    /// Multiple matches — integrity failure.
+    /// Multiple matches - integrity failure.
     Mismatch,
 }
 

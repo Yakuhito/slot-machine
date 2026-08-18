@@ -231,7 +231,7 @@ mod tests {
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, "abc", 1),
                 base_price * 128
             );
-            // Grammar accepts 3–63; length ≥6 (without digits) uses factor 2.
+            // Grammar accepts 3-63; length ≥6 (without digits) uses factor 2.
             let long_handle = "a".repeat(63);
             assert_eq!(
                 XchandlesFactorPricingPuzzleArgs::get_price(base_price, &long_handle, 1),

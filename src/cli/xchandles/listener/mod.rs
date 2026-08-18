@@ -1,6 +1,6 @@
 //! Public XCHandles listener: singleton discovery, follow, and HTTP reads.
 //!
-//! Tickets 11–14 extend the same real-HTTP fixture and golden contract established here.
+//! Tickets 11-14 extend the same real-HTTP fixture and golden contract established here.
 
 mod api;
 mod auction_pricing;

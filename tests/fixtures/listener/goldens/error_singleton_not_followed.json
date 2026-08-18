@@ -1,5 +1,5 @@
 {
   "code": "singleton_not_followed",
-  "message": "Launcher is not followed by any canonical Handle slot",
+  "message": "Launcher is not followed by any live handle slot",
   "request_id": "FIXED_REQUEST_ID"
 }

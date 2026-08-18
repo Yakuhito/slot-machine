@@ -472,7 +472,7 @@ async fn connect_websocket(
     }
 
     // Fallback for indexed slots that were never in a replayed action log
-    // (upgrade from a sync-only DB). Load slots first, then project —
+    // (upgrade from a sync-only DB). Load slots first, then project -
     // DbHandleSlotStore uses the same `db` mutex, so projecting while this
     // lock is held deadlocks.
     let mut persisted_slots = Vec::new();
@@ -797,7 +797,7 @@ async fn connect_websocket(
 /// First height that is no longer canonical, for `indexer.rollback`.
 ///
 /// - Empty window or linear extend (`new_height == last+1` and `new_prev_hash == last.hash`): `None`.
-/// - Tip rewound (`new_height < last`): `Some(new_height + 1)` — everything above the new tip is orphaned.
+/// - Tip rewound (`new_height < last`): `Some(new_height + 1)` - everything above the new tip is orphaned.
 /// - First stored height whose on-chain header no longer matches: `Some(that height)`.
 /// - `hash_at` returning `None` stops the scan (RPC miss); that is not treated as a reorg.
 /// - If every stored hash still matches, this is a skipped-peak gap, not a reorg.

@@ -141,7 +141,7 @@ async fn require_fresh(state: &ListenerApiState) -> Result<(u32, u64), ApiError>
     Ok((freshness.indexed_peak_height, freshness.confirmed_timestamp))
 }
 
-/// Opaque cursor: `v1.{expiration}.{handle}` — stable for the canonical projection order.
+/// Opaque cursor: `v1.{expiration}.{handle}` - stable for the canonical projection order.
 fn encode_cursor(expiration: u64, handle: &str) -> String {
     format!("v1.{expiration}.{handle}")
 }
@@ -391,7 +391,7 @@ async fn lookup_registration(
         .as_ref()
         .ok_or_else(ApiError::handle_not_found)?;
 
-    // Readable after Handle Expiration — no expiration safety gate here.
+    // Readable after Handle Expiration - no expiration safety gate here.
     Ok(registration_to_response(reg, indexed_peak_height))
 }
 
@@ -447,7 +447,7 @@ async fn lookup_pending_transfer(
         .as_ref()
         .ok_or_else(ApiError::handle_not_found)?;
 
-    // Expired Handles are not performable — distinct from unified proof's 410.
+    // Expired Handles are not performable - distinct from unified proof's 410.
     if state.now_unix() >= slot.expiration {
         return Ok(None);
     }
