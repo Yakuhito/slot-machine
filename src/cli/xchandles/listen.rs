@@ -25,40 +25,61 @@ use super::listener::{
     PendingUpdateStore, RegistrationStore, RegistryPricing, SingletonIndexer, SingletonStore,
 };
 use crate::{
-    get_coinset_client, hex_string_to_bytes32, sync_xchandles, sync_xchandles_detailed, CliError,
-    CoinsetWebSocketMessage, Db, XchandlesSpentTransition, BASE_PRICE_AT_FACTOR_ONE,
+    get_coinset_client, get_last_onchain_timestamp, hex_string_to_bytes32, sync_xchandles,
+    sync_xchandles_detailed, CliError, CoinsetWebSocketMessage, Db, XchandlesSpentTransition,
     PRICE_SCHEDULE, REGISTRATION_PERIOD,
 };
-use chia_wallet_sdk::driver::XchandlesExpirePricingPuzzle;
-use chia_wallet_sdk::types::{puzzles::XchandlesFactorPricingPuzzleArgs, Mod};
 
-fn pricing_from_registry_state(
-    pricing_puzzle_hash: Bytes32,
-    expired_handle_pricing_puzzle_hash: Bytes32,
-) -> Option<RegistryPricing> {
-    let candidates: Vec<u64> = PRICE_SCHEDULE
-        .iter()
-        .map(|(_, _, price)| *price)
-        .chain(std::iter::once(BASE_PRICE_AT_FACTOR_ONE))
-        .collect();
-    for base_price in candidates {
-        let factor = XchandlesFactorPricingPuzzleArgs {
-            base_price,
-            registration_period: REGISTRATION_PERIOD,
+/// `(timestamp, registration_price)` from `xchandles_price_schedule_testnet11.csv`.
+const TESTNET11_PRICE_SCHEDULE: [(u64, u64); 9] = [
+    (1_786_885_200, 9),
+    (1_786_892_400, 8),
+    (1_786_924_800, 7),
+    (1_786_935_600, 6),
+    (1_786_953_600, 5),
+    (1_786_971_600, 4),
+    (1_786_978_800, 3),
+    (1_787_011_200, 2),
+    (1_787_022_000, 1),
+];
+
+/// Latest schedule row whose timestamp is `<= now`. Before the first row, launch price is 1.
+fn schedule_base_price_at(now: u64, testnet11: bool) -> u64 {
+    let mut price = 1;
+    if testnet11 {
+        for (timestamp, scheduled) in TESTNET11_PRICE_SCHEDULE {
+            if now >= timestamp {
+                price = scheduled;
+            }
         }
-        .curry_tree_hash();
-        let expired =
-            XchandlesExpirePricingPuzzle::curry_tree_hash(base_price, REGISTRATION_PERIOD);
-        if factor == pricing_puzzle_hash.into()
-            && expired == expired_handle_pricing_puzzle_hash.into()
-        {
-            return Some(RegistryPricing {
-                base_price,
-                registration_period: REGISTRATION_PERIOD,
-            });
+    } else {
+        for (timestamp, _, scheduled) in PRICE_SCHEDULE {
+            if now >= timestamp {
+                price = scheduled;
+            }
         }
     }
-    None
+    price
+}
+
+fn pricing_at(now: u64, testnet11: bool) -> RegistryPricing {
+    RegistryPricing {
+        base_price: schedule_base_price_at(now, testnet11),
+        registration_period: REGISTRATION_PERIOD,
+    }
+}
+
+async fn set_schedule_pricing(
+    registry_pricing: &RwLock<std::collections::HashMap<Bytes32, RegistryPricing>>,
+    launcher_ids: &[Bytes32],
+    now: u64,
+    testnet11: bool,
+) {
+    let pricing = pricing_at(now, testnet11);
+    let mut map = registry_pricing.write().await;
+    for id in launcher_ids {
+        map.insert(*id, pricing);
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,8 +156,9 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
         .expect("Failed to install rustls crypto provider");
 
     let mut initial_pricing = std::collections::HashMap::new();
+    let startup_pricing = pricing_at(FreshnessState::now_unix(), testnet11);
     for id in &launcher_ids {
-        initial_pricing.insert(*id, RegistryPricing::default());
+        initial_pricing.insert(*id, startup_pricing);
     }
     let registry_pricing = Arc::new(RwLock::new(initial_pricing));
 
@@ -349,6 +371,9 @@ async fn index_registry_transition(
     }
 }
 
+/// Full-node `get_coin_records_by_names` request cap.
+const COINSET_NAMES_BATCH: usize = 500;
+
 /// Walk every followed NFT already in the store (including ones persisted
 /// before this restart) until a full pass finds no spent current coins.
 async fn catch_up_followed_nfts(
@@ -357,7 +382,7 @@ async fn catch_up_followed_nfts(
 ) -> Result<(), CliError> {
     loop {
         let ids = indexer.store.all_launcher_ids().await;
-        let mut followed_a_spend = 0usize;
+        let mut coin_ids = Vec::new();
         for launcher_id in ids {
             let Some(rec) = indexer.store.get(launcher_id).await else {
                 continue;
@@ -371,22 +396,34 @@ async fn catch_up_followed_nfts(
             if current.melted {
                 continue;
             }
-            let Some(coin_record) = client
-                .get_coin_record_by_name(current.coin_id)
+            coin_ids.push(current.coin_id);
+        }
+
+        let mut spent = Vec::new();
+        for batch in coin_ids.chunks(COINSET_NAMES_BATCH) {
+            let Some(records) = client
+                .get_coin_records_by_names(batch.to_vec(), None, None, Some(true), None)
                 .await?
-                .coin_record
+                .coin_records
             else {
                 continue;
             };
-            if !coin_record.spent {
-                continue;
-            }
+            spent.extend(records.into_iter().filter(|record| record.spent));
+        }
+
+        if spent.is_empty() {
+            eprintln!("[xchandles-listen] all followed NFT coins are unspent");
+            return Ok(());
+        }
+
+        for coin_record in &spent {
+            let coin_id = coin_record.coin.coin_id();
             let Some(spend) = client
-                .get_puzzle_and_solution(current.coin_id, Some(coin_record.spent_block_index))
+                .get_puzzle_and_solution(coin_id, Some(coin_record.spent_block_index))
                 .await?
                 .coin_solution
             else {
-                return Err(CliError::CoinNotSpent(current.coin_id));
+                return Err(CliError::CoinNotSpent(coin_id));
             };
             let mut allocator = Allocator::new();
             if let Err(e) = indexer
@@ -395,14 +432,10 @@ async fn catch_up_followed_nfts(
             {
                 eprintln!("singleton follow error: {e}");
             }
-            followed_a_spend += 1;
-        }
-        if followed_a_spend == 0 {
-            eprintln!("[xchandles-listen] all followed NFT coins are unspent");
-            return Ok(());
         }
         eprintln!(
-            "[xchandles-listen] followed {followed_a_spend} subsequent NFT spend(s); rechecking unspent coins"
+            "[xchandles-listen] followed {} subsequent NFT spend(s); rechecking unspent coins",
+            spent.len()
         );
     }
 }
@@ -440,19 +473,8 @@ async fn connect_websocket(
         registries.push(synced.registry);
     }
 
-    // Seed confirmed pricing from the currently synced registry states.
-    {
-        let mut pricing = registry_pricing.write().await;
-        for registry in &registries {
-            let launcher_id = registry.info.constants.launcher_id;
-            if let Some(p) = pricing_from_registry_state(
-                registry.info.state.pricing_puzzle_hash,
-                registry.info.state.expired_handle_pricing_puzzle_hash,
-            ) {
-                pricing.insert(launcher_id, p);
-            }
-        }
-    }
+    let onchain_ts = get_last_onchain_timestamp(&client).await?;
+    set_schedule_pricing(&registry_pricing, &launcher_ids, onchain_ts, testnet11).await;
 
     // Replay spent registry transitions (full history on first sync, only new
     // spends when resuming a saved tip) with the same discover+project+follow
@@ -635,12 +657,6 @@ async fn connect_websocket(
                                             sync_xchandles(&client, &mut db, &mut ctx, *launcher_id)
                                                 .await?
                                         };
-                                        if let Some(p) = pricing_from_registry_state(
-                                            registry.info.state.pricing_puzzle_hash,
-                                            registry.info.state.expired_handle_pricing_puzzle_hash,
-                                        ) {
-                                            registry_pricing.write().await.insert(*launcher_id, p);
-                                        }
                                         registries[i] = registry;
                                     }
                                 }
@@ -711,16 +727,6 @@ async fn connect_websocket(
                                 registries[i] = registry;
 
                                 let registry_launcher_id = registries[i].info.constants.launcher_id;
-                                if let Some(p) = pricing_from_registry_state(
-                                    registries[i].info.state.pricing_puzzle_hash,
-                                    registries[i].info.state.expired_handle_pricing_puzzle_hash,
-                                ) {
-                                    registry_pricing
-                                        .write()
-                                        .await
-                                        .insert(registry_launcher_id, p);
-                                }
-
                                 index_registry_transition(
                                     &db,
                                     indexer.as_ref(),
@@ -751,6 +757,13 @@ async fn connect_websocket(
                             }
                         }
                         if let Some(tip) = tip_height {
+                            set_schedule_pricing(
+                                &registry_pricing,
+                                &launcher_ids,
+                                confirmed_timestamp,
+                                testnet11,
+                            )
+                            .await;
                             indexer
                                 .note_peak(
                                     tip,
@@ -900,5 +913,48 @@ mod tests {
     fn reorg_rollback_from_unverified_hash_is_not_a_reorg() {
         let stored = [(10, h(1))];
         assert_eq!(reorg_rollback_from(&stored, 12, h(99), |_| None), None);
+    }
+
+    #[test]
+    fn coinset_names_batches_cap_at_500() {
+        assert_eq!(COINSET_NAMES_BATCH, 500);
+        let ids = vec![Bytes32::default(); 501];
+        let batches: Vec<&[Bytes32]> = ids.chunks(COINSET_NAMES_BATCH).collect();
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[0].len(), 500);
+        assert_eq!(batches[1].len(), 1);
+    }
+
+    #[test]
+    fn testnet11_schedule_price_follows_time() {
+        assert_eq!(schedule_base_price_at(0, true), 1);
+        assert_eq!(schedule_base_price_at(1_786_885_199, true), 1);
+        assert_eq!(schedule_base_price_at(1_786_885_200, true), 9);
+        assert_eq!(schedule_base_price_at(1_786_935_600, true), 6);
+        assert_eq!(schedule_base_price_at(1_786_953_600, true), 5);
+        assert_eq!(schedule_base_price_at(1_787_022_000, true), 1);
+        assert_eq!(schedule_base_price_at(u64::MAX, true), 1);
+    }
+
+    #[test]
+    fn mainnet_schedule_price_follows_time() {
+        assert_eq!(schedule_base_price_at(0, false), 1);
+        assert_eq!(schedule_base_price_at(1_787_216_399, false), 1);
+        assert_eq!(schedule_base_price_at(1_787_216_400, false), 5_000_000);
+        assert_eq!(schedule_base_price_at(1_788_426_000, false), 5_000);
+    }
+
+    #[test]
+    fn testnet11_typed_schedule_matches_csv() {
+        let path = format!(
+            "{}/xchandles_price_schedule_testnet11.csv",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let records = crate::load_xchandles_state_schedule_csv(path).unwrap();
+        let from_csv: Vec<(u64, u64)> = records
+            .iter()
+            .map(|r| (r.timestamp, r.registration_price))
+            .collect();
+        assert_eq!(from_csv.as_slice(), TESTNET11_PRICE_SCHEDULE.as_slice());
     }
 }

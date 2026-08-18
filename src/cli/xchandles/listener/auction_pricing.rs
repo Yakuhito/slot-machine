@@ -142,6 +142,14 @@ mod tests {
     }
 
     #[test]
+    fn digit_halves_length_factor_for_test8() {
+        // length 5 → 16, contains a digit → /2, so 8× the registry base price.
+        assert_eq!(base_registration_fee(5_000, "test8"), 40_000);
+        assert_eq!(base_registration_fee(6, "test8"), 48);
+        assert_eq!(base_registration_fee(5, "test8"), 40);
+    }
+
+    #[test]
     fn projection_offset_is_exactly_420() {
         assert_eq!(projected_pricing_timestamp(1_700_000_000), 1_700_000_420);
         assert_eq!(PRICING_PROJECTION_OFFSET_SECONDS, 420);

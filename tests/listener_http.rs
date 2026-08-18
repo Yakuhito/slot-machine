@@ -2640,6 +2640,39 @@ async fn expiring_soon_golden_and_30_day_boundary() {
 }
 
 #[tokio::test]
+async fn expiring_soon_quotes_test8_from_testnet_base_price() {
+    let registry = b32(0xaa);
+    let server = RunningListener::spawn_with_registries(
+        expiring_freshness(),
+        vec![registry],
+        Some(EXPIRING_NOW),
+    )
+    .await;
+    server.registry_pricing.write().await.insert(
+        registry,
+        RegistryPricing {
+            base_price: 5,
+            registration_period: 31_557_600,
+        },
+    );
+    seed_named_handle(&server, registry, "test8", EXPIRING_NOW + 7 * 86_400).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(format!("{}/expiring?view=soon", server.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: Value = resp.json().await.unwrap();
+    let items = body["items"].as_array().expect("items");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["handle"], "test8");
+    // 5-char + digit → 8× live base, not the mainnet 5000 default (40000).
+    assert_eq!(items[0]["base_registration_fee"], 40);
+}
+
+#[tokio::test]
 async fn expiring_invalid_view_and_stale_refuse_entire_page() {
     let server = RunningListener::spawn_with_registries(
         expiring_freshness(),
