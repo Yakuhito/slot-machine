@@ -20,11 +20,11 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::{Any, CorsLayer};
 
 use super::listener::{
-    committed_base_from_pricing_puzzle, effective_base_at, generations_for_network, listener_router,
-    DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore, DbSingletonStore,
-    FollowRecordStatus, FreshnessState, HandleSlotStore, ListenerApiState, PendingUpdateStore,
-    RegistrationStore, RegistryPricing, ScheduleGeneration, SingletonIndexer, SingletonStore,
-    SlotParentLineage,
+    committed_base_from_pricing_puzzle, effective_base_at, generations_for_network,
+    listener_router, DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore,
+    DbSingletonStore, FollowRecordStatus, FreshnessState, HandleSlotStore, ListenerApiState,
+    PendingUpdateStore, RegistrationStore, RegistryPricing, ScheduleGeneration, SingletonIndexer,
+    SingletonStore, SlotParentLineage,
 };
 use crate::{
     get_coinset_client, get_last_onchain_timestamp, hex_string_to_bytes32, sync_xchandles,
@@ -357,17 +357,67 @@ async fn parent_lineage_by_created_slot_hash(
     map
 }
 
-/// Same indexer path as a live registry spend: discover NFTs in the block,
-/// project slots/registrations/pending, then follow any spent current coins.
-async fn index_registry_transition(
-    db: &Arc<futures::lock::Mutex<Db>>,
+#[derive(Debug, Clone)]
+struct RegistryIndexedTransition {
+    height: u32,
+    logs: Vec<XchandlesActionLog>,
+    block_spends: Vec<CoinSpend>,
+    parent_by_value_hash: std::collections::HashMap<Bytes32, SlotParentLineage>,
+}
+
+#[derive(Debug, Clone)]
+struct RegistrySyncBatch {
+    registry: XchandlesRegistry,
+    transitions: Vec<RegistryIndexedTransition>,
+}
+
+#[async_trait::async_trait]
+trait RegistryChainSource: Send + Sync {
+    async fn sync_registry(&self, launcher_id: Bytes32) -> Result<RegistrySyncBatch, CliError>;
+}
+
+struct CoinsetRegistryChainSource<'a> {
+    client: &'a CoinsetClient,
+    db: &'a Arc<futures::lock::Mutex<Db>>,
+}
+
+#[async_trait::async_trait]
+impl RegistryChainSource for CoinsetRegistryChainSource<'_> {
+    async fn sync_registry(&self, launcher_id: Bytes32) -> Result<RegistrySyncBatch, CliError> {
+        let synced = {
+            let mut ctx = SpendContext::new();
+            let mut db = self.db.lock().await;
+            sync_xchandles_detailed(self.client, &mut db, &mut ctx, launcher_id).await?
+        };
+
+        let mut transitions = Vec::with_capacity(synced.spent_transitions.len());
+        for transition in synced.spent_transitions {
+            let block_spends = block_spends_at_height(self.client, transition.height).await?;
+            let parent_by_value_hash =
+                parent_lineage_by_created_slot_hash(self.db, launcher_id, &transition.logs).await;
+            transitions.push(RegistryIndexedTransition {
+                height: transition.height,
+                logs: transition.logs,
+                block_spends,
+                parent_by_value_hash,
+            });
+        }
+
+        Ok(RegistrySyncBatch {
+            registry: synced.registry,
+            transitions,
+        })
+    }
+}
+
+async fn apply_registry_transition(
     indexer: &SingletonIndexer,
     launcher_id: Bytes32,
     height: u32,
     logs: &[XchandlesActionLog],
     block_spends: &[CoinSpend],
+    parent_by_value_hash: &std::collections::HashMap<Bytes32, SlotParentLineage>,
 ) {
-    let parent_by_value_hash = parent_lineage_by_created_slot_hash(db, launcher_id, logs).await;
     let mut allocator = Allocator::new();
     if let Err(e) = indexer
         .on_registry_transition(&mut allocator, height, block_spends, logs)
@@ -389,6 +439,89 @@ async fn index_registry_transition(
     if let Err(e) = indexer.on_block(&mut allocator, height, block_spends).await {
         eprintln!("singleton follow error: {e}");
     }
+}
+
+async fn process_spent_registry_records(
+    source: &dyn RegistryChainSource,
+    indexer: &SingletonIndexer,
+    registries: &mut [XchandlesRegistry],
+    coin_records: Vec<chia_wallet_sdk::coinset::CoinRecord>,
+) -> Result<(), CliError> {
+    let mut records_by_coin_id = std::collections::HashMap::new();
+    for record in coin_records {
+        let coin_id = record.coin.coin_id();
+        if records_by_coin_id.insert(coin_id, record).is_some() {
+            return Err(CliError::Custom(format!(
+                "duplicate coin record for registry coin {}",
+                hex::encode(coin_id)
+            )));
+        }
+    }
+    for registry in registries.iter() {
+        let coin_id = registry.coin.coin_id();
+        if !records_by_coin_id.contains_key(&coin_id) {
+            return Err(CliError::Custom(format!(
+                "missing coin record for registry coin {}",
+                hex::encode(coin_id)
+            )));
+        }
+    }
+    if records_by_coin_id.len() != registries.len() {
+        return Err(CliError::Custom(
+            "coin record response contained an unexpected registry coin".to_string(),
+        ));
+    }
+
+    for (i, registry) in registries.iter_mut().enumerate() {
+        let coin_record = records_by_coin_id
+            .remove(&registry.coin.coin_id())
+            .expect("registry coin records were validated before processing");
+        if !coin_record.spent {
+            continue;
+        }
+        let launcher_id = registry.info.constants.launcher_id;
+        println!(
+            "Latest registry #{} coin was spent at height {}... ",
+            i, coin_record.spent_block_index
+        );
+        let synced = source.sync_registry(launcher_id).await?;
+        for transition in &synced.transitions {
+            apply_registry_transition(
+                indexer,
+                launcher_id,
+                transition.height,
+                &transition.logs,
+                &transition.block_spends,
+                &transition.parent_by_value_hash,
+            )
+            .await;
+        }
+        *registry = synced.registry;
+        println!("synced :)");
+    }
+    Ok(())
+}
+
+/// Same indexer path as a live registry spend: discover NFTs in the block,
+/// project slots/registrations/pending, then follow any spent current coins.
+async fn index_registry_transition(
+    db: &Arc<futures::lock::Mutex<Db>>,
+    indexer: &SingletonIndexer,
+    launcher_id: Bytes32,
+    height: u32,
+    logs: &[XchandlesActionLog],
+    block_spends: &[CoinSpend],
+) {
+    let parent_by_value_hash = parent_lineage_by_created_slot_hash(db, launcher_id, logs).await;
+    apply_registry_transition(
+        indexer,
+        launcher_id,
+        height,
+        logs,
+        block_spends,
+        &parent_by_value_hash,
+    )
+    .await;
 }
 
 /// Full-node `get_coin_records_by_names` request cap.
@@ -713,68 +846,17 @@ async fn connect_websocket(
                         let coin_records = coin_resp.coin_records.ok_or(CliError::Custom(
                             "Weird - coin records not found after peak update.".to_string(),
                         ))?;
-                        for (i, coin_record) in coin_records.iter().enumerate() {
-                            if coin_record.spent {
-                                print!(
-                                    "Latest registry #{} coin was spent at height {}... ",
-                                    i, coin_record.spent_block_index
-                                );
-
-                                let spent_height = coin_record.spent_block_index;
-                                let block_spends =
-                                    block_spends_at_height(&client, spent_height).await?;
-
-                                let (registry, logs) = {
-                                    let mut ctx = SpendContext::new();
-                                    let mut db = db.lock().await;
-
-                                    let parent_spend = client
-                                        .get_puzzle_and_solution(
-                                            coin_record.coin.coin_id(),
-                                            Some(spent_height),
-                                        )
-                                        .await?
-                                        .coin_solution
-                                        .ok_or(CliError::CoinNotSpent(
-                                            coin_record.coin.coin_id(),
-                                        ))?;
-
-                                    let parsed = XchandlesRegistry::from_spend(
-                                        &mut ctx,
-                                        &parent_spend,
-                                        registries[i].info.constants,
-                                        chia_bls::Signature::default(),
-                                    )?
-                                    .ok_or(
-                                        CliError::Custom("Could not parse registry spend".into()),
-                                    )?;
-                                    let logs = parsed.pending_spend.logs.clone();
-
-                                    let registry = sync_xchandles(
-                                        &client,
-                                        &mut db,
-                                        &mut ctx,
-                                        registries[i].info.constants.launcher_id,
-                                    )
-                                    .await?;
-                                    (registry, logs)
-                                };
-                                registries[i] = registry;
-
-                                let registry_launcher_id = registries[i].info.constants.launcher_id;
-                                index_registry_transition(
-                                    &db,
-                                    indexer.as_ref(),
-                                    registry_launcher_id,
-                                    spent_height,
-                                    &logs,
-                                    &block_spends,
-                                )
-                                .await;
-
-                                println!("synced :)")
-                            }
-                        }
+                        let source = CoinsetRegistryChainSource {
+                            client: &client,
+                            db: &db,
+                        };
+                        process_spent_registry_records(
+                            &source,
+                            indexer.as_ref(),
+                            &mut registries,
+                            coin_records,
+                        )
+                        .await?;
 
                         // Follow singleton spends in the new tip block as well.
                         if let (Some(tip), Some(rec)) = (tip_height, tip_rec) {
@@ -882,8 +964,331 @@ fn reorg_rollback_from(
 mod tests {
     use super::*;
 
+    use std::collections::HashMap;
+
+    use chia_protocol::Coin;
+    use chia_puzzle_types::{EveProof, Proof};
+    use chia_wallet_sdk::coinset::CoinRecord;
+    use chia_wallet_sdk::driver::{
+        XchandlesPrecommitValue, XchandlesRegisterActionLog, XchandlesRegistryInfo,
+        XchandlesRegistryState,
+    };
+    use chia_wallet_sdk::types::puzzles::{XchandlesHandleSlotValue, XchandlesPricingSolution};
+
+    #[derive(Clone)]
+    struct FakeRegistryChainSource {
+        syncs: HashMap<Bytes32, RegistrySyncBatch>,
+    }
+
+    #[async_trait::async_trait]
+    impl RegistryChainSource for FakeRegistryChainSource {
+        async fn sync_registry(&self, launcher_id: Bytes32) -> Result<RegistrySyncBatch, CliError> {
+            self.syncs.get(&launcher_id).cloned().ok_or_else(|| {
+                CliError::Custom(format!(
+                    "unexpected registry sync: {}",
+                    hex::encode(launcher_id)
+                ))
+            })
+        }
+    }
+
     fn h(byte: u8) -> Bytes32 {
         Bytes32::new([byte; 32])
+    }
+
+    fn fake_registry(launcher_id: Bytes32, coin_tag: u8) -> XchandlesRegistry {
+        XchandlesRegistry::new(
+            Coin::new(h(coin_tag), h(coin_tag.wrapping_add(1)), 1),
+            Proof::Eve(EveProof {
+                parent_parent_coin_info: h(coin_tag.wrapping_add(2)),
+                parent_amount: 1,
+            }),
+            XchandlesRegistryInfo::new(
+                XchandlesRegistryState::from(h(0x91), 5_000, REGISTRATION_PERIOD),
+                chia_wallet_sdk::driver::XchandlesConstants::new(launcher_id, h(0x92), 32, h(0x93)),
+            ),
+        )
+    }
+
+    fn register_log(handle: &str, tag: u8) -> XchandlesActionLog {
+        let slot = |name: &str, counter: u64| {
+            XchandlesHandleSlotValue::new(
+                counter,
+                name.tree_hash().into(),
+                Bytes32::default(),
+                Bytes32::new([0xff; 32]),
+                4_102_444_800,
+                h(0x11),
+                h(0x11),
+            )
+        };
+        let precommit = XchandlesPrecommitValue::new(
+            h(0x01),
+            (),
+            h(0x02),
+            XchandlesPricingSolution {
+                buy_time: 1_700_000_000,
+                current_expiration: 0,
+                handle: handle.to_string(),
+                num_periods: 1,
+            },
+            handle.to_string(),
+            h(tag),
+            h(0x11),
+            h(0x11),
+        );
+        XchandlesActionLog::Register(XchandlesRegisterActionLog {
+            spent_left_slot: slot("left", 0),
+            spent_right_slot: slot("right", 0),
+            created_left_slot: slot("left", 1),
+            created_handle_slot: slot(handle, 0),
+            created_right_slot: slot("right", 1),
+            precommit_value: precommit,
+            total_price: u64::from(tag),
+            registered_time: REGISTRATION_PERIOD,
+            owner_full_puzzle_hash: h(0x31),
+            resolved_full_puzzle_hash: None,
+            owner_inner_puzzle_hash: h(0x32),
+            resolved_inner_puzzle_hash: h(0x32),
+        })
+    }
+
+    async fn spawn_registration_api(
+        registry_launcher_ids: Vec<Bytes32>,
+        indexer: &SingletonIndexer,
+    ) -> String {
+        let state = ListenerApiState {
+            store: Arc::clone(&indexer.store),
+            handle_slots: Arc::clone(&indexer.handle_slots),
+            registrations: Arc::clone(&indexer.registrations),
+            pending_updates: Arc::clone(&indexer.pending_updates),
+            freshness: Arc::clone(&indexer.freshness),
+            registry_pricing: Arc::new(RwLock::new(HashMap::new())),
+            price_schedule: Arc::new(Vec::new()),
+            committed_base_price: Arc::new(RwLock::new(HashMap::new())),
+            registry_launcher_ids,
+            now_unix_override: None,
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, listener_router(state)).await.unwrap();
+        });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn skipped_peaks_publish_every_intermediate_registry_transition() {
+        let launcher_id = h(0xa0);
+        let current = fake_registry(launcher_id, 0x10);
+        let latest = fake_registry(launcher_id, 0x20);
+        let observed = CoinRecord {
+            coin: current.coin,
+            coinbase: false,
+            confirmed_block_index: 8,
+            spent: true,
+            spent_block_index: 10,
+            timestamp: 1_700_000_000,
+        };
+        let source = FakeRegistryChainSource {
+            syncs: HashMap::from([(
+                launcher_id,
+                RegistrySyncBatch {
+                    registry: latest.clone(),
+                    transitions: vec![
+                        RegistryIndexedTransition {
+                            height: 10,
+                            logs: vec![register_log("alice", 0xa1)],
+                            block_spends: Vec::new(),
+                            parent_by_value_hash: HashMap::new(),
+                        },
+                        RegistryIndexedTransition {
+                            height: 11,
+                            logs: vec![register_log("bravo", 0xb1)],
+                            block_spends: Vec::new(),
+                            parent_by_value_hash: HashMap::new(),
+                        },
+                    ],
+                },
+            )]),
+        };
+        let indexer = SingletonIndexer::new(
+            crate::MemorySingletonStore::shared() as Arc<dyn SingletonStore>,
+            crate::MemoryHandleSlotStore::shared() as Arc<dyn HandleSlotStore>,
+            crate::MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+            crate::MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
+            Arc::new(RwLock::new(FreshnessState::fresh_at(
+                11,
+                FreshnessState::now_unix(),
+            ))),
+        );
+        let mut registries = vec![current];
+
+        process_spent_registry_records(&source, &indexer, &mut registries, vec![observed])
+            .await
+            .unwrap();
+
+        let base = spawn_registration_api(vec![launcher_id], &indexer).await;
+        let client = reqwest::Client::new();
+        for (handle, height) in [("alice", 10), ("bravo", 11)] {
+            let response = client
+                .get(format!("{base}/registrations/{handle}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body: serde_json::Value = response.json().await.unwrap();
+            assert_eq!(body["confirmation_height"], height);
+        }
+        assert_eq!(registries[0].coin, latest.coin);
+    }
+
+    #[tokio::test]
+    async fn reordered_coin_records_update_the_registry_with_the_matching_coin_id() {
+        let launcher_a = h(0xa0);
+        let launcher_b = h(0xb0);
+        let current_a = fake_registry(launcher_a, 0x10);
+        let current_b = fake_registry(launcher_b, 0x30);
+        let latest_a = fake_registry(launcher_a, 0x20);
+        let latest_b = fake_registry(launcher_b, 0x40);
+        let spent_a = CoinRecord {
+            coin: current_a.coin,
+            coinbase: false,
+            confirmed_block_index: 8,
+            spent: true,
+            spent_block_index: 10,
+            timestamp: 1_700_000_000,
+        };
+        let unspent_b = CoinRecord {
+            coin: current_b.coin,
+            coinbase: false,
+            confirmed_block_index: 8,
+            spent: false,
+            spent_block_index: 0,
+            timestamp: 1_700_000_000,
+        };
+        let source = FakeRegistryChainSource {
+            syncs: HashMap::from([
+                (
+                    launcher_a,
+                    RegistrySyncBatch {
+                        registry: latest_a.clone(),
+                        transitions: vec![RegistryIndexedTransition {
+                            height: 10,
+                            logs: vec![register_log("alice", 0xa1)],
+                            block_spends: Vec::new(),
+                            parent_by_value_hash: HashMap::new(),
+                        }],
+                    },
+                ),
+                (
+                    launcher_b,
+                    RegistrySyncBatch {
+                        registry: latest_b,
+                        transitions: vec![RegistryIndexedTransition {
+                            height: 10,
+                            logs: vec![register_log("bravo", 0xb1)],
+                            block_spends: Vec::new(),
+                            parent_by_value_hash: HashMap::new(),
+                        }],
+                    },
+                ),
+            ]),
+        };
+        let indexer = SingletonIndexer::new(
+            crate::MemorySingletonStore::shared() as Arc<dyn SingletonStore>,
+            crate::MemoryHandleSlotStore::shared() as Arc<dyn HandleSlotStore>,
+            crate::MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+            crate::MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
+            Arc::new(RwLock::new(FreshnessState::fresh_at(
+                10,
+                FreshnessState::now_unix(),
+            ))),
+        );
+        let mut registries = vec![current_a, current_b];
+
+        // Coinset does not promise request order; return B before A.
+        process_spent_registry_records(
+            &source,
+            &indexer,
+            &mut registries,
+            vec![unspent_b, spent_a],
+        )
+        .await
+        .unwrap();
+
+        let base = spawn_registration_api(vec![launcher_a, launcher_b], &indexer).await;
+        let alice = reqwest::get(format!(
+            "{base}/registrations/alice?launcher_id={launcher_a}"
+        ))
+        .await
+        .unwrap();
+        assert_eq!(alice.status(), StatusCode::OK);
+        let bravo = reqwest::get(format!(
+            "{base}/registrations/bravo?launcher_id={launcher_b}"
+        ))
+        .await
+        .unwrap();
+        assert_eq!(bravo.status(), StatusCode::NOT_FOUND);
+        assert_eq!(registries[0].coin, latest_a.coin);
+    }
+
+    #[tokio::test]
+    async fn partial_coin_record_response_is_rejected_before_any_registry_update() {
+        let launcher_a = h(0xa0);
+        let launcher_b = h(0xb0);
+        let current_a = fake_registry(launcher_a, 0x10);
+        let current_b = fake_registry(launcher_b, 0x30);
+        let latest_a = fake_registry(launcher_a, 0x20);
+        let spent_a = CoinRecord {
+            coin: current_a.coin,
+            coinbase: false,
+            confirmed_block_index: 8,
+            spent: true,
+            spent_block_index: 10,
+            timestamp: 1_700_000_000,
+        };
+        let source = FakeRegistryChainSource {
+            syncs: HashMap::from([(
+                launcher_a,
+                RegistrySyncBatch {
+                    registry: latest_a,
+                    transitions: vec![RegistryIndexedTransition {
+                        height: 10,
+                        logs: vec![register_log("alice", 0xa1)],
+                        block_spends: Vec::new(),
+                        parent_by_value_hash: HashMap::new(),
+                    }],
+                },
+            )]),
+        };
+        let indexer = SingletonIndexer::new(
+            crate::MemorySingletonStore::shared() as Arc<dyn SingletonStore>,
+            crate::MemoryHandleSlotStore::shared() as Arc<dyn HandleSlotStore>,
+            crate::MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+            crate::MemoryPendingUpdateStore::shared() as Arc<dyn PendingUpdateStore>,
+            Arc::new(RwLock::new(FreshnessState::fresh_at(
+                10,
+                FreshnessState::now_unix(),
+            ))),
+        );
+        let original_a_coin = current_a.coin;
+        let mut registries = vec![current_a, current_b];
+
+        let error =
+            process_spent_registry_records(&source, &indexer, &mut registries, vec![spent_a])
+                .await
+                .unwrap_err();
+
+        assert!(error.to_string().contains("missing coin record"));
+        assert_eq!(registries[0].coin, original_a_coin);
+        let base = spawn_registration_api(vec![launcher_a, launcher_b], &indexer).await;
+        let alice = reqwest::get(format!(
+            "{base}/registrations/alice?launcher_id={launcher_a}"
+        ))
+        .await
+        .unwrap();
+        assert_eq!(alice.status(), StatusCode::NOT_FOUND);
     }
 
     #[test]
@@ -993,6 +1398,9 @@ mod tests {
             .iter()
             .map(|r| (r.timestamp, r.registration_price))
             .collect();
-        assert_eq!(from_csv.as_slice(), crate::TESTNET11_PRICE_SCHEDULE.as_slice());
+        assert_eq!(
+            from_csv.as_slice(),
+            crate::TESTNET11_PRICE_SCHEDULE.as_slice()
+        );
     }
 }
