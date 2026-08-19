@@ -22,6 +22,9 @@ use super::handle_store::{HandleSlotStore, StoredHandleSlot};
 use super::pending_store::PendingUpdateStore;
 use super::registration_store::{RegistrationActionKind, RegistrationStore, StoredRegistration};
 use super::store::{FollowRecordStatus, SingletonStore, StoredSingletonState};
+use super::price_schedule::{
+    remaining_unroll_start, PriceQuery, PriceResponse, ScheduleGeneration, ScheduleResponse,
+};
 use super::types::{
     hex32, is_canonical_handle, parse_launcher_id, ExpiringActiveItem, ExpiringActiveResponse,
     ExpiringQuery, ExpiringSoonItem, ExpiringSoonResponse, ExpiringView, HandleProofResponse,
@@ -57,6 +60,10 @@ pub struct ListenerApiState {
     pub freshness: Arc<RwLock<FreshnessState>>,
     /// Per-registry confirmed base price / registration period.
     pub registry_pricing: Arc<RwLock<HashMap<Bytes32, RegistryPricing>>>,
+    /// Full Price Singleton generation list (static; last row holds).
+    pub price_schedule: Arc<Vec<ScheduleGeneration>>,
+    /// Committed (pre-unroll) base price per registry.
+    pub committed_base_price: Arc<RwLock<HashMap<Bytes32, u64>>>,
     /// Configured registries in follow order; omission of `launcher_id` selects the first.
     pub registry_launcher_ids: Vec<Bytes32>,
     /// Optional clock override for tests (unix seconds).
@@ -73,8 +80,10 @@ impl ListenerApiState {
         registry_launcher_ids: Vec<Bytes32>,
     ) -> Self {
         let mut pricing = HashMap::new();
+        let mut committed = HashMap::new();
         for id in &registry_launcher_ids {
             pricing.insert(*id, RegistryPricing::default());
+            committed.insert(*id, RegistryPricing::default().base_price);
         }
         Self {
             store,
@@ -83,6 +92,8 @@ impl ListenerApiState {
             pending_updates,
             freshness: Arc::new(RwLock::new(freshness)),
             registry_pricing: Arc::new(RwLock::new(pricing)),
+            price_schedule: Arc::new(Vec::new()),
+            committed_base_price: Arc::new(RwLock::new(committed)),
             registry_launcher_ids,
             now_unix_override: None,
         }
@@ -120,6 +131,8 @@ pub fn listener_router(state: ListenerApiState) -> Router {
             get(get_registration).head(head_registration),
         )
         .route("/expiring", get(get_expiring).head(head_expiring))
+        .route("/price", get(get_price).head(head_price))
+        .route("/schedule", get(get_schedule).head(head_schedule))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
@@ -653,6 +666,78 @@ async fn head_expiring(
         }
         None => Err(ApiError::invalid_view()),
     }
+}
+
+async fn lookup_price(
+    state: &ListenerApiState,
+    query: &PriceQuery,
+) -> Result<PriceResponse, ApiError> {
+    let registry = select_registry(state, query.launcher_id.as_deref())?;
+    let (indexed_peak_height, confirmed_timestamp) = require_fresh(state).await?;
+    let committed = state
+        .committed_base_price
+        .read()
+        .await
+        .get(&registry)
+        .copied();
+    let pricing = state.registry_pricing.read().await.get(&registry).copied();
+    let current_base_price = committed
+        .or_else(|| pricing.map(|p| p.base_price))
+        .unwrap_or(1);
+    let start = remaining_unroll_start(
+        &state.price_schedule,
+        current_base_price,
+        confirmed_timestamp,
+    );
+    let unrolls = state.price_schedule.get(start..).unwrap_or(&[]).to_vec();
+    Ok(PriceResponse {
+        indexed_peak_height,
+        confirmed_timestamp,
+        current_base_price,
+        unrolls,
+    })
+}
+
+async fn lookup_schedule(
+    state: &ListenerApiState,
+    query: &PriceQuery,
+) -> Result<ScheduleResponse, ApiError> {
+    let _registry = select_registry(state, query.launcher_id.as_deref())?;
+    Ok(ScheduleResponse {
+        generations: state.price_schedule.as_ref().clone(),
+    })
+}
+
+async fn get_price(
+    State(state): State<ListenerApiState>,
+    Query(query): Query<PriceQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let body = lookup_price(&state, &query).await?;
+    Ok(Json(body))
+}
+
+async fn head_price(
+    State(state): State<ListenerApiState>,
+    Query(query): Query<PriceQuery>,
+) -> Result<StatusCode, ApiError> {
+    let _ = lookup_price(&state, &query).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn get_schedule(
+    State(state): State<ListenerApiState>,
+    Query(query): Query<PriceQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let body = lookup_schedule(&state, &query).await?;
+    Ok(Json(body))
+}
+
+async fn head_schedule(
+    State(state): State<ListenerApiState>,
+    Query(query): Query<PriceQuery>,
+) -> Result<StatusCode, ApiError> {
+    let _ = lookup_schedule(&state, &query).await?;
+    Ok(StatusCode::OK)
 }
 
 async fn get_singleton(

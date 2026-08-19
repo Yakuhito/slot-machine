@@ -21,7 +21,7 @@ use clvm_utils::ToTreeHash;
 use clvmr::Allocator;
 use serde_json::Value;
 use slot_machine::{
-    discover_singleton_in_block, listener_router, push_handle_replacement,
+    discover_singleton_in_block, generations_for_network, listener_router, push_handle_replacement,
     push_pending_replacement, push_registration_replacement, push_replacement, rollback_to_before,
     DiscoveryResult, FollowRecordStatus, FollowedSingleton, FreshnessState, HandleSlotRecord,
     HandleSlotStore, ListenerApiState, MemoryHandleSlotStore, MemoryPendingUpdateStore,
@@ -62,6 +62,8 @@ struct RunningListener {
     freshness: Arc<RwLock<FreshnessState>>,
     #[allow(dead_code)] // available for pricing-override tests
     registry_pricing: Arc<RwLock<HashMap<Bytes32, RegistryPricing>>>,
+    #[allow(dead_code)]
+    committed_base_price: Arc<RwLock<HashMap<Bytes32, u64>>>,
     _join: tokio::task::JoinHandle<()>,
 }
 
@@ -75,6 +77,23 @@ impl RunningListener {
         registry_launcher_ids: Vec<Bytes32>,
         now_unix_override: Option<u64>,
     ) -> Self {
+        Self::spawn_with_pricing(
+            freshness,
+            registry_launcher_ids,
+            now_unix_override,
+            Vec::new(),
+            5_000,
+        )
+        .await
+    }
+
+    async fn spawn_with_pricing(
+        freshness: FreshnessState,
+        registry_launcher_ids: Vec<Bytes32>,
+        now_unix_override: Option<u64>,
+        price_schedule: Vec<slot_machine::ScheduleGeneration>,
+        committed_base: u64,
+    ) -> Self {
         let store = MemorySingletonStore::shared();
         let handle_slots = MemoryHandleSlotStore::shared();
         let registrations = MemoryRegistrationStore::shared();
@@ -85,12 +104,19 @@ impl RunningListener {
             pricing_map.insert(
                 *id,
                 RegistryPricing {
-                    base_price: 5_000,
+                    base_price: committed_base,
                     registration_period: 31_557_600,
                 },
             );
         }
         let registry_pricing = Arc::new(RwLock::new(pricing_map));
+        let committed_base_price = {
+            let mut committed = HashMap::new();
+            for id in &registry_launcher_ids {
+                committed.insert(*id, committed_base);
+            }
+            Arc::new(RwLock::new(committed))
+        };
         let state = ListenerApiState {
             store: store.clone() as Arc<dyn SingletonStore>,
             handle_slots: handle_slots.clone() as Arc<dyn HandleSlotStore>,
@@ -98,6 +124,8 @@ impl RunningListener {
             pending_updates: pending_updates.clone() as Arc<dyn PendingUpdateStore>,
             freshness: Arc::clone(&freshness),
             registry_pricing: Arc::clone(&registry_pricing),
+            price_schedule: Arc::new(price_schedule),
+            committed_base_price: Arc::clone(&committed_base_price),
             registry_launcher_ids,
             now_unix_override,
         };
@@ -122,6 +150,7 @@ impl RunningListener {
             pending_updates,
             freshness,
             registry_pricing,
+            committed_base_price,
             _join: join,
         }
     }
@@ -1041,6 +1070,8 @@ async fn handle_proof_restores_prior_slot_after_reorganization() {
                 registration_period: 31_557_600,
             },
         )]))),
+        price_schedule: Arc::new(Vec::new()),
+        committed_base_price: Arc::new(RwLock::new(HashMap::from([(registry, 5_000u64)]))),
         registry_launcher_ids: vec![registry],
         now_unix_override: Some(1_700_000_000),
     };
@@ -1435,6 +1466,8 @@ async fn registration_reorganization_restores_prior_and_reverses_total() {
                 registration_period: 31_557_600,
             },
         )]))),
+        price_schedule: Arc::new(Vec::new()),
+        committed_base_price: Arc::new(RwLock::new(HashMap::from([(registry, 5_000u64)]))),
         registry_launcher_ids: vec![registry],
         now_unix_override: None,
     };
@@ -2357,6 +2390,8 @@ async fn pending_transfer_reorganization_restores_or_removes() {
                 registration_period: 31_557_600,
             },
         )]))),
+        price_schedule: Arc::new(Vec::new()),
+        committed_base_price: Arc::new(RwLock::new(HashMap::from([(registry, 5_000u64)]))),
         registry_launcher_ids: vec![registry],
         now_unix_override: Some(1_700_000_000),
     };
@@ -2894,6 +2929,8 @@ async fn expiring_membership_updates_after_fork_rollback() {
                 registration_period: 31_557_600,
             },
         )]))),
+        price_schedule: Arc::new(Vec::new()),
+        committed_base_price: Arc::new(RwLock::new(HashMap::from([(registry, 5_000u64)]))),
         registry_launcher_ids: vec![registry],
         now_unix_override: Some(EXPIRING_NOW),
     };
@@ -2992,4 +3029,102 @@ async fn expiring_new_peak_refreshes_projected_pricing() {
     );
     let prem_after = after["items"][0]["current_premium"].as_u64().unwrap();
     assert!(prem_after < prem_before);
+}
+
+#[tokio::test]
+async fn schedule_returns_full_generation_list_without_freshness() {
+    let registry = b32(0xaa);
+    let schedule = generations_for_network(true);
+    let server = RunningListener::spawn_with_pricing(
+        expiring_freshness(),
+        vec![registry],
+        Some(EXPIRING_NOW),
+        schedule.clone(),
+        1,
+    )
+    .await;
+    let body: Value = reqwest::get(format!("{}/schedule", server.base))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(body.get("indexed_peak_height").is_none());
+    assert!(body.get("confirmed_timestamp").is_none());
+    assert_eq!(body["generations"].as_array().unwrap().len(), schedule.len());
+    assert_eq!(
+        body["generations"][0]["activation_timestamp"],
+        schedule[0].activation_timestamp
+    );
+    assert_eq!(body["generations"][0]["base_price"], schedule[0].base_price);
+}
+
+#[tokio::test]
+async fn price_reports_committed_base_and_remaining_due_unrolls() {
+    let registry = b32(0xaa);
+    let schedule = generations_for_network(true);
+    let confirmed = 1_786_935_600; // third testnet row (base 6) is due
+    let freshness = FreshnessState::fresh_at(116, EXPIRING_NOW).with_confirmed_timestamp(confirmed);
+    let server = RunningListener::spawn_with_pricing(
+        freshness,
+        vec![registry],
+        Some(EXPIRING_NOW),
+        schedule.clone(),
+        1, // committed still launch price
+    )
+    .await;
+    let body: Value = reqwest::get(format!("{}/price", server.base))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(body["current_base_price"], 1);
+    assert_eq!(body["confirmed_timestamp"], confirmed);
+    assert_eq!(body["unrolls"].as_array().unwrap().len(), schedule.len());
+    assert_eq!(
+        body["unrolls"][0]["activation_timestamp"],
+        schedule[0].activation_timestamp
+    );
+}
+
+#[tokio::test]
+async fn price_omits_applied_generations_when_committed_matches_last_due() {
+    let registry = b32(0xaa);
+    let schedule = generations_for_network(true);
+    let confirmed = 1_786_935_600;
+    let freshness = FreshnessState::fresh_at(116, EXPIRING_NOW).with_confirmed_timestamp(confirmed);
+    let server = RunningListener::spawn_with_pricing(
+        freshness,
+        vec![registry],
+        Some(EXPIRING_NOW),
+        schedule.clone(),
+        6,
+    )
+    .await;
+    let body: Value = reqwest::get(format!("{}/price", server.base))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(body["current_base_price"], 6);
+    let unrolls = body["unrolls"].as_array().unwrap();
+    assert_eq!(unrolls.len(), schedule.len() - 4);
+    assert_eq!(unrolls[0]["base_price"], 5);
+}
+
+#[tokio::test]
+async fn schedule_rejects_unknown_launcher() {
+    let registry = b32(0xaa);
+    let server = RunningListener::spawn_with_registries(expiring_freshness(), vec![registry], None)
+        .await;
+    let resp = reqwest::get(format!(
+        "{}/schedule?launcher_id={}",
+        server.base,
+        hex::encode([0xbbu8; 32])
+    ))
+    .await
+    .unwrap();
+    assert_eq!(resp.status(), 404);
 }

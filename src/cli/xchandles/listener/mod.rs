@@ -10,12 +10,18 @@ mod freshness;
 mod handle_store;
 mod index;
 mod pending_store;
+mod price_schedule;
 mod refs;
 mod registration_store;
 mod store;
 mod types;
 
 pub use api::{listener_router, serve_listener, ListenerApiState, RegistryPricing};
+pub use price_schedule::{
+    committed_base_from_pricing_puzzle, effective_base_at, generations_for_network,
+    remaining_unroll_start, ScheduleGeneration, ScheduleResponse, TESTNET11_PRICE_SCHEDULE,
+    LAUNCH_BASE_PRICE, PriceQuery, PriceResponse,
+};
 pub use auction_pricing::{
     auction_premium, base_registration_fee, projected_pricing_timestamp, reaches_base_at,
     total_registration_fee, AUCTION_DURATION_SECONDS, PRICING_PROJECTION_OFFSET_SECONDS,

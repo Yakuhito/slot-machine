@@ -20,47 +20,21 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tower_http::cors::{Any, CorsLayer};
 
 use super::listener::{
-    listener_router, DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore,
-    DbSingletonStore, FollowRecordStatus, FreshnessState, HandleSlotStore, ListenerApiState,
-    PendingUpdateStore, RegistrationStore, RegistryPricing, SingletonIndexer, SingletonStore,
+    committed_base_from_pricing_puzzle, effective_base_at, generations_for_network, listener_router,
+    DbHandleSlotStore, DbPendingUpdateStore, DbRegistrationStore, DbSingletonStore,
+    FollowRecordStatus, FreshnessState, HandleSlotStore, ListenerApiState, PendingUpdateStore,
+    RegistrationStore, RegistryPricing, ScheduleGeneration, SingletonIndexer, SingletonStore,
     SlotParentLineage,
 };
 use crate::{
     get_coinset_client, get_last_onchain_timestamp, hex_string_to_bytes32, sync_xchandles,
     sync_xchandles_detailed, CliError, CoinsetWebSocketMessage, Db, XchandlesSpentTransition,
-    PRICE_SCHEDULE, REGISTRATION_PERIOD,
+    REGISTRATION_PERIOD,
 };
-
-/// `(timestamp, registration_price)` from `xchandles_price_schedule_testnet11.csv`.
-const TESTNET11_PRICE_SCHEDULE: [(u64, u64); 9] = [
-    (1_786_885_200, 9),
-    (1_786_892_400, 8),
-    (1_786_924_800, 7),
-    (1_786_935_600, 6),
-    (1_786_953_600, 5),
-    (1_786_971_600, 4),
-    (1_786_978_800, 3),
-    (1_787_011_200, 2),
-    (1_787_022_000, 1),
-];
 
 /// Latest schedule row whose timestamp is `<= now`. Before the first row, launch price is 1.
 fn schedule_base_price_at(now: u64, testnet11: bool) -> u64 {
-    let mut price = 1;
-    if testnet11 {
-        for (timestamp, scheduled) in TESTNET11_PRICE_SCHEDULE {
-            if now >= timestamp {
-                price = scheduled;
-            }
-        }
-    } else {
-        for (timestamp, _, scheduled) in PRICE_SCHEDULE {
-            if now >= timestamp {
-                price = scheduled;
-            }
-        }
-    }
-    price
+    effective_base_at(&generations_for_network(testnet11), now)
 }
 
 fn pricing_at(now: u64, testnet11: bool) -> RegistryPricing {
@@ -72,15 +46,37 @@ fn pricing_at(now: u64, testnet11: bool) -> RegistryPricing {
 
 async fn set_schedule_pricing(
     registry_pricing: &RwLock<std::collections::HashMap<Bytes32, RegistryPricing>>,
+    committed_base_price: &RwLock<std::collections::HashMap<Bytes32, u64>>,
     launcher_ids: &[Bytes32],
+    registries: &[chia_wallet_sdk::driver::XchandlesRegistry],
+    schedule: &[ScheduleGeneration],
     now: u64,
     testnet11: bool,
 ) {
     let pricing = pricing_at(now, testnet11);
-    let mut map = registry_pricing.write().await;
-    for id in launcher_ids {
-        map.insert(*id, pricing);
+    let effective = pricing.base_price;
+    {
+        let mut map = registry_pricing.write().await;
+        for id in launcher_ids {
+            map.insert(*id, pricing);
+        }
     }
+    let mut committed = committed_base_price.write().await;
+    for (i, id) in launcher_ids.iter().enumerate() {
+        let from_puzzle = registries.get(i).and_then(|registry| {
+            committed_base_from_pricing_puzzle(
+                registry.info.state.pricing_puzzle_hash,
+                registry_period_or_default(registry),
+                schedule,
+            )
+        });
+        committed.insert(*id, from_puzzle.unwrap_or(effective));
+    }
+}
+
+fn registry_period_or_default(registry: &chia_wallet_sdk::driver::XchandlesRegistry) -> u64 {
+    let _ = registry;
+    REGISTRATION_PERIOD
 }
 
 #[derive(Debug, Deserialize)]
@@ -167,6 +163,12 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
         initial_pricing.insert(*id, startup_pricing);
     }
     let registry_pricing = Arc::new(RwLock::new(initial_pricing));
+    let price_schedule = Arc::new(generations_for_network(testnet11));
+    let mut initial_committed = std::collections::HashMap::new();
+    for id in &launcher_ids {
+        initial_committed.insert(*id, startup_pricing.base_price);
+    }
+    let committed_base_price = Arc::new(RwLock::new(initial_committed));
 
     let api_state = ListenerApiState {
         store: Arc::clone(&singleton_store),
@@ -175,6 +177,8 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
         pending_updates: Arc::clone(&pending_updates),
         freshness: Arc::clone(&freshness),
         registry_pricing: Arc::clone(&registry_pricing),
+        price_schedule: Arc::clone(&price_schedule),
+        committed_base_price: Arc::clone(&committed_base_price),
         registry_launcher_ids: launcher_ids.clone(),
         now_unix_override: None,
     };
@@ -199,6 +203,8 @@ pub async fn xchandles_listen(launcher_ids: String, testnet11: bool) -> Result<(
             launcher_ids.clone(),
             Arc::clone(&indexer),
             Arc::clone(&registry_pricing),
+            Arc::clone(&committed_base_price),
+            Arc::clone(&price_schedule),
         )
         .await
         {
@@ -460,6 +466,8 @@ async fn connect_websocket(
     launcher_ids: Vec<Bytes32>,
     indexer: Arc<SingletonIndexer>,
     registry_pricing: Arc<RwLock<std::collections::HashMap<Bytes32, RegistryPricing>>>,
+    committed_base_price: Arc<RwLock<std::collections::HashMap<Bytes32, u64>>>,
+    price_schedule: Arc<Vec<ScheduleGeneration>>,
 ) -> Result<(), CliError> {
     println!("Syncing XCHandles registries (initial)...");
     let client = get_coinset_client(testnet11);
@@ -488,7 +496,16 @@ async fn connect_websocket(
     }
 
     let onchain_ts = get_last_onchain_timestamp(&client).await?;
-    set_schedule_pricing(&registry_pricing, &launcher_ids, onchain_ts, testnet11).await;
+    set_schedule_pricing(
+        &registry_pricing,
+        &committed_base_price,
+        &launcher_ids,
+        &registries,
+        &price_schedule,
+        onchain_ts,
+        testnet11,
+    )
+    .await;
 
     // Replay spent registry transitions (full history on first sync, only new
     // spends when resuming a saved tip) with the same discover+project+follow
@@ -777,7 +794,10 @@ async fn connect_websocket(
                         if let Some(tip) = tip_height {
                             set_schedule_pricing(
                                 &registry_pricing,
+                                &committed_base_price,
                                 &launcher_ids,
+                                &registries,
+                                &price_schedule,
                                 confirmed_timestamp,
                                 testnet11,
                             )
@@ -973,6 +993,6 @@ mod tests {
             .iter()
             .map(|r| (r.timestamp, r.registration_price))
             .collect();
-        assert_eq!(from_csv.as_slice(), TESTNET11_PRICE_SCHEDULE.as_slice());
+        assert_eq!(from_csv.as_slice(), crate::TESTNET11_PRICE_SCHEDULE.as_slice());
     }
 }
