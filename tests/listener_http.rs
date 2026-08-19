@@ -3051,7 +3051,10 @@ async fn schedule_returns_full_generation_list_without_freshness() {
         .unwrap();
     assert!(body.get("indexed_peak_height").is_none());
     assert!(body.get("confirmed_timestamp").is_none());
-    assert_eq!(body["generations"].as_array().unwrap().len(), schedule.len());
+    assert_eq!(
+        body["generations"].as_array().unwrap().len(),
+        schedule.len()
+    );
     assert_eq!(
         body["generations"][0]["activation_timestamp"],
         schedule[0].activation_timestamp
@@ -3117,8 +3120,8 @@ async fn price_omits_applied_generations_when_committed_matches_last_due() {
 #[tokio::test]
 async fn schedule_rejects_unknown_launcher() {
     let registry = b32(0xaa);
-    let server = RunningListener::spawn_with_registries(expiring_freshness(), vec![registry], None)
-        .await;
+    let server =
+        RunningListener::spawn_with_registries(expiring_freshness(), vec![registry], None).await;
     let resp = reqwest::get(format!(
         "{}/schedule?launcher_id={}",
         server.base,

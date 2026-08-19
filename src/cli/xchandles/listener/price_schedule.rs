@@ -61,10 +61,12 @@ pub fn testnet11_generations() -> Vec<ScheduleGeneration> {
 pub fn mainnet_generations() -> Vec<ScheduleGeneration> {
     PRICE_SCHEDULE
         .iter()
-        .map(|&(activation_timestamp, _factor, base_price)| ScheduleGeneration {
-            activation_timestamp,
-            base_price,
-        })
+        .map(
+            |&(activation_timestamp, _factor, base_price)| ScheduleGeneration {
+                activation_timestamp,
+                base_price,
+            },
+        )
         .collect()
 }
 

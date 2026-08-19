@@ -17,11 +17,6 @@ mod store;
 mod types;
 
 pub use api::{listener_router, serve_listener, ListenerApiState, RegistryPricing};
-pub use price_schedule::{
-    committed_base_from_pricing_puzzle, effective_base_at, generations_for_network,
-    remaining_unroll_start, ScheduleGeneration, ScheduleResponse, TESTNET11_PRICE_SCHEDULE,
-    LAUNCH_BASE_PRICE, PriceQuery, PriceResponse,
-};
 pub use auction_pricing::{
     auction_premium, base_registration_fee, projected_pricing_timestamp, reaches_base_at,
     total_registration_fee, AUCTION_DURATION_SECONDS, PRICING_PROJECTION_OFFSET_SECONDS,
@@ -42,6 +37,11 @@ pub use pending_store::{
     clear_pending_current, prune_pending_history, push_pending_replacement,
     rollback_pending_to_before, DbPendingUpdateStore, MemoryPendingUpdateStore,
     PendingUpdateRecord, PendingUpdateStore, StoredPendingUpdate,
+};
+pub use price_schedule::{
+    committed_base_from_pricing_puzzle, effective_base_at, generations_for_network,
+    remaining_unroll_start, PriceQuery, PriceResponse, ScheduleGeneration, ScheduleResponse,
+    LAUNCH_BASE_PRICE, TESTNET11_PRICE_SCHEDULE,
 };
 pub use refs::{dereferenced_launchers, references_from_action_log, SingletonReference};
 pub use registration_store::{

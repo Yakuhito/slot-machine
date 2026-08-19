@@ -20,11 +20,11 @@ use super::error::ApiError;
 use super::freshness::FreshnessState;
 use super::handle_store::{HandleSlotStore, StoredHandleSlot};
 use super::pending_store::PendingUpdateStore;
-use super::registration_store::{RegistrationActionKind, RegistrationStore, StoredRegistration};
-use super::store::{FollowRecordStatus, SingletonStore, StoredSingletonState};
 use super::price_schedule::{
     remaining_unroll_start, PriceQuery, PriceResponse, ScheduleGeneration, ScheduleResponse,
 };
+use super::registration_store::{RegistrationActionKind, RegistrationStore, StoredRegistration};
+use super::store::{FollowRecordStatus, SingletonStore, StoredSingletonState};
 use super::types::{
     hex32, is_canonical_handle, parse_launcher_id, ExpiringActiveItem, ExpiringActiveResponse,
     ExpiringQuery, ExpiringSoonItem, ExpiringSoonResponse, ExpiringView, HandleProofResponse,
