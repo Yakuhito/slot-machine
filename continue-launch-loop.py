@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Drive `xchandles continue-launch` through precommit batches, then register batches.
 
-The CLI `--skip` sent to each run is a lookbehind of 16 batches so a reorg that
-undid recent work is still discovered. The script only answers `yes` at
-`Proceed?` when the printed handles match the CSV rows at the logical skip.
+The CLI `--skip` sent to each run is one handle behind the logical skip so it
+still checks the previous on-chain coin. A reorg that undid recent work then
+prints earlier handles and is still discovered. The script only answers `yes`
+at `Proceed?` when the printed handles match the CSV rows at the logical skip.
 If the CLI lists *earlier* handles (reorg of recent work), it answers `no`,
 waits 30s then 300s, and retries; it exits only if the list is still early.
 
@@ -31,7 +32,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-LOOKBEHIND_BATCHES = 16
 EARLIER_RETRY_WAITS = (30, 300)
 PRECOMMIT_HANDLES_OPT = "--precommit-handles-per-spend"
 REGISTER_HANDLES_OPT = "--register-handles-per-spend"
@@ -166,8 +166,8 @@ def parse_printed_handles(text: str) -> list[HandleRow]:
     ]
 
 
-def safe_skip_for(logical_skip: int, handles_per_spend: int) -> int:
-    return max(0, logical_skip - LOOKBEHIND_BATCHES * handles_per_spend)
+def safe_skip_for(logical_skip: int) -> int:
+    return max(0, logical_skip - 1)
 
 
 def cli_error_line(text: str) -> str | None:
@@ -444,7 +444,7 @@ def run_pass(
     run = 0
     while skip < total:
         expected = rows[skip : skip + handles_per_spend]
-        safe_skip = safe_skip_for(skip, handles_per_spend)
+        safe_skip = safe_skip_for(skip)
         run += 1
         status = run_one_with_retries(
             cmd,
@@ -532,8 +532,8 @@ def main() -> None:
             f"register pass starts at skip=0 ({register_batches} runs)"
         )
     print(
-        f"CLI --skip lookbehind is {LOOKBEHIND_BATCHES} batches at that pass's "
-        "handles-per-spend so recent reorgs are still visible"
+        "CLI --skip is one handle behind the logical skip so the previous "
+        "on-chain coin is still checked and recent reorgs stay visible"
     )
 
     if not register_only:
@@ -633,11 +633,11 @@ def self_test() -> None:
     assert not printed_starts_earlier(rows7, rows7[2:7], 0)
     assert not printed_starts_earlier(rows7, [], 5)
 
-    assert safe_skip_for(0, 5) == 0
-    assert safe_skip_for(5, 5) == 0
-    assert safe_skip_for(80, 5) == 0
-    assert safe_skip_for(81, 5) == 1
-    assert safe_skip_for(100, 5) == 20
+    assert safe_skip_for(0) == 0
+    assert safe_skip_for(1) == 0
+    assert safe_skip_for(2) == 1
+    assert safe_skip_for(5) == 4
+    assert safe_skip_for(100) == 99
     assert batch_count(7, 0, 5) == 2
     assert batch_count(7, 5, 5) == 1
     assert batch_count(7, 7, 5) == 0
@@ -787,7 +787,7 @@ def _run_mock(
         rows,
         expected,
         logical_skip,
-        safe_skip_for(logical_skip, 5),
+        safe_skip_for(logical_skip),
         "self-test",
         1,
         1,
@@ -810,7 +810,7 @@ def _run_mock_with_retries(
         rows,
         expected,
         logical_skip,
-        safe_skip_for(logical_skip, 5),
+        safe_skip_for(logical_skip),
         "self-test",
         1,
         1,
