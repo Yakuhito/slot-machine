@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Drive `xchandles continue-launch` through precommit batches, then register batches.
+"""Drive `xchandles continue-launch` through one pass, then exit.
+
+Default is the precommit pass (precommit + eve NFT mint). Re-run with
+`--register-only` for the register pass. The two are not chained.
 
 The CLI `--skip` sent to each run is one handle behind the logical skip so it
 still checks the previous on-chain coin. A reorg that undid recent work then
@@ -7,6 +10,9 @@ prints earlier handles and is still discovered. The script only answers `yes`
 at `Proceed?` when the printed handles match the CSV rows at the logical skip.
 If the CLI lists *earlier* handles (reorg of recent work), it answers `no`,
 waits 30s then 300s, and retries; it exits only if the list is still early.
+If push returns DOUBLE_SPEND after yes, wait 10s and retry the same skip
+(new offer); skip is not increased. If that previous tx actually confirmed,
+the CLI prints later handles and this script exits.
 
 `slot-machine` prints `Error: ...` and still exits 0, so this script treats
 `Confirmed!` / `Error:` in the output as the real success/failure signal.
@@ -18,7 +24,7 @@ Usage:
 Loop options (stripped before the CLI runs; default to --handles-per-spend):
   --precommit-handles-per-spend N   first pass (precommit + eve NFT mint)
   --register-handles-per-spend N    second pass (register eve NFTs)
-  --register-only                   skip precommit and start at the register pass
+  --register-only                   register pass only (do not run precommit)
 """
 
 from __future__ import annotations
@@ -27,12 +33,14 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 EARLIER_RETRY_WAITS = (30, 300)
+DOUBLE_SPEND_RETRY_WAIT = 10
 PRECOMMIT_HANDLES_OPT = "--precommit-handles-per-spend"
 REGISTER_HANDLES_OPT = "--register-handles-per-spend"
 REGISTER_ONLY_OPT = "--register-only"
@@ -356,6 +364,8 @@ def run_one(
         full = output + rest
         err = cli_error_line(full)
         if err:
+            if "DOUBLE_SPEND" in err:
+                return "double_spend", printed
             raise SystemExit(f"error: continue-launch failed after yes: {err}")
         if CONFIRMED not in full:
             raise SystemExit(
@@ -394,7 +404,8 @@ def run_one_with_retries(
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> str:
     last_printed: list[HandleRow] = []
-    for attempt in range(len(EARLIER_RETRY_WAITS) + 1):
+    earlier_attempt = 0
+    while True:
         status, printed = run_one(
             cmd,
             rows,
@@ -406,20 +417,30 @@ def run_one_with_retries(
             planned,
             env=env,
         )
+        if status == "double_spend":
+            print(
+                f"DOUBLE_SPEND after yes at skip={logical_skip}; "
+                f"waiting {DOUBLE_SPEND_RETRY_WAIT}s then retrying the same skip "
+                "(new offer).",
+                flush=True,
+            )
+            sleep_fn(DOUBLE_SPEND_RETRY_WAIT)
+            continue
         if status != "earlier":
             return status
         last_printed = printed
-        if attempt >= len(EARLIER_RETRY_WAITS):
+        if earlier_attempt >= len(EARLIER_RETRY_WAITS):
             break
-        wait = EARLIER_RETRY_WAITS[attempt]
+        wait = EARLIER_RETRY_WAITS[earlier_attempt]
         print(
             f"CLI listed earlier handles than skip={logical_skip}; "
             f"answering no and waiting {wait}s before retry "
-            f"{attempt + 1}/{len(EARLIER_RETRY_WAITS)}.",
+            f"{earlier_attempt + 1}/{len(EARLIER_RETRY_WAITS)}.",
             flush=True,
         )
         print_handle_mismatch(rows, expected, printed, logical_skip)
         sleep_fn(wait)
+        earlier_attempt += 1
     refuse_mismatch(rows, expected, last_printed, logical_skip)
 
 
@@ -529,22 +550,25 @@ def main() -> None:
     else:
         print(
             f"Precommit pass starts at skip={start_skip} ({precommit_batches} runs); "
-            f"register pass starts at skip=0 ({register_batches} runs)"
+            "exiting after precommit (re-run with --register-only for registrations)"
         )
     print(
         "CLI --skip is one handle behind the logical skip so the previous "
         "on-chain coin is still checked and recent reorgs stay visible"
     )
 
-    if not register_only:
-        run_pass(cmd, rows, "precommit", start_skip, precommit_hps)
+    if register_only:
+        run_pass(cmd, rows, "register", register_start, register_hps)
         print()
-        print(
-            "=== precommit pass complete; resetting skip to 0 for register pass ==="
-        )
-    run_pass(cmd, rows, "register", register_start, register_hps)
+        print(f"Done: register pass finished for {total} handles.")
+        return
+
+    run_pass(cmd, rows, "precommit", start_skip, precommit_hps)
     print()
-    print(f"Done: continue-launch finished for {total} handles.")
+    print(
+        f"Done: precommit pass finished for {total} handles. "
+        "Re-run with --register-only to register eve NFTs."
+    )
 
 
 PRECOMMIT_SAMPLE = """
@@ -606,6 +630,23 @@ if line != "yes":
 if mode == "fail_after":
     print("Error: transaction rejected")
     sys.exit(0)
+if mode == "double_spend":
+    path = os.environ["MOCK_COUNTER"]
+    with open(path) as f:
+        n = int(f.read() or "0")
+    with open(path, "w") as f:
+        f.write(str(n + 1))
+    if n == 0:
+        print("Submitting transaction...")
+        print(
+            "Transaction submitted; status='', error='Failed to include "
+            "transaction abc, error DOUBLE_SPEND'"
+        )
+        print(
+            "Error: custom error: Failed to include transaction abc, "
+            "error DOUBLE_SPEND"
+        )
+        sys.exit(0)
 print("Confirmed!")
 """
 
@@ -750,6 +791,28 @@ def self_test() -> None:
     else:
         raise SystemExit("self-test: expected earlier-handle abort after retries")
     assert slept == [30, 300], slept
+
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as counter:
+        counter.write("0")
+        counter_path = counter.name
+    slept = []
+    status = _run_mock_with_retries(
+        mock,
+        {
+            "MOCK_MODE": "double_spend",
+            "MOCK_PREAMBLE": preamble,
+            "MOCK_COUNTER": counter_path,
+        },
+        rows7,
+        expected,
+        logical_skip=2,
+        sleep_fn=slept.append,
+    )
+    assert status == "ok"
+    assert slept == [10], slept
+    with open(counter_path) as f:
+        assert f.read() == "2"
+    os.unlink(counter_path)
 
     rows3 = rows7[:3]
     env = os.environ.copy()
