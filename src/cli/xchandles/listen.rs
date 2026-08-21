@@ -369,6 +369,70 @@ trait RegistryChainSource: Send + Sync {
     async fn sync_registry(&self, launcher_id: Bytes32) -> Result<RegistrySyncBatch, CliError>;
 }
 
+#[async_trait::async_trait]
+trait BlockSpendSource: Send + Sync {
+    async fn block_at_height(
+        &self,
+        height: u32,
+    ) -> Result<Option<(Bytes32, Vec<CoinSpend>)>, CliError>;
+}
+
+struct CoinsetBlockSource<'a> {
+    client: &'a CoinsetClient,
+}
+
+#[async_trait::async_trait]
+impl BlockSpendSource for CoinsetBlockSource<'_> {
+    async fn block_at_height(
+        &self,
+        height: u32,
+    ) -> Result<Option<(Bytes32, Vec<CoinSpend>)>, CliError> {
+        let Some(rec) = self
+            .client
+            .get_block_record_by_height(height)
+            .await?
+            .block_record
+        else {
+            return Ok(None);
+        };
+        let spends = self
+            .client
+            .get_block_spends(rec.header_hash)
+            .await?
+            .block_spends
+            .unwrap_or_default();
+        Ok(Some((rec.header_hash, spends)))
+    }
+}
+
+/// Follow spent current coins in every canonical block after `after_height` through `tip`.
+///
+/// Returns `(height, header_hash)` for each height that had a block record, in order.
+/// Missing records are skipped so the next peak can retry them.
+async fn follow_blocks_after(
+    indexer: &SingletonIndexer,
+    source: &dyn BlockSpendSource,
+    after_height: u32,
+    tip: u32,
+) -> Result<Vec<(u32, Bytes32)>, CliError> {
+    let mut followed = Vec::new();
+    let start = after_height.saturating_add(1);
+    if start > tip {
+        return Ok(followed);
+    }
+    for height in start..=tip {
+        let Some((header_hash, spends)) = source.block_at_height(height).await? else {
+            continue;
+        };
+        let mut allocator = Allocator::new();
+        if let Err(e) = indexer.on_block(&mut allocator, height, &spends).await {
+            eprintln!("singleton follow error: {e}");
+        }
+        followed.push((height, header_hash));
+    }
+    Ok(followed)
+}
+
 struct CoinsetRegistryChainSource<'a> {
     client: &'a CoinsetClient,
     db: &'a Arc<futures::lock::Mutex<Db>>,
@@ -718,6 +782,25 @@ async fn connect_websocket(
     );
     catch_up_followed_nfts(&client, indexer.as_ref()).await?;
 
+    // Seed the live follow cursor at the current tip so reconnects walk only
+    // new blocks (catch-up above already walked spent coins via coin records).
+    // recent_peaks is an in-memory window of (height, header_hash) used only
+    // to detect reorgs; it is not persisted.
+    let mut last_followed_height = client
+        .get_blockchain_state()
+        .await?
+        .blockchain_state
+        .map(|s| s.peak.height)
+        .ok_or_else(|| CliError::Custom("no blockchain state after NFT catch-up".to_string()))?;
+    let mut recent_peaks: VecDeque<(u32, Bytes32)> = VecDeque::new();
+    if let Some(rec) = client
+        .get_block_record_by_height(last_followed_height)
+        .await?
+        .block_record
+    {
+        recent_peaks.push_back((last_followed_height, rec.header_hash));
+    }
+
     let ws_url = format!("{}/ws", client.base_url().replace("https://", "wss://"));
     println!("Connecting to WebSocket at {}", ws_url);
 
@@ -729,9 +812,6 @@ async fn connect_websocket(
 
     let (mut _write, mut read) = ws_stream.split();
     let mut last_clear_time = SystemTime::now();
-    // In-memory window of recently processed peak (height, header_hash) pairs.
-    // Used only to detect reorgs; not persisted.
-    let mut recent_peaks: VecDeque<(u32, Bytes32)> = VecDeque::new();
 
     while let Some(message) = read.next().await {
         match message {
@@ -811,6 +891,10 @@ async fn connect_websocket(
                                     );
                                     indexer.rollback(from_height).await;
                                     recent_peaks.retain(|(h, _)| *h < from_height);
+                                    last_followed_height = recent_peaks
+                                        .back()
+                                        .map(|(h, _)| *h)
+                                        .unwrap_or(from_height.saturating_sub(1));
                                     for (i, launcher_id) in launcher_ids.iter().enumerate() {
                                         let registry = {
                                             let mut ctx = SpendContext::new();
@@ -851,19 +935,40 @@ async fn connect_websocket(
                         )
                         .await?;
 
-                        // Follow singleton spends in the new tip block as well.
-                        if let (Some(tip), Some(rec)) = (tip_height, tip_rec) {
-                            let tip_spends = client
-                                .get_block_spends(rec.header_hash)
-                                .await?
-                                .block_spends
-                                .unwrap_or_default();
-                            let mut allocator = Allocator::new();
-                            let _ = indexer.on_block(&mut allocator, tip, &tip_spends).await;
-                            recent_peaks.retain(|(h, _)| *h < tip);
-                            recent_peaks.push_back((tip, rec.header_hash));
-                            while recent_peaks.len() > 32 {
-                                recent_peaks.pop_front();
+                        // Follow singleton spends in every block from the last
+                        // followed height through the current tip.
+                        if let Some(tip) = tip_height {
+                            let source = CoinsetBlockSource { client: &client };
+                            match follow_blocks_after(
+                                indexer.as_ref(),
+                                &source,
+                                last_followed_height,
+                                tip,
+                            )
+                            .await
+                            {
+                                Ok(followed) => {
+                                    for (height, header_hash) in followed {
+                                        recent_peaks.retain(|(h, _)| *h < height);
+                                        recent_peaks.push_back((height, header_hash));
+                                        last_followed_height = height;
+                                    }
+                                    while recent_peaks.len() > 32 {
+                                        recent_peaks.pop_front();
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("singleton follow error: {e}");
+                                }
+                            }
+                            if let Some(rec) = &tip_rec {
+                                if recent_peaks.back().map(|(h, _)| *h) != Some(tip) {
+                                    recent_peaks.retain(|(h, _)| *h < tip);
+                                    recent_peaks.push_back((tip, rec.header_hash));
+                                    while recent_peaks.len() > 32 {
+                                        recent_peaks.pop_front();
+                                    }
+                                }
                             }
                         }
                         if let Some(tip) = tip_height {
@@ -960,17 +1065,35 @@ mod tests {
     use std::collections::HashMap;
 
     use chia_protocol::Coin;
+    use chia_puzzle_types::singleton::SingletonArgs;
     use chia_puzzle_types::{EveProof, Proof};
     use chia_wallet_sdk::coinset::CoinRecord;
     use chia_wallet_sdk::driver::{
-        XchandlesPrecommitValue, XchandlesRegisterActionLog, XchandlesRegistryInfo,
-        XchandlesRegistryState,
+        Launcher, SingletonInfo, StandardLayer, XchandlesPrecommitValue,
+        XchandlesRegisterActionLog, XchandlesRegistryInfo, XchandlesRegistryState,
     };
+    use chia_wallet_sdk::test::{BlsPair, Simulator};
     use chia_wallet_sdk::types::puzzles::{XchandlesHandleSlotValue, XchandlesPricingSolution};
+    use chia_wallet_sdk::types::Conditions;
 
     #[derive(Clone)]
     struct FakeRegistryChainSource {
         syncs: HashMap<Bytes32, RegistrySyncBatch>,
+    }
+
+    #[derive(Clone, Default)]
+    struct FakeBlockSource {
+        blocks: HashMap<u32, (Bytes32, Vec<CoinSpend>)>,
+    }
+
+    #[async_trait::async_trait]
+    impl BlockSpendSource for FakeBlockSource {
+        async fn block_at_height(
+            &self,
+            height: u32,
+        ) -> Result<Option<(Bytes32, Vec<CoinSpend>)>, CliError> {
+            Ok(self.blocks.get(&height).cloned())
+        }
     }
 
     #[async_trait::async_trait]
@@ -1134,6 +1257,149 @@ mod tests {
             assert_eq!(body["confirmation_height"], height);
         }
         assert_eq!(registries[0].coin, latest.coin);
+    }
+
+    #[tokio::test]
+    async fn skipped_peaks_follow_singleton_spend_between_last_indexed_and_tip() {
+        let mut sim = Simulator::new();
+        let mut ctx = SpendContext::new();
+        let bls = BlsPair::default();
+        let p2 = StandardLayer::new(bls.pk);
+        let launcher_coin = sim.new_coin(chia_puzzles::SINGLETON_LAUNCHER_HASH.into(), 1);
+        let launcher = Launcher::new(launcher_coin.parent_coin_info, 1);
+        let (_, did) = launcher.create_simple_did(&mut ctx, &p2).unwrap();
+        sim.spend_coins(ctx.take(), std::slice::from_ref(&bls.sk))
+            .unwrap();
+
+        let owner = did.info.launcher_id;
+        let inner: Bytes32 = did.info.inner_puzzle_hash().into();
+        let full: Bytes32 = SingletonArgs::curry_tree_hash(owner, inner.into()).into();
+
+        let mut ctx = SpendContext::new();
+        let current = did.update(&mut ctx, &p2, Conditions::new()).unwrap();
+        let initiator = current.coin.parent_coin_info;
+        let spends = ctx.take();
+        sim.spend_coins(spends, std::slice::from_ref(&bls.sk))
+            .unwrap();
+
+        let mut ctx = SpendContext::new();
+        let next = current.update(&mut ctx, &p2, Conditions::new()).unwrap();
+        let spends = ctx.take();
+        let follow_spend = spends
+            .iter()
+            .find(|s| s.coin.coin_id() == current.coin.coin_id())
+            .cloned()
+            .unwrap();
+        sim.spend_coins(spends, std::slice::from_ref(&bls.sk))
+            .unwrap();
+
+        let registry = h(0xa0);
+        let handle = "alice";
+        let handle_hash: Bytes32 = handle.tree_hash().into();
+        let store = crate::MemorySingletonStore::shared();
+        let handle_slots = crate::MemoryHandleSlotStore::shared();
+        let pending_updates = crate::MemoryPendingUpdateStore::shared();
+        let indexer = SingletonIndexer::new(
+            store.clone() as Arc<dyn SingletonStore>,
+            handle_slots.clone() as Arc<dyn HandleSlotStore>,
+            crate::MemoryRegistrationStore::shared() as Arc<dyn RegistrationStore>,
+            pending_updates.clone() as Arc<dyn PendingUpdateStore>,
+            Arc::new(RwLock::new(FreshnessState::fresh_at(
+                12,
+                FreshnessState::now_unix(),
+            ))),
+        );
+
+        store
+            .upsert(crate::FollowedSingleton {
+                launcher_id: owner,
+                expected_full_puzzle_hash: full,
+                expected_inner_puzzle_hash: inner,
+                discovery_height: 10,
+                status: FollowRecordStatus::Active,
+                current: Some(crate::StoredSingletonState::from_coin(
+                    owner,
+                    current.coin,
+                    inner,
+                    10,
+                    false,
+                    None,
+                    None,
+                )),
+                history: Vec::new(),
+                reference_count: 1,
+                dereference_height: None,
+            })
+            .await;
+        handle_slots
+            .upsert(crate::HandleSlotRecord {
+                registry_launcher_id: registry,
+                handle_hash,
+                current: Some(crate::StoredHandleSlot {
+                    registry_launcher_id: registry,
+                    handle_hash,
+                    counter: 1,
+                    neighbors_left: Bytes32::default(),
+                    neighbors_right: Bytes32::new([0xff; 32]),
+                    expiration: 4_102_444_800,
+                    owner_launcher_id: owner,
+                    resolved_launcher_id: owner,
+                    parent_coin_id: h(0x31),
+                    parent_parent_id: h(0xee),
+                    parent_inner_puzzle_hash: h(0xef),
+                    confirmation_height: 90,
+                }),
+                history: Vec::new(),
+            })
+            .await;
+        pending_updates
+            .upsert(crate::PendingUpdateRecord {
+                registry_launcher_id: registry,
+                handle_hash,
+                current: Some(crate::StoredPendingUpdate {
+                    registry_launcher_id: registry,
+                    handle_hash,
+                    new_owner_launcher_id: h(0x33),
+                    new_resolved_launcher_id: h(0x44),
+                    update_confirmation_height: 100,
+                    minimum_execution_height: 150,
+                    update_initiator_coin_id: initiator,
+                }),
+                history: Vec::new(),
+            })
+            .await;
+
+        let base = spawn_registration_api(vec![registry], &indexer).await;
+        let client = reqwest::Client::new();
+        let before = client
+            .get(format!("{base}/handle/{handle}/pending-transfer"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(before.status(), StatusCode::OK);
+
+        let source = FakeBlockSource {
+            blocks: HashMap::from([
+                (11, (h(0x11), vec![follow_spend])),
+                (12, (h(0x12), Vec::new())),
+            ]),
+        };
+        follow_blocks_after(&indexer, &source, 10, 12)
+            .await
+            .unwrap();
+
+        let rec = store.get(owner).await.unwrap();
+        assert_eq!(
+            rec.current.as_ref().unwrap().coin_id,
+            next.coin.coin_id(),
+            "intermediate singleton spend must be followed before the empty tip"
+        );
+        let after = client
+            .get(format!("{base}/handle/{handle}/pending-transfer"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(after.status(), StatusCode::NO_CONTENT);
     }
 
     #[tokio::test]
