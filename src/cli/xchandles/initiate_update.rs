@@ -82,7 +82,7 @@ pub async fn xchandles_initiate_update(
         ))?
         .peak
         .height;
-    let min_height = min_height.unwrap_or(peak_height + 1);
+    let min_height = min_height.unwrap_or(peak_height + 8);
 
     println!("Handle: {}", handle);
     let current_owner_nft =

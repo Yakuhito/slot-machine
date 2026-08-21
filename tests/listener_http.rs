@@ -2004,13 +2004,12 @@ async fn pending_transfer_golden_future_ready_and_exact_fields() {
     assert_eq!(
         keys,
         [
-            "current_executor_coin_id",
-            "handle_hash",
+            "executor_coin_id",
+            "initiator_coin_id",
             "minimum_execution_height",
             "new_owner_launcher_id",
             "new_resolved_launcher_id",
             "update_confirmation_height",
-            "update_initiator_coin_id",
         ]
     );
 
@@ -2038,7 +2037,7 @@ async fn pending_transfer_golden_future_ready_and_exact_fields() {
         .unwrap();
     assert_eq!(ready["minimum_execution_height"], 50);
     assert_eq!(
-        ready["current_executor_coin_id"].as_str().unwrap(),
+        ready["executor_coin_id"].as_str().unwrap(),
         hex::encode(executor)
     );
 }

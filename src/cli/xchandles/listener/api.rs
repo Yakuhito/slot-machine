@@ -470,13 +470,12 @@ async fn performable_pending_transfer(
     }
 
     Some(PendingTransferResponse {
-        handle_hash: hex32(pending.handle_hash),
         new_owner_launcher_id: hex32(pending.new_owner_launcher_id),
         new_resolved_launcher_id: hex32(pending.new_resolved_launcher_id),
         update_confirmation_height: pending.update_confirmation_height,
         minimum_execution_height: pending.minimum_execution_height,
-        update_initiator_coin_id: hex32(pending.update_initiator_coin_id),
-        current_executor_coin_id: hex32(owner.coin_id),
+        initiator_coin_id: hex32(pending.update_initiator_coin_id),
+        executor_coin_id: hex32(owner.coin_id),
     })
 }
 

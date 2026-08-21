@@ -119,22 +119,20 @@ impl XchandlesApiClient {
         let left_parent_parent_info = hex_string_to_bytes32(&neighbors_resp.left_parent_parent_id)?;
         let left_parent_inner_puzzle_hash =
             hex_string_to_bytes32(&neighbors_resp.left_parent_inner_puzzle_hash)?;
-        let left_parent_amount = neighbors_resp.left_parent_amount;
         let left_proof = LineageProof {
             parent_parent_coin_info: left_parent_parent_info,
             parent_inner_puzzle_hash: left_parent_inner_puzzle_hash,
-            parent_amount: left_parent_amount,
+            parent_amount: 1,
         };
 
         let right_parent_parent_info =
             hex_string_to_bytes32(&neighbors_resp.right_parent_parent_id)?;
         let right_parent_inner_puzzle_hash =
             hex_string_to_bytes32(&neighbors_resp.right_parent_inner_puzzle_hash)?;
-        let right_parent_amount = neighbors_resp.right_parent_amount;
         let right_proof = LineageProof {
             parent_parent_coin_info: right_parent_parent_info,
             parent_inner_puzzle_hash: right_parent_inner_puzzle_hash,
-            parent_amount: right_parent_amount,
+            parent_amount: 1,
         };
 
         let left_info = SlotInfo::<XchandlesHandleSlotValue>::from_value(

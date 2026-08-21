@@ -87,7 +87,6 @@ struct XchandlesNeighborsQuery {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct XchandlesNeighborsResponse {
-    pub handle_hash: String,
     pub left_handle_hash: String,
     pub right_handle_hash: String,
 
@@ -101,7 +100,6 @@ pub struct XchandlesNeighborsResponse {
     #[serde(alias = "left_parent_parent_info")]
     pub left_parent_parent_id: String,
     pub left_parent_inner_puzzle_hash: String,
-    pub left_parent_amount: u64,
 
     pub right_right_handle_hash: String,
     pub right_expiration: u64,
@@ -113,7 +111,6 @@ pub struct XchandlesNeighborsResponse {
     #[serde(alias = "right_parent_parent_info")]
     pub right_parent_parent_id: String,
     pub right_parent_inner_puzzle_hash: String,
-    pub right_parent_amount: u64,
 }
 
 #[derive(Clone)]
@@ -269,8 +266,6 @@ async fn get_neighbors(
     }?;
 
     let response = XchandlesNeighborsResponse {
-        handle_hash: hex::encode(handle_hash.to_bytes()),
-
         left_handle_hash: hex::encode(left.info.value.handle_hash.to_bytes()),
         right_handle_hash: hex::encode(right.info.value.handle_hash.to_bytes()),
 
@@ -282,7 +277,6 @@ async fn get_neighbors(
         left_parent_id: hex::encode(left.coin.parent_coin_info.to_bytes()),
         left_parent_parent_id: hex::encode(left.proof.parent_parent_coin_info.to_bytes()),
         left_parent_inner_puzzle_hash: hex::encode(left.proof.parent_inner_puzzle_hash.to_bytes()),
-        left_parent_amount: left.proof.parent_amount,
 
         right_right_handle_hash: hex::encode(right.info.value.neighbors.right_value.to_bytes()),
         right_expiration: right.info.value.expiration,
@@ -294,7 +288,6 @@ async fn get_neighbors(
         right_parent_inner_puzzle_hash: hex::encode(
             right.proof.parent_inner_puzzle_hash.to_bytes(),
         ),
-        right_parent_amount: right.proof.parent_amount,
     };
 
     Ok(Json(response))

@@ -134,13 +134,12 @@ pub struct PendingTransferQuery {
 /// and embedded as `HandleProofResponse.pending_transfer`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingTransferResponse {
-    pub handle_hash: String,
     pub new_owner_launcher_id: String,
     pub new_resolved_launcher_id: String,
     pub update_confirmation_height: u32,
     pub minimum_execution_height: u32,
-    pub update_initiator_coin_id: String,
-    pub current_executor_coin_id: String,
+    pub initiator_coin_id: String,
+    pub executor_coin_id: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
